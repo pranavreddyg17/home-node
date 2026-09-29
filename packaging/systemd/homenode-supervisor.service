@@ -1,0 +1,44 @@
+[Unit]
+Description=HomeNode protected workload supervisor
+Requires=libvirtd.service homenode.slice
+After=libvirtd.service homenode.slice
+ConditionPathExists=/etc/homenode/services.env
+ConditionPathExists=/etc/homenode/runtime-policy.json
+ConditionPathExists=/etc/homenode/catalog.pub
+ConditionPathExists=/var/lib/homenode/catalog/catalog.json
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=/etc/homenode/services.env
+ExecStart=/usr/lib/homenode/homenode-supervisor --access-gid ${RUNTIME_GID} --transfer-gid ${TRANSFER_GID}
+RuntimeDirectory=homenode
+RuntimeDirectoryMode=0755
+StateDirectory=homenode/supervisor
+StateDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=120
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SYS_PTRACE
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/var/lib/homenode/supervisor /var/lib/homenode/images /var/lib/homenode/volumes /run/homenode
+InaccessiblePaths=-/var/lib/homenode/control -/etc/homenode/tls
+MemoryMax=512M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

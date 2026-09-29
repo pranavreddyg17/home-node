@@ -1,0 +1,41 @@
+[Unit]
+Description=HomeNode bounded guest transfer service
+Requires=homenode-supervisor.service
+After=homenode-supervisor.service
+ConditionPathExists=/etc/homenode/services.env
+
+[Service]
+Type=simple
+User=homenode-transfer
+Group=homenode-runtime
+SupplementaryGroups=homenode-transfer
+EnvironmentFile=/etc/homenode/services.env
+ExecStart=/usr/lib/homenode/homenode-transfer --socket /run/homenode-transfer/transfer.sock --supervisor /run/homenode/supervisor.sock --channels /run/homenode/guests --controller-uid ${CONTROLLER_UID} --access-gid ${RUNTIME_GID} --policy-generation ${POLICY_GENERATION}
+RuntimeDirectory=homenode-transfer
+RuntimeDirectoryMode=0750
+UMask=0077
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/run/homenode-transfer
+InaccessiblePaths=-/var/lib/homenode/control -/var/lib/homenode/volumes -/var/lib/homenode/images -/var/lib/homenode/supervisor -/etc/homenode/tls
+MemoryMax=256M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

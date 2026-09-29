@@ -23,6 +23,8 @@ go build -trimpath -o "$root/usr/lib/homenode/homenode-supervisor" ./cmd/homenod
 go build -trimpath -o "$root/usr/lib/homenode/homenode-transfer" ./cmd/homenode-transfer
 go build -trimpath -o "$root/usr/lib/homenode/guest/homenode-guest" ./cmd/homenode-guest
 cp -R web/dist/. "$root/usr/share/homenode/web/"
+mkdir -p "$root/usr/share/homenode/systemd"
+cp packaging/systemd/* "$root/usr/share/homenode/systemd/"
 cp packaging/debian/OWNERSHIP.md "$root/usr/share/doc/homenode/"
 cp docs/PROGRESS.md "$root/usr/share/doc/homenode/IMPLEMENTATION.md"
 cat > "$root/DEBIAN/control" <<CONTROL

@@ -1,0 +1,9 @@
+[Unit]
+Description=HomeNode workload resource boundary
+
+[Slice]
+# Conservative bootstrap values. Setup must replace these with measured owner
+# policy, matching runtime-policy.json, before permitting workload starts.
+MemoryMax=4G
+CPUQuota=100%
+TasksMax=512

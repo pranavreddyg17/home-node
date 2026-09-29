@@ -1,0 +1,42 @@
+[Unit]
+Description=HomeNode private control plane
+Requires=homenode-supervisor.service homenode-transfer.service
+After=network-online.target tailscaled.service homenode-supervisor.service homenode-transfer.service
+Wants=network-online.target
+ConditionPathExists=/etc/homenode/services.env
+
+[Service]
+Type=simple
+User=homenode
+Group=homenode
+SupplementaryGroups=homenode-runtime
+EnvironmentFile=/etc/homenode/services.env
+ExecStart=/usr/bin/homenode serve --bind ${TAILNET_IP} --port ${HTTPS_PORT} --origin ${HTTPS_ORIGIN} --tls-cert /etc/homenode/tls/server.crt --tls-key /etc/homenode/tls/server.key --web-dir /usr/share/homenode/web --state-dir /var/lib/homenode/control --supervisor-socket /run/homenode/supervisor.sock --transfer-socket /run/homenode-transfer/transfer.sock --policy-generation ${POLICY_GENERATION}
+StateDirectory=homenode/control
+StateDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/homenode/control
+InaccessiblePaths=-/var/lib/homenode/volumes -/var/lib/homenode/images -/var/lib/homenode/supervisor -/etc/homenode/catalog.pub -/etc/homenode/runtime-policy.json
+MemoryMax=512M
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target
