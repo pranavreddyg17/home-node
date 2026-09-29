@@ -201,3 +201,19 @@ Bootstrap creates only this fixed journal directory. It does not establish
 ownership of occupied configuration, install images, activate services, or
 provide account/data removal. The empty journal is intentionally retained on
 failure so concurrent or interrupted invocations can safely retry admission.
+
+### Configuration orchestration
+
+`Engine.Configure` is a Linux/root-only configuration phase for the production
+host root. It requires a completed account ownership ledger, verifies live
+ownership markers and full account admission, and requires supported-host
+preflight before taking measured memory, disk availability and CPU count.
+Caller-supplied account and capacity values are replaced with observations;
+policy peer UIDs are bound to the verified identities. Publisher trust and the
+catalog version floor must still come from independent release trust.
+
+Generation and journaled publication run under the same engine mutex and process
+lock. Replay must match the original installed configuration. This API does not
+fetch guest images, issue certificates, start services or certify isolation.
+Host preflight observations are admission checks, not physical acceptance tests.
+A user-facing installation command and remaining phases are still pending.

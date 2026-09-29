@@ -72,6 +72,10 @@ func (e *Engine) removeStage(j journal, index int) error {
 func (e *Engine) Apply(ctx context.Context, plan Plan) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.applyLocked(ctx, plan)
+}
+
+func (e *Engine) applyLocked(ctx context.Context, plan Plan) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
