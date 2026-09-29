@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"time"
 
@@ -119,17 +120,113 @@ func runRestic(ctx context.Context, repository, secret *os.File, operation strin
 	default:
 		return nil, ErrRepository
 	}
-	cmd := exec.CommandContext(deadline, "/usr/bin/restic", args...)
-	cmd.Env = []string{"PATH=/usr/bin:/bin", "LANG=C", "HOME=/nonexistent"}
-	cmd.ExtraFiles = []*os.File{repository, secret}
 	output := &boundedOutput{maximum: 32768}
+	if err := resticProcess(deadline, args, []*os.File{repository, secret}, output); err != nil {
+		return nil, err
+	}
+	return output.data, nil
+}
+
+func resticProcess(ctx context.Context, args []string, descriptors []*os.File, output io.Writer) error {
+	cmd := exec.CommandContext(ctx, "/usr/bin/restic", args...)
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "LANG=C", "HOME=/nonexistent", "GOMAXPROCS=2", "GOMEMLIMIT=256MiB"}
+	cmd.ExtraFiles = descriptors
 	cmd.Stdout = output
 	cmd.Stderr = io.Discard
 	cmd.WaitDelay = 2 * time.Second
 	if err := cmd.Run(); err != nil {
-		return nil, ErrRepository
+		return ErrRepository
 	}
-	return output.data, nil
+	return nil
+}
+
+// Snapshot encrypts a validated recovery set. Maintenance must hold an exclusive
+// lease and keep app disks stopped and staging immutable for the entire call.
+// This does not itself stop apps or register a drive.
+func (r *Repository) Snapshot(ctx context.Context, stage *os.File, manifest Manifest, policy RestorePolicy) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.directory == nil || stage == nil {
+		return "", ErrRepository
+	}
+	root, err := os.OpenRoot("/proc/self/fd/" + strconv.FormatUint(uint64(stage.Fd()), 10))
+	if err != nil {
+		return "", ErrManifest
+	}
+	defer root.Close()
+	deadline, cancel := context.WithTimeout(ctx, 2*time.Hour)
+	defer cancel()
+	if err = ValidateRecoverySet(deadline, root, manifest, policy); err != nil {
+		return "", err
+	}
+	data, err := json.Marshal(manifest)
+	if err != nil || len(data) > MaxManifestBytes {
+		return "", ErrManifest
+	}
+	file, err := root.OpenFile("manifest.json", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err == nil {
+		_, writeErr := file.Write(data)
+		err = errors.Join(writeErr, file.Sync(), file.Close())
+		if err != nil {
+			_ = root.Remove("manifest.json")
+			return "", ErrManifest
+		}
+	} else if errors.Is(err, os.ErrExist) {
+		info, e := root.Lstat("manifest.json")
+		if e != nil || !info.Mode().IsRegular() || info.Size() > MaxManifestBytes {
+			return "", ErrManifest
+		}
+		file, e = root.Open("manifest.json")
+		if e != nil {
+			return "", ErrManifest
+		}
+		existing, e := io.ReadAll(io.LimitReader(file, MaxManifestBytes+1))
+		_ = file.Close()
+		if e != nil || !bytes.Equal(existing, data) {
+			return "", ErrManifest
+		}
+	} else {
+		return "", ErrManifest
+	}
+	if err = stage.Sync(); err != nil {
+		return "", ErrManifest
+	}
+	args := []string{"--repo", "/proc/self/fd/3", "--password-file", "/proc/self/fd/4", "--no-cache", "--json", "backup", "--quiet", "--host", "homenode", "--tag", "homenode-v1", "--", "/proc/self/fd/5/manifest.json"}
+	for _, entry := range manifest.Files {
+		args = append(args, "/proc/self/fd/5/"+entry.Name)
+	}
+	output := &boundedOutput{maximum: 32768}
+	if err = resticProcess(deadline, args, []*os.File{r.directory, r.secret, stage}, output); err != nil {
+		return "", err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(output.data))
+	snapshotID := ""
+	for {
+		var summary struct {
+			Type string `json:"message_type"`
+			ID   string `json:"snapshot_id"`
+		}
+		err = decoder.Decode(&summary)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", ErrRepository
+		}
+		if summary.Type == "summary" {
+			if snapshotID != "" || !repositoryPattern.MatchString(summary.ID) {
+				return "", ErrRepository
+			}
+			snapshotID = summary.ID
+		}
+	}
+	if snapshotID == "" {
+		return "", ErrRepository
+	}
+	if err = ValidateRecoverySet(deadline, root, manifest, policy); err != nil {
+		return "", err
+	}
+	return snapshotID, nil
 }
 
 // VerifyRepository authenticates restic's encrypted config and matches the

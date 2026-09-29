@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestRepositoryDirectoryRefusesSymlink(t *testing.T) {
@@ -109,5 +110,72 @@ func TestRealResticRepositoryAuthentication(t *testing.T) {
 	}
 	if err = repository.Check(context.Background()); err == nil {
 		t.Fatal("closed repository retained credentials")
+	}
+}
+
+func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
+	if os.Getenv("HOMENODE_RESTIC_INTEGRATION") != "1" {
+		t.Skip("requires disposable Linux restic integration environment")
+	}
+	parent, err := os.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer parent.Close()
+	password := []byte("snapshot integration password")
+	if _, err = resticConfig(context.Background(), parent, password, true); err != nil {
+		t.Fatal(err)
+	}
+	data, err := resticConfig(context.Background(), parent, password, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config struct {
+		ID string `json:"id"`
+	}
+	if err = json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	target := registeredTarget()
+	target.RepositoryID = config.ID
+	repository, err := openRepository(context.Background(), parent, target, password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	_, manifest, policy, path := recoverySet(t)
+	stage, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stage.Close()
+	snapshot, err := repository.Snapshot(context.Background(), stage, manifest, policy)
+	if err != nil || !repositoryPattern.MatchString(snapshot) {
+		t.Fatal("real snapshot", snapshot, err)
+	}
+	if err = repository.Check(context.Background()); err != nil {
+		t.Fatal("encrypted packs", err)
+	}
+	// Verify actual encrypted storage returns the exact sanitized database bytes.
+	// Physical guest consistency and drive admission remain separate gates.
+	var restored bytes.Buffer
+	args := []string{"--repo", "/proc/self/fd/3", "--password-file", "/proc/self/fd/4", "--no-cache", "dump", snapshot, "/proc/self/fd/5/snapshot.db"}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err = resticProcess(ctx, args, []*os.File{repository.directory, repository.secret}, &restored); err != nil {
+		t.Fatal("restore bytes", err)
+	}
+	original, err := os.ReadFile(filepath.Join(path, "snapshot.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(restored.Bytes(), original) {
+		t.Fatal("encrypted snapshot round trip changed bytes")
+	}
+	if err = os.WriteFile(filepath.Join(path, "files.raw"), []byte("corrupt"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if id, err := repository.Snapshot(context.Background(), stage, manifest, policy); err == nil || id != "" {
+		t.Fatal("corrupt payload reported backed up")
 	}
 }
