@@ -33,14 +33,14 @@ type Backend interface {
 	Call(context.Context, string, guestproto.Request) (guestproto.Response, error)
 }
 type Service struct {
-	Store      *state.Store
-	Backend    Backend
-	Generation int64
-	locks      [64]sync.Mutex
+	Store            *state.Store
+	Backend          Backend
+	PolicyGeneration int64
+	locks            [64]sync.Mutex
 }
 
 func New(store *state.Store, backend Backend, generation int64) *Service {
-	return &Service{Store: store, Backend: backend, Generation: generation}
+	return &Service{Store: store, Backend: backend, PolicyGeneration: generation}
 }
 func (s *Service) lock(id string) func() {
 	h := fnv.New32a()
@@ -112,11 +112,15 @@ func (s *Service) CreateTransfer(ctx context.Context, device, name string, size 
 		if err := tx.QueryRow("SELECT coalesce(sum(size),0),count(*) FROM transfers WHERE state IN('uploading','verifying')").Scan(&reserved, &count); err != nil {
 			return err
 		}
+		var activeJobs int
+		if err := tx.QueryRow("SELECT count(*) FROM jobs WHERE state IN('queued','preparing','running','finalizing','cancelling')").Scan(&activeJobs); err != nil {
+			return err
+		}
 		var used int64
 		if err := tx.QueryRow("SELECT coalesce(sum(size),0) FROM files").Scan(&used); err != nil {
 			return err
 		}
-		if count >= 16 || used+reserved+size > StorageQuota {
+		if count >= 16 || used+reserved+size+int64(activeJobs)*jobOutputBudget > StorageQuota {
 			return ErrConflict
 		}
 		_, err := tx.Exec("INSERT INTO transfers(id,device_id,name,size,sha256,state,created_at,expires_at) VALUES(?,?,?,?,?,'uploading',?,?)", transfer.ID, device, name, size, hash, time.Now().Unix(), transfer.ExpiresAt)
@@ -306,8 +310,12 @@ func operation(tx *sql.Tx, device, key, kind string, body any) (Operation, bool,
 	if !errors.Is(err, sql.ErrNoRows) {
 		return o, false, err
 	}
-	o = Operation{ID: state.Random(), Kind: kind, State: "pending", Result: json.RawMessage(data), CreatedAt: time.Now().Unix(), UpdatedAt: time.Now().Unix()}
-	_, err = tx.Exec("INSERT INTO operations(id,device_id,kind,state,request_hash,idempotency_key,result,created_at,updated_at) VALUES(?,?,?,'pending',?,?,?,?,?)", o.ID, device, kind, hash, key, string(data), o.CreatedAt, o.UpdatedAt)
+	resultData := data
+	if kind == "generation" {
+		resultData = []byte("{}")
+	}
+	o = Operation{ID: state.Random(), Kind: kind, State: "pending", Result: json.RawMessage(resultData), CreatedAt: time.Now().Unix(), UpdatedAt: time.Now().Unix()}
+	_, err = tx.Exec("INSERT INTO operations(id,device_id,kind,state,request_hash,idempotency_key,result,created_at,updated_at) VALUES(?,?,?,'pending',?,?,?,?,?)", o.ID, device, kind, hash, key, string(resultData), o.CreatedAt, o.UpdatedAt)
 	return o, false, err
 }
 func (s *Service) Operation(ctx context.Context, device, id string) (Operation, error) {

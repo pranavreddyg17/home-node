@@ -40,6 +40,7 @@ func (p Policy) Validate() error {
 }
 
 type Request struct {
+	Revision         int64  `json:"revision"`
 	Version          int    `json:"version"`
 	OperationID      string `json:"operationId"`
 	Action           string `json:"action"`
@@ -48,6 +49,7 @@ type Request struct {
 	PolicyGeneration int64  `json:"policyGeneration"`
 }
 type Instance struct {
+	Revision    int64  `json:"revision"`
 	CreatedAt   int64  `json:"createdAt"`
 	ID          string `json:"id"`
 	Workload    string `json:"workload"`
@@ -85,9 +87,20 @@ func (m *Manager) Initialize(ctx context.Context) error {
 			return ErrPolicy
 		}
 	}
-	_, err := m.Store.DB.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS runtime_instances(id TEXT PRIMARY KEY, workload TEXT NOT NULL, state TEXT NOT NULL, desired TEXT NOT NULL, image_sha256 TEXT NOT NULL, memory_mib INTEGER NOT NULL, vcpus INTEGER NOT NULL, data_bytes INTEGER NOT NULL, created_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS runtime_operations(id TEXT PRIMARY KEY, request_hash TEXT NOT NULL, instance_id TEXT NOT NULL, state TEXT NOT NULL);`)
+	_, err := m.Store.DB.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS runtime_instances(id TEXT PRIMARY KEY, workload TEXT NOT NULL, state TEXT NOT NULL, desired TEXT NOT NULL, image_sha256 TEXT NOT NULL, memory_mib INTEGER NOT NULL, vcpus INTEGER NOT NULL, data_bytes INTEGER NOT NULL, created_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS runtime_stops(instance_id TEXT PRIMARY KEY); CREATE TABLE IF NOT EXISTS runtime_operations(id TEXT PRIMARY KEY, request_hash TEXT NOT NULL, instance_id TEXT NOT NULL, state TEXT NOT NULL);`)
 	if err != nil {
 		return err
+	}
+	for _, table := range []string{"runtime_instances", "runtime_stops"} {
+		var columns int
+		if err = m.Store.DB.QueryRowContext(ctx, "SELECT count(*) FROM pragma_table_info(?) WHERE name='revision'", table).Scan(&columns); err != nil {
+			return err
+		}
+		if columns == 0 {
+			if _, err = m.Store.DB.ExecContext(ctx, "ALTER TABLE "+table+" ADD COLUMN revision INTEGER NOT NULL DEFAULT 1"); err != nil {
+				return err
+			}
+		}
 	}
 	return m.Store.Transaction(ctx, func(tx *sql.Tx) error {
 		var previous string
@@ -124,11 +137,11 @@ func (m *Manager) Initialize(ctx context.Context) error {
 }
 func (m *Manager) Inspect(ctx context.Context, id string) (Instance, error) {
 	var i Instance
-	err := m.Store.DB.QueryRowContext(ctx, "SELECT id,workload,state,desired,image_sha256,memory_mib,vcpus,data_bytes,created_at FROM runtime_instances WHERE id=?", id).Scan(&i.ID, &i.Workload, &i.State, &i.Desired, &i.ImageSHA256, &i.MemoryMiB, &i.VCPUs, &i.DataBytes, &i.CreatedAt)
+	err := m.Store.DB.QueryRowContext(ctx, "SELECT id,workload,state,desired,image_sha256,memory_mib,vcpus,data_bytes,created_at,revision FROM runtime_instances WHERE id=?", id).Scan(&i.ID, &i.Workload, &i.State, &i.Desired, &i.ImageSHA256, &i.MemoryMiB, &i.VCPUs, &i.DataBytes, &i.CreatedAt, &i.Revision)
 	return i, err
 }
 func (m *Manager) Apply(ctx context.Context, r Request) (Instance, error) {
-	if r.Version != 1 || !guestproto.ValidID(r.OperationID) || !guestproto.ValidID(r.InstanceID) || r.PolicyGeneration != m.Policy.Generation {
+	if r.Version != 1 || !guestproto.ValidID(r.OperationID) || !guestproto.ValidID(r.InstanceID) || r.PolicyGeneration != m.Policy.Generation || r.Action != "inspect" && (r.Revision < 1 || r.Revision > 1<<53) {
 		return Instance{}, ErrPolicy
 	}
 	switch r.Action {
@@ -138,6 +151,8 @@ func (m *Manager) Apply(ctx context.Context, r Request) (Instance, error) {
 		return m.stop(ctx, r)
 	case "inspect":
 		return m.Inspect(ctx, r.InstanceID)
+	case "purge":
+		return m.purge(ctx, r)
 	default:
 		return Instance{}, ErrPolicy
 	}
@@ -180,8 +195,16 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 			return e
 		}
 		var existingWorkload, existingDigest, existingState string
-		existingErr := tx.QueryRow("SELECT workload,image_sha256,state FROM runtime_instances WHERE id=?", r.InstanceID).Scan(&existingWorkload, &existingDigest, &existingState)
+		var existingRevision int64
+		existingErr := tx.QueryRow("SELECT workload,image_sha256,state,revision FROM runtime_instances WHERE id=?", r.InstanceID).Scan(&existingWorkload, &existingDigest, &existingState, &existingRevision)
 		restarting := existingErr == nil
+		var stopped int
+		if e = tx.QueryRow("SELECT coalesce(max(revision),0) FROM runtime_stops WHERE instance_id=?", r.InstanceID).Scan(&stopped); e != nil {
+			return e
+		}
+		if r.Revision <= int64(stopped) || restarting && r.Revision <= existingRevision {
+			return ErrPolicy
+		}
 		if existingErr != nil && !errors.Is(existingErr, sql.ErrNoRows) {
 			return existingErr
 		}
@@ -214,9 +237,9 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 			return ErrCapacity
 		}
 		if restarting {
-			_, e = tx.Exec("UPDATE runtime_instances SET state='preparing',desired='running',created_at=? WHERE id=?", time.Now().Unix(), r.InstanceID)
+			_, e = tx.Exec("UPDATE runtime_instances SET state='preparing',desired='running',created_at=?,revision=? WHERE id=?", time.Now().Unix(), r.Revision, r.InstanceID)
 		} else {
-			_, e = tx.Exec("INSERT INTO runtime_instances VALUES(?,?,'preparing','running',?,?,?,?,?)", r.InstanceID, r.Workload, image.SHA256, image.MemoryMiB, image.VCPUs, image.DataBytes, time.Now().Unix())
+			_, e = tx.Exec("INSERT INTO runtime_instances VALUES(?,?,'preparing','running',?,?,?,?,?,?)", r.InstanceID, r.Workload, image.SHA256, image.MemoryMiB, image.VCPUs, image.DataBytes, time.Now().Unix(), r.Revision)
 		}
 		return e
 	})
@@ -288,22 +311,21 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 }
 func (m *Manager) stop(ctx context.Context, r Request) (Instance, error) {
 	err := m.Store.Transaction(ctx, func(tx *sql.Tx) error {
-		_, err := m.operation(tx, r)
-		if err != nil {
+		if _, err := m.operation(tx, r); err != nil {
 			return err
 		}
-		result, err := tx.Exec("UPDATE runtime_instances SET desired='stopped',state='stopping' WHERE id=?", r.InstanceID)
-		if err != nil {
+		var current int64
+		if err := tx.QueryRow("SELECT coalesce(max(revision),0) FROM runtime_instances WHERE id=?", r.InstanceID).Scan(&current); err != nil {
 			return err
 		}
-		n, err := result.RowsAffected()
-		if err != nil {
-			return err
-		}
-		if n != 1 {
+		if r.Revision < current {
 			return ErrPolicy
 		}
-		return nil
+		if _, err := tx.Exec("INSERT INTO runtime_stops VALUES(?,?) ON CONFLICT(instance_id) DO UPDATE SET revision=max(revision,excluded.revision)", r.InstanceID, r.Revision); err != nil {
+			return err
+		}
+		_, err := tx.Exec("UPDATE runtime_instances SET desired='stopped',state='stopping',revision=? WHERE id=?", r.Revision, r.InstanceID)
+		return err
 	})
 	if err != nil {
 		return Instance{}, err
@@ -321,7 +343,11 @@ func (m *Manager) stop(ctx context.Context, r Request) (Instance, error) {
 	if err != nil {
 		return Instance{}, err
 	}
-	return m.Inspect(ctx, r.InstanceID)
+	instance, err := m.Inspect(ctx, r.InstanceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Instance{ID: r.InstanceID, State: "stopped", Desired: "stopped", Revision: r.Revision}, nil
+	}
+	return instance, err
 }
 
 // Reconcile never repeats an uncertain job. At startup it stops each recorded
@@ -421,4 +447,39 @@ func (m *Manager) Audit(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (m *Manager) purge(ctx context.Context, r Request) (Instance, error) {
+	instance, err := m.Inspect(ctx, r.InstanceID)
+	if err != nil {
+		return Instance{}, err
+	}
+	if instance.Workload != "video" || instance.Desired != "stopped" || instance.State == "running" || instance.State == "preparing" || instance.State == "stopping" {
+		return Instance{}, ErrPolicy
+	}
+	running, err := m.Backend.Running(ctx, r.InstanceID)
+	if err != nil {
+		return Instance{}, err
+	}
+	if running {
+		return Instance{}, ErrPolicy
+	}
+	if err = m.Store.Transaction(ctx, func(tx *sql.Tx) error { _, err := m.operation(tx, r); return err }); err != nil {
+		return Instance{}, err
+	}
+	for _, path := range []string{filepath.Join(m.Volumes, r.InstanceID+".raw"), filepath.Join(m.Channels, r.InstanceID, "adapter.sock"), filepath.Join(m.Channels, r.InstanceID)} {
+		if err = os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return Instance{}, err
+		}
+	}
+	if err = m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.Exec("UPDATE runtime_instances SET state='removed' WHERE id=?", r.InstanceID); err != nil {
+			return err
+		}
+		_, err := tx.Exec("UPDATE runtime_operations SET state='succeeded' WHERE id=?", r.OperationID)
+		return err
+	}); err != nil {
+		return Instance{}, err
+	}
+	return m.Inspect(ctx, r.InstanceID)
 }

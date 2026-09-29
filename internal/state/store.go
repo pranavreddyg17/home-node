@@ -80,8 +80,8 @@ func (s *Store) migrate() error {
 		if err := tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 			return err
 		}
-		if version > 2 {
-			return fmt.Errorf("database schema %d is newer than supported schema 2", version)
+		if version > 4 {
+			return fmt.Errorf("database schema %d is newer than supported schema 4", version)
 		}
 		if version < 1 {
 			if _, err := tx.Exec(schema); err != nil {
@@ -90,6 +90,16 @@ func (s *Store) migrate() error {
 		}
 		if version < 2 {
 			if _, err := tx.Exec(workloadSchema); err != nil {
+				return err
+			}
+		}
+		if version < 3 {
+			if _, err := tx.Exec(jobSchema); err != nil {
+				return err
+			}
+		}
+		if version < 4 {
+			if _, err := tx.Exec("ALTER TABLE apps ADD COLUMN revision INTEGER NOT NULL DEFAULT 0; PRAGMA user_version=4;"); err != nil {
 				return err
 			}
 		}
@@ -138,4 +148,16 @@ CREATE TABLE jobs (id TEXT PRIMARY KEY, device_id TEXT NOT NULL REFERENCES devic
 CREATE TABLE conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL);
 CREATE TABLE generations (id TEXT PRIMARY KEY, device_id TEXT NOT NULL REFERENCES devices(id), conversation_id TEXT NOT NULL REFERENCES conversations(id), prompt TEXT NOT NULL, output TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, operation_id TEXT NOT NULL REFERENCES operations(id), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
 PRAGMA user_version=2;
+`
+
+const jobSchema = `
+CREATE TABLE job_groups (id TEXT PRIMARY KEY, device_id TEXT NOT NULL REFERENCES devices(id), input_id TEXT NOT NULL REFERENCES files(id), preset TEXT NOT NULL, created_at INTEGER NOT NULL);
+INSERT INTO job_groups SELECT id,device_id,input_id,preset,created_at FROM jobs;
+ALTER TABLE jobs ADD COLUMN group_id TEXT REFERENCES job_groups(id);
+UPDATE jobs SET group_id=id;
+CREATE TRIGGER jobs_group_required BEFORE INSERT ON jobs WHEN NEW.group_id IS NULL BEGIN SELECT RAISE(ABORT,'job group required'); END;
+ALTER TABLE jobs ADD COLUMN start_requested INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE orphan_objects(id TEXT PRIMARY KEY, workload TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE INDEX jobs_group ON jobs(group_id,created_at);
+PRAGMA user_version=3;
 `

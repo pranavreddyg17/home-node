@@ -52,7 +52,7 @@ func newManager(t *testing.T) (*Manager, *fakeBackend) {
 	return m, backend
 }
 func startRequest() Request {
-	return Request{Version: 1, OperationID: state.Random(), InstanceID: state.Random(), Action: "start", Workload: "files", PolicyGeneration: 1}
+	return Request{Version: 1, OperationID: state.Random(), InstanceID: state.Random(), Action: "start", Revision: 1, Workload: "files", PolicyGeneration: 1}
 }
 func TestStartReplayAndConflict(t *testing.T) {
 	m, b := newManager(t)
@@ -207,11 +207,13 @@ func TestPersistentAppRestartKeepsVolumeIdentity(t *testing.T) {
 	}
 	stop := r
 	stop.Action = "stop"
+	stop.Revision = 2
 	stop.OperationID = state.Random()
 	if _, err := m.Apply(ctx, stop); err != nil {
 		t.Fatal(err)
 	}
 	r.OperationID = state.Random()
+	r.Revision = 3
 	i, err := m.Apply(ctx, r)
 	if err != nil {
 		t.Fatal(err)
@@ -236,5 +238,58 @@ func TestAuditStopsExpiredCatalog(t *testing.T) {
 	i, err := m.Inspect(context.Background(), r.InstanceID)
 	if err != nil || i.State != "interrupted" {
 		t.Fatalf("audit state %+v %v", i, err)
+	}
+}
+
+func TestStopBeforeStartPreventsLateLaunch(t *testing.T) {
+	m, b := newManager(t)
+	r := startRequest()
+	stop := r
+	stop.OperationID = state.Random()
+	stop.Action = "stop"
+	stop.Revision = 2
+	if _, err := m.Apply(context.Background(), stop); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Apply(context.Background(), r); !errors.Is(err, ErrPolicy) {
+		t.Fatalf("late start accepted: %v", err)
+	}
+	if b.starts != 0 {
+		t.Fatal("cancelled VM launched")
+	}
+}
+
+func TestOldLifecycleIntentCannotUndoNewerStopOrStart(t *testing.T) {
+	m, b := newManager(t)
+	ctx := context.Background()
+	start := startRequest()
+	if _, err := m.Apply(ctx, start); err != nil {
+		t.Fatal(err)
+	}
+	stop := start
+	stop.Action = "stop"
+	stop.OperationID = state.Random()
+	stop.Revision = 2
+	if _, err := m.Apply(ctx, stop); err != nil {
+		t.Fatal(err)
+	}
+	late := start
+	late.OperationID = state.Random()
+	if _, err := m.Apply(ctx, late); !errors.Is(err, ErrPolicy) {
+		t.Fatalf("stale start accepted: %v", err)
+	}
+	newStart := start
+	newStart.OperationID = state.Random()
+	newStart.Revision = 3
+	if _, err := m.Apply(ctx, newStart); err != nil {
+		t.Fatal(err)
+	}
+	lateStop := stop
+	lateStop.OperationID = state.Random()
+	if _, err := m.Apply(ctx, lateStop); !errors.Is(err, ErrPolicy) {
+		t.Fatalf("stale stop accepted: %v", err)
+	}
+	if !b.running {
+		t.Fatal("stale stop killed newer authorized instance")
 	}
 }

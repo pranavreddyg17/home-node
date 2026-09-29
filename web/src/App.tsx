@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { IdentityBoundary, Devices, Settings } from './Identity'
 import { api, type Session } from './api'
-import { Apps, Files } from './Workloads'
+import { Apps, Files, Jobs, AI } from './Workloads'
 
 type Status = 'pass' | 'warn' | 'fail'
 
@@ -73,10 +73,10 @@ function Workspace({ session, logout, verify }: { session: Session; logout: () =
         <div className="brand"><span className="brand-symbol">H<span /></span><span>HomeNode<small>PERSONAL COMPUTE</small></span></div>
         <div className="nav-heading">WORKSPACE</div>
         <nav>
-          {['Overview', 'Host checks', 'Apps', 'Jobs', 'Files', 'Devices', 'Settings'].map((item) => (
+          {['Overview', 'Host checks', 'Apps', 'AI', 'Jobs', 'Files', 'Devices', 'Settings'].map((item) => (
             <button key={item} type="button" className={`nav-item ${selected === item ? 'active' : ''}`} onClick={() => setSelected(item)} aria-current={selected === item ? 'page' : undefined}>
-              <span className="nav-glyph" aria-hidden="true">{({ Overview: '◫', 'Host checks': '◇', Apps: '▦', Jobs: '≡', Files: '▤', Devices: '⌘', Settings: '⚙' } as Record<string, string>)[item]}</span>{item}
-              {['Jobs'].includes(item) && <span className="soon">SOON</span>}
+              <span className="nav-glyph" aria-hidden="true">{({ Overview: '◫', 'Host checks': '◇', Apps: '▦', AI: '✳', Jobs: '≡', Files: '▤', Devices: '⌘', Settings: '⚙' } as Record<string, string>)[item]}</span>{item}
+
             </button>
           ))}
         </nav>
@@ -88,7 +88,7 @@ function Workspace({ session, logout, verify }: { session: Session; logout: () =
         <main>
           <div className="heading-row"><div><p className="eyebrow">SERVER OVERVIEW</p><h1>{selected === 'Overview' ? 'Your home server' : selected}</h1><p className="lede">A clear view of what this machine can support.</p></div><button type="button" className="refresh-button" onClick={() => void refresh()} disabled={state.kind === 'loading'}>↻ <span>Run checks</span></button></div>
 
-          {selected === 'Apps' ? <Apps session={session} verify={verify} /> : selected === 'Files' ? <Files /> : selected === 'Devices' ? <Devices session={session} verify={verify} /> : selected === 'Settings' ? <Settings logout={logout} /> : selected !== 'Overview' && selected !== 'Host checks' ? (
+          {selected === 'AI' ? <AI verify={verify} /> : selected === 'Jobs' ? <Jobs /> : selected === 'Apps' ? <Apps session={session} verify={verify} /> : selected === 'Files' ? <Files /> : selected === 'Devices' ? <Devices session={session} verify={verify} /> : selected === 'Settings' ? <Settings logout={logout} /> : selected !== 'Overview' && selected !== 'Host checks' ? (
             <section className="empty-screen"><span className="empty-icon" aria-hidden="true">◇</span><h2>{selected} is being built</h2><p>The host must pass isolation checks before workloads and device access can be enabled. This screen will be connected to verified services as they are implemented.</p><button type="button" onClick={() => setSelected('Host checks')}>View host checks →</button></section>
           ) : state.kind === 'loading' ? (
             <section className="status-panel" role="status">Checking this machine…</section>

@@ -369,7 +369,7 @@ func (a *Agent) start(r guestproto.Request) error {
 		return errors.New("wrong workload")
 	}
 	if old, ok := a.tasks[r.ObjectID]; ok {
-		if old.InputID != r.InputID || old.Preset != r.Preset || old.PromptHash != checksum([]byte(r.Prompt)) {
+		if old.InputID != r.InputID || old.Preset != r.Preset || old.PromptHash != promptDigest(r) {
 			return errors.New("request conflict")
 		}
 		return nil
@@ -394,7 +394,7 @@ func (a *Agent) start(r guestproto.Request) error {
 		duration = 2 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
-	t := &task{State: "running", InputID: r.InputID, Preset: r.Preset, PromptHash: checksum([]byte(r.Prompt)), cancel: cancel}
+	t := &task{State: "running", InputID: r.InputID, Preset: r.Preset, PromptHash: promptDigest(r), cancel: cancel}
 	if err = a.save(r.ObjectID, t); err != nil {
 		cancel()
 		return err
@@ -461,8 +461,32 @@ func (a *Agent) convert(ctx context.Context, r guestproto.Request) error {
 	return output.Sync()
 }
 func (a *Agent) generate(ctx context.Context, r guestproto.Request) (string, error) {
-	body, _ := json.Marshal(map[string]any{"prompt": r.Prompt, "n_predict": 256, "stream": true, "cache_prompt": false})
-	req, err := http.NewRequestWithContext(ctx, "POST", "http://127.0.0.1:8080/completion", bytes.NewReader(body))
+	messages := r.Messages
+	if r.InputID != "" {
+		file, err := a.root.Open(r.InputID + ".blob")
+		if err != nil {
+			return "", err
+		}
+		data, err := io.ReadAll(io.LimitReader(file, (16<<10)+1))
+		_ = file.Close()
+		if err != nil || len(data) > 16<<10 {
+			return "", guestproto.ErrProtocol
+		}
+		if err = json.Unmarshal(data, &messages); err != nil {
+			return "", guestproto.ErrProtocol
+		}
+		check := r
+		check.InputID = ""
+		check.Messages = messages
+		if err = guestproto.Validate(check); err != nil {
+			return "", err
+		}
+	}
+	if len(messages) == 0 {
+		messages = []guestproto.Message{{Role: "user", Content: r.Prompt}}
+	}
+	body, _ := json.Marshal(map[string]any{"messages": messages, "max_tokens": 256, "stream": true, "cache_prompt": false})
+	req, err := http.NewRequestWithContext(ctx, "POST", "http://127.0.0.1:8080/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -484,23 +508,39 @@ func (a *Agent) generate(ctx context.Context, r guestproto.Request) (string, err
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}
-		var token struct {
-			Content string `json:"content"`
-			Stop    bool   `json:"stop"`
+		value := strings.TrimPrefix(line, "data: ")
+		if value == "[DONE]" {
+			break
 		}
-		if json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &token) != nil {
+		var token struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+				FinishReason *string `json:"finish_reason"`
+			} `json:"choices"`
+		}
+		if json.Unmarshal([]byte(value), &token) != nil || len(token.Choices) > 1 {
 			return "", errors.New("invalid model output")
 		}
-		if len(text)+len(token.Content) > 32<<10 {
+		if len(token.Choices) == 0 {
+			continue
+		}
+		content := token.Choices[0].Delta.Content
+		if token.Choices[0].FinishReason != nil {
+			stopped = true
+		}
+
+		if len(text)+len(content) > 32<<10 {
 			return "", errors.New("model output limit")
 		}
-		text += token.Content
+		text += content
 		a.mu.Lock()
 		if task, ok := a.tasks[r.ObjectID]; ok && task.State == "running" {
 			task.Text = text
 		}
 		a.mu.Unlock()
-		if token.Stop {
+		if stopped {
 			stopped = true
 			break
 		}
@@ -512,4 +552,12 @@ func (a *Agent) generate(ctx context.Context, r guestproto.Request) (string, err
 		return "", errors.New("incomplete model output")
 	}
 	return text, nil
+}
+
+func promptDigest(r guestproto.Request) string {
+	data, _ := json.Marshal(struct {
+		Prompt   string
+		Messages []guestproto.Message
+	}{r.Prompt, r.Messages})
+	return checksum(data)
 }
