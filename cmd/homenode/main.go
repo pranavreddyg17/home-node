@@ -19,7 +19,9 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/control"
 	"github.com/pranavreddyg17/home-node/internal/hostcheck"
 	"github.com/pranavreddyg17/home-node/internal/identity"
+	"github.com/pranavreddyg17/home-node/internal/runtimeclient"
 	"github.com/pranavreddyg17/home-node/internal/state"
+	"github.com/pranavreddyg17/home-node/internal/workload"
 )
 
 func main() {
@@ -78,6 +80,9 @@ func setupCode(args []string) {
 }
 func serve(args []string) {
 	flags := flag.NewFlagSet("serve", flag.ExitOnError)
+	supervisorSocket := flags.String("supervisor-socket", "", "protected runtime socket (empty disables execution)")
+	transferSocket := flags.String("transfer-socket", "", "protected transfer socket")
+	generation := flags.Int64("policy-generation", 1, "approved runtime policy generation")
 	dev := flags.Bool("dev", false, "local development only; use HTTP on localhost")
 	port := flags.Int("port", 8787, "listen port")
 	address := flags.String("bind", "", "production Tailscale IP; development always uses 127.0.0.1")
@@ -113,7 +118,17 @@ func serve(args []string) {
 		fatal(err)
 	}
 	defer store.Close()
-	handler, err := control.New(store, control.Config{Origin: *origin, Development: *dev, UI: os.DirFS(*ui), Report: func() hostcheck.Report { return hostcheck.Inspect(*dataRoot) }})
+	var backend workload.Backend
+	if *supervisorSocket != "" || *transferSocket != "" {
+		if *supervisorSocket == "" || *transferSocket == "" {
+			fatal(fmt.Errorf("both workload sockets are required"))
+		}
+		if *dev {
+			fatal(fmt.Errorf("development mode cannot connect to privileged workload services"))
+		}
+		backend = runtimeclient.New(*supervisorSocket, *transferSocket)
+	}
+	handler, err := control.New(store, control.Config{Runtime: backend, PolicyGeneration: *generation, Origin: *origin, Development: *dev, UI: os.DirFS(*ui), Report: func() hostcheck.Report { return hostcheck.Inspect(*dataRoot) }})
 	if err != nil {
 		fatal(err)
 	}
@@ -124,6 +139,10 @@ func serve(args []string) {
 	defer listener.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if err = handler.Workloads.Reconcile(ctx); err != nil {
+		fatal(err)
+	}
+	go handler.Workloads.Run(ctx)
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13}}
 	go func() {
 		<-ctx.Done()

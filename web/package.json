@@ -10,6 +10,7 @@
     "test:e2e": "go build -o ../bin/homenode ../cmd/homenode && playwright test"
   },
   "dependencies": {
+    "@noble/hashes": "^2.4.0",
     "@simplewebauthn/browser": "^14.0.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"

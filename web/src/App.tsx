@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { IdentityBoundary, Devices, Settings } from './Identity'
-import type { Session } from './api'
+import { api, type Session } from './api'
+import { Apps, Files } from './Workloads'
 
 type Status = 'pass' | 'warn' | 'fail'
 
@@ -40,6 +41,7 @@ function CheckMark({ status }: { status: Status }) {
 function Workspace({ session, logout, verify }: { session: Session; logout: () => Promise<void>; verify: () => Promise<void> }) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
   const [selected, setSelected] = useState('Overview')
+  const [runtime, setRuntime] = useState({ configured: false, running: 0 })
 
   const refresh = useCallback(async () => {
     setState({ kind: 'loading' })
@@ -48,6 +50,8 @@ function Workspace({ session, logout, verify }: { session: Session; logout: () =
       if (!response.ok) throw new Error(`Host service returned ${response.status}`)
       const report = (await response.json()) as Report
       if (!Array.isArray(report.checks)) throw new Error('Invalid report from host service')
+      const apps = await api<{ apps: { state: string }[]; runtimeConfigured: boolean }>('/apps')
+      setRuntime({ configured: apps.runtimeConfigured, running: apps.apps.filter(a => a.state === 'running').length })
       setState({ kind: 'loaded', report })
     } catch (error) {
       setState({ kind: 'error', message: error instanceof Error ? error.message : 'Could not read host status' })
@@ -72,7 +76,7 @@ function Workspace({ session, logout, verify }: { session: Session; logout: () =
           {['Overview', 'Host checks', 'Apps', 'Jobs', 'Files', 'Devices', 'Settings'].map((item) => (
             <button key={item} type="button" className={`nav-item ${selected === item ? 'active' : ''}`} onClick={() => setSelected(item)} aria-current={selected === item ? 'page' : undefined}>
               <span className="nav-glyph" aria-hidden="true">{({ Overview: '◫', 'Host checks': '◇', Apps: '▦', Jobs: '≡', Files: '▤', Devices: '⌘', Settings: '⚙' } as Record<string, string>)[item]}</span>{item}
-              {['Apps', 'Jobs', 'Files'].includes(item) && <span className="soon">SOON</span>}
+              {['Jobs'].includes(item) && <span className="soon">SOON</span>}
             </button>
           ))}
         </nav>
@@ -80,11 +84,11 @@ function Workspace({ session, logout, verify }: { session: Session; logout: () =
       </aside>
 
       <div className="main-area">
-        <header className="topbar"><div className="breadcrumb">Workspace <span>/</span> {selected}</div><div className="top-meta"><span className="top-version">PREVIEW 0.1</span><span className="top-avatar" aria-hidden="true">H</span></div></header>
+        <header className="topbar"><div className="breadcrumb">Workspace <span>/</span> {selected}</div><div className="top-meta"><span className="top-version">DEVELOPMENT PREVIEW</span><span className="top-avatar" aria-hidden="true">H</span></div></header>
         <main>
-          <div className="heading-row"><div><p className="eyebrow">HOST FOUNDATION</p><h1>{selected === 'Overview' ? 'Your home server' : selected}</h1><p className="lede">A clear view of what this machine can support.</p></div><button type="button" className="refresh-button" onClick={() => void refresh()} disabled={state.kind === 'loading'}>↻ <span>Run checks</span></button></div>
+          <div className="heading-row"><div><p className="eyebrow">SERVER OVERVIEW</p><h1>{selected === 'Overview' ? 'Your home server' : selected}</h1><p className="lede">A clear view of what this machine can support.</p></div><button type="button" className="refresh-button" onClick={() => void refresh()} disabled={state.kind === 'loading'}>↻ <span>Run checks</span></button></div>
 
-          {selected === 'Devices' ? <Devices session={session} verify={verify} /> : selected === 'Settings' ? <Settings logout={logout} /> : selected !== 'Overview' && selected !== 'Host checks' ? (
+          {selected === 'Apps' ? <Apps session={session} verify={verify} /> : selected === 'Files' ? <Files /> : selected === 'Devices' ? <Devices session={session} verify={verify} /> : selected === 'Settings' ? <Settings logout={logout} /> : selected !== 'Overview' && selected !== 'Host checks' ? (
             <section className="empty-screen"><span className="empty-icon" aria-hidden="true">◇</span><h2>{selected} is being built</h2><p>The host must pass isolation checks before workloads and device access can be enabled. This screen will be connected to verified services as they are implemented.</p><button type="button" onClick={() => setSelected('Host checks')}>View host checks →</button></section>
           ) : state.kind === 'loading' ? (
             <section className="status-panel" role="status">Checking this machine…</section>
@@ -92,12 +96,12 @@ function Workspace({ session, logout, verify }: { session: Session; logout: () =
             <section className="status-panel error-panel" role="alert"><strong>Host service is unavailable</strong><p>{state.message}</p><p>Start the local service with <code>go run ./cmd/homenode serve</code>, then run the checks again.</p></section>
           ) : report && (
             <>
-              <section className="hero-panel" aria-label="Host status"><div className="hero-main"><div className="hero-icon" aria-hidden="true">⌂</div><div><span className="hero-kicker">THIS MACHINE</span><h2>{hostName}<span className="os-arch"> · {report.host.architecture}</span></h2><p>{report.prerequisitesMet ? 'Basic prerequisites detected. VM isolation still needs implementation and validation.' : `${failures} prerequisite${failures === 1 ? '' : 's'} need attention before workload execution.`}</p></div></div><span className={`hero-badge ${report.prerequisitesMet ? 'amber' : 'red'}`}>{report.prerequisitesMet ? 'PREREQUISITES MET' : 'NOT READY'}</span></section>
+              <section className="hero-panel" aria-label="Host status"><div className="hero-main"><div className="hero-icon" aria-hidden="true">⌂</div><div><span className="hero-kicker">THIS MACHINE</span><h2>{hostName}<span className="os-arch"> · {report.host.architecture}</span></h2><p>{report.prerequisitesMet ? 'Basic prerequisites detected. Hardware qualification remains a separate release gate.' : `${failures} prerequisite${failures === 1 ? '' : 's'} need attention before workload execution.`}</p></div></div><span className={`hero-badge ${report.prerequisitesMet ? 'amber' : 'red'}`}>{report.prerequisitesMet ? 'PREREQUISITES MET' : 'NOT READY'}</span></section>
 
-              <div className="metric-grid"><div className="metric"><span>CHECKS PASSED</span><strong>{positives}<em> / {report.checks.length}</em></strong><small>Host prerequisites</small></div><div className="metric"><span>EXECUTION</span><strong className="metric-word">Disabled</strong><small>Isolation gate is pending</small></div><div className="metric"><span>AVAILABLE STORAGE</span><strong>{report.host.availableDiskBytes ? `${(report.host.availableDiskBytes / 2 ** 30).toFixed(1)} GB` : 'Unknown'}</strong><small>{report.host.diskProbePath || 'Future data volume'}</small></div></div>
+              <div className="metric-grid"><div className="metric"><span>CHECKS PASSED</span><strong>{positives}<em> / {report.checks.length}</em></strong><small>Host prerequisites</small></div><div className="metric"><span>RUNNING APPS</span><strong>{runtime.running}</strong><small>{runtime.configured ? 'Workload services configured' : 'Workload services not configured'}</small></div><div className="metric"><span>AVAILABLE STORAGE</span><strong>{report.host.availableDiskBytes ? `${(report.host.availableDiskBytes / 2 ** 30).toFixed(1)} GB` : 'Unknown'}</strong><small>{report.host.diskProbePath || 'Future data volume'}</small></div></div>
 
               <div className="content-grid"><section className="checks-panel"><div className="section-heading"><div><p className="eyebrow">PREFLIGHT</p><h2>Host checks</h2></div><span>{report.checks.length} CHECKS</span></div><div className="checks-list">{report.checks.map((check) => <div className="check-row" key={check.id}><CheckMark status={check.status} /><div><strong>{check.title}</strong><p>{check.detail}</p>{check.status !== 'pass' && check.remediation && <p className="remediation">{check.remediation}</p>}</div><span className={`check-label ${check.status}`}>{check.status.toUpperCase()}</span></div>)}</div></section>
-                <aside className="next-panel"><p className="eyebrow">BUILD STATUS</p><h2>What comes next</h2><p>HomeNode is at the host foundation stage. The next security milestone is a two-VM test on a supported Linux machine.</p><div className="next-divider" /><div className="next-item"><span className="step-number">01</span><div><strong>Qualify the host</strong><small>Confirm KVM, libvirt, AppArmor, memory and storage.</small></div></div><div className="next-item"><span className="step-number">02</span><div><strong>Prove isolation</strong><small>Test that neither VM can reach host data or the other VM.</small></div></div><div className="next-item"><span className="step-number">03</span><div><strong>Enable workloads</strong><small>Only after enforcement and recovery are verified.</small></div></div><div className="notice"><span aria-hidden="true">●</span><span>No app or job can run from this build.</span></div></aside></div>
+                <aside className="next-panel"><p className="eyebrow">BUILD STATUS</p><h2>What comes next</h2><p>Passkey identity, isolated workload services, and resumable file transfers are implemented. Physical-host qualification and the remaining product workflows are in progress.</p><div className="next-divider" /><div className="next-item"><span className="step-number">01</span><div><strong>Qualify the host</strong><small>Confirm KVM, libvirt, AppArmor, memory and storage.</small></div></div><div className="next-item"><span className="step-number">02</span><div><strong>Prove isolation</strong><small>Test that neither VM can reach host data or the other VM.</small></div></div><div className="next-item"><span className="step-number">03</span><div><strong>Enable workloads</strong><small>Only after enforcement and recovery are verified.</small></div></div><div className="notice"><span aria-hidden="true">●</span><span>Production qualification is still pending.</span></div></aside></div>
               <p className="timestamp">Checked {new Date(report.generatedAt).toLocaleString()} · This report measures prerequisites, not a complete security certification.</p>
             </>
           )}

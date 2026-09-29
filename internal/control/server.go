@@ -21,15 +21,19 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/hostcheck"
 	"github.com/pranavreddyg17/home-node/internal/identity"
 	"github.com/pranavreddyg17/home-node/internal/state"
+	"github.com/pranavreddyg17/home-node/internal/workload"
 )
 
 type Config struct {
-	Origin      string
-	Development bool
-	UI          fs.FS
-	Report      func() hostcheck.Report
+	Runtime          workload.Backend
+	PolicyGeneration int64
+	Origin           string
+	Development      bool
+	UI               fs.FS
+	Report           func() hostcheck.Report
 }
 type Server struct {
+	Workloads  *workload.Service
 	config     Config
 	Identity   *identity.Service
 	Store      *state.Store
@@ -75,7 +79,9 @@ func New(store *state.Store, config Config) (*Server, error) {
 	if config.Development {
 		s.cookie = "homenode-dev"
 	}
+	s.Workloads = workload.New(store, config.Runtime, config.PolicyGeneration)
 	s.routes()
+	s.workloadRoutes()
 	return s, nil
 }
 
@@ -143,7 +149,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "BUSY", "Retry after current requests finish.")
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	limit := int64(64 << 10)
+	if strings.HasPrefix(r.URL.Path, "/api/v1/transfers/") && strings.HasSuffix(r.URL.Path, "/chunks") {
+		limit = 512 << 10
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if strings.HasPrefix(r.URL.Path, "/api/v1/auth/") && !s.allowAuth() {
 		w.Header().Set("Retry-After", "60")
 		fail(w, 429, "RATE_LIMITED", "Wait a minute before another authentication attempt.")

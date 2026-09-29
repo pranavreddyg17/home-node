@@ -10,6 +10,14 @@ HomeNode's end-to-end implementation is in progress. A completed code path is no
 - Browser end-to-end test passed with a Chromium virtual authenticator: setup, pairing, denied admin access, revoke, sign out/in, recovery invalidation and mobile width.
 - Production requires private-network binding and TLS; explicit development mode is loopback-only.
 
+## Runtime and file implementation
+
+- Added an independently authorized Unix-socket supervisor, protected operation journal, signed immutable catalog checks, resource admission, no-NIC libvirt XML, confinement checks, timeout/audit enforcement and restart reconciliation.
+- Added a separate transfer service and bounded, correlated guest protocol. Guest content handling includes durable checksummed chunks, replay checks, immutable finalization, and path confinement.
+- Added persistent app operations and Files API/UI with storage reservation, resume, download, rename, trash and restore. The controller never mounts a guest filesystem.
+- Unit/integration tests exercise actual guest byte storage, control authorization, response headers, supervisor admission/replay/failure policy and catalog verification. These tests do not prove VM isolation.
+- Video and CPU inference guest adapters exist; their controller workflow, image packaging and validation are not complete.
+
 ## Current work
 
 1. Identity follow-ups: action-bound sensitive approvals, broader browser/device coverage, recovery/export tooling.

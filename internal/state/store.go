@@ -80,14 +80,20 @@ func (s *Store) migrate() error {
 		if err := tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 			return err
 		}
-		if version > 1 {
-			return fmt.Errorf("database schema %d is newer than supported schema 1", version)
+		if version > 2 {
+			return fmt.Errorf("database schema %d is newer than supported schema 2", version)
 		}
-		if version == 1 {
-			return nil
+		if version < 1 {
+			if _, err := tx.Exec(schema); err != nil {
+				return err
+			}
 		}
-		_, err := tx.Exec(schema)
-		return err
+		if version < 2 {
+			if _, err := tx.Exec(workloadSchema); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
@@ -122,4 +128,14 @@ CREATE INDEX events_created ON events(created_at);
 CREATE TABLE operations (id TEXT PRIMARY KEY, device_id TEXT NOT NULL REFERENCES devices(id), kind TEXT NOT NULL, state TEXT NOT NULL, request_hash TEXT NOT NULL, idempotency_key TEXT NOT NULL, result TEXT NOT NULL DEFAULT '{}', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, UNIQUE(device_id,idempotency_key));
 CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 PRAGMA user_version=1;
+`
+
+const workloadSchema = `
+CREATE TABLE apps (workload TEXT PRIMARY KEY CHECK(workload IN('files','ai')), instance_id TEXT NOT NULL UNIQUE, state TEXT NOT NULL, operation_id TEXT, updated_at INTEGER NOT NULL);
+CREATE TABLE transfers (id TEXT PRIMARY KEY, device_id TEXT NOT NULL REFERENCES devices(id), name TEXT NOT NULL, size INTEGER NOT NULL CHECK(size>=0), sha256 TEXT NOT NULL, offset INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+CREATE TABLE files (id TEXT PRIMARY KEY, transfer_id TEXT UNIQUE REFERENCES transfers(id), name TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL, created_at INTEGER NOT NULL, trash_until INTEGER);
+CREATE TABLE jobs (id TEXT PRIMARY KEY, device_id TEXT NOT NULL REFERENCES devices(id), input_id TEXT NOT NULL REFERENCES files(id), preset TEXT NOT NULL, state TEXT NOT NULL, instance_id TEXT NOT NULL, operation_id TEXT NOT NULL REFERENCES operations(id), output_id TEXT, error_code TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+CREATE TABLE conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE TABLE generations (id TEXT PRIMARY KEY, device_id TEXT NOT NULL REFERENCES devices(id), conversation_id TEXT NOT NULL REFERENCES conversations(id), prompt TEXT NOT NULL, output TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, operation_id TEXT NOT NULL REFERENCES operations(id), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+PRAGMA user_version=2;
 `
