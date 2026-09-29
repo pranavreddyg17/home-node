@@ -52,6 +52,15 @@ func TestRecoverySnapshotIncludesCommittedWALAndExcludesTrust(t *testing.T) {
 	if bytes.Contains(data, []byte(credential)) || bytes.Contains(data, []byte(token)) {
 		t.Fatal("removed secrets remain in snapshot pages")
 	}
+	snapshotFile, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	apps, err := ValidateRecoverySnapshot(context.Background(), snapshotFile)
+	_ = snapshotFile.Close()
+	if err != nil || len(apps) != 1 || apps[0].Workload != "files" {
+		t.Fatal("snapshot inventory validation", apps, err)
+	}
 	// Open only the main file, with no source WAL or live source connection.
 	restored, err := sql.Open("sqlite", path)
 	if err != nil {
