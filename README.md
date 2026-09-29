@@ -18,7 +18,7 @@ In a second terminal, issue the single-use enrollment code:
 go run ./cmd/homenode setup-code --state-dir .homenode
 ```
 
-Open `http://localhost:8787`, enter the code, create a passkey, and save the recovery codes outside the server. HTTP is allowed only in explicit loopback development mode. Production requires an exact HTTPS origin, certificate/key, and a Tailscale IPv4 bind address. A state directory pins its original origin; changing a passkey relying-party identity requires recovery.
+Open `http://localhost:8787`, enter the code, create a passkey, and save the recovery codes outside the server. HTTP is allowed only in explicit loopback development mode. Production verifies an exact HTTPS origin, a trusted matching certificate/key in protected root-owned files, and a Tailscale IPv4 address assigned to this host. Protected certificate replacements are revalidated for new TLS handshakes; certificate issuance and renewal still require owner action. See [private HTTPS setup](docs/NETWORK_SETUP.md). A state directory pins its original origin; changing a passkey relying-party identity requires recovery.
 
 Run `go run ./cmd/homenode doctor` for machine-readable host diagnostics. Ubuntu Server 24.04 LTS on x86-64 is the initial host target; macOS can develop the interface but cannot qualify KVM/AppArmor isolation.
 

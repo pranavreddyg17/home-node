@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"net/netip"
 	"os"
 	"os/signal"
 	"strconv"
@@ -19,6 +18,7 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/control"
 	"github.com/pranavreddyg17/home-node/internal/hostcheck"
 	"github.com/pranavreddyg17/home-node/internal/identity"
+	"github.com/pranavreddyg17/home-node/internal/networkcheck"
 	"github.com/pranavreddyg17/home-node/internal/runtimeclient"
 	"github.com/pranavreddyg17/home-node/internal/state"
 	"github.com/pranavreddyg17/home-node/internal/workload"
@@ -33,6 +33,8 @@ func main() {
 		doctor(os.Args[2:])
 	case "serve":
 		serve(os.Args[2:])
+	case "network-check":
+		networkCheck(os.Args[2:])
 	case "setup-code":
 		setupCode(os.Args[2:])
 	default:
@@ -40,7 +42,7 @@ func main() {
 	}
 }
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: homenode <doctor|serve|setup-code> [options]")
+	fmt.Fprintln(os.Stderr, "usage: homenode <doctor|network-check|serve|setup-code> [options]")
 	os.Exit(2)
 }
 func fatal(err error) { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
@@ -56,6 +58,22 @@ func doctor(args []string) {
 	}
 	if !report.PrerequisitesMet {
 		os.Exit(1)
+	}
+}
+func networkCheck(args []string) {
+	flags := flag.NewFlagSet("network-check", flag.ExitOnError)
+	bind := flags.String("bind", "", "host Tailscale IPv4 address")
+	port := flags.Int("port", 8787, "unprivileged HTTPS port")
+	origin := flags.String("origin", "", "exact HTTPS origin")
+	cert := flags.String("tls-cert", "/etc/homenode/tls/server.crt", "certificate PEM path")
+	key := flags.String("tls-key", "/etc/homenode/tls/server.key", "protected private key PEM path")
+	_ = flags.Parse(args)
+	certificate, err := networkcheck.Inspect(networkcheck.Config{Bind: *bind, Port: *port, Origin: *origin}, *cert, *key)
+	if err != nil {
+		fatal(err)
+	}
+	if err = json.NewEncoder(os.Stdout).Encode(map[string]any{"identityValid": true, "certificateExpires": certificate.Leaf.NotAfter, "tailnetPolicyVerified": false, "phoneReachabilityVerified": false}); err != nil {
+		fatal(err)
 	}
 }
 func setupCode(args []string) {
@@ -96,6 +114,7 @@ func serve(args []string) {
 	if *port < 1 || *port > 65535 {
 		fatal(fmt.Errorf("port must be 1..65535"))
 	}
+	var certificateSource *networkcheck.CertificateSource
 	if *dev {
 		if *address != "" && *address != "127.0.0.1" {
 			fatal(fmt.Errorf("development binds only loopback"))
@@ -105,12 +124,17 @@ func serve(args []string) {
 			*origin = "http://localhost:" + strconv.Itoa(*port)
 		}
 	} else {
-		ip, err := netip.ParseAddr(*address)
-		if err != nil || !netip.MustParsePrefix("100.64.0.0/10").Contains(ip) {
-			fatal(fmt.Errorf("production bind must be the host's Tailscale IPv4 address"))
+		var err error
+		certificateSource, err = networkcheck.NewCertificateSource(networkcheck.Config{Bind: *address, Port: *port, Origin: *origin}, *cert, *key)
+		if err != nil {
+			fatal(err)
 		}
-		if *origin == "" || *cert == "" || *key == "" {
-			fatal(fmt.Errorf("production requires --origin, --tls-cert and --tls-key"))
+		certificate, err := certificateSource.GetCertificate(nil)
+		if err != nil {
+			fatal(err)
+		}
+		if time.Until(certificate.Leaf.NotAfter) < 14*24*time.Hour {
+			slog.Warn("TLS certificate needs renewal before expiry")
 		}
 	}
 	store, err := state.Open(*directory)
@@ -143,7 +167,10 @@ func serve(args []string) {
 		fatal(err)
 	}
 	go handler.Workloads.Run(ctx)
-	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13}}
+	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13, SessionTicketsDisabled: true}}
+	if certificateSource != nil {
+		server.TLSConfig.GetCertificate = certificateSource.GetCertificate
+	}
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -168,7 +195,7 @@ func serve(args []string) {
 	if *dev {
 		err = server.Serve(listener)
 	} else {
-		err = server.ServeTLS(listener, *cert, *key)
+		err = server.ServeTLS(listener, "", "")
 	}
 	if err != nil && err != http.ErrServerClosed {
 		fatal(err)

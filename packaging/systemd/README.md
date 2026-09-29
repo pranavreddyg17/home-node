@@ -14,6 +14,10 @@ file. Values must match the actual local account IDs and approved root-owned
 runtime policy. Missing values must be caught by setup; programs reject invalid
 values. TLS key directory is root-owned, readable only by the controller group.
 No default address, private key, publisher trust root, or owner is included.
+Run `homenode network-check` with the intended address, port, origin and protected
+TLS paths before activation; see [private HTTPS setup](../../docs/NETWORK_SETUP.md).
+Production startup repeats these checks. Certificate replacement is observed
+without restarting, but issuance and renewal are not yet automated.
 
 Supervisor needs root to provision raw volumes/channel ownership and communicate
 with libvirt. It has no management/TLS access inside its mount namespace.
