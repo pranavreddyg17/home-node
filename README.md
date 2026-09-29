@@ -2,7 +2,7 @@
 
 Design for turning a supported spare Linux laptop into a private server for the owner's other devices. The first release includes private files, CPU-based local AI, isolated processing jobs, device access, verified updates, encrypted external backup, recovery, export, and removal.
 
-The current implementation includes persistent SQLite identity, passkey enrollment and login, scoped device pairing, revocation, recovery codes, host diagnostics, and a responsive interface. Workload execution remains disabled until the supervisor and guest runtime are implemented and qualified.
+The current implementation includes passkey identity, scoped devices, recovery, isolated runtime services, resumable files, video jobs, private AI conversations, and a responsive interface. Production execution requires separately provisioned verified guest images and a qualified Linux host. See the implementation record for outstanding release gates.
 
 Build and run a local development instance (Go 1.26+, Node.js 22.12+):
 
@@ -39,3 +39,5 @@ The browser test uses a virtual authenticator to exercise actual WebAuthn signat
 - [Security research and rationale](SECURITY_RESEARCH_AND_PLAN.md) documents threats, isolation/network decisions, primary sources, and required security evidence.
 
 Next, validate two confined VMs on real supported hardware and record the isolation and resource results. Do not treat passing diagnostics as proof that VM isolation is safe.
+
+To build an unsigned development Debian package on Ubuntu/Debian after installing web dependencies, run `packaging/debian/build.sh`. It packages Linux amd64 binaries and built web assets under `artifacts/`. It does not provision or start services. [Package ownership](packaging/debian/OWNERSHIP.md) documents installed paths and limits; production signing and the resumable installer are still outstanding.

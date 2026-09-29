@@ -34,6 +34,15 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm --prefix web ci
       - run: npm --prefix web run build
+      - name: Build and inspect development Debian package
+        run: |
+          packaging/debian/build.sh 0.1.0~ci
+          dpkg-deb --info artifacts/homenode_0.1.0~ci_amd64.deb
+          dpkg-deb --extract artifacts/homenode_0.1.0~ci_amd64.deb /tmp/homenode-package
+          cd /tmp/homenode-package
+          sha256sum --check usr/share/doc/homenode/SHA256SUMS
+          test -x usr/bin/homenode
+          test -f usr/share/homenode/web/index.html
       - name: Install browser
         working-directory: web
         run: npx playwright install --with-deps chromium
