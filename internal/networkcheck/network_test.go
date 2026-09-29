@@ -87,3 +87,19 @@ func TestPrivateHTTPSIdentity(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigurationRejectsNoncanonicalOrEnvironmentSyntax(t *testing.T) {
+	for _, origin := range []string{
+		"https://HOME.example.ts.net:8787",
+		"https://home.example.ts.net:08787",
+		"https://home.example.ts.net.:8787",
+		"https://-home.example.ts.net:8787",
+		"https://home+.example.ts.net:8787",
+		"https://home\".example.ts.net:8787",
+		"https://home.example.ts.net:8787\nPOLICY_GENERATION=0",
+	} {
+		if _, err := ValidateConfiguration(Config{Bind: "100.100.1.2", Port: 8787, Origin: origin}); err == nil {
+			t.Fatal("unsafe configuration accepted", origin)
+		}
+	}
+}

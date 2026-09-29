@@ -117,10 +117,10 @@ func (s *Service) CreateTransfer(ctx context.Context, device, name string, size 
 			return err
 		}
 		var used int64
-		if err := tx.QueryRow("SELECT coalesce(sum(size),0)+(SELECT count(*) FROM orphan_objects WHERE workload='files')*? FROM files", jobOutputBudget).Scan(&used); err != nil {
+		if err := tx.QueryRow("SELECT coalesce(sum(size),0)+(SELECT count(*) FROM orphan_objects WHERE workload='files')*? FROM files", MaxJobOutputBytes).Scan(&used); err != nil {
 			return err
 		}
-		if count >= 16 || used+reserved+size+int64(activeJobs)*jobOutputBudget > StorageQuota {
+		if count >= 16 || used+reserved+size+int64(activeJobs)*MaxJobOutputBytes > StorageQuota {
 			return ErrConflict
 		}
 		_, err := tx.Exec("INSERT INTO transfers(id,device_id,name,size,sha256,state,created_at,expires_at) VALUES(?,?,?,?,?,'uploading',?,?)", transfer.ID, device, name, size, hash, time.Now().Unix(), transfer.ExpiresAt)

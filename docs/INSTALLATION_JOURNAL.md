@@ -65,3 +65,33 @@ roots and activate no services. Host integration, ownership bootstrap of the
 journal itself, account-operation journaling, image placement, updates,
 full uninstall/reinstall, systemd behavior and supported-host power-loss tests
 remain unfinished.
+
+## Configuration generation
+
+`ConfigurationPlan` builds the concrete Files/AI/Jobs host configuration for
+this engine. It takes typed network settings, independent publisher trust and
+catalog floor, existing account/group IDs, supervisor policy and measured host
+capacity. It verifies the signed catalog and requires all three workloads.
+Controller/transfer identities and all private/runtime/QEMU groups must be
+separate; policy identities must match the supplied accounts.
+
+The generator checks a 2 GiB host memory reserve, CPU reserve, each image's
+resource grant, simultaneous Files/video capacity and disk space for immutable
+images, persistent data disks, temporary video disks and the policy's free-space
+reserve. Files data must accommodate the application's quota plus 4 GiB of
+headroom; video data must accommodate bounded input/output plus 2 GiB headroom.
+These are initial profile floors, not measured guest-overhead certification or
+physical allocation. Image verification/placement and measured VM overhead
+remain activation gates.
+
+Service units are embedded from the reviewed repository sources in the
+installer binary. The generated slice's exact memory bytes and CPU quota match
+the supervisor budget; there are no arbitrary downloaded unit overrides.
+Network values must use a canonical DNS HTTPS origin with its exact
+unprivileged port, preventing environment syntax from entering services.env.
+Plans contain policy, publisher key, catalog, services environment, units and
+owned directory identities. They exclude TLS key contents. JSON previews omit
+all file contents and explicitly list the checks still needed before activation.
+A root-only fixture applies and rolls back this generated configuration through
+the real engine in a temporary host tree; it neither creates accounts nor starts
+services.

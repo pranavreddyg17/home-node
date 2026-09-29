@@ -13,7 +13,8 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
 )
 
-const jobOutputBudget int64 = 4 << 30
+// MaxJobOutputBytes bounds result copying and its durable storage reservation.
+const MaxJobOutputBytes int64 = 4 << 30
 
 type Job struct {
 	CleanupPending bool    `json:"cleanupPending"`
@@ -88,13 +89,13 @@ func (s *Service) CreateJob(ctx context.Context, device, key, input, preset, ret
 			return ErrConflict
 		}
 		var used, reserved int64
-		if err = tx.QueryRow("SELECT coalesce(sum(size),0)+(SELECT count(*) FROM orphan_objects WHERE workload='files')*? FROM files", jobOutputBudget).Scan(&used); err != nil {
+		if err = tx.QueryRow("SELECT coalesce(sum(size),0)+(SELECT count(*) FROM orphan_objects WHERE workload='files')*? FROM files", MaxJobOutputBytes).Scan(&used); err != nil {
 			return err
 		}
 		if err = tx.QueryRow("SELECT coalesce(sum(size),0) FROM transfers WHERE state IN('uploading','verifying','cancelling')").Scan(&reserved); err != nil {
 			return err
 		}
-		if used+reserved+int64(active+1)*jobOutputBudget > StorageQuota {
+		if used+reserved+int64(active+1)*MaxJobOutputBytes > StorageQuota {
 			return ErrConflict
 		}
 		group := retryGroup
@@ -391,7 +392,7 @@ func (s *Service) executeJob(ctx context.Context, j Job) error {
 			case "running":
 				continue
 			case "succeeded":
-				if result.Size <= 0 || result.Size > jobOutputBudget || !hashPattern.MatchString(result.SHA256) {
+				if result.Size <= 0 || result.Size > MaxJobOutputBytes || !hashPattern.MatchString(result.SHA256) {
 					return ErrConflict
 				}
 				if err = s.jobPhase(ctx, j, "finalizing"); err != nil {

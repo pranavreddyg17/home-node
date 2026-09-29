@@ -11,12 +11,15 @@ import (
 	"net"
 	"net/netip"
 	"net/url"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
 var ErrIdentity = errors.New("private HTTPS identity is invalid")
 var tailnet = netip.MustParsePrefix("100.64.0.0/10")
+var dnsLabel = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 
 type Config struct {
 	Bind   string
@@ -27,11 +30,13 @@ type Config struct {
 // Validate checks configuration, local interface ownership and the complete
 // server chain without sending the private key or making network requests.
 func Validate(c Config, local []netip.Addr, certPEM, keyPEM []byte, roots *x509.CertPool, now time.Time) (tls.Certificate, error) {
+
 	var empty tls.Certificate
-	ip, err := netip.ParseAddr(c.Bind)
-	if err != nil || !tailnet.Contains(ip) || c.Port < 1024 || c.Port > 65535 {
-		return empty, fmt.Errorf("bind must be a local Tailscale IPv4 address with an unprivileged port: %w", ErrIdentity)
+	host, err := ValidateConfiguration(c)
+	if err != nil {
+		return empty, err
 	}
+	ip, _ := netip.ParseAddr(c.Bind)
 	found := false
 	for _, addr := range local {
 		if addr.Unmap() == ip {
@@ -40,24 +45,6 @@ func Validate(c Config, local []netip.Addr, certPEM, keyPEM []byte, roots *x509.
 	}
 	if !found {
 		return empty, fmt.Errorf("configured Tailscale address is not assigned to this host: %w", ErrIdentity)
-	}
-	origin, err := url.Parse(c.Origin)
-	if err != nil || origin.Scheme != "https" || origin.Host == "" || origin.User != nil || origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" || origin.ForceQuery || origin.Opaque != "" || origin.String() != c.Origin {
-		return empty, fmt.Errorf("origin must be an exact HTTPS origin: %w", ErrIdentity)
-	}
-	host := origin.Hostname()
-	if host == "" || net.ParseIP(host) != nil {
-		return empty, fmt.Errorf("origin needs a stable DNS name: %w", ErrIdentity)
-	}
-	port := 443
-	if origin.Port() != "" {
-		port, err = strconv.Atoi(origin.Port())
-		if err != nil {
-			return empty, ErrIdentity
-		}
-	}
-	if port != c.Port {
-		return empty, fmt.Errorf("origin port differs from listener port: %w", ErrIdentity)
 	}
 	certificate, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil || len(certificate.Certificate) == 0 {
@@ -80,6 +67,32 @@ func Validate(c Config, local []netip.Addr, certPEM, keyPEM []byte, roots *x509.
 	}
 	certificate.Leaf = leaf
 	return certificate, nil
+}
+
+// ValidateConfiguration checks deterministic values suitable for a plan or
+// systemd environment file. It does not observe actual network/TLS readiness.
+func ValidateConfiguration(c Config) (string, error) {
+	ip, err := netip.ParseAddr(c.Bind)
+	if err != nil || !tailnet.Contains(ip) || c.Port < 1024 || c.Port > 65535 {
+		return "", fmt.Errorf("bind needs a Tailscale IPv4 address and unprivileged port: %w", ErrIdentity)
+	}
+	origin, err := url.Parse(c.Origin)
+	if err != nil || origin.Scheme != "https" || origin.Host == "" || origin.User != nil || origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" || origin.ForceQuery || origin.Opaque != "" {
+		return "", ErrIdentity
+	}
+	host := origin.Hostname()
+	if len(host) > 253 || !strings.Contains(host, ".") || net.ParseIP(host) != nil {
+		return "", ErrIdentity
+	}
+	for _, part := range strings.Split(host, ".") {
+		if !dnsLabel.MatchString(part) {
+			return "", ErrIdentity
+		}
+	}
+	if c.Origin != "https://"+net.JoinHostPort(host, strconv.Itoa(c.Port)) {
+		return "", fmt.Errorf("origin must use its canonical DNS name and exact listener port: %w", ErrIdentity)
+	}
+	return host, nil
 }
 
 func LocalAddresses() ([]netip.Addr, error) {
