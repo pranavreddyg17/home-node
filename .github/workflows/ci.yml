@@ -48,6 +48,8 @@ jobs:
           test -f usr/share/homenode/web/index.html
           sudo apt-get install -y "$GITHUB_WORKSPACE/artifacts/homenode_0.1.0~ci_amd64.deb"
           systemd-analyze verify "$GITHUB_WORKSPACE"/packaging/systemd/*.service "$GITHUB_WORKSPACE"/packaging/systemd/*.slice
+      - name: Inspect native service accounts with installed CLI
+        run: sudo env HOMENODE_ACCOUNT_INSPECTION_INTEGRATION=1 "$(command -v go)" test ./internal/install -run '^TestInstalledAccountInspection$'
       - name: Install browser
         working-directory: web
         run: npx playwright install --with-deps chromium

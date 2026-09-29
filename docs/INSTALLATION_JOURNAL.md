@@ -95,3 +95,43 @@ all file contents and explicitly list the checks still needed before activation.
 A root-only fixture applies and rolls back this generated configuration through
 the real engine in a temporary host tree; it neither creates accounts nor starts
 services.
+
+## Service identity admission
+
+Read-only `sudo homenode accounts-check` inspects actual local identities before
+configuration generation/activation. It requires Linux root to read protected
+account databases; output contains only numeric IDs and admission status.
+It does not create identities or start services.
+
+The initial Ubuntu setup requires dedicated `homenode` and `homenode-transfer`
+users and their private groups, plus `homenode-runtime`. Service UIDs and these
+three GIDs must be in the system-account range 1–999. `libvirt-qemu` retains its
+OS-assigned GID. Each user must have a unique UID, its own primary group,
+`/nonexistent` as home, a nologin shell and a locked shadow password. The passwd
+entry must use shadow credentials. Supplementary membership is restricted to
+the shared runtime group; private groups have no foreign members/primary users,
+and the runtime group contains exactly the two service identities. No aliases
+may reuse these group IDs. Configuration planning enforces the same numeric
+range/separation and policy identity bindings.
+
+Protected bounded passwd/group/shadow snapshots validate these rules. The
+supported NSS sources for passwd/group/shadow are local `files`, optionally
+followed by `systemd`; remote/compatibility sources are rejected for this initial
+profile. Fixed `getent` and `id` commands confirm current name resolution and
+memberships with bounded output, fixed environment and deadlines. Password/hash
+content is never returned in errors, previews or journals. This check does not
+certify arbitrary custom PAM/SSH configuration or firmware/host confinement.
+
+Negative tests cover UID/GID aliases, unlocked/empty passwords, non-shadow
+credentials, interactive shells, real homes, private/runtime group sharing,
+privileged supplementary membership and remote NSS sources. An opt-in Linux CI
+fixture, after package installation, creates the two real system users/groups,
+runs the installed CLI, rejects an added privileged membership and verifies the
+repair. It deletes only its created fixture identities and starts no HomeNode
+services. Ordinary tests and laptop development never run that mutation.
+
+Production account creation and its ownership journal are still unfinished.
+The eventual installer must refuse foreign occupied names, record its own
+creation before issuing fixed account tools, resume interrupted creation, and
+preserve pre-existing identities on rollback. A successful read-only check
+cannot substitute for that ownership lifecycle or fresh-host onboarding.

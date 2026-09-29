@@ -18,6 +18,7 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/control"
 	"github.com/pranavreddyg17/home-node/internal/hostcheck"
 	"github.com/pranavreddyg17/home-node/internal/identity"
+	"github.com/pranavreddyg17/home-node/internal/install"
 	"github.com/pranavreddyg17/home-node/internal/networkcheck"
 	"github.com/pranavreddyg17/home-node/internal/runtimeclient"
 	"github.com/pranavreddyg17/home-node/internal/state"
@@ -33,6 +34,8 @@ func main() {
 		doctor(os.Args[2:])
 	case "serve":
 		serve(os.Args[2:])
+	case "accounts-check":
+		accountsCheck(os.Args[2:])
 	case "network-check":
 		networkCheck(os.Args[2:])
 	case "setup-code":
@@ -42,7 +45,7 @@ func main() {
 	}
 }
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: homenode <doctor|network-check|serve|setup-code> [options]")
+	fmt.Fprintln(os.Stderr, "usage: homenode <doctor|accounts-check|network-check|serve|setup-code> [options]")
 	os.Exit(2)
 }
 func fatal(err error) { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
@@ -58,6 +61,19 @@ func doctor(args []string) {
 	}
 	if !report.PrerequisitesMet {
 		os.Exit(1)
+	}
+}
+func accountsCheck(args []string) {
+	flags := flag.NewFlagSet("accounts-check", flag.ExitOnError)
+	_ = flags.Parse(args)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	accounts, err := install.InspectLocalAccounts(ctx)
+	if err != nil {
+		fatal(err)
+	}
+	if err = json.NewEncoder(os.Stdout).Encode(map[string]any{"accountsValid": true, "accounts": accounts, "servicesActivated": false}); err != nil {
+		fatal(err)
 	}
 }
 func networkCheck(args []string) {

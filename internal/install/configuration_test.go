@@ -31,7 +31,7 @@ func configurationFixture(t *testing.T) (Configuration, catalog.Manifest, ed2551
 		{ID: "video", SHA256: digest([]byte("video fixture")), Bytes: 1024, MemoryMiB: 1024, VCPUs: 1, DataBytes: 8 * catalog.GiB, Protocol: 1, License: "fixture-license", Version: "1"},
 		{ID: "ai", SHA256: digest([]byte("ai fixture")), Bytes: 1024, MemoryMiB: 2048, VCPUs: 1, DataBytes: 16 * catalog.GiB, Protocol: 1, License: "fixture-license", Version: "1"},
 	}}
-	c := Configuration{Network: networkcheck.Config{Bind: "100.100.1.2", Port: 8787, Origin: "https://home.example.ts.net:8787"}, Accounts: Accounts{ControllerUID: 65534, TransferUID: 65533, ControllerGID: 60001, TransferGID: 60002, RuntimeGID: 60003, QEMUGID: 60004}, Policy: supervisor.Policy{Generation: 7, MemoryMiB: 4096, VCPUs: 2, MaxInstances: 3, DiskReserveBytes: 4 * catalog.GiB, ControllerUID: 65534, TransferUID: 65533}, Publisher: pub, MinimumCatalogVersion: 4, Capacity: Capacity{MemoryBytes: 8 * uint64(catalog.GiB), LogicalCPUs: 4, FreeDiskBytes: 100 * uint64(catalog.GiB)}}
+	c := Configuration{Network: networkcheck.Config{Bind: "100.100.1.2", Port: 8787, Origin: "https://home.example.ts.net:8787"}, Accounts: Accounts{ControllerUID: 800, TransferUID: 801, ControllerGID: 800, TransferGID: 801, RuntimeGID: 802, QEMUGID: 64055}, Policy: supervisor.Policy{Generation: 7, MemoryMiB: 4096, VCPUs: 2, MaxInstances: 3, DiskReserveBytes: 4 * catalog.GiB, ControllerUID: 800, TransferUID: 801}, Publisher: pub, MinimumCatalogVersion: 4, Capacity: Capacity{MemoryBytes: 8 * uint64(catalog.GiB), LogicalCPUs: 4, FreeDiskBytes: 100 * uint64(catalog.GiB)}}
 	c.Catalog = signConfigurationCatalog(t, manifest, pub, key)
 	return c, manifest, key, now
 }
@@ -67,7 +67,7 @@ func TestConfigurationPlanBindsPolicyUnitsAndCatalog(t *testing.T) {
 		t.Fatal("incorrect preview", result)
 	}
 	env := string(findConfiguration(t, result.Plan, "etc/homenode/services.env").Data)
-	for _, value := range []string{"TAILNET_IP=100.100.1.2\n", "HTTPS_ORIGIN=https://home.example.ts.net:8787\n", "POLICY_GENERATION=7\n", "CONTROLLER_UID=65534\n", "RUNTIME_GID=60003\n", "TRANSFER_GID=60002\n"} {
+	for _, value := range []string{"TAILNET_IP=100.100.1.2\n", "HTTPS_ORIGIN=https://home.example.ts.net:8787\n", "POLICY_GENERATION=7\n", "CONTROLLER_UID=800\n", "RUNTIME_GID=802\n", "TRANSFER_GID=801\n"} {
 		if !strings.Contains(env, value) {
 			t.Fatal("missing binding", value)
 		}

@@ -60,7 +60,10 @@ func ConfigurationPlan(c Configuration, now time.Time) (ConfigurationPreview, er
 		return result, err
 	}
 	a := c.Accounts
-	if a.ControllerUID == 0 || a.TransferUID == 0 || a.ControllerUID == a.TransferUID || a.ControllerUID > 1<<31-1 || a.TransferUID > 1<<31-1 || c.Policy.ControllerUID != a.ControllerUID || c.Policy.TransferUID != a.TransferUID {
+	if a.ControllerUID == 0 || a.TransferUID == 0 || a.ControllerUID == a.TransferUID || a.ControllerUID >= 1000 || a.TransferUID >= 1000 || c.Policy.ControllerUID != a.ControllerUID || c.Policy.TransferUID != a.TransferUID {
+		return result, ErrPlan
+	}
+	if a.ControllerGID >= 1000 || a.TransferGID >= 1000 || a.RuntimeGID >= 1000 {
 		return result, ErrPlan
 	}
 	seen := map[int]bool{}
