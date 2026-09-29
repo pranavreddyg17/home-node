@@ -178,6 +178,17 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer restoreStage.Close()
+	// testing.TempDir creates child directories with 0777 filtered by umask;
+	// explicitly exercise and then satisfy restore's private-staging contract.
+	if err = os.Chmod(restorePath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = repository.Restore(context.Background(), snapshot, restoreStage, policy); err == nil {
+		t.Fatal("public staging accepted")
+	}
+	if err = os.Chmod(restorePath, 0700); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = repository.Restore(context.Background(), snapshot, restoreStage, policy); err != nil {
 		t.Fatal("validated set restore", err)
 	}
@@ -189,6 +200,9 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 		t.Fatal("existing restore files overwritten")
 	}
 	failedPath := t.TempDir()
+	if err = os.Chmod(failedPath, 0700); err != nil {
+		t.Fatal(err)
+	}
 	failedStage, err := os.Open(failedPath)
 	if err != nil {
 		t.Fatal(err)
