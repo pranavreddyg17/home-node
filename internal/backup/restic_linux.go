@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sync"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -83,23 +84,40 @@ func resticConfig(ctx context.Context, directory *os.File, password []byte, init
 	if err != nil || !info.IsDir() {
 		return nil, ErrRepository
 	}
-	repository, err := repositoryDirectory(directory, initialize)
-	if err != nil {
-		return nil, err
-	}
-	defer repository.Close()
 	secret, err := passwordDescriptor(password)
 	if err != nil {
 		return nil, err
 	}
 	defer secret.Close()
-	deadline, cancel := context.WithTimeout(ctx, 30*time.Second)
+	repository, err := repositoryDirectory(directory, initialize)
+	if err != nil {
+		return nil, err
+	}
+	defer repository.Close()
+	operation := "config"
+	if initialize {
+		operation = "init"
+	}
+	return runRestic(ctx, repository, secret, operation)
+}
+
+func runRestic(ctx context.Context, repository, secret *os.File, operation string) ([]byte, error) {
+	duration := 30 * time.Second
+	if operation == "check" {
+		duration = 10 * time.Minute
+	}
+	deadline, cancel := context.WithTimeout(ctx, duration)
 	defer cancel()
 	args := []string{"--repo", "/proc/self/fd/3", "--password-file", "/proc/self/fd/4", "--no-cache", "--json"}
-	if initialize {
+	switch operation {
+	case "init":
 		args = append(args, "init", "--repository-version", "2")
-	} else {
+	case "config":
 		args = append(args, "cat", "config")
+	case "check":
+		args = append(args, "check", "--read-data", "--quiet")
+	default:
+		return nil, ErrRepository
 	}
 	cmd := exec.CommandContext(deadline, "/usr/bin/restic", args...)
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "LANG=C", "HOME=/nonexistent"}
@@ -108,7 +126,7 @@ func resticConfig(ctx context.Context, directory *os.File, password []byte, init
 	cmd.Stdout = output
 	cmd.Stderr = io.Discard
 	cmd.WaitDelay = 2 * time.Second
-	if err = cmd.Run(); err != nil {
+	if err := cmd.Run(); err != nil {
 		return nil, ErrRepository
 	}
 	return output.data, nil
@@ -117,12 +135,58 @@ func resticConfig(ctx context.Context, directory *os.File, password []byte, init
 // VerifyRepository authenticates restic's encrypted config and matches the
 // registered repository ID. Call after OpenTarget and before any backup mutation.
 func VerifyRepository(ctx context.Context, directory *os.File, target Target, password []byte) error {
-	if err := target.Validate(); err != nil {
-		return err
-	}
-	data, err := resticConfig(ctx, directory, password, false)
+	repository, err := openRepository(ctx, directory, target, password)
 	if err != nil {
 		return err
+	}
+	return repository.Close()
+}
+
+// Repository retains the exact authenticated repository and sealed password.
+// Close ends the credential lifetime. It exposes only typed maintenance actions.
+type Repository struct {
+	mu                sync.Mutex
+	directory, secret *os.File
+}
+
+// OpenRepository admits the registered mount before authenticating its repository.
+func OpenRepository(ctx context.Context, target Target, password []byte) (*Repository, error) {
+	directory, err := OpenTarget(target)
+	if err != nil {
+		return nil, err
+	}
+	defer directory.Close()
+	return openRepository(ctx, directory, target, password)
+}
+
+func openRepository(ctx context.Context, directory *os.File, target Target, password []byte) (_ *Repository, resultErr error) {
+	if err := target.Validate(); err != nil {
+		return nil, err
+	}
+	if directory == nil {
+		return nil, ErrRepository
+	}
+	secret, err := passwordDescriptor(password)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if resultErr != nil {
+			_ = secret.Close()
+		}
+	}()
+	pinned, err := repositoryDirectory(directory, false)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if resultErr != nil {
+			_ = pinned.Close()
+		}
+	}()
+	data, err := runRestic(ctx, pinned, secret, "config")
+	if err != nil {
+		return nil, err
 	}
 	var config struct {
 		ID      string `json:"id"`
@@ -130,11 +194,34 @@ func VerifyRepository(ctx context.Context, directory *os.File, target Target, pa
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	if err = decoder.Decode(&config); err != nil {
-		return ErrRepository
+		return nil, ErrRepository
 	}
 	var extra any
 	if decoder.Decode(&extra) != io.EOF || config.ID != target.RepositoryID || (config.Version != 1 && config.Version != 2) {
+		return nil, ErrRepository
+	}
+	return &Repository{directory: pinned, secret: secret}, nil
+}
+
+// Check validates every encrypted pack using restic. It does not establish that
+// app data can be restored, and it never unlocks or prunes another operation.
+func (r *Repository) Check(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.directory == nil {
 		return ErrRepository
 	}
-	return nil
+	_, err := runRestic(ctx, r.directory, r.secret, "check")
+	return err
+}
+
+func (r *Repository) Close() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.directory == nil {
+		return nil
+	}
+	err := errors.Join(r.directory.Close(), r.secret.Close())
+	r.directory, r.secret = nil, nil
+	return err
 }

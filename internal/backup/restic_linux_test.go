@@ -87,4 +87,27 @@ func TestRealResticRepositoryAuthentication(t *testing.T) {
 	if err = VerifyRepository(context.Background(), directory, target, []byte("wrong password")); err == nil {
 		t.Fatal("wrong password admitted")
 	}
+	repository, err := openRepository(context.Background(), directory, target, password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	if err = os.Rename(filepath.Join(directory.Name(), "homenode-backup"), filepath.Join(directory.Name(), "original")); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Mkdir(filepath.Join(directory.Name(), "homenode-backup"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err = repository.Check(context.Background()); err != nil {
+		t.Fatal("pinned repository check followed replacement", err)
+	}
+	if err = VerifyRepository(context.Background(), directory, target, password); err == nil {
+		t.Fatal("replacement directory authenticated")
+	}
+	if err = repository.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = repository.Check(context.Background()); err == nil {
+		t.Fatal("closed repository retained credentials")
+	}
 }
