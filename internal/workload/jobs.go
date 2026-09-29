@@ -88,7 +88,7 @@ func (s *Service) CreateJob(ctx context.Context, device, key, input, preset, ret
 			return ErrConflict
 		}
 		var used, reserved int64
-		if err = tx.QueryRow("SELECT coalesce(sum(size),0) FROM files").Scan(&used); err != nil {
+		if err = tx.QueryRow("SELECT coalesce(sum(size),0)+(SELECT count(*) FROM orphan_objects WHERE workload='files')*? FROM files", jobOutputBudget).Scan(&used); err != nil {
 			return err
 		}
 		if err = tx.QueryRow("SELECT coalesce(sum(size),0) FROM transfers WHERE state IN('uploading','verifying','cancelling')").Scan(&reserved); err != nil {
@@ -398,6 +398,8 @@ func (s *Service) executeJob(ctx context.Context, j Job) error {
 					return err
 				}
 				output := state.Random()
+				unlock := s.lock(output)
+				defer unlock()
 				if _, err = s.Store.DB.ExecContext(ctx, "INSERT INTO orphan_objects VALUES(?,'files',?)", output, time.Now().Unix()); err != nil {
 					return err
 				}

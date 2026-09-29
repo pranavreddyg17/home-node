@@ -177,7 +177,7 @@ func (s *Service) Reconcile(ctx context.Context) error {
 }
 func (s *Service) Run(ctx context.Context) {
 	var workers sync.WaitGroup
-	for _, work := range []func(context.Context) error{func(ctx context.Context) error { return s.processAppKind(ctx, "app.start") }, func(ctx context.Context) error { return s.processAppKind(ctx, "app.stop") }, s.processJob, s.processGeneration, s.expireTransfer, s.expireTrash, s.cleanupJobResources} {
+	for _, work := range []func(context.Context) error{func(ctx context.Context) error { return s.processAppKind(ctx, "app.start") }, func(ctx context.Context) error { return s.processAppKind(ctx, "app.stop") }, s.processJob, s.processGeneration, s.expireTransfer, s.expireTrash, s.cleanupJobResources, s.cleanupOrphanObject} {
 		workers.Add(1)
 		go func(fn func(context.Context) error) {
 			defer workers.Done()

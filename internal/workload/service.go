@@ -117,7 +117,7 @@ func (s *Service) CreateTransfer(ctx context.Context, device, name string, size 
 			return err
 		}
 		var used int64
-		if err := tx.QueryRow("SELECT coalesce(sum(size),0) FROM files").Scan(&used); err != nil {
+		if err := tx.QueryRow("SELECT coalesce(sum(size),0)+(SELECT count(*) FROM orphan_objects WHERE workload='files')*? FROM files", jobOutputBudget).Scan(&used); err != nil {
 			return err
 		}
 		if count >= 16 || used+reserved+size+int64(activeJobs)*jobOutputBudget > StorageQuota {
