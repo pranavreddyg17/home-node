@@ -1,0 +1,121 @@
+package state
+
+import (
+	"bytes"
+	"context"
+	"database/sql"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestRecoverySnapshotIncludesCommittedWALAndExcludesTrust(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "source"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	device, credential, token := Random(), "PRIVATE-CREDENTIAL-MARKER-"+Random(), "PRIVATE-SESSION-MARKER-"+Random()
+	for _, statement := range []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO identity(singleton,owner_id,claimed,epoch) VALUES(1,'original-owner',1,7)`, nil},
+		{`INSERT INTO devices(id,name,capabilities,created_at) VALUES(?,'owner','["admin"]',1)`, []any{device}},
+		{`INSERT INTO credentials(id,device_id,data) VALUES(?,?,?)`, []any{[]byte("id"), device, credential}},
+		{`INSERT INTO sessions VALUES(?,?,7,1,1,1,9999999999)`, []any{token, device}},
+		{`INSERT INTO settings VALUES('origin','https://old-host.example')`, nil},
+		{`INSERT INTO settings VALUES('retained-config','committed-WAL-value')`, nil},
+		{`INSERT INTO apps(workload,instance_id,state,updated_at,revision) VALUES('files',?,'running',1,9)`, []any{Random()}},
+		{`INSERT INTO transfers(id,device_id,name,size,sha256,state,created_at,expires_at) VALUES(?,?,'unfinished',1,?,'uploading',1,9999999999)`, []any{Random(), device, Hash("content")}},
+	} {
+		if _, err = s.DB.Exec(statement.sql, statement.args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	staging := filepath.Join(t.TempDir(), "snapshot")
+	if err = os.Mkdir(staging, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path, err := s.RecoverySnapshot(context.Background(), staging)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Fatal("snapshot permissions", info, err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(data, []byte(credential)) || bytes.Contains(data, []byte(token)) {
+		t.Fatal("removed secrets remain in snapshot pages")
+	}
+	// Open only the main file, with no source WAL or live source connection.
+	restored, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restored.Close()
+	var value string
+	if err = restored.QueryRow("SELECT value FROM settings WHERE key='retained-config'").Scan(&value); err != nil || value != "committed-WAL-value" {
+		t.Fatal(value, err)
+	}
+	var claimed, epoch int
+	if err = restored.QueryRow("SELECT claimed,epoch FROM identity").Scan(&claimed, &epoch); err != nil || claimed != 0 || epoch != 8 {
+		t.Fatal(claimed, epoch, err)
+	}
+	var count int
+	for _, table := range []string{"sessions", "credentials", "invitations", "challenges", "recovery_codes"} {
+		if err = restored.QueryRow("SELECT count(*) FROM " + table).Scan(&count); err != nil || count != 0 {
+			t.Fatal(table, count, err)
+		}
+	}
+	if err = restored.QueryRow("SELECT count(*) FROM devices WHERE revoked_at IS NULL").Scan(&count); err != nil || count != 0 {
+		t.Fatal("device trust restored", err)
+	}
+	if err = restored.QueryRow("SELECT count(*) FROM settings WHERE key='origin'").Scan(&count); err != nil || count != 0 {
+		t.Fatal("old host origin retained", err)
+	}
+	var phase string
+	var revision int
+	if err = restored.QueryRow("SELECT state,revision FROM apps WHERE workload='files'").Scan(&phase, &revision); err != nil || phase != "stopped" || revision != 10 {
+		t.Fatal("restored runtime intent", phase, revision, err)
+	}
+	if err = restored.QueryRow("SELECT state FROM transfers").Scan(&phase); err != nil || phase != "cancelling" {
+		t.Fatal("restored upload resumed", phase, err)
+	}
+	if err = s.DB.QueryRow("SELECT count(*) FROM sessions").Scan(&count); err != nil || count != 1 {
+		t.Fatal("source identity modified", err)
+	}
+	if _, err = s.RecoverySnapshot(context.Background(), staging); err == nil {
+		t.Fatal("existing snapshot overwritten")
+	}
+}
+
+func TestRecoverySnapshotRefusesPublicDirectoryAndCancelledContext(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "source"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	staging := filepath.Join(t.TempDir(), "snapshot")
+	if err = os.Mkdir(staging, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.RecoverySnapshot(context.Background(), staging); err == nil {
+		t.Fatal("public staging directory accepted")
+	}
+	if err = os.Chmod(staging, 0700); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err = s.RecoverySnapshot(ctx, staging); err == nil {
+		t.Fatal("cancelled snapshot succeeded")
+	}
+	if _, err = os.Stat(filepath.Join(staging, "snapshot.db")); !os.IsNotExist(err) {
+		t.Fatal("failed snapshot left behind", err)
+	}
+}
