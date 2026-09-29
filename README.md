@@ -2,23 +2,37 @@
 
 Design for turning a supported spare Linux laptop into a private server for the owner's other devices. The first release includes private files, CPU-based local AI, isolated processing jobs, device access, verified updates, encrypted external backup, recovery, export, and removal.
 
-The first implementation slice contains a Go host preflight, a loopback-only diagnostics API, and a React diagnostics screen. Workload execution is disabled. The application has not been security-audited.
+The current implementation includes persistent SQLite identity, passkey enrollment and login, scoped device pairing, revocation, recovery codes, host diagnostics, and a responsive interface. Workload execution remains disabled until the supervisor and guest runtime are implemented and qualified.
 
-To run the local development build, start the Go service and web development server in separate terminals:
-
-```sh
-go run ./cmd/homenode serve
-```
+Build and run a local development instance (Go 1.26+, Node.js 22.12+):
 
 ```sh
-cd web
-npm ci
-npm run dev
+npm --prefix web ci
+npm --prefix web run build
+go run ./cmd/homenode serve --dev --state-dir .homenode
 ```
 
-Open the local address printed by Vite. For a machine-readable host report, run `go run ./cmd/homenode doctor`. A nonzero exit code means prerequisites were not met. A passing report is only a prerequisite check; this build still cannot run apps or jobs. The supported host target is Ubuntu Server 24.04 LTS on x86-64. macOS is useful for building and testing the UI but will correctly fail the host check.
+In a second terminal, issue the single-use enrollment code:
 
-Run `go test ./...`, `go vet ./...`, and `npm --prefix web run build` before committing. The web build is not yet served by the Go binary; the production TLS, enrollment, installer, VM runtime, and backup workflow remain in the implementation plan.
+```sh
+go run ./cmd/homenode setup-code --state-dir .homenode
+```
+
+Open `http://localhost:8787`, enter the code, create a passkey, and save the recovery codes outside the server. HTTP is allowed only in explicit loopback development mode. Production requires an exact HTTPS origin, certificate/key, and a Tailscale IPv4 bind address. A state directory pins its original origin; changing a passkey relying-party identity requires recovery.
+
+Run `go run ./cmd/homenode doctor` for machine-readable host diagnostics. Ubuntu Server 24.04 LTS on x86-64 is the initial host target; macOS can develop the interface but cannot qualify KVM/AppArmor isolation.
+
+Verification:
+
+```sh
+go test ./...
+go vet ./...
+npm --prefix web run build
+# Once per machine, install Playwright's Chromium:
+cd web && npx playwright install chromium && npm run test:e2e
+```
+
+The browser test uses a virtual authenticator to exercise actual WebAuthn signatures, device scope, revocation, login and recovery against a temporary SQLite database. It does not replace real-device testing. To use an installed Chrome, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to its executable path. See [implementation progress](docs/PROGRESS.md) for outstanding work and release gates.
 
 - [End-to-end product specification](END_TO_END_PRODUCT_SPEC.md) defines scope, user journeys, components, state, API responsibilities, and completion criteria.
 - [Implementation and release plan](IMPLEMENTATION_PLAN.md) defines milestones, dependencies, proposed code layout, estimates, and acceptance gates.

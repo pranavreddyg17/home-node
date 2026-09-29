@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { IdentityBoundary, Devices, Settings } from './Identity'
+import type { Session } from './api'
 
 type Status = 'pass' | 'warn' | 'fail'
 
@@ -35,7 +37,7 @@ function CheckMark({ status }: { status: Status }) {
   return <span className={`check-mark ${status}`} aria-hidden="true">{status === 'pass' ? '✓' : status === 'warn' ? '!' : '×'}</span>
 }
 
-function App() {
+function Workspace({ session, logout, verify }: { session: Session; logout: () => Promise<void>; verify: () => Promise<void> }) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
   const [selected, setSelected] = useState('Overview')
 
@@ -70,11 +72,11 @@ function App() {
           {['Overview', 'Host checks', 'Apps', 'Jobs', 'Files', 'Devices', 'Settings'].map((item) => (
             <button key={item} type="button" className={`nav-item ${selected === item ? 'active' : ''}`} onClick={() => setSelected(item)} aria-current={selected === item ? 'page' : undefined}>
               <span className="nav-glyph" aria-hidden="true">{({ Overview: '◫', 'Host checks': '◇', Apps: '▦', Jobs: '≡', Files: '▤', Devices: '⌘', Settings: '⚙' } as Record<string, string>)[item]}</span>{item}
-              {['Apps', 'Jobs', 'Files', 'Devices', 'Settings'].includes(item) && <span className="soon">SOON</span>}
+              {['Apps', 'Jobs', 'Files'].includes(item) && <span className="soon">SOON</span>}
             </button>
           ))}
         </nav>
-        <div className="sidebar-bottom"><span className="tiny-dot" /> Local development build <small>Execution is disabled</small></div>
+        <div className="sidebar-bottom"><span className="tiny-dot" /> {session.device.name} <small>Passkey authenticated</small></div>
       </aside>
 
       <div className="main-area">
@@ -82,7 +84,7 @@ function App() {
         <main>
           <div className="heading-row"><div><p className="eyebrow">HOST FOUNDATION</p><h1>{selected === 'Overview' ? 'Your home server' : selected}</h1><p className="lede">A clear view of what this machine can support.</p></div><button type="button" className="refresh-button" onClick={() => void refresh()} disabled={state.kind === 'loading'}>↻ <span>Run checks</span></button></div>
 
-          {selected !== 'Overview' && selected !== 'Host checks' ? (
+          {selected === 'Devices' ? <Devices session={session} verify={verify} /> : selected === 'Settings' ? <Settings logout={logout} /> : selected !== 'Overview' && selected !== 'Host checks' ? (
             <section className="empty-screen"><span className="empty-icon" aria-hidden="true">◇</span><h2>{selected} is being built</h2><p>The host must pass isolation checks before workloads and device access can be enabled. This screen will be connected to verified services as they are implemented.</p><button type="button" onClick={() => setSelected('Host checks')}>View host checks →</button></section>
           ) : state.kind === 'loading' ? (
             <section className="status-panel" role="status">Checking this machine…</section>
@@ -105,4 +107,4 @@ function App() {
   )
 }
 
-export default App
+export default function App() { return <IdentityBoundary>{(session, logout, verify) => <Workspace session={session} logout={logout} verify={verify} />}</IdentityBoundary> }

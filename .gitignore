@@ -3,3 +3,7 @@ web/dist/
 *.tsbuildinfo
 *.test
 .DS_Store
+.homenode/
+bin/
+playwright-report/
+test-results/

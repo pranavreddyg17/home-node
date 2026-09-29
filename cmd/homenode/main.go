@@ -1,76 +1,157 @@
 package main
 
 import (
+	"context"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
+	"github.com/pranavreddyg17/home-node/internal/control"
 	"github.com/pranavreddyg17/home-node/internal/hostcheck"
-	"github.com/pranavreddyg17/home-node/internal/server"
+	"github.com/pranavreddyg17/home-node/internal/identity"
+	"github.com/pranavreddyg17/home-node/internal/state"
 )
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "doctor" {
+	if len(os.Args) < 2 {
+		usage()
+	}
+	switch os.Args[1] {
+	case "doctor":
 		doctor(os.Args[2:])
-		return
-	}
-	if len(os.Args) > 1 && os.Args[1] == "serve" {
+	case "serve":
 		serve(os.Args[2:])
-		return
+	case "setup-code":
+		setupCode(os.Args[2:])
+	default:
+		usage()
 	}
-	fmt.Fprintln(os.Stderr, "usage: homenode <doctor|serve> [options]")
+}
+func usage() {
+	fmt.Fprintln(os.Stderr, "usage: homenode <doctor|serve|setup-code> [options]")
 	os.Exit(2)
 }
-
+func fatal(err error) { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
 func doctor(args []string) {
 	flags := flag.NewFlagSet("doctor", flag.ExitOnError)
-	dataRoot := flags.String("data-root", "/var/lib/homenode", "future workload data location")
+	root := flags.String("data-root", "/var/lib/homenode", "workload data location")
 	_ = flags.Parse(args)
-	report := hostcheck.Inspect(*dataRoot)
+	report := hostcheck.Inspect(*root)
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(report); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		fatal(err)
 	}
 	if !report.PrerequisitesMet {
 		os.Exit(1)
 	}
 }
-
+func setupCode(args []string) {
+	flags := flag.NewFlagSet("setup-code", flag.ExitOnError)
+	directory := flags.String("state-dir", "/var/lib/homenode/control", "private management state directory")
+	_ = flags.Parse(args)
+	store, err := state.Open(*directory)
+	if err != nil {
+		fatal(err)
+	}
+	defer store.Close()
+	auth, err := identity.New(store, "http://localhost")
+	if err != nil {
+		fatal(err)
+	}
+	code, err := auth.CreateSetupCode(context.Background())
+	if err != nil {
+		fatal(err)
+	}
+	fmt.Println("Single-use enrollment code (expires in 10 minutes):")
+	fmt.Println(code)
+}
 func serve(args []string) {
 	flags := flag.NewFlagSet("serve", flag.ExitOnError)
-	port := flags.Int("port", 8787, "local diagnostics port")
-	dataRoot := flags.String("data-root", "/var/lib/homenode", "future workload data location")
+	dev := flags.Bool("dev", false, "local development only; use HTTP on localhost")
+	port := flags.Int("port", 8787, "listen port")
+	address := flags.String("bind", "", "production Tailscale IP; development always uses 127.0.0.1")
+	origin := flags.String("origin", "", "exact HTTPS browser origin (required in production)")
+	directory := flags.String("state-dir", "/var/lib/homenode/control", "private management state directory")
+	dataRoot := flags.String("data-root", "/var/lib/homenode", "workload data location")
+	ui := flags.String("web-dir", "web/dist", "built first-party web assets")
+	cert := flags.String("tls-cert", "", "certificate PEM path")
+	key := flags.String("tls-key", "", "private key PEM path")
 	_ = flags.Parse(args)
-	if *port < 0 || *port > 65535 {
-		fmt.Fprintln(os.Stderr, "port must be between 0 and 65535")
-		os.Exit(2)
+	if *port < 1 || *port > 65535 {
+		fatal(fmt.Errorf("port must be 1..65535"))
 	}
-	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(*port))
-	listener, err := net.Listen("tcp", address)
+	if *dev {
+		if *address != "" && *address != "127.0.0.1" {
+			fatal(fmt.Errorf("development binds only loopback"))
+		}
+		*address = "127.0.0.1"
+		if *origin == "" {
+			*origin = "http://localhost:" + strconv.Itoa(*port)
+		}
+	} else {
+		ip, err := netip.ParseAddr(*address)
+		if err != nil || !netip.MustParsePrefix("100.64.0.0/10").Contains(ip) {
+			fatal(fmt.Errorf("production bind must be the host's Tailscale IPv4 address"))
+		}
+		if *origin == "" || *cert == "" || *key == "" {
+			fatal(fmt.Errorf("production requires --origin, --tls-cert and --tls-key"))
+		}
+	}
+	store, err := state.Open(*directory)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		fatal(err)
+	}
+	defer store.Close()
+	handler, err := control.New(store, control.Config{Origin: *origin, Development: *dev, UI: os.DirFS(*ui), Report: func() hostcheck.Report { return hostcheck.Inspect(*dataRoot) }})
+	if err != nil {
+		fatal(err)
+	}
+	listener, err := net.Listen("tcp", net.JoinHostPort(*address, strconv.Itoa(*port)))
+	if err != nil {
+		fatal(err)
 	}
 	defer listener.Close()
-	srv := &http.Server{
-		Handler:           server.New(func() hostcheck.Report { return hostcheck.Inspect(*dataRoot) }),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       30 * time.Second,
-		MaxHeaderBytes:    16 << 10,
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13}}
+	go func() {
+		<-ctx.Done()
+		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdown)
+	}()
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := handler.Identity.Cleanup(ctx); err != nil && ctx.Err() == nil {
+					slog.Error("identity cleanup failed")
+				}
+			}
+		}
+	}()
+	slog.Info("HomeNode listening", "origin", *origin, "development", *dev)
+	if *dev {
+		err = server.Serve(listener)
+	} else {
+		err = server.ServeTLS(listener, *cert, *key)
 	}
-	slog.Info("local diagnostics available", "address", listener.Addr().String())
-	if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
-		slog.Error("server stopped", "error", err)
-		os.Exit(1)
+	if err != nil && err != http.ErrServerClosed {
+		fatal(err)
 	}
 }

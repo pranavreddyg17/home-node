@@ -1,6 +1,6 @@
 # Personal compute server implementation and release plan
 
-Revision 1 — 28 September 2026. This is the build sequence for the [end-to-end specification](END_TO_END_PRODUCT_SPEC.md), under the controls in [the security research](SECURITY_RESEARCH_AND_PLAN.md). The repository currently contains design documents, not a working application. Milestones below are acceptance gates, not completed work.
+Revision 1 — 28 September 2026. This is the build sequence for the [end-to-end specification](END_TO_END_PRODUCT_SPEC.md), under the controls in [the security research](SECURITY_RESEARCH_AND_PLAN.md). The repository contains an initial control plane and interface. See [implementation progress](docs/PROGRESS.md) for verified functionality. Milestones below are release acceptance gates, not claims of completion.
 
 **Architecture decisions to hold stable.** Use Go for host services, React/TypeScript for the first-party interface, optional Three.js for device visualization, SQLite for local metadata, QEMU/KVM with libvirt for app isolation, a restrictive Tailscale deployment for client access, verified release metadata for updates, and restic for encrypted external-drive backup. Start on one supported x86-64 Linux release. Do not add Kubernetes, Redis, PostgreSQL, a public cloud control plane, a custom VPN, or a second backend language unless evidence requires it.
 
@@ -34,7 +34,7 @@ The planning range is approximately 15–24 engineer-weeks for an experienced fu
 | Backup | Registered drive, maintenance orchestration, consistency manifest, restic integration, restore | Stable schemas and app storage |
 | Release/support | Signed deliverables, CI evidence, known limits, diagnostics, reporting and response | Every milestone contributes |
 
-**Repository structure for implementation.** This is a proposed layout; these source directories are not created by this planning task.
+**Repository structure for implementation.** This is the target layout; the implementation record tracks created components.
 
 ```text
 cmd/
