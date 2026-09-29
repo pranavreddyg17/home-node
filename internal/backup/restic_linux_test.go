@@ -172,10 +172,74 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if !bytes.Equal(restored.Bytes(), original) {
 		t.Fatal("encrypted snapshot round trip changed bytes")
 	}
+	restorePath := t.TempDir()
+	restoreStage, err := os.Open(restorePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restoreStage.Close()
+	if _, err = repository.Restore(context.Background(), snapshot, restoreStage, policy); err != nil {
+		t.Fatal("validated set restore", err)
+	}
+	restoredDatabase, err := os.ReadFile(filepath.Join(restorePath, "snapshot.db"))
+	if err != nil || !bytes.Equal(restoredDatabase, original) {
+		t.Fatal("restored database mismatch", err)
+	}
+	if _, err = repository.Restore(context.Background(), snapshot, restoreStage, policy); err == nil {
+		t.Fatal("existing restore files overwritten")
+	}
+	failedPath := t.TempDir()
+	failedStage, err := os.Open(failedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer failedStage.Close()
+	wrongPolicy := policy
+	wrongPolicy.MinimumCatalogVersion = manifest.CatalogVersion + 1
+	if _, err = repository.Restore(context.Background(), snapshot, failedStage, wrongPolicy); err == nil {
+		t.Fatal("incompatible recovery installed")
+	}
+	if entries, err := os.ReadDir(failedPath); err != nil || len(entries) != 0 {
+		t.Fatal("failed restore left payload", entries, err)
+	}
+	// Create a deliberately incomplete repository snapshot using the real tool.
+	// Its manifest names a disk absent from the snapshot, so restore must remove
+	// the already retrieved database when the later disk lookup fails.
+	incomplete := &boundedOutput{maximum: 32768}
+	partialArgs := []string{"--repo", "/proc/self/fd/3", "--password-file", "/proc/self/fd/4", "--no-cache", "--json", "backup", "--quiet", "--host", "fixture", "--", "/proc/self/fd/5/manifest.json", "/proc/self/fd/5/snapshot.db"}
+	if err = resticProcess(ctx, partialArgs, []*os.File{repository.directory, repository.secret, stage}, incomplete); err != nil {
+		t.Fatal(err)
+	}
+	var summary struct {
+		ID string `json:"snapshot_id"`
+	}
+	if err = json.Unmarshal(incomplete.data, &summary); err != nil || !repositoryPattern.MatchString(summary.ID) {
+		t.Fatal("incomplete fixture summary", err)
+	}
+	if _, err = repository.Restore(context.Background(), summary.ID, failedStage, policy); err == nil {
+		t.Fatal("missing disk restored successfully")
+	}
+	if entries, err := os.ReadDir(failedPath); err != nil || len(entries) != 0 {
+		t.Fatal("partial restore retained files", entries, err)
+	}
 	if err = os.WriteFile(filepath.Join(path, "files.raw"), []byte("corrupt"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if id, err := repository.Snapshot(context.Background(), stage, manifest, policy); err == nil || id != "" {
 		t.Fatal("corrupt payload reported backed up")
+	}
+}
+
+func TestRestoreWriterRefusesOversizedOutput(t *testing.T) {
+	var destination bytes.Buffer
+	writer := &restoreWriter{destination: &destination, remaining: 3}
+	if _, err := writer.Write([]byte("too many bytes")); err == nil || destination.Len() != 0 {
+		t.Fatal("oversized restore wrote data")
+	}
+	if _, err := writer.Write([]byte("abc")); err != nil || writer.remaining != 0 {
+		t.Fatal(err)
+	}
+	if _, err := writer.Write([]byte("d")); err == nil {
+		t.Fatal("restore grew past manifest size")
 	}
 }
