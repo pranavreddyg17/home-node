@@ -55,6 +55,7 @@ Development is on macOS; none of these hardware or external review gates may be 
 - The package has no automatic provisioning or removal hooks and does not include private configuration or data. It is unsigned development tooling, not a production distribution or completed installer.
 - CI now builds/extracts the actual package and checks its entire payload against its checksum inventory. Local shell syntax checks pass; Debian packaging is tested on the Linux runner because this Mac has no `dpkg-deb`.
 - Upload expiration and cancellation slices passed Linux CI before this packaging change.
+- The package build, extracted payload checksum verification and artifact retention passed Linux CI on commit `0886f3b`. Systemd provisioning templates were added afterward and have separate checks pending.
 
 ## Service provisioning groundwork
 

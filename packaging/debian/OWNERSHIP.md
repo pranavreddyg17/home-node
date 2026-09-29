@@ -1,7 +1,8 @@
 # Development package ownership
 
 The package owns `/usr/bin/homenode`, `/usr/lib/homenode`,
-`/usr/share/homenode/web`, and `/usr/share/doc/homenode`. Binaries and web assets
+`/usr/share/homenode` (web assets and inactive service templates), and
+`/usr/share/doc/homenode`. Binaries and web assets
 are root-owned and writable only by root. The guest executable is a build input
 for immutable guest images; it must not be launched on the host.
 

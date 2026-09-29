@@ -18,10 +18,11 @@ No default address, private key, publisher trust root, or owner is included.
 Supervisor needs root to provision raw volumes/channel ownership and communicate
 with libvirt. It has no management/TLS access inside its mount namespace.
 Controller gets only private control state; transfer gets its socket directory.
-Controller/transfer drop all capabilities. Supervisor confinement still requires
-Supervisor retains only ownership, protected filesystem access and process
+Controller/transfer drop all capabilities. Supervisor retains only ownership,
+protected filesystem access and process
 inspection capabilities; it cannot administer networking or mount filesystems.
-independent physical-host verification; these unit restrictions do not prove the
+Supervisor confinement still requires independent physical-host verification;
+these unit restrictions do not prove the
 hypervisor boundary. Controller host diagnostics will report KVM inaccessible
 under its private device namespace; the root supervisor remains authoritative
 for workload eligibility.
