@@ -71,9 +71,15 @@ func accountsProvision(args []string) {
 		fatal(fmt.Errorf("account provisioning requires Linux and root"))
 	}
 	flags := flag.NewFlagSet("accounts-provision", flag.ExitOnError)
-	directory := flags.String("journal-dir", "/var/lib/homenode-install", "existing private root-owned installation journal directory")
+	directory := flags.String("journal-dir", "/var/lib/homenode-install", "private journal directory; the default is created securely")
 	_ = flags.Parse(args)
-	engine, err := install.Open("/", *directory)
+	var engine *install.Engine
+	var err error
+	if *directory == "/var/lib/homenode-install" {
+		engine, err = install.OpenSystem()
+	} else {
+		engine, err = install.Open("/", *directory)
+	}
 	if err != nil {
 		fatal(err)
 	}

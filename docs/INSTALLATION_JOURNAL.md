@@ -186,3 +186,18 @@ live namespace collisions, foreign initial names and changed ownership markers.
 This remains separate from physical power-loss qualification and production
 account removal. Removal needs stopped services, active-process and retained-data
 checks before UID/GID reuse can be considered safe.
+
+### Fresh journal bootstrap
+
+The default `accounts-provision` invocation now creates `/var/lib/homenode-install`
+with mode 0700. It pins the host root and each existing `var`/`lib` directory,
+rejects symlinks and directories with foreign ownership or group/other write
+access, and syncs the parent before opening the journal and taking its lock.
+Existing journal directories must have mode 0700; unsafe permissions are not
+silently repaired. Missing system parents are not recursively created. A custom
+`--journal-dir` still requires an existing private directory.
+
+Bootstrap creates only this fixed journal directory. It does not establish
+ownership of occupied configuration, install images, activate services, or
+provide account/data removal. The empty journal is intentionally retained on
+failure so concurrent or interrupted invocations can safely retry admission.

@@ -36,6 +36,10 @@ func Open(hostRoot, journalDirectory string) (*Engine, error) {
 		host.Close()
 		return nil, err
 	}
+	return openRoots(host, jr, owner)
+}
+
+func openRoots(host, jr *os.Root, owner int) (*Engine, error) {
 	lock, err := jr.OpenFile("install.lock", os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0600)
 	if err != nil {
 		host.Close()
