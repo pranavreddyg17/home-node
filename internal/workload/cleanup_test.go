@@ -94,3 +94,96 @@ func TestExpiredUploadRetainsReservationUntilGuestDeletion(t *testing.T) {
 		t.Fatal("cleanup replay", err)
 	}
 }
+
+func TestTrashExpirationReclaimsBytesOnlyAfterGuestDeletion(t *testing.T) {
+	s, backend, device := service(t)
+	ctx := context.Background()
+	startFiles(t, s, device)
+	data := []byte("retained until durable trash deletion")
+	upload, err := s.CreateTransfer(ctx, device, "trash.txt", int64(len(data)), sum(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Upload(ctx, device, upload.ID, 0, data, sum(data)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Finalize(ctx, device, upload.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.ChangeFile(ctx, device, upload.ID, "trash", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Store.DB.Exec("UPDATE files SET trash_until=0 WHERE id=?", upload.ID); err != nil {
+		t.Fatal(err)
+	}
+	s.Backend = nil
+	if err = s.expireTrash(ctx); err == nil {
+		t.Fatal("offline deletion falsely completed")
+	}
+	var bytes int64
+	if err = s.Store.DB.QueryRow("SELECT sum(size) FROM files").Scan(&bytes); err != nil || bytes != int64(len(data)) {
+		t.Fatal("quota released early", bytes, err)
+	}
+	if err = s.ChangeFile(ctx, device, upload.ID, "restore", ""); err == nil {
+		t.Fatal("expired trash restored")
+	}
+	s.Backend = backend
+	if err = s.expireTrash(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.File(ctx, upload.ID); err == nil {
+		t.Fatal("purged file remained visible")
+	}
+	files, err := s.Files(ctx)
+	if err != nil || len(files) != 0 {
+		t.Fatal(files, err)
+	}
+	if err = s.Store.DB.QueryRow("SELECT sum(size) FROM files").Scan(&bytes); err != nil || bytes != 0 {
+		t.Fatal("purge quota", bytes, err)
+	}
+	if response := backend.agent.Handle(guestproto.Request{Version: 1, RequestID: state.Random(), Operation: "stat", ObjectID: upload.ID}); response.Error == "" {
+		t.Fatal("guest retained expired object")
+	}
+	if err = s.ChangeFile(ctx, device, upload.ID, "restore", ""); err == nil {
+		t.Fatal("purged tombstone restored")
+	}
+	if _, err = s.Finalize(ctx, device, upload.ID); err == nil {
+		t.Fatal("ready transfer resurrected purged file")
+	}
+	if err = s.expireTrash(ctx); err != nil {
+		t.Fatal("purge replay", err)
+	}
+}
+
+func TestTrashExpirationProtectsActiveJobInput(t *testing.T) {
+	s, _, device, input := jobService(t)
+	ctx := context.Background()
+	job, err := s.CreateJob(ctx, device, state.Random(), input.ID, "mp4-720p", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.ChangeFile(ctx, device, input.ID, "trash", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Store.DB.Exec("UPDATE files SET trash_until=0 WHERE id=?", input.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.expireTrash(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.File(ctx, input.ID); err != nil {
+		t.Fatal("active input deleted", err)
+	}
+	if err = s.CancelJob(ctx, device, job.ID, job.AttemptID); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.processJob(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.expireTrash(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.File(ctx, input.ID); err == nil {
+		t.Fatal("terminal input held forever")
+	}
+}

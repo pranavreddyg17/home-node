@@ -204,11 +204,11 @@ func (s *Service) Finalize(ctx context.Context, device, id string) (File, error)
 }
 func (s *Service) File(ctx context.Context, id string) (File, error) {
 	var f File
-	err := s.Store.DB.QueryRowContext(ctx, "SELECT id,name,size,sha256,created_at,trash_until FROM files WHERE id=?", id).Scan(&f.ID, &f.Name, &f.Size, &f.SHA256, &f.CreatedAt, &f.TrashUntil)
+	err := s.Store.DB.QueryRowContext(ctx, "SELECT id,name,size,sha256,created_at,trash_until FROM files WHERE id=? AND (trash_until IS NULL OR trash_until>=0)", id).Scan(&f.ID, &f.Name, &f.Size, &f.SHA256, &f.CreatedAt, &f.TrashUntil)
 	return f, err
 }
 func (s *Service) Files(ctx context.Context) ([]File, error) {
-	rows, err := s.Store.DB.QueryContext(ctx, "SELECT id,name,size,sha256,created_at,trash_until FROM files ORDER BY created_at DESC LIMIT 10000")
+	rows, err := s.Store.DB.QueryContext(ctx, "SELECT id,name,size,sha256,created_at,trash_until FROM files WHERE trash_until IS NULL OR trash_until>=0 ORDER BY created_at DESC LIMIT 10000")
 	if err != nil {
 		return nil, err
 	}
@@ -227,6 +227,8 @@ func (s *Service) ChangeFile(ctx context.Context, device, id, action, name strin
 	if !guestproto.ValidID(id) {
 		return ErrInvalid
 	}
+	unlock := s.lock(id)
+	defer unlock()
 	return s.Store.Transaction(ctx, func(tx *sql.Tx) error {
 		var result sql.Result
 		var err error
@@ -235,11 +237,11 @@ func (s *Service) ChangeFile(ctx context.Context, device, id, action, name strin
 			if !validName(name) {
 				return ErrInvalid
 			}
-			result, err = tx.Exec("UPDATE files SET name=? WHERE id=?", name, id)
+			result, err = tx.Exec("UPDATE files SET name=? WHERE id=? AND (trash_until IS NULL OR trash_until>?)", name, id, time.Now().Unix())
 		case "trash":
 			result, err = tx.Exec("UPDATE files SET trash_until=? WHERE id=? AND trash_until IS NULL", time.Now().Add(7*24*time.Hour).Unix(), id)
 		case "restore":
-			result, err = tx.Exec("UPDATE files SET trash_until=NULL WHERE id=?", id)
+			result, err = tx.Exec("UPDATE files SET trash_until=NULL WHERE id=? AND trash_until>?", id, time.Now().Unix())
 		default:
 			return ErrInvalid
 		}
