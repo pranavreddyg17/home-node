@@ -16,6 +16,7 @@ import (
 const jobOutputBudget int64 = 4 << 30
 
 type Job struct {
+	CleanupPending bool    `json:"cleanupPending"`
 	StartRequested bool    `json:"-"`
 	ID             string  `json:"id"`
 	AttemptID      string  `json:"attemptId"`
@@ -30,11 +31,11 @@ type Job struct {
 	UpdatedAt      int64   `json:"updatedAt"`
 }
 
-const jobColumns = "group_id,id,input_id,preset,state,instance_id,operation_id,output_id,error_code,created_at,updated_at,start_requested"
+const jobColumns = "group_id,id,input_id,preset,state,instance_id,operation_id,output_id,error_code,created_at,updated_at,start_requested,EXISTS(SELECT 1 FROM settings WHERE key='job.cleanup.'||jobs.id AND json_extract(value,'$.state')='pending' AND jobs.state IN('succeeded','failed','cancelled','interrupted'))"
 
 func scanJob(row interface{ Scan(...any) error }) (Job, error) {
 	var j Job
-	err := row.Scan(&j.ID, &j.AttemptID, &j.InputID, &j.Preset, &j.State, &j.InstanceID, &j.OperationID, &j.OutputID, &j.ErrorCode, &j.CreatedAt, &j.UpdatedAt, &j.StartRequested)
+	err := row.Scan(&j.ID, &j.AttemptID, &j.InputID, &j.Preset, &j.State, &j.InstanceID, &j.OperationID, &j.OutputID, &j.ErrorCode, &j.CreatedAt, &j.UpdatedAt, &j.StartRequested, &j.CleanupPending)
 	return j, err
 }
 func (s *Service) Jobs(ctx context.Context) ([]Job, error) {
@@ -297,16 +298,17 @@ func (s *Service) processJob(ctx context.Context) error {
 		return readErr
 	}
 	if current.StartRequested {
-		_, stopErr = s.Backend.Apply(cleanup, supervisor.Request{Version: 1, OperationID: state.Random(), Action: "stop", Revision: 2, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration})
-	}
-	if current.StartRequested && stopErr == nil {
-		_, _ = s.Backend.Apply(cleanup, supervisor.Request{Version: 1, OperationID: state.Random(), Action: "purge", Revision: 3, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration})
+		stopErr = s.releaseJobResources(cleanup, j)
 	}
 	latest, err := s.attempt(cleanup, j.AttemptID)
 	if err != nil {
 		return err
 	}
 	if latest.State == "succeeded" {
+		if stopErr != nil {
+			_, err = s.Store.DB.ExecContext(cleanup, "UPDATE jobs SET error_code='CLEANUP_PENDING' WHERE id=?", j.AttemptID)
+			return errors.Join(stopErr, err)
+		}
 		return stopErr
 	}
 	phase, code := "failed", "WORKLOAD_FAILED"
@@ -330,16 +332,23 @@ func (s *Service) executeJob(ctx context.Context, j Job) error {
 	if err != nil || input.TrashUntil != nil {
 		return ErrConflict
 	}
-	startResult, err := s.Store.DB.ExecContext(ctx, "UPDATE jobs SET start_requested=1 WHERE id=? AND state='preparing'", j.AttemptID)
+	err = s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		result, err := tx.Exec("UPDATE jobs SET start_requested=1 WHERE id=? AND state='preparing'", j.AttemptID)
+		if err != nil {
+			return err
+		}
+		n, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n != 1 {
+			return context.Canceled
+		}
+		_, err = tx.Exec("INSERT OR IGNORE INTO settings(key,value) VALUES(?,json_object('state','pending','lastAttempt',0))", cleanupKey(j.AttemptID))
+		return err
+	})
 	if err != nil {
 		return err
-	}
-	n, err := startResult.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n != 1 {
-		return context.Canceled
 	}
 	instance, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: j.OperationID, Action: "start", Revision: 1, InstanceID: j.InstanceID, Workload: "video", PolicyGeneration: s.PolicyGeneration})
 	if err != nil {

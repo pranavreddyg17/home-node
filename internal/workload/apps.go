@@ -147,6 +147,9 @@ func (s *Service) processAppKind(ctx context.Context, selectedKind string) error
 	return s.finish(ctx, opID, "succeeded", instance)
 }
 func (s *Service) Reconcile(ctx context.Context) error {
+	if _, err := s.Store.DB.ExecContext(ctx, "INSERT OR IGNORE INTO settings(key,value) SELECT 'job.cleanup.'||id,json_object('state','pending','lastAttempt',0) FROM jobs WHERE start_requested=1"); err != nil {
+		return err
+	}
 	if err := s.reconcileJobs(ctx); err != nil {
 		return err
 	}
@@ -174,7 +177,7 @@ func (s *Service) Reconcile(ctx context.Context) error {
 }
 func (s *Service) Run(ctx context.Context) {
 	var workers sync.WaitGroup
-	for _, work := range []func(context.Context) error{func(ctx context.Context) error { return s.processAppKind(ctx, "app.start") }, func(ctx context.Context) error { return s.processAppKind(ctx, "app.stop") }, s.processJob, s.processGeneration, s.expireTransfer, s.expireTrash} {
+	for _, work := range []func(context.Context) error{func(ctx context.Context) error { return s.processAppKind(ctx, "app.start") }, func(ctx context.Context) error { return s.processAppKind(ctx, "app.stop") }, s.processJob, s.processGeneration, s.expireTransfer, s.expireTrash, s.cleanupJobResources} {
 		workers.Add(1)
 		go func(fn func(context.Context) error) {
 			defer workers.Done()

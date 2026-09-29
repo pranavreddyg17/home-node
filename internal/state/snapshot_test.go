@@ -26,6 +26,7 @@ func TestRecoverySnapshotIncludesCommittedWALAndExcludesTrust(t *testing.T) {
 		{`INSERT INTO sessions VALUES(?,?,7,1,1,1,9999999999)`, []any{token, device}},
 		{`INSERT INTO settings VALUES('origin','https://old-host.example')`, nil},
 		{`INSERT INTO settings VALUES('retained-config','committed-WAL-value')`, nil},
+		{`INSERT INTO settings VALUES('job.cleanup.old-attempt','{"state":"pending","lastAttempt":0}')`, nil},
 		{`INSERT INTO apps(workload,instance_id,state,updated_at,revision) VALUES('files',?,'running',1,9)`, []any{Random()}},
 		{`INSERT INTO transfers(id,device_id,name,size,sha256,state,created_at,expires_at) VALUES(?,?,'unfinished',1,?,'uploading',1,9999999999)`, []any{Random(), device, Hash("content")}},
 	} {
@@ -86,6 +87,12 @@ func TestRecoverySnapshotIncludesCommittedWALAndExcludesTrust(t *testing.T) {
 	}
 	if err = restored.QueryRow("SELECT count(*) FROM settings WHERE key='origin'").Scan(&count); err != nil || count != 0 {
 		t.Fatal("old host origin retained", err)
+	}
+	if err = restored.QueryRow("SELECT count(*) FROM settings WHERE key GLOB 'job.cleanup.*'").Scan(&count); err != nil || count != 0 {
+		t.Fatal("old cleanup authority retained", count, err)
+	}
+	if err = s.DB.QueryRow("SELECT count(*) FROM settings WHERE key GLOB 'job.cleanup.*'").Scan(&count); err != nil || count != 1 {
+		t.Fatal("source cleanup intent modified", count, err)
 	}
 	var phase string
 	var revision int
