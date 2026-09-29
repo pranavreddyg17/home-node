@@ -169,11 +169,18 @@ func main() {
 		fatal(err)
 	}
 	server := &http.Server{Handler: manager.Handler(), ConnContext: supervisor.PeerContext, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 95 * time.Second, IdleTimeout: 10 * time.Second, MaxHeaderBytes: 8192}
+	shutdownDone := make(chan error, 1)
 	go func() {
 		<-ctx.Done()
-		deadline, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_ = server.Shutdown(deadline)
+		deadline, cancel := context.WithTimeout(context.Background(), 100*time.Second)
+		shutdownErr := server.Shutdown(deadline)
+		cancel()
+		if shutdownErr != nil {
+			_ = server.Close()
+		}
+		cleanup, cancelCleanup := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancelCleanup()
+		shutdownDone <- errors.Join(shutdownErr, manager.Shutdown(cleanup))
 	}()
 	go func() {
 		ticker := time.NewTicker(10 * time.Second)
@@ -192,7 +199,12 @@ func main() {
 		}
 	}()
 	fmt.Println("HomeNode runtime supervisor ready")
-	if err = server.Serve(listener); err != nil && err != http.ErrServerClosed {
+	err = server.Serve(listener)
+	stop()
+	if errors.Is(err, http.ErrServerClosed) {
+		err = nil
+	}
+	if err = errors.Join(err, <-shutdownDone); err != nil {
 		fatal(err)
 	}
 }

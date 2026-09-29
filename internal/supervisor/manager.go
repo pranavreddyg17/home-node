@@ -76,6 +76,7 @@ type Manager struct {
 	Images, Volumes, Channels string
 	Backend                   Backend
 	startMu                   sync.Mutex
+	shuttingDown              bool // guarded by startMu
 }
 
 func (m *Manager) Initialize(ctx context.Context) error {
@@ -177,6 +178,9 @@ func (m *Manager) operation(tx *sql.Tx, r Request) (bool, error) {
 func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 	m.startMu.Lock()
 	defer m.startMu.Unlock()
+	if m.shuttingDown {
+		return Instance{}, ErrPolicy
+	}
 	if !m.Manifest.Expires.After(time.Now()) {
 		return Instance{}, catalog.ErrUntrusted
 	}
@@ -352,6 +356,15 @@ func (m *Manager) stop(ctx context.Context, r Request) (Instance, error) {
 
 // Reconcile never repeats an uncertain job. At startup it stops each recorded
 // VM before marking interrupted operations; apps are restarted by new intent.
+// Shutdown permanently closes start admission on this manager. Guest stop is
+// a safety boundary, not an application-consistent backup operation.
+func (m *Manager) Shutdown(ctx context.Context) error {
+	m.startMu.Lock()
+	defer m.startMu.Unlock()
+	m.shuttingDown = true
+	return m.Reconcile(ctx)
+}
+
 func (m *Manager) Reconcile(ctx context.Context) error {
 	rows, err := m.Store.DB.QueryContext(ctx, "SELECT id FROM runtime_instances WHERE state IN('preparing','running','stopping')")
 	if err != nil {
@@ -371,16 +384,22 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	var failures []error
 	for _, id := range ids {
 		if !guestproto.ValidID(id) {
-			return ErrPolicy
+			failures = append(failures, ErrPolicy)
+			continue
 		}
 		if err = m.Backend.Stop(ctx, id); err != nil {
-			return fmt.Errorf("cannot stop uncertain instance: %w", err)
+			failures = append(failures, fmt.Errorf("cannot stop uncertain instance: %w", err))
+			continue
 		}
 		if _, err = m.Store.DB.ExecContext(ctx, "UPDATE runtime_instances SET state='interrupted',desired='stopped' WHERE id=?", id); err != nil {
-			return err
+			failures = append(failures, err)
 		}
+	}
+	if len(failures) > 0 {
+		return errors.Join(failures...)
 	}
 	_, err = m.Store.DB.ExecContext(ctx, "UPDATE runtime_operations SET state='interrupted' WHERE state='pending'")
 	return err

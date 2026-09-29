@@ -54,6 +54,61 @@ func newManager(t *testing.T) (*Manager, *fakeBackend) {
 func startRequest() Request {
 	return Request{Version: 1, OperationID: state.Random(), InstanceID: state.Random(), Action: "start", Revision: 1, Workload: "files", PolicyGeneration: 1}
 }
+
+type failingStopBackend struct {
+	*fakeBackend
+	failID string
+}
+
+func (b *failingStopBackend) Stop(ctx context.Context, id string) error {
+	if id == b.failID {
+		b.stops++
+		return errors.New("stop failed")
+	}
+	return b.fakeBackend.Stop(ctx, id)
+}
+
+func TestShutdownStopsAllAndKeepsFailedStopVisible(t *testing.T) {
+	m, b := newManager(t)
+	ctx := context.Background()
+	first, second := startRequest(), startRequest()
+	ai := m.Manifest.Images[0]
+	ai.ID = "ai"
+	m.Manifest.Images = append(m.Manifest.Images, ai)
+	second.Workload = "ai"
+	for _, r := range []Request{first, second} {
+		if _, err := m.Apply(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	failing := &failingStopBackend{fakeBackend: b, failID: first.InstanceID}
+	m.Backend = failing
+	if err := m.Shutdown(ctx); err == nil {
+		t.Fatal("stop failure hidden")
+	}
+	if b.stops != 2 {
+		t.Fatal("one failed stop skipped another guest", b.stops)
+	}
+	one, err := m.Inspect(ctx, first.InstanceID)
+	if err != nil || one.State != "running" {
+		t.Fatal("failed stop falsely completed", one, err)
+	}
+	two, err := m.Inspect(ctx, second.InstanceID)
+	if err != nil || two.State != "interrupted" || two.Desired != "stopped" {
+		t.Fatal(two, err)
+	}
+	if _, err = m.Apply(ctx, startRequest()); !errors.Is(err, ErrPolicy) {
+		t.Fatal("shutdown admitted start", err)
+	}
+	failing.failID = ""
+	if err = m.Shutdown(ctx); err != nil {
+		t.Fatal("retry failed", err)
+	}
+	one, err = m.Inspect(ctx, first.InstanceID)
+	if err != nil || one.State != "interrupted" {
+		t.Fatal(one, err)
+	}
+}
 func TestStartReplayAndConflict(t *testing.T) {
 	m, b := newManager(t)
 	ctx := context.Background()
