@@ -147,6 +147,9 @@ func (a *Agent) Handle(r guestproto.Request) guestproto.Response {
 			}
 		}
 		delete(a.tasks, r.ObjectID)
+		if err == nil {
+			err = a.sync()
+		}
 	case "run", "generate":
 		err = a.start(r)
 		if err == nil {
