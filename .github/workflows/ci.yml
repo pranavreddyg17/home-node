@@ -48,3 +48,10 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Browser workflows
         run: npm --prefix web run test:e2e
+      - name: Retain verified development package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: homenode-development-amd64
+          path: artifacts/homenode_0.1.0~ci_amd64.deb*
+          if-no-files-found: error
+          retention-days: 14
