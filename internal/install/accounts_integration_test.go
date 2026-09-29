@@ -42,6 +42,14 @@ func TestInstalledAccountInspection(t *testing.T) {
 	var createdUsers, createdGroups []string
 	t.Cleanup(func() {
 		for i := len(createdUsers) - 1; i >= 0; i-- {
+			_, exists, err := lookupAccount(ctx, "passwd", createdUsers[i])
+			if err != nil {
+				t.Error("fixture account lookup failed", err)
+				continue
+			}
+			if !exists {
+				continue
+			}
 			if _, err := accountCommand(ctx, "/usr/sbin/userdel", createdUsers[i]); err != nil {
 				t.Error("fixture account cleanup failed", createdUsers[i], err)
 			}
@@ -60,18 +68,29 @@ func TestInstalledAccountInspection(t *testing.T) {
 			}
 		}
 	})
-	for _, name := range []string{"homenode", "homenode-transfer", "homenode-runtime"} {
-		if _, err := accountCommand(ctx, "/usr/sbin/groupadd", "--system", name); err != nil {
-			t.Fatal(err)
-		}
-		createdGroups = append(createdGroups, name)
+
+	journalDirectory := t.TempDir()
+	if err := os.Chmod(journalDirectory, 0700); err != nil {
+		t.Fatal(err)
 	}
-	for _, name := range []string{"homenode", "homenode-transfer"} {
-		if _, err := accountCommand(ctx, "/usr/sbin/useradd", "--system", "--gid", name, "--groups", "homenode-runtime", "--no-create-home", "--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin", name); err != nil {
-			t.Fatal(err)
-		}
-		createdUsers = append(createdUsers, name)
+	engine, err := Open("/", journalDirectory)
+	if err != nil {
+		t.Fatal(err)
 	}
+	defer engine.Close()
+	// Initial vacancy was established above. The fixture cleanup runs only for
+	// these known names; production account removal remains a separate phase.
+	createdGroups = []string{"homenode", "homenode-transfer", "homenode-runtime"}
+	createdUsers = []string{"homenode", "homenode-transfer"}
+	provisioned, err := engine.ProvisionAccounts(ctx)
+	if err != nil {
+		t.Fatal("journaled native account creation failed", err)
+	}
+	replay, err := engine.ProvisionAccounts(ctx)
+	if err != nil || replay != provisioned {
+		t.Fatal("native provision replay failed", err)
+	}
+
 	accounts, err := InspectLocalAccounts(ctx)
 	if err != nil || accounts.ControllerUID == accounts.TransferUID {
 		t.Fatal("native identity inspection failed", accounts, err)

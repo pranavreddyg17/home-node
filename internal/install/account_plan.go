@@ -2,8 +2,6 @@ package install
 
 import (
 	"encoding/hex"
-	"fmt"
-	"strconv"
 	"strings"
 )
 
@@ -118,18 +116,6 @@ func PlanAccountCreation(ownerID string, passwd, groups, nss []byte) (AccountCre
 		return empty, err
 	}
 	a := Accounts{ControllerUID: uint32(controllerUID), TransferUID: uint32(transferUID), ControllerGID: controllerGID, TransferGID: transferGID, RuntimeGID: runtimeGID, QEMUGID: qemuGID}
-	commands := []AccountCommand{}
-	for _, g := range []struct {
-		name string
-		gid  int
-	}{{"homenode", controllerGID}, {"homenode-transfer", transferGID}, {"homenode-runtime", runtimeGID}} {
-		commands = append(commands, AccountCommand{Program: "/usr/sbin/groupadd", Arguments: []string{"--system", "--gid", strconv.Itoa(g.gid), g.name}})
-	}
-	for _, u := range []struct {
-		name string
-		uid  int
-	}{{"homenode", controllerUID}, {"homenode-transfer", transferUID}} {
-		commands = append(commands, AccountCommand{Program: "/usr/sbin/useradd", Arguments: []string{"--system", "--uid", strconv.Itoa(u.uid), "--gid", u.name, "--groups", "homenode-runtime", "--no-create-home", "--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin", "--comment", fmt.Sprintf("HomeNode install %s", ownerID), u.name}})
-	}
+	commands := creationCommands(ownerID, a)
 	return AccountCreationPlan{OwnerID: ownerID, Accounts: a, Commands: commands, Pending: []string{"confirm live system name and numeric ID vacancy", "commit ownership intent to private journal", "execute fixed commands with deadlines and verify each result", "verify locked credentials and exact memberships", "retain ownership record for safe rollback"}}, nil
 }

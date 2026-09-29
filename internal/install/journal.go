@@ -156,19 +156,27 @@ func (e *Engine) save(j journal) error {
 	if err != nil {
 		return err
 	}
+	return e.saveJournalBytes("install", data)
+}
+func (e *Engine) saveJournalBytes(name string, data []byte) error {
+	if name != "install" && name != "accounts" {
+		return ErrPlan
+	}
+	next, final := name+".next", name+".json"
+	var err error
 	// This reserved staging name belongs only to this private journal. Recover
 	// a torn previous journal write without touching the last committed journal.
-	if info, err := e.journalRoot.Lstat("install.next"); err == nil {
+	if info, err := e.journalRoot.Lstat(next); err == nil {
 		if !info.Mode().IsRegular() || !owned(info, e.owner) || info.Mode().Perm() != 0600 {
 			return ErrConflict
 		}
-		if err = e.journalRoot.Remove("install.next"); err != nil {
+		if err = e.journalRoot.Remove(next); err != nil {
 			return err
 		}
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	file, err := e.journalRoot.OpenFile("install.next", os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0600)
+	file, err := e.journalRoot.OpenFile(next, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0600)
 	if err != nil {
 		return err
 	}
@@ -180,7 +188,7 @@ func (e *Engine) save(j journal) error {
 	if err != nil {
 		return err
 	}
-	if err = e.journalRoot.Rename("install.next", "install.json"); err != nil {
+	if err = e.journalRoot.Rename(next, final); err != nil {
 		return err
 	}
 	return syncDirectory(e.journalRoot, ".")

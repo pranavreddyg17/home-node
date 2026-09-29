@@ -151,3 +151,38 @@ Native fixture cleanup checks definite absence before deleting a group because
 `userdel` can remove an empty private group when `USERGROUPS_ENAB` is enabled.
 Timeout/resolution failures are not treated as absence. See the
 [userdel manual](https://www.man7.org/linux/man-pages/man8/userdel.8%40%40shadow-utils.html).
+
+## Journaled account provisioning
+
+The root-only `homenode accounts-provision --journal-dir <private-directory>`
+now executes the account phase. The journal directory must already exist, be
+root-owned and private; automatic journal bootstrap and the complete installer
+wizard are still unfinished. Provisioning starts no services and deletes no
+accounts. Do not use a second journal to adopt previously created identities.
+
+The engine commits owner ID, reserved numeric identities and an intent digest
+before any creation command. Commands are reconstructed from fixed templates;
+arbitrary executable/argument data is not loaded from the journal. Each pending
+name and ID must be vacant in current system resolution before its fixed command
+runs. Each observed result is checked before recording completion. A user
+created just before a lost result must retain its recorded UID/GID, unique
+installation GECOS marker, locked shadow credential, nologin shell, nonexistent
+home and approved memberships. Unexpected attributes, aliases or membership
+changes are conflicts; they are not silently repaired.
+
+Restart reconciliation accepts matching owned effects and resumes the remaining
+steps without issuing duplicate creation commands. A completed identity that
+has disappeared is a conflict rather than an instruction to reuse its old UID.
+Final admission rechecks the complete identity profile through the native
+inspector before reporting success. Invalid partial OS account-database updates
+remain conflicts requiring diagnosis; this component does not rewrite passwd or
+shadow databases itself. Password/hash contents are not stored in the journal.
+
+The native disposable Linux fixture now provisions through this engine and
+checks replay before invoking the installed inspection CLI. Fast tests simulate
+loss of a user-creation result, recreate the engine over its actual private
+journal, and verify that only the remaining command executes. They also reject
+live namespace collisions, foreign initial names and changed ownership markers.
+This remains separate from physical power-loss qualification and production
+account removal. Removal needs stopped services, active-process and retained-data
+checks before UID/GID reuse can be considered safe.

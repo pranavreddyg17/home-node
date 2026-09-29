@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"syscall"
 	"time"
@@ -34,6 +35,8 @@ func main() {
 		doctor(os.Args[2:])
 	case "serve":
 		serve(os.Args[2:])
+	case "accounts-provision":
+		accountsProvision(os.Args[2:])
 	case "accounts-check":
 		accountsCheck(os.Args[2:])
 	case "network-check":
@@ -45,7 +48,7 @@ func main() {
 	}
 }
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: homenode <doctor|accounts-check|network-check|serve|setup-code> [options]")
+	fmt.Fprintln(os.Stderr, "usage: homenode <doctor|accounts-provision|accounts-check|network-check|serve|setup-code> [options]")
 	os.Exit(2)
 }
 func fatal(err error) { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
@@ -61,6 +64,28 @@ func doctor(args []string) {
 	}
 	if !report.PrerequisitesMet {
 		os.Exit(1)
+	}
+}
+func accountsProvision(args []string) {
+	if runtime.GOOS != "linux" || os.Geteuid() != 0 {
+		fatal(fmt.Errorf("account provisioning requires Linux and root"))
+	}
+	flags := flag.NewFlagSet("accounts-provision", flag.ExitOnError)
+	directory := flags.String("journal-dir", "/var/lib/homenode-install", "existing private root-owned installation journal directory")
+	_ = flags.Parse(args)
+	engine, err := install.Open("/", *directory)
+	if err != nil {
+		fatal(err)
+	}
+	defer engine.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	accounts, err := engine.ProvisionAccounts(ctx)
+	if err != nil {
+		fatal(err)
+	}
+	if err = json.NewEncoder(os.Stdout).Encode(map[string]any{"accountsProvisioned": true, "accounts": accounts, "servicesActivated": false}); err != nil {
+		fatal(err)
 	}
 }
 func accountsCheck(args []string) {
