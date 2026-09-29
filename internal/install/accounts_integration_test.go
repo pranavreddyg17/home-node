@@ -19,12 +19,20 @@ func TestInstalledAccountInspection(t *testing.T) {
 	}
 	ctx := context.Background()
 	for _, name := range []string{"homenode", "homenode-transfer"} {
-		if _, err := accountCommand(ctx, "/usr/bin/getent", "passwd", name); err == nil {
+		_, exists, err := lookupAccount(ctx, "passwd", name)
+		if err != nil {
+			t.Fatal("fixture cannot establish account vacancy", err)
+		}
+		if exists {
 			t.Fatal("fixture refuses existing account", name)
 		}
 	}
 	for _, name := range []string{"homenode", "homenode-transfer", "homenode-runtime"} {
-		if _, err := accountCommand(ctx, "/usr/bin/getent", "group", name); err == nil {
+		_, exists, err := lookupAccount(ctx, "group", name)
+		if err != nil {
+			t.Fatal("fixture cannot establish group vacancy", err)
+		}
+		if exists {
 			t.Fatal("fixture refuses existing group", name)
 		}
 	}
@@ -39,6 +47,14 @@ func TestInstalledAccountInspection(t *testing.T) {
 			}
 		}
 		for i := len(createdGroups) - 1; i >= 0; i-- {
+			_, exists, err := lookupAccount(ctx, "group", createdGroups[i])
+			if err != nil {
+				t.Error("fixture group lookup failed", createdGroups[i], err)
+				continue
+			}
+			if !exists {
+				continue
+			}
 			if _, err := accountCommand(ctx, "/usr/sbin/groupdel", createdGroups[i]); err != nil {
 				t.Error("fixture group cleanup failed", createdGroups[i], err)
 			}

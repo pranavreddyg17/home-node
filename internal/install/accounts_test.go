@@ -2,6 +2,7 @@ package install
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 )
@@ -67,6 +68,14 @@ func TestNameResolutionRejectsRemoteIdentitySources(t *testing.T) {
 	} {
 		if err := ValidateNameServices([]byte(invalid)); err == nil {
 			t.Fatal("unsupported resolution accepted")
+		}
+	}
+}
+
+func TestAccountLookupCannotReadShadowOrAcceptOptions(t *testing.T) {
+	for _, value := range []struct{ database, key string }{{"shadow", "homenode"}, {"group", "--help"}, {"passwd", "root\nother"}} {
+		if _, _, err := lookupAccount(context.Background(), value.database, value.key); err == nil {
+			t.Fatal("unsafe lookup accepted")
 		}
 	}
 }

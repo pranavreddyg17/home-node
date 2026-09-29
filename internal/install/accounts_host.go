@@ -3,6 +3,7 @@ package install
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -138,4 +139,39 @@ func resolvedAccounts(ctx context.Context, a Accounts) error {
 		}
 	}
 	return nil
+}
+
+// lookupAccount distinguishes a definite getent "not found" result from a
+// timeout, unavailable resolver or malformed response. Cleanup may skip only
+// definite absence; other errors remain actionable.
+func lookupAccount(ctx context.Context, database, key string) ([]byte, bool, error) {
+	if database != "passwd" && database != "group" {
+		return nil, false, ErrAccounts
+	}
+	allowed := key == "homenode" || key == "homenode-transfer" || key == "homenode-runtime" || key == "libvirt-qemu"
+	if !allowed {
+		if _, err := accountID(key); err != nil {
+			return nil, false, ErrAccounts
+		}
+	}
+	deadline, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(deadline, "/usr/bin/getent", database, key)
+	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C"}
+	cmd.WaitDelay = time.Second
+	var output accountOutput
+	cmd.Stdout = &output
+	cmd.Stderr = io.Discard
+	err := cmd.Run()
+	if err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && exit.ExitCode() == 2 && output.Len() == 0 && deadline.Err() == nil {
+			return nil, false, nil
+		}
+		return nil, false, ErrAccounts
+	}
+	if output.Len() == 0 {
+		return nil, false, ErrAccounts
+	}
+	return output.Bytes(), true, nil
 }

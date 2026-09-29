@@ -135,3 +135,19 @@ The eventual installer must refuse foreign occupied names, record its own
 creation before issuing fixed account tools, resume interrupted creation, and
 preserve pre-existing identities on rollback. A successful read-only check
 cannot substitute for that ownership lifecycle or fresh-host onboarding.
+
+`PlanAccountCreation` now defines the creation intent for the future account
+journal. It refuses all occupied service names (including apparently valid
+ones), stale memberships that a newly created user could inherit, QEMU group
+aliases and exhausted system-ID space. It reserves distinct unused IDs in
+100–999, also excluding dangling primary group IDs. Commands use fixed tool
+paths and argument vectors, locked-password useradd defaults, nologin shells,
+nonexistent homes and an installation marker. The planner changes nothing;
+its preview explicitly requires live vacancy confirmation, committed ownership
+intent, bounded execution/result verification and retained rollback ownership.
+It is not yet a production account-creation command.
+
+Native fixture cleanup checks definite absence before deleting a group because
+`userdel` can remove an empty private group when `USERGROUPS_ENAB` is enabled.
+Timeout/resolution failures are not treated as absence. See the
+[userdel manual](https://www.man7.org/linux/man-pages/man8/userdel.8%40%40shadow-utils.html).
