@@ -109,7 +109,7 @@ func (s *Service) CreateTransfer(ctx context.Context, device, name string, size 
 	err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
 		var reserved int64
 		var count int
-		if err := tx.QueryRow("SELECT coalesce(sum(size),0),count(*) FROM transfers WHERE state IN('uploading','verifying')").Scan(&reserved, &count); err != nil {
+		if err := tx.QueryRow("SELECT coalesce(sum(size),0),count(*) FROM transfers WHERE state IN('uploading','verifying','cancelling')").Scan(&reserved, &count); err != nil {
 			return err
 		}
 		var activeJobs int

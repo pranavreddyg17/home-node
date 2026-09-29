@@ -43,11 +43,12 @@ export function Files() {
   const [busy, setBusy] = useState(false)
   const [trash, setTrash] = useState(false)
   const pause = useRef(false)
+  const [pendingUpload, setPendingUpload] = useState<{ id: string; storageKey: string } | null>(null)
   const refresh = () => api<FileInfo[]>('/files').then(setFiles)
   useEffect(() => { void refresh().catch(e => setError(message(e))); return () => { pause.current = true } }, [])
   const upload = async (file: File) => {
     if (file.size > 2 ** 30) { setError('This build accepts files up to 1 GiB.'); return }
-    setBusy(true); setError(''); pause.current = false; setProgress(0); setPhase('Calculating file checksum')
+    setBusy(true); setError(''); pause.current = false; setPendingUpload(null); setProgress(0); setPhase('Calculating file checksum')
     try {
       const digest = sha256.create()
       for (let offset = 0; offset < file.size; offset += 2 ** 20) {
@@ -64,6 +65,7 @@ export function Files() {
         if (transfer && (transfer.expiresAt * 1000 <= Date.now() || !['uploading', 'verifying', 'ready'].includes(transfer.state))) transfer = null
       }
       if (!transfer) { transfer = await api<Transfer>('/transfers', { name: file.name, size: file.size, sha256: hash }); localStorage.setItem(storageKey, transfer.id) }
+      if (transfer.state !== 'ready') setPendingUpload({ id: transfer.id, storageKey })
       setPhase('Uploading'); setProgress(file.size ? transfer.offset / file.size : 1)
       while (transfer.offset < file.size) {
         if (pause.current) { setPhase('Paused. Select the same file to resume.'); return }
@@ -75,12 +77,21 @@ export function Files() {
       }
       setPhase('Verifying complete file')
       await api(`/transfers/${transfer.id}/finalize`, {})
-      localStorage.removeItem(storageKey); setPhase('Upload verified'); setProgress(1); await refresh()
+      localStorage.removeItem(storageKey); setPendingUpload(null); setPhase('Upload verified'); setProgress(1); await refresh()
     } catch (e) { setError(message(e)); setPhase('Upload stopped. Select the same file to retry or resume.') } finally { setBusy(false) }
+  }
+  const cancelUpload = async () => {
+    if (!pendingUpload || busy) return
+    setBusy(true); setError('')
+    try {
+      await api(`/transfers/${pendingUpload.id}/cancel`, {})
+      localStorage.removeItem(pendingUpload.storageKey)
+      setPendingUpload(null); setPhase('Upload cancelled. Storage cleanup will finish when Private Files is available.'); setProgress(0)
+    } catch (e) { setError(message(e)) } finally { setBusy(false) }
   }
   const change = async (file: FileInfo, action: string, name = '') => { setError(''); try { await api(`/files/${file.id}/actions`, { action, name }); await refresh() } catch (e) { setError(message(e)) } }
   const visible = files.filter(f => Boolean(f.trashUntil) === trash)
-  return <div className="stack">{error && <p className="form-error" role="alert">{error}</p>}<section className="panel"><div className="section-heading"><h2>Your files</h2><button onClick={() => void refresh().catch(e => setError(message(e)))}>Refresh</button></div><p>Uploads are checked before they become downloadable. If a connection breaks, select the same file again to resume.</p><label className="upload-picker">Upload a file<input type="file" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void upload(file); e.target.value = '' }} /></label>{phase && <div className="transfer-progress" role="status"><span>{phase}</span><progress max={1} value={progress} aria-label="Transfer progress" />{busy && <button onClick={() => { pause.current = true }}>Pause upload</button>}</div>}</section>
+  return <div className="stack">{error && <p className="form-error" role="alert">{error}</p>}<section className="panel"><div className="section-heading"><h2>Your files</h2><button onClick={() => void refresh().catch(e => setError(message(e)))}>Refresh</button></div><p>Uploads are checked before they become downloadable. If a connection breaks, select the same file again to resume.</p><label className="upload-picker">Upload a file<input type="file" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void upload(file); e.target.value = '' }} /></label>{phase && <div className="transfer-progress" role="status"><span>{phase}</span><progress max={1} value={progress} aria-label="Transfer progress" />{busy && <button onClick={() => { pause.current = true }}>Pause upload</button>}{!busy && pendingUpload && <button onClick={() => void cancelUpload()}>Cancel upload and discard partial file</button>}</div>}</section>
     <section className="panel"><div className="button-row"><button aria-pressed={!trash} onClick={() => setTrash(false)}>Files</button><button aria-pressed={trash} onClick={() => setTrash(true)}>Trash</button></div>{!visible.length && <p>{trash ? 'Trash is empty.' : 'No files yet. Start Private Files in Apps, then upload your first file.'}</p>}{visible.map(file => <article className="file-row" key={file.id}><div><strong>{file.name}</strong><p>{bytes(file.size)} · {new Date(file.createdAt * 1000).toLocaleDateString()}</p><details><summary>Integrity</summary><code className="checksum">SHA-256: {file.sha256}</code></details></div><div className="button-row">{trash ? <button onClick={() => void change(file, 'restore')}>Restore</button> : <><a className="download-link" href={`/api/v1/files/${file.id}/download`} download>Download</a><button onClick={() => { const name = window.prompt('New filename', file.name); if (name) void change(file, 'rename', name) }}>Rename</button><button onClick={() => void change(file, 'trash')}>Move to trash</button></>}</div></article>)}</section>
   </div>
 }

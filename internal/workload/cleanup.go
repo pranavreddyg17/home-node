@@ -14,7 +14,7 @@ import (
 // acknowledged: an unavailable guest must not turn disk usage into free quota.
 func (s *Service) expireTransfer(ctx context.Context) error {
 	var id string
-	err := s.Store.DB.QueryRowContext(ctx, "SELECT id FROM transfers WHERE state IN('uploading','verifying') AND expires_at<=? ORDER BY expires_at LIMIT 1", time.Now().Unix()).Scan(&id)
+	err := s.Store.DB.QueryRowContext(ctx, "SELECT id FROM transfers WHERE state='cancelling' OR (state IN('uploading','verifying') AND expires_at<=?) ORDER BY expires_at LIMIT 1", time.Now().Unix()).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -28,7 +28,7 @@ func (s *Service) expireTransfer(ctx context.Context) error {
 	if err = s.Store.DB.QueryRowContext(ctx, "SELECT device_id,state,expires_at FROM transfers WHERE id=?", id).Scan(&device, &phase, &expires); err != nil {
 		return err
 	}
-	if (phase != "uploading" && phase != "verifying") || expires > time.Now().Unix() {
+	if phase != "cancelling" && ((phase != "uploading" && phase != "verifying") || expires > time.Now().Unix()) {
 		return nil
 	}
 	instance, err := s.app(ctx, "files")
@@ -40,10 +40,41 @@ func (s *Service) expireTransfer(ctx context.Context) error {
 	if _, err = s.call(deadline, instance, guestproto.Request{Operation: "delete", ObjectID: id}); err != nil {
 		return err
 	}
+	terminal := "expired"
+	if phase == "cancelling" {
+		terminal = "cancelled"
+	}
 	return s.Store.Transaction(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.Exec("UPDATE transfers SET state='expired' WHERE id=?", id); err != nil {
+		if _, err := tx.Exec("UPDATE transfers SET state=? WHERE id=?", terminal, id); err != nil {
 			return err
 		}
-		return state.Event(tx, device, "transfer.expired", id, map[string]any{})
+		return state.Event(tx, device, "transfer."+terminal, id, map[string]any{})
 	})
+}
+
+// Persist cancellation before attempting guest cleanup, so loss of a connection
+// or an offline Files app cannot resume a transfer the owner has discarded.
+func (s *Service) CancelTransfer(ctx context.Context, device, id string) (Transfer, error) {
+	unlock := s.lock(id)
+	defer unlock()
+	t, err := s.Transfer(ctx, device, id)
+	if err != nil {
+		return t, err
+	}
+	if t.State == "cancelled" || t.State == "cancelling" || t.State == "expired" {
+		return t, nil
+	}
+	if t.State != "uploading" && t.State != "verifying" {
+		return t, ErrConflict
+	}
+	err = s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.Exec("UPDATE transfers SET state='cancelling' WHERE id=?", id); err != nil {
+			return err
+		}
+		return state.Event(tx, device, "transfer.cancelling", id, map[string]any{})
+	})
+	if err == nil {
+		t.State = "cancelling"
+	}
+	return t, err
 }

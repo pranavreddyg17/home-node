@@ -66,11 +66,36 @@ func TestAuthenticatedTransferAPI(t *testing.T) {
 	if w.Header().Get("Content-Type") != "application/octet-stream" || !strings.HasPrefix(w.Header().Get("Content-Disposition"), "attachment;") || !strings.Contains(w.Header().Get("Content-Security-Policy"), "sandbox") {
 		t.Fatal("active content could execute on management origin")
 	}
+	body, _ = json.Marshal(map[string]any{"name": "discard.txt", "size": len(data), "sha256": digest})
+	w = request(s, "POST", "http://localhost:8787/api/v1/transfers", string(body), token, s.config.Origin)
+	if w.Code != 201 {
+		t.Fatal("create cancellable upload", w.Code)
+	}
+	if err = json.Unmarshal(w.Body.Bytes(), &transfer); err != nil {
+		t.Fatal(err)
+	}
+	endpoint := "http://localhost:8787/api/v1/transfers/" + transfer.ID + "/cancel"
+	w = request(s, "POST", endpoint, "{}", token, "https://attacker.example")
+	if w.Code != 403 {
+		t.Fatal("cross-origin cancellation", w.Code)
+	}
+	w = request(s, "POST", endpoint, "{}", token, s.config.Origin)
+	if w.Code != 202 {
+		t.Fatal("cancel", w.Code, w.Body.String())
+	}
+	w = request(s, "POST", "http://localhost:8787/api/v1/transfers/"+transfer.ID+"/finalize", "{}", token, s.config.Origin)
+	if w.Code != 409 {
+		t.Fatal("cancelled upload finalized", w.Code)
+	}
 	if _, err = s.Store.DB.Exec("UPDATE devices SET capabilities='[\"jobs\"]'"); err != nil {
 		t.Fatal(err)
 	}
 	w = request(s, http.MethodGet, "http://localhost:8787/api/v1/files", "", token, "")
 	if w.Code != 403 {
 		t.Fatal("jobs-only device read private files")
+	}
+	w = request(s, "POST", endpoint, "{}", token, s.config.Origin)
+	if w.Code != 403 {
+		t.Fatal("jobs-only device cancelled file upload", w.Code)
 	}
 }

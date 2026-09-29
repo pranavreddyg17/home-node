@@ -90,7 +90,7 @@ func (s *Service) CreateJob(ctx context.Context, device, key, input, preset, ret
 		if err = tx.QueryRow("SELECT coalesce(sum(size),0) FROM files").Scan(&used); err != nil {
 			return err
 		}
-		if err = tx.QueryRow("SELECT coalesce(sum(size),0) FROM transfers WHERE state IN('uploading','verifying')").Scan(&reserved); err != nil {
+		if err = tx.QueryRow("SELECT coalesce(sum(size),0) FROM transfers WHERE state IN('uploading','verifying','cancelling')").Scan(&reserved); err != nil {
 			return err
 		}
 		if used+reserved+int64(active+1)*jobOutputBudget > StorageQuota {
