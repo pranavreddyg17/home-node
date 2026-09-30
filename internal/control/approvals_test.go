@@ -1,9 +1,17 @@
 package control
 
 import (
+	"context"
 	"encoding/json"
+	"github.com/pranavreddyg17/home-node/internal/identity"
+	"github.com/pranavreddyg17/home-node/internal/state"
+	"github.com/pranavreddyg17/home-node/internal/workload"
+	"net/http"
+	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -60,5 +68,58 @@ func TestDeviceMutationsRequireActionGrantEvenWithFreshSession(t *testing.T) {
 		if w.Code != 403 || !strings.Contains(w.Body.String(), "APPROVAL_REQUIRED") {
 			t.Fatal("fresh session bypassed approval", path, w.Code, w.Body.String())
 		}
+	}
+}
+
+func TestAppActionConsumesExactGrantWithDurableIntent(t *testing.T) {
+	s := testServer(t)
+	s.config.PolicyGeneration = 1
+	backend := fileBackend{}
+	s.config.Runtime = backend
+	s.Workloads = workload.New(s.Store, backend, 1)
+	session := seedSession(t, s, `["admin"]`)
+	actor, err := s.Identity.Authenticate(context.Background(), session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := state.Random()
+	_, resources, err := s.appApprovalResources(context.Background(), "files", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"action":"start"}`
+	grant := state.Random()
+	binding := identity.ApprovalBinding{Action: "app.start", Resources: resources, BodySHA256: state.Hash(body), PolicyGeneration: 1, Epoch: actor.Epoch, ExpiresAt: time.Now().Unix() + 120, DeviceID: actor.Device.ID, SessionHash: actor.TokenHash}
+	// Production binding resources are canonicalized before persistence.
+	slices.Sort(binding.Resources)
+	payload, _ := json.Marshal(map[string]any{"binding": binding, "issuer": actor.Device.ID})
+	if _, err := s.Store.DB.Exec("INSERT INTO challenges(token_hash,kind,payload,epoch,expires_at) VALUES(?,'approval-grant',?,?,?)", state.Hash(grant), string(payload), actor.Epoch, binding.ExpiresAt); err != nil {
+		t.Fatal(err)
+	}
+	send := func(requestKey string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "http://localhost:8787/api/v1/apps/files/actions", strings.NewReader(body))
+		r.URL.Scheme = ""
+		r.URL.Host = ""
+		r.Header.Set("Origin", "http://localhost:8787")
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Idempotency-Key", requestKey)
+		r.Header.Set("X-Action-Approval", grant)
+		r.AddCookie(&http.Cookie{Name: s.cookie, Value: session})
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		return w
+	}
+	if w := send(state.Random()); w.Code != 403 {
+		t.Fatal("changed request key authorized", w.Code, w.Body.String())
+	}
+	if w := send(key); w.Code != 202 {
+		t.Fatal("approved intent failed", w.Code, w.Body.String())
+	}
+	if w := send(key); w.Code != 403 {
+		t.Fatal("consumed approval replayed", w.Code, w.Body.String())
+	}
+	var count int
+	if err := s.Store.DB.QueryRow("SELECT count(*) FROM operations WHERE state='pending'").Scan(&count); err != nil || count != 1 {
+		t.Fatal("wrong intent count", count, err)
 	}
 }

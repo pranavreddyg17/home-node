@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/pranavreddyg17/home-node/internal/identity"
 	"github.com/pranavreddyg17/home-node/internal/workload"
 )
 
@@ -26,7 +27,7 @@ func (s *Server) workloadRoutes() {
 	s.mux.Handle("POST /api/v1/jobs", s.require("jobs", false, http.HandlerFunc(s.createJob)))
 	s.mux.Handle("POST /api/v1/jobs/{id}/cancel", s.require("jobs", false, http.HandlerFunc(s.cancelJob)))
 	s.mux.Handle("GET /api/v1/apps", s.require("", false, http.HandlerFunc(s.apps)))
-	s.mux.Handle("POST /api/v1/apps/{workload}/actions", s.require("admin", true, http.HandlerFunc(s.appAction)))
+	s.mux.Handle("POST /api/v1/apps/{workload}/actions", s.require("admin", false, http.HandlerFunc(s.appAction)))
 	s.mux.Handle("GET /api/v1/operations/{id}", s.require("", false, http.HandlerFunc(s.operation)))
 	s.mux.Handle("POST /api/v1/transfers", s.require("files", false, http.HandlerFunc(s.createTransfer)))
 	s.mux.Handle("GET /api/v1/transfers/{id}", s.require("files", false, http.HandlerFunc(s.transfer)))
@@ -58,15 +59,38 @@ func (s *Server) apps(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"apps": items, "runtimeConfigured": s.config.Runtime != nil})
 }
 func (s *Server) appAction(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Action string `json:"action"`
-	}
-	if !decode(w, r, &body) {
+	body, ok := approvalBody(w, r)
+	if !ok {
 		return
 	}
-	op, err := s.Workloads.AppAction(r.Context(), actor(r).Device.ID, r.Header.Get("Idempotency-Key"), r.PathValue("workload"), body.Action)
+	action, err := identity.ParseAppApprovalAction(body)
+	if err != nil {
+		s.authError(w, err)
+		return
+	}
+	grant := r.Header.Get("X-Action-Approval")
+	if grant == "" {
+		fail(w, 403, "APPROVAL_REQUIRED", "Approve this app action with your passkey.")
+		return
+	}
+	key, name := r.Header.Get("Idempotency-Key"), r.PathValue("workload")
+	snapshot, resources, err := s.appApprovalResources(r.Context(), name, key)
 	if err != nil {
 		workloadError(w, err)
+		return
+	}
+	var op workload.Operation
+	err = s.Identity.ConsumeApproval(r.Context(), actor(r), grant, "app."+action, resources, body, s.config.PolicyGeneration, func(tx *sql.Tx) error {
+		var err error
+		op, err = s.Workloads.AppActionAtResourcesInTransaction(tx, actor(r).Device.ID, key, name, action, snapshot)
+		return err
+	})
+	if err != nil {
+		if errors.Is(err, identity.ErrDenied) {
+			s.authError(w, err)
+		} else {
+			workloadError(w, err)
+		}
 		return
 	}
 	writeJSON(w, 202, op)
