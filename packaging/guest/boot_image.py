@@ -255,12 +255,58 @@ def boot(image, manifest, output):
         os.close(fd)
 
 
+def qmp_message(channel, deadline):
+    channel.settimeout(max(0.001, deadline - time.monotonic()))
+    line = bytearray()
+    while len(line) < 8192:
+        if time.monotonic() >= deadline:
+            raise ValueError("QMP shutdown evidence timed out")
+        byte = channel.recv(1)
+        if not byte:
+            raise ValueError("QMP closed before shutdown evidence")
+        line.extend(byte)
+        if byte == b"\n":
+            message = json.loads(line)
+            if not isinstance(message, dict):
+                raise ValueError("invalid QMP message")
+            return message
+    raise ValueError("QMP message exceeds bound")
+
+
+def qmp_shutdown(channel):
+    deadline = time.monotonic() + 90
+    if not isinstance(qmp_message(channel, deadline).get("QMP"), dict):
+        raise ValueError("QMP greeting missing")
+    for command, identifier in (("qmp_capabilities", "capabilities"), ("system_powerdown", "powerdown")):
+        channel.sendall(json.dumps({"execute": command, "id": identifier}).encode() + b"\n")
+        acknowledged, shutdown = False, False
+        for _ in range(256):
+            message = qmp_message(channel, deadline)
+            if "error" in message:
+                raise ValueError("QMP shutdown command refused")
+            if message.get("event") == "SHUTDOWN":
+                data = message.get("data", {})
+                if command != "system_powerdown" or not isinstance(data, dict) or data.get("guest") is not True or data.get("reason") != "guest-shutdown":
+                    raise ValueError("shutdown was not guest initiated")
+                shutdown = True
+            if "return" in message:
+                if message.get("id") != identifier or message["return"] != {} or acknowledged:
+                    raise ValueError("unexpected QMP acknowledgement")
+                acknowledged = True
+            if acknowledged and (command == "qmp_capabilities" or shutdown):
+                break
+        else:
+            raise ValueError("QMP shutdown evidence exceeds event bound")
+    return {"guestInitiated": True, "reason": "guest-shutdown"}
+
+
 def boot_vm(system_fd, data_fd, output, record):
     channel_path = output / "adapter.sock"
+    qmp_path = output / "qmp.sock"
     if len(os.fsencode(channel_path)) > 100 or "," in str(channel_path) or "\n" in str(channel_path):
         raise ValueError("fixture socket path exceeds bound")
     command = ["/usr/bin/qemu-system-x86_64", "-machine", "q35", "-accel", "tcg", "-m", "1536" if record["profile"] == "ai" else "512", "-smp", "2" if record["profile"] == "ai" else "1",
-               "-nodefaults", "-nic", "none", "-display", "none", "-monitor", "none", "-serial", "stdio", "-no-reboot",
+               "-nodefaults", "-nic", "none", "-display", "none", "-monitor", "none", "-qmp", f"unix:{qmp_path},server=on,wait=off", "-serial", "stdio", "-no-reboot",
                "-drive", f"file=/proc/self/fd/{system_fd},if=none,id=system,format=raw,readonly=on",
                "-device", "virtio-blk-pci,drive=system,serial=homenode-system",
                "-drive", f"file=/proc/self/fd/{data_fd},if=none,id=data,format=raw",
@@ -301,9 +347,20 @@ def boot_vm(system_fd, data_fd, output, record):
             object_evidence = object_roundtrip(channel)
             video_evidence, cancellation = video_roundtrip(channel, output) if record["profile"] == "video" else ([], None)
             ai_evidence = ai_roundtrip(channel) if record["profile"] == "ai" else None
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as monitor:
+            monitor.settimeout(90)
+            monitor.connect(str(qmp_path))
+            shutdown_evidence = qmp_shutdown(monitor)
+        if process.wait(timeout=30) != 0:
+            raise ValueError("guest poweroff process exit failed")
+        subprocess.run(["/usr/sbin/e2fsck", "-f", "-n", "/proc/self/fd/" + str(data_fd)],
+                       pass_fds=(data_fd,), stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=30)
+        shutdown_evidence["qemuExitCode"] = 0
+        shutdown_evidence["readOnlyFilesystemCheck"] = True
         result = {"schema": 1, "profile": record["profile"], "imageSHA256": record["sha256"],
                   "tcgBootAndObjectRoundTrip": True, "objectTransfer": object_evidence,
-                  "videoPresets": video_evidence, "videoCancellation": cancellation, "aiInference": ai_evidence, "releaseQualified": False}
+                  "videoPresets": video_evidence, "videoCancellation": cancellation, "aiInference": ai_evidence, "shutdown": shutdown_evidence, "releaseQualified": False}
         with (output / "boot-evidence.json").open("x") as file:
             json.dump(result, file, indent=2)
             file.write("\n")
@@ -322,7 +379,7 @@ def boot_vm(system_fd, data_fd, output, record):
             raise ValueError("fixture diagnostic reader did not stop")
         with (output / "boot-console.log").open("xb") as file:
             file.write(b"".join(logs))
-        # Disposable disks are retained; termination is not a clean backup stop.
+        # Disposable disks are retained. Failure teardown is not shutdown evidence.
 
 
 if __name__ == "__main__":

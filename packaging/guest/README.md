@@ -286,18 +286,23 @@ Linux user and `HOMENODE_GUEST_BOOT_INTEGRATION=1`. The fixture bounds and verif
 the manifest/image digest, creates only new private fixture staging, and formats
 an exclusive 128 MiB test data file. It never mounts guest filesystems on the host.
 QEMU runs q35 BIOS/TCG with a read-only system descriptor, separate data descriptor,
-512 MiB RAM, one vCPU, virtio RNG/serial and no NIC, monitor or display. Only a
-fixture-private Unix socket carries bounded typed adapter frames.
+512 MiB RAM/one vCPU for files and video, 1536 MiB/two vCPUs for AI,
+virtio RNG/serial and no NIC or display. A fixture-private Unix socket carries
+bounded typed adapter frames; a separate private QMP socket controls poweroff.
 
 Within a bounded boot deadline the fixture requires adapter health and a small
 upload/finalize/download/content-verification/delete-ack round trip. It retains
 at most 8 MiB of console diagnostics and writes separate boot evidence on success;
 it does not edit the build manifest's unqualified flags. The CI workflow retains
 console/evidence even after a failed boot, with no fixture data disk upload.
-Termination is deliberate teardown of test-only state, not clean shutdown,
-backup consistency, physical power-loss or filesystem durability qualification.
+Success now also requires ACPI powerdown, QMP guest-initiated shutdown evidence,
+zero QEMU exit and a successful read-only e2fsck of the disposable data disk.
+Failure termination is teardown of test-only state and cannot count as shutdown
+evidence. These checks do not establish full backup consistency, physical
+power-loss durability or production-host shutdown qualification.
 
-No successful assembled boot is established yet. TCG and a tiny test disk also
+Historical assembled boot results are recorded in docs/PROGRESS.md. The new
+shutdown gate still requires an inspected assembled-image result. TCG and a tiny test disk also
 do not prove KVM/AppArmor confinement, production disk quotas, video conversion,
 model loading, memory/thermal envelopes, client networking or full host lifecycle.
 The real image build and boot results must be inspected before those claims.

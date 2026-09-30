@@ -194,5 +194,51 @@ class AICancellationTests(unittest.TestCase):
         calls.assert_not_called()
 
 
+
+
+class QMPShutdownTests(unittest.TestCase):
+    def exchange(self, guest=True, reason="guest-shutdown", refused=False):
+        client, server = socket.socketpair()
+        errors = []
+        def peer():
+            try:
+                server.settimeout(2)
+                with server.makefile("rwb") as stream:
+                    stream.write(b'{"QMP":{}}\n'); stream.flush()
+                    self.assertEqual(json.loads(stream.readline())["execute"], "qmp_capabilities")
+                    stream.write(b'{"return":{},"id":"capabilities"}\n'); stream.flush()
+                    self.assertEqual(json.loads(stream.readline())["execute"], "system_powerdown")
+                    if refused:
+                        stream.write(b'{"error":{"class":"GenericError"},"id":"powerdown"}\n')
+                    else:
+                        stream.write(b'{"return":{},"id":"powerdown"}\n')
+                        stream.write(json.dumps({"event":"SHUTDOWN","data":{"guest":guest,"reason":reason}}).encode()+b"\n")
+                    stream.flush()
+            except Exception as error:
+                errors.append(error)
+            finally:
+                server.close()
+        thread = threading.Thread(target=peer); thread.start()
+        try:
+            if guest is True and reason == "guest-shutdown" and not refused:
+                self.assertTrue(boot_image.qmp_shutdown(client)["guestInitiated"])
+            else:
+                with self.assertRaises(ValueError):
+                    boot_image.qmp_shutdown(client)
+        finally:
+            client.close(); thread.join(3)
+        self.assertFalse(thread.is_alive())
+        if errors: raise errors[0]
+
+    def test_guest_shutdown(self):
+        self.exchange()
+
+    def test_host_teardown_and_crash_are_not_guest_shutdown(self):
+        self.exchange(guest=False, reason="host-signal")
+        self.exchange(reason="guest-panic")
+        self.exchange(guest="true")
+        self.exchange(refused=True)
+
+
 if __name__ == "__main__":
     unittest.main()
