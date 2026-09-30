@@ -33,6 +33,9 @@ func StageDisk(ctx context.Context, root *os.Root, source *os.File, entry Backup
 		return result, err
 	}
 	defer directory.Close()
+	if err := requireStagingSpace(directory, entry.Bytes); err != nil {
+		return result, err
+	}
 	file, err := root.OpenFile(entry.Name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		return result, err
@@ -61,6 +64,9 @@ func StageDisk(ctx context.Context, root *os.Root, source *os.File, entry Backup
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
+		if err := requireStagingSpace(directory, remaining); err != nil {
+			return result, err
+		}
 		n, err := io.ReadFull(reader, buffer[:min(int64(len(buffer)), remaining)])
 		if err != nil {
 			return result, err
@@ -83,6 +89,9 @@ func StageDisk(ctx context.Context, root *os.Root, source *os.File, entry Backup
 		return result, err
 	}
 	if err = file.Sync(); err != nil {
+		return result, err
+	}
+	if err := requireStagingSpace(directory, 0); err != nil {
 		return result, err
 	}
 	if err = directory.Sync(); err != nil {
