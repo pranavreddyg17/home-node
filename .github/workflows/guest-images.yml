@@ -1,0 +1,63 @@
+name: Development guest images
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packaging/guest/**'
+      - 'internal/guest/**'
+      - 'internal/guestmount/**'
+      - 'internal/guestinit/**'
+      - 'cmd/homenode-guest*/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/guest-images.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: guest-images-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [files, video]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.26.8'
+          cache: true
+      - name: Install disposable image build dependencies
+        run: sudo apt-get update && sudo apt-get install -y systemd-container dosfstools e2fsprogs python3-pefile squashfs-tools
+      - name: Stage and authenticate local development adapter overlay
+        env:
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          sh packaging/guest/stage.sh "$PROFILE" "$RUNNER_TEMP/overlay-$PROFILE"
+          python3 packaging/guest/overlay.py package "$RUNNER_TEMP/overlay-$PROFILE" "$RUNNER_TEMP/overlay-$PROFILE.tar" "$(git show -s --format=%ct HEAD)"
+      - name: Fetch pinned image builder source
+        run: |
+          sudo git init "$RUNNER_TEMP/mkosi-source"
+          sudo git -C "$RUNNER_TEMP/mkosi-source" remote add origin https://github.com/systemd/mkosi.git
+          sudo git -C "$RUNNER_TEMP/mkosi-source" fetch --depth=1 origin 52448a27f6f869c108352ed82fcfb9be633703fb
+          sudo git -C "$RUNNER_TEMP/mkosi-source" checkout --detach FETCH_HEAD
+          sudo install -d -m 0700 "$RUNNER_TEMP/assembly"
+      - name: Build unsigned development system disk
+        env:
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          digest=$(sha256sum "$RUNNER_TEMP/overlay-$PROFILE.tar" | cut -d ' ' -f 1)
+          sudo env HOMENODE_GUEST_IMAGE_BUILD=1 python3 packaging/guest/build_image.py "$RUNNER_TEMP/overlay-$PROFILE.tar" "$digest" "$PROFILE" "$(git rev-parse HEAD)" "$RUNNER_TEMP/assembly/$PROFILE" "$RUNNER_TEMP/mkosi-source"
+          sudo chmod 0755 "$RUNNER_TEMP/assembly" "$RUNNER_TEMP/assembly/$PROFILE" "$RUNNER_TEMP/assembly/$PROFILE/artifacts"
+          sudo chmod 0644 "$RUNNER_TEMP/assembly/$PROFILE/artifacts/"*
+      - name: Retain unsigned development disk and package inventory
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: homenode-development-guest-${{ matrix.profile }}
+          path: ${{ runner.temp }}/assembly/${{ matrix.profile }}/artifacts/*
+          if-no-files-found: error
+          retention-days: 7

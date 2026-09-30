@@ -46,6 +46,7 @@ class FinalizeTests(unittest.TestCase):
             with self.subTest(profile=profile), tempfile.TemporaryDirectory() as directory:
                 root, source = fixture(Path(directory), profile)
                 finalize_root.finalize(root, source)
+                (root / "tmp").chmod(0o1777)  # distribution tmpfiles may prepare it
                 finalize_root.finalize(root, source)
                 wants = root / "etc/systemd/system/multi-user.target.wants"
                 self.assertEqual([p.name for p in wants.iterdir()], [f"homenode-guest@{profile}.service"])

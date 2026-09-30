@@ -57,9 +57,10 @@ def admit_payload(root, source):
             if file.read(1) or digest.hexdigest() != item["sha256"]:
                 raise ValueError("merged payload digest mismatch")
     for name in overlay.MOUNTPOINTS:
-        directory(root / name)
-        if stat.S_IMODE((root / name).stat().st_mode) != 0o755:
-            raise ValueError("unexpected underlying mountpoint mode")
+        info = (root / name).lstat()
+        allowed = (0o755, 0o1777) if name == "tmp" else (0o755,)
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_gid != os.getegid() or stat.S_IMODE(info.st_mode) not in allowed:
+            raise ValueError("unexpected underlying mountpoint metadata")
     identity.check(root)
     return record
 

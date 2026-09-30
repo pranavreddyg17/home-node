@@ -245,3 +245,35 @@ provides a candidate BIOS GRUB assembly path; no recipe/build or maintained
 release acceptance is established by root finalization. Base packages, tool
 security coverage, initramfs content, bootloader and all workload runtimes still
 need assembly/provenance and boot qualification.
+
+## Development disk assembly
+
+`build_image.py ARCHIVE SHA256 PROFILE REVISION NEW_OUTPUT MKOSI_CHECKOUT` is an
+explicit disposable Linux/root pipeline (`HOMENODE_GUEST_IMAGE_BUILD=1`). It
+requires a private root-owned output parent, exclusive new staging and an
+unchanged root-owned mkosi checkout at commit
+`52448a27f6f869c108352ed82fcfb9be633703fb`. It imports the bounded digest-pinned
+overlay, copies only the reviewed recipe/helpers, and runs mkosi summary/build.
+Failures retain staging. It does not install host services or write physical
+disks, and the normal owner installer never builds these images.
+
+The recipe requests Ubuntu noble x86-64 packages with repository signature
+checks, BIOS/EFI GRUB, a distribution kernel/initramfs, a 256 MiB ESP, 1 MiB BIOS
+partition and 2–4 GiB ext4 root with the read-only partition flag and `ro` kernel
+argument. Root login is locked and autologin disabled. The finalization hook
+checks merged adapter bytes/identity and enables its mounts and selected unit.
+Distribution tmpfiles may leave the underlying `/tmp` mode 1777; this protected
+root-owned sticky directory is accepted alongside the overlay's 0755 mode.
+Files and video are assembled, with FFmpeg added for video. AI is explicitly
+refused until its reviewed runtime/model assembly exists.
+
+The separate `Development guest images` workflow performs real builds on
+throwaway Ubuntu runners and retains unsigned disks and package inventories for
+seven days. `development-build.json` binds source/overlay/tool identities and
+result bytes, and explicitly records `releaseQualified: false` and
+`bootValidated: false`. The source package repositories currently resolve
+maintained versions at build time: signature checking and recorded package
+inventories do not provide an independently reproducible pinned package closure.
+No source-signature promotion, current tool security qualification, complete
+license inventory, model/runtime qualification, VM boot/health acceptance or
+signed release publication is implied. These remain mandatory release work.
