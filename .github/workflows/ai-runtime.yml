@@ -126,13 +126,6 @@ jobs:
             "$RUNNER_TEMP/ai-assembly/payload"
           sudo chmod 0755 "$RUNNER_TEMP/ai-image" "$RUNNER_TEMP/ai-image/build" "$RUNNER_TEMP/ai-image/build/artifacts"
           sudo chmod 0644 "$RUNNER_TEMP/ai-image/build/artifacts/"*
-      - name: Retain unsigned AI disk and package inventory
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: homenode-development-guest-ai
-          path: ${{ runner.temp }}/ai-image/build/artifacts/
-          retention-days: 7
-          if-no-files-found: error
       - name: Boot AI guest and exercise actual adapter inference
         env:
           HOMENODE_GUEST_BOOT_INTEGRATION: '1'
@@ -147,3 +140,10 @@ jobs:
             ${{ runner.temp }}/guest-boot-ai/boot-evidence.json
           retention-days: 7
           if-no-files-found: warn
+      - name: Retain unsigned AI disk and package inventory
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: homenode-development-guest-ai
+          path: ${{ runner.temp }}/ai-image/build/artifacts/
+          retention-days: 7
+          if-no-files-found: error
