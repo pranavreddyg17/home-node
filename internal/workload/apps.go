@@ -44,7 +44,20 @@ func (s *Service) Apps(ctx context.Context) ([]App, error) {
 	}
 	return apps, rows.Err()
 }
+
 func (s *Service) AppAction(ctx context.Context, device, key, name, action string) (Operation, error) {
+	var op Operation
+	err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		var err error
+		op, err = s.AppActionInTransaction(tx, device, key, name, action)
+		return err
+	})
+	return op, err
+}
+
+// AppActionInTransaction persists intent only. Approval consumption can share
+// this transaction; runtime effects happen later through the operation worker.
+func (s *Service) AppActionInTransaction(tx *sql.Tx, device, key, name, action string) (Operation, error) {
 	if name != "files" && name != "ai" || action != "start" && action != "stop" {
 		return Operation{}, ErrInvalid
 	}
@@ -52,40 +65,38 @@ func (s *Service) AppAction(ctx context.Context, device, key, name, action strin
 		return Operation{}, ErrUnavailable
 	}
 	var op Operation
-	err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
-		var phase, instance string
-		var revision int64
-		err := tx.QueryRow("SELECT instance_id,state,revision FROM apps WHERE workload=?", name).Scan(&instance, &phase, &revision)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		if instance == "" {
-			instance = state.Random()
-		}
-		// Hash the user's stable intent, not a new generated identifier, so retries
-		// can recover the original operation after a network failure.
-		var replay bool
-		op, replay, err = operation(tx, device, key, "app."+action, map[string]string{"workload": name, "action": action})
-		if err != nil || replay {
-			return err
-		}
-		if phase == "stopping" || action == "start" && (phase == "running" || phase == "starting") {
-			return ErrConflict
-		}
-		intent, _ := json.Marshal(appIntent{Workload: name, Action: action, InstanceID: instance, Revision: revision + 1})
-		if _, err = tx.Exec("UPDATE operations SET result=? WHERE id=?", string(intent), op.ID); err != nil {
-			return err
-		}
-		op.Result = intent
-		phase = "starting"
-		if action == "stop" {
-			phase = "stopping"
-		}
-		_, err = tx.Exec("INSERT INTO apps(workload,instance_id,state,operation_id,updated_at,revision) VALUES(?,?,?,?,?,?) ON CONFLICT(workload) DO UPDATE SET state=excluded.state,operation_id=excluded.operation_id,updated_at=excluded.updated_at,revision=excluded.revision", name, instance, phase, op.ID, time.Now().Unix(), revision+1)
-		return err
-	})
+	var phase, instance string
+	var revision int64
+	err := tx.QueryRow("SELECT instance_id,state,revision FROM apps WHERE workload=?", name).Scan(&instance, &phase, &revision)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return op, err
+	}
+	if instance == "" {
+		instance = state.Random()
+	}
+	// Hash the user's stable intent, not a new generated identifier, so retries
+	// can recover the original operation after a network failure.
+	var replay bool
+	op, replay, err = operation(tx, device, key, "app."+action, map[string]string{"workload": name, "action": action})
+	if err != nil || replay {
+		return op, err
+	}
+	if phase == "stopping" || action == "start" && (phase == "running" || phase == "starting") {
+		return Operation{}, ErrConflict
+	}
+	intent, _ := json.Marshal(appIntent{Workload: name, Action: action, InstanceID: instance, Revision: revision + 1})
+	if _, err = tx.Exec("UPDATE operations SET result=? WHERE id=?", string(intent), op.ID); err != nil {
+		return op, err
+	}
+	op.Result = intent
+	phase = "starting"
+	if action == "stop" {
+		phase = "stopping"
+	}
+	_, err = tx.Exec("INSERT INTO apps(workload,instance_id,state,operation_id,updated_at,revision) VALUES(?,?,?,?,?,?) ON CONFLICT(workload) DO UPDATE SET state=excluded.state,operation_id=excluded.operation_id,updated_at=excluded.updated_at,revision=excluded.revision", name, instance, phase, op.ID, time.Now().Unix(), revision+1)
 	return op, err
 }
+
 func (s *Service) processApp(ctx context.Context) error { return s.processAppKind(ctx, "") }
 func (s *Service) processAppKind(ctx context.Context, selectedKind string) error {
 	if s.Backend == nil {

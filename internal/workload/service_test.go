@@ -2,7 +2,9 @@ package workload
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -204,5 +206,42 @@ func TestEmptyFile(t *testing.T) {
 	data, err := s.Download(ctx, file.ID, 0)
 	if err != nil || len(data) != 0 {
 		t.Fatalf("empty download %v", err)
+	}
+}
+
+func TestAppIntentParticipatesInCallerTransaction(t *testing.T) {
+	s, backend, device := service(t)
+	failed := errors.New("approval transaction failure")
+	err := s.Store.Transaction(context.Background(), func(tx *sql.Tx) error {
+		if _, err := s.AppActionInTransaction(tx, device, state.Random(), "files", "start"); err != nil {
+			return err
+		}
+		return failed
+	})
+	if !errors.Is(err, failed) {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"apps", "operations"} {
+		var count int
+		if err := s.Store.DB.QueryRow("SELECT count(*) FROM " + table).Scan(&count); err != nil || count != 0 {
+			t.Fatal("rolled back intent survived", table, count, err)
+		}
+	}
+	if backend.starts != 0 {
+		t.Fatal("transaction executed runtime effect")
+	}
+	err = s.Store.Transaction(context.Background(), func(tx *sql.Tx) error {
+		_, err := s.AppActionInTransaction(tx, device, state.Random(), "files", "start")
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := s.Store.DB.QueryRow("SELECT count(*) FROM operations WHERE state='pending'").Scan(&count); err != nil || count != 1 {
+		t.Fatal("committed intent missing", count, err)
+	}
+	if backend.starts != 0 {
+		t.Fatal("committed intent bypassed worker")
 	}
 }
