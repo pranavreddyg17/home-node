@@ -66,3 +66,13 @@ func TestShutdownDoesNotForceStopOnCancellationOrFailure(t *testing.T) {
 		})
 	}
 }
+
+func TestShutdownDeadlineWhileGuestIgnoresPoweroff(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	requests := 0
+	err := awaitShutdown(ctx, state.Random(), func(context.Context, string) (bool, error) { return true, nil }, func(context.Context, string) error { requests++; return nil }, time.Millisecond)
+	if !errors.Is(err, context.DeadlineExceeded) || requests > 1 {
+		t.Fatal("ignored poweroff did not honor deadline", requests, err)
+	}
+}

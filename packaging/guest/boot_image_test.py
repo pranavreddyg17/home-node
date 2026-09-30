@@ -197,7 +197,7 @@ class AICancellationTests(unittest.TestCase):
 
 
 class QMPShutdownTests(unittest.TestCase):
-    def exchange(self, guest=True, reason="guest-shutdown", refused=False):
+    def exchange(self, guest=True, reason="guest-shutdown", refused=False, evidence=True, event_first=False):
         client, server = socket.socketpair()
         errors = []
         def peer():
@@ -211,8 +211,13 @@ class QMPShutdownTests(unittest.TestCase):
                     if refused:
                         stream.write(b'{"error":{"class":"GenericError"},"id":"powerdown"}\n')
                     else:
-                        stream.write(b'{"return":{},"id":"powerdown"}\n')
-                        stream.write(json.dumps({"event":"SHUTDOWN","data":{"guest":guest,"reason":reason}}).encode()+b"\n")
+                        acknowledgement = b'{"return":{},"id":"powerdown"}\n'
+                        event = json.dumps({"event":"SHUTDOWN","data":{"guest":guest,"reason":reason}}).encode()+b"\n"
+                        if evidence and event_first:
+                            stream.write(event)
+                        stream.write(acknowledgement)
+                        if evidence and not event_first:
+                            stream.write(event)
                     stream.flush()
             except Exception as error:
                 errors.append(error)
@@ -220,7 +225,7 @@ class QMPShutdownTests(unittest.TestCase):
                 server.close()
         thread = threading.Thread(target=peer); thread.start()
         try:
-            if guest is True and reason == "guest-shutdown" and not refused:
+            if guest is True and reason == "guest-shutdown" and not refused and evidence:
                 self.assertTrue(boot_image.qmp_shutdown(client)["guestInitiated"])
             else:
                 with self.assertRaises(ValueError):
@@ -232,6 +237,12 @@ class QMPShutdownTests(unittest.TestCase):
 
     def test_guest_shutdown(self):
         self.exchange()
+
+    def test_acknowledgement_without_exit_evidence_is_rejected(self):
+        self.exchange(evidence=False)
+
+    def test_guest_event_before_acknowledgement(self):
+        self.exchange(event_first=True)
 
     def test_host_teardown_and_crash_are_not_guest_shutdown(self):
         self.exchange(guest=False, reason="host-signal")
