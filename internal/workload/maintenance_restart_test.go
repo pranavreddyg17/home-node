@@ -97,3 +97,40 @@ func TestMaintenanceRestartRefusesChangedOwnershipOrAuthority(t *testing.T) {
 		})
 	}
 }
+
+func TestMaintenanceJobCompletionRequiresConfirmedOwnedRestart(t *testing.T) {
+	s, _, device := service(t)
+	ctx := context.Background()
+	startFiles(t, s, device)
+	token, job, err := s.Store.BeginMaintenanceJob(ctx, device)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.MaintenanceStop(ctx, token, device, "files"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.processApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "draining", "restoring"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Store.CompleteMaintenanceJob(ctx, token, job.ID); !errors.Is(err, state.ErrMaintenance) {
+		t.Fatal("stopped app forgotten", err)
+	}
+	if _, err = s.MaintenanceRestart(ctx, token, device, "files"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Store.CompleteMaintenanceJob(ctx, token, job.ID); !errors.Is(err, state.ErrMaintenance) {
+		t.Fatal("pending restart ignored", err)
+	}
+	if err = s.processApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Store.CompleteMaintenanceJob(ctx, token, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.CreateConversation(ctx, "after completion"); err != nil {
+		t.Fatal("completed job blocked admission", err)
+	}
+}

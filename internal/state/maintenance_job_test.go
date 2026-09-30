@@ -130,3 +130,60 @@ func TestMaintenanceRootCheckpointRollsBackWithPhaseWriteFailure(t *testing.T) {
 		t.Fatal("partial root authority persisted", retained, err)
 	}
 }
+
+func TestMaintenanceJobCompletionWaitsForRootRelease(t *testing.T) {
+	s, device, _ := maintenanceJobFixture(t)
+	defer s.Close()
+	ctx := context.Background()
+	token, job, err := s.BeginMaintenanceJob(ctx, device)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.AdvanceMaintenanceJob(ctx, token, job.ID, "draining", "freezing"); err != nil {
+		t.Fatal(err)
+	}
+	rootToken := Random()
+	if err = s.AttachMaintenanceRoot(ctx, token, job.ID, rootToken); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.AdvanceMaintenanceJob(ctx, token, job.ID, "staging", "restoring"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.CompleteMaintenanceJob(ctx, token, job.ID); !errors.Is(err, ErrMaintenanceOwner) {
+		t.Fatal("root authority forgotten", err)
+	}
+	fixtureError := errors.New("fixture root release failed")
+	if err = s.ReleaseMaintenanceRoot(ctx, token, job.ID, func(context.Context, string) error { return fixtureError }); !errors.Is(err, fixtureError) {
+		t.Fatal(err)
+	}
+	retained, err := s.InspectMaintenanceJob(ctx, token)
+	if err != nil || retained.RootToken != rootToken {
+		t.Fatal("failed release lost authority", retained, err)
+	}
+	if err = s.ReleaseMaintenanceRoot(ctx, token, job.ID, func(_ context.Context, got string) error {
+		if got != rootToken {
+			t.Fatal(got)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.DB.Exec("INSERT INTO settings VALUES('host.activity.fixture','trash-expiry')"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.CompleteMaintenanceJob(ctx, token, job.ID); !errors.Is(err, ErrMaintenance) {
+		t.Fatal("unfinished activity ignored", err)
+	}
+	if _, err = s.DB.Exec("DELETE FROM settings WHERE key='host.activity.fixture'"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.CompleteMaintenanceJob(ctx, token, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Transaction(ctx, RequireAdmission); err != nil {
+		t.Fatal("completed job kept admission closed", err)
+	}
+	if err = s.CompleteMaintenanceJob(ctx, token, job.ID); !errors.Is(err, ErrMaintenanceOwner) {
+		t.Fatal("old owner reused", err)
+	}
+}

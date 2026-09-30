@@ -143,3 +143,116 @@ func (s *Store) AttachMaintenanceRoot(ctx context.Context, token, id, rootToken 
 		return err
 	})
 }
+
+// ReleaseMaintenanceRoot invokes the trusted supervisor bridge before clearing
+// the recorded token. A crash between those steps needs explicit reconciliation;
+// this method never guesses that an unacknowledged release succeeded.
+func (s *Store) ReleaseMaintenanceRoot(ctx context.Context, token, id string, release func(context.Context, string) error) error {
+	if release == nil {
+		return ErrMaintenanceOwner
+	}
+	job, err := s.InspectMaintenanceJob(ctx, token)
+	if err != nil {
+		return err
+	}
+	if job.ID != id || job.Phase != "restoring" || job.RootToken == "" {
+		return ErrMaintenanceOwner
+	}
+	if err = s.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := RequireMaintenanceOwner(tx, token); err != nil {
+			return err
+		}
+		current, err := readMaintenanceJob(tx)
+		if err != nil {
+			return err
+		}
+		if current != job {
+			return ErrMaintenanceOwner
+		}
+		return maintenanceDevice(tx, job.Device)
+	}); err != nil {
+		return err
+	}
+	if err = release(ctx, job.RootToken); err != nil {
+		return err
+	}
+	return s.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := RequireMaintenanceOwner(tx, token); err != nil {
+			return err
+		}
+		current, err := readMaintenanceJob(tx)
+		if err != nil {
+			return err
+		}
+		if current != job {
+			return ErrMaintenanceOwner
+		}
+		if err := maintenanceDevice(tx, current.Device); err != nil {
+			return err
+		}
+		_, err = tx.Exec("UPDATE settings SET value='' WHERE key=?", maintenanceJobPrefix+"root-token")
+		return err
+	})
+}
+
+// CompleteMaintenanceJob verifies recorded restoration before atomically
+// removing the journal and admission barrier. It cannot release root authority.
+func (s *Store) CompleteMaintenanceJob(ctx context.Context, token, id string) error {
+	return s.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := RequireMaintenanceOwner(tx, token); err != nil {
+			return err
+		}
+		job, err := readMaintenanceJob(tx)
+		if err != nil {
+			return err
+		}
+		if job.ID != id || job.Phase != "restoring" || job.RootToken != "" {
+			return ErrMaintenanceOwner
+		}
+		if err := maintenanceDevice(tx, job.Device); err != nil {
+			return err
+		}
+		var blockers int
+		if err := tx.QueryRow(`SELECT
+   (SELECT count(*) FROM settings WHERE key GLOB 'host.activity.*')+
+   (SELECT count(*) FROM operations WHERE state NOT IN('succeeded','failed','cancelled','interrupted'))+
+   (SELECT count(*) FROM transfers WHERE state NOT IN('ready','cancelled','expired'))+
+   (SELECT count(*) FROM jobs WHERE state NOT IN('succeeded','failed','cancelled','interrupted'))+
+   (SELECT count(*) FROM generations WHERE state NOT IN('succeeded','failed','cancelled','interrupted'))+
+   (SELECT count(*) FROM orphan_objects)+
+   (SELECT count(*) FROM settings WHERE key GLOB 'job.cleanup.*' AND CASE WHEN json_valid(value) THEN COALESCE(json_extract(value,'$.state'),'') ELSE '' END<>'done')`).Scan(&blockers); err != nil {
+			return err
+		}
+		if blockers != 0 {
+			return ErrMaintenance
+		}
+		for _, name := range []string{"files", "ai"} {
+			stopKey := Hash("maintenance-stop\x00" + token + "\x00" + name)
+			var stops int
+			if err := tx.QueryRow("SELECT count(*) FROM operations WHERE idempotency_key=? AND kind='app.stop'", stopKey).Scan(&stops); err != nil {
+				return err
+			}
+			if stops == 0 {
+				continue
+			}
+			if stops != 1 {
+				return ErrMaintenance
+			}
+			restartKey := Hash("maintenance-restart\x00" + token + "\x00" + name)
+			var restored int
+			if err := tx.QueryRow(`SELECT count(*) FROM operations stop JOIN operations restart ON restart.device_id=stop.device_id JOIN apps app ON app.operation_id=restart.id
+    WHERE stop.idempotency_key=? AND stop.device_id=? AND stop.kind='app.stop' AND stop.state='succeeded'
+    AND restart.idempotency_key=? AND restart.kind='app.start' AND restart.state='succeeded' AND app.workload=? AND app.state='running'`, stopKey, job.Device, restartKey, name).Scan(&restored); err != nil {
+				return err
+			}
+			if restored != 1 {
+				return ErrMaintenance
+			}
+		}
+		if _, err = tx.Exec("DELETE FROM settings WHERE key GLOB 'host.maintenance-job.*'"); err != nil {
+			return err
+		}
+		_, err = tx.Exec("DELETE FROM settings WHERE key=? AND value=?", maintenanceKey, token)
+		return err
+	})
+}
