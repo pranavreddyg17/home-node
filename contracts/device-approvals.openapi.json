@@ -1,0 +1,1152 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "HomeNode device approval API",
+    "version": "0.1.0",
+    "description": "Implemented device approval slice only. Other HomeNode endpoints remain outside this document pending complete API contract work. Production requires trusted HTTPS and Strict Secure HttpOnly __Host-homenode sessions; development uses homenode-dev on localhost."
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "paths": {
+    "/devices/pair/approval": {
+      "post": {
+        "operationId": "beginDevicePairApproval",
+        "security": [
+          {
+            "OwnerSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match the configured HomeNode HTTPS origin."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalBegin"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed or oversized request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session missing or expired",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, capability, assertion, binding or approval denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Identity conflict, including last administrator protection",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content type must be application/json",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Authentication rate limit exceeded",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request concurrency limit reached",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Requires a current administrator session. Request bytes (at most 4096) are SHA256-bound exactly, including whitespace, to action, resource IDs, current policy generation, recovery epoch, acting device/session and a two-minute expiry. Only credentials registered to the acting device are offered, with user verification required."
+      }
+    },
+    "/devices/{id}/revoke/approval": {
+      "post": {
+        "operationId": "beginDeviceRevokeApproval",
+        "security": [
+          {
+            "OwnerSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match the configured HomeNode HTTPS origin."
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyObject"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalBegin"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed or oversized request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session missing or expired",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, capability, assertion, binding or approval denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Identity conflict, including last administrator protection",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content type must be application/json",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Authentication rate limit exceeded",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request concurrency limit reached",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Requires a current administrator session. Request bytes (at most 4096) are SHA256-bound exactly, including whitespace, to action, resource IDs, current policy generation, recovery epoch, acting device/session and a two-minute expiry. Only credentials registered to the acting device are offered, with user verification required."
+      }
+    },
+    "/auth/approval/finish": {
+      "post": {
+        "operationId": "finishActionApproval",
+        "security": [
+          {
+            "OwnerSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match the configured HomeNode HTTPS origin."
+          },
+          {
+            "name": "X-Approval-Challenge",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 20,
+              "maxLength": 128,
+              "description": "Opaque bearer value; transmit only in the designated header or JSON body. Never put in URLs or persistent browser storage."
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyAssertion"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalGrant"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed or oversized request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session missing or expired",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, capability, assertion, binding or approval denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Identity conflict, including last administrator protection",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content type must be application/json",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Authentication rate limit exceeded",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request concurrency limit reached",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Requires a current administrator session. A finish attempt consumes its ceremony even on assertion failure. The resulting grant retains the original two-minute expiry and does not rotate the login session."
+      }
+    },
+    "/devices/pair": {
+      "post": {
+        "operationId": "pairDevice",
+        "security": [
+          {
+            "OwnerSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match the configured HomeNode HTTPS origin."
+          },
+          {
+            "name": "X-Action-Approval",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 20,
+              "maxLength": 128,
+              "description": "Opaque bearer value; transmit only in the designated header or JSON body. Never put in URLs or persistent browser storage."
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Invitation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed or oversized request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session missing or expired",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, capability, assertion, binding or approval denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Identity conflict, including last administrator protection",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content type must be application/json",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Authentication rate limit exceeded",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request concurrency limit reached",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Requires a current administrator session. Requires the exact bytes used for approval begin. Grant consumption and mutation commit in one transaction. Changed authority and successful replay are denied; a failed durable mutation rolls back grant consumption. Global session freshness alone does not authorize this mutation."
+      }
+    },
+    "/devices/{id}/revoke": {
+      "post": {
+        "operationId": "revokeDevice",
+        "security": [
+          {
+            "OwnerSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match the configured HomeNode HTTPS origin."
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            }
+          },
+          {
+            "name": "X-Action-Approval",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 20,
+              "maxLength": 128,
+              "description": "Opaque bearer value; transmit only in the designated header or JSON body. Never put in URLs or persistent browser storage."
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyObject"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "revoked"
+                  ],
+                  "properties": {
+                    "revoked": {
+                      "const": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed or oversized request",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session missing or expired",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, capability, assertion, binding or approval denied",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Identity conflict, including last administrator protection",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content type must be application/json",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Authentication rate limit exceeded",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request concurrency limit reached",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Requires a current administrator session. Requires the exact bytes used for approval begin. Grant consumption and mutation commit in one transaction. Changed authority and successful replay are denied; a failed durable mutation rolls back grant consumption. Global session freshness alone does not authorize this mutation."
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "OwnerSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-homenode"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "EmptyObject": {
+        "type": "object",
+        "additionalProperties": false,
+        "maxProperties": 0
+      },
+      "PairRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "capabilities"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Must contain non-whitespace text; NUL, CR and LF are refused. Runtime bounds use UTF-8 bytes."
+          },
+          "capabilities": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 4,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "admin",
+                "files",
+                "jobs",
+                "ai"
+              ]
+            }
+          }
+        },
+        "description": "Duplicate decoded keys, escaped duplicates, differently cased keys and invalid UTF-8 are refused."
+      },
+      "ApprovalBegin": {
+        "type": "object",
+        "required": [
+          "options",
+          "challengeToken",
+          "expiresAt"
+        ],
+        "properties": {
+          "options": {
+            "type": "object",
+            "required": [
+              "publicKey"
+            ],
+            "properties": {
+              "publicKey": {
+                "type": "object",
+                "description": "WebAuthn PublicKeyCredentialRequestOptions JSON; userVerification is required and allowCredentials contains acting-device credentials only."
+              }
+            }
+          },
+          "challengeToken": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 128,
+            "description": "Opaque bearer value; transmit only in the designated header or JSON body. Never put in URLs or persistent browser storage."
+          },
+          "expiresAt": {
+            "type": "integer",
+            "description": "Unix seconds; original approval expiry."
+          }
+        }
+      },
+      "ApprovalGrant": {
+        "type": "object",
+        "required": [
+          "approvalToken"
+        ],
+        "properties": {
+          "approvalToken": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 128,
+            "description": "Opaque bearer value; transmit only in the designated header or JSON body. Never put in URLs or persistent browser storage."
+          }
+        }
+      },
+      "Invitation": {
+        "type": "object",
+        "required": [
+          "code",
+          "expiresIn"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 128,
+            "description": "Opaque bearer value; transmit only in the designated header or JSON body. Never put in URLs or persistent browser storage."
+          },
+          "expiresIn": {
+            "const": 300
+          }
+        }
+      },
+      "PasskeyAssertion": {
+        "type": "object",
+        "required": [
+          "id",
+          "rawId",
+          "type",
+          "response"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "rawId": {
+            "type": "string"
+          },
+          "type": {
+            "const": "public-key"
+          },
+          "response": {
+            "type": "object",
+            "required": [
+              "clientDataJSON",
+              "authenticatorData",
+              "signature"
+            ],
+            "properties": {
+              "clientDataJSON": {
+                "type": "string",
+                "description": "Base64url encoded bytes."
+              },
+              "authenticatorData": {
+                "type": "string",
+                "description": "Base64url encoded bytes."
+              },
+              "signature": {
+                "type": "string",
+                "description": "Base64url encoded bytes."
+              },
+              "userHandle": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Base64url encoded bytes."
+              }
+            }
+          },
+          "clientExtensionResults": {
+            "type": "object"
+          }
+        },
+        "description": "WebAuthn assertion JSON as returned by the browser serializer. Global HTTP body limit is 64 KiB."
+      }
+    }
+  }
+}
