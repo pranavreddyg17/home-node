@@ -12,6 +12,8 @@ import (
 
 type conversationDeleteIntent struct {
 	ConversationID string `json:"conversationId"`
+	Attempts       int    `json:"attempts,omitempty"`
+	NextAttemptAt  int64  `json:"nextAttemptAt,omitempty"`
 }
 
 // RequestConversationDeletionInTransaction records authority before any guest
@@ -66,7 +68,7 @@ func conversationDeletionPending(tx *sql.Tx, id string) (bool, error) {
 
 func (s *Service) processConversationDeletion(ctx context.Context) error {
 	var operationID, device, payload string
-	err := s.Store.DB.QueryRowContext(ctx, "SELECT id,device_id,result FROM operations WHERE kind='conversation.delete' AND state='pending' ORDER BY created_at LIMIT 1").Scan(&operationID, &device, &payload)
+	err := s.Store.DB.QueryRowContext(ctx, "SELECT id,device_id,result FROM operations WHERE kind='conversation.delete' AND state='pending' AND COALESCE(json_extract(result,'$.nextAttemptAt'),0)<=? ORDER BY updated_at,created_at,id LIMIT 1", time.Now().Unix()).Scan(&operationID, &device, &payload)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -75,10 +77,29 @@ func (s *Service) processConversationDeletion(ctx context.Context) error {
 	}
 	var object map[string]json.RawMessage
 	var intent conversationDeleteIntent
-	if len(payload) > 256 || json.Unmarshal([]byte(payload), &object) != nil || len(object) != 1 || object["conversationId"] == nil || json.Unmarshal([]byte(payload), &intent) != nil || !guestproto.ValidID(intent.ConversationID) {
+	if len(payload) > 512 || json.Unmarshal([]byte(payload), &object) != nil || len(object) < 1 || len(object) > 3 || object["conversationId"] == nil || json.Unmarshal([]byte(payload), &intent) != nil || !guestproto.ValidID(intent.ConversationID) || intent.Attempts < 0 || intent.Attempts > 10 || intent.NextAttemptAt < 0 {
 		return ErrConflict
+	}
+	for key := range object {
+		if key != "conversationId" && key != "attempts" && key != "nextAttemptAt" {
+			return ErrConflict
+		}
 	}
 	deadline, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	return s.deleteConversation(deadline, device, intent.ConversationID, operationID)
+	err = s.deleteConversation(deadline, device, intent.ConversationID, operationID)
+	if err == nil {
+		return nil
+	}
+	if intent.Attempts < 10 {
+		intent.Attempts++
+	}
+	delay := int64(1) << min(intent.Attempts, 6)
+	intent.NextAttemptAt = time.Now().Unix() + delay
+	updated, encodeErr := json.Marshal(intent)
+	if encodeErr != nil {
+		return errors.Join(err, encodeErr)
+	}
+	_, persistErr := s.Store.DB.ExecContext(ctx, "UPDATE operations SET result=?,updated_at=? WHERE id=? AND kind='conversation.delete' AND state='pending'", string(updated), time.Now().Unix(), operationID)
+	return errors.Join(err, persistErr)
 }

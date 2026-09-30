@@ -3,8 +3,10 @@ package workload
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/state"
 )
@@ -171,6 +173,37 @@ func TestDeletionWorkerRetriesAfterUnavailableGuestAndServiceRestart(t *testing.
 	var count int
 	if err := s.Store.DB.QueryRow("SELECT count(*) FROM generations WHERE conversation_id=?", conversation.ID).Scan(&count); err != nil || count != 1 {
 		t.Fatal("failure removed metadata", count, err)
+	}
+	var retryPayload string
+	if err := s.Store.DB.QueryRow("SELECT result FROM operations WHERE id=?", op.ID).Scan(&retryPayload); err != nil {
+		t.Fatal(err)
+	}
+	var retry conversationDeleteIntent
+	if err := json.Unmarshal([]byte(retryPayload), &retry); err != nil || retry.Attempts != 1 || retry.NextAttemptAt <= time.Now().Unix() {
+		t.Fatal("retry schedule not persisted", retry, err)
+	}
+	second, err := s.CreateConversation(ctx, "another deletion")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var secondOp Operation
+	if err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		var err error
+		secondOp, err = s.RequestConversationDeletionInTransaction(tx, device, state.Random(), second.ID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.processConversationDeletion(ctx); err != nil {
+		t.Fatal("deferred failure starved eligible deletion", err)
+	}
+	secondStatus, err := s.Operation(ctx, device, secondOp.ID)
+	if err != nil || secondStatus.State != "succeeded" {
+		t.Fatal("eligible deletion did not complete", secondStatus, err)
+	}
+	// Simulate reaching the persisted eligibility time without a wall-clock sleep.
+	if _, err := s.Store.DB.Exec("UPDATE operations SET result=json_set(result,'$.nextAttemptAt',0) WHERE id=?", op.ID); err != nil {
+		t.Fatal(err)
 	}
 	restarted := New(s.Store, backend, 1)
 	if _, err := s.Store.DB.Exec("UPDATE apps SET state='running' WHERE workload='ai'"); err != nil {
