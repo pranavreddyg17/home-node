@@ -2,9 +2,12 @@
 package guestinit
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"io"
 	"os"
+	"strings"
 	"syscall"
 )
 
@@ -122,7 +125,43 @@ func admitIntent(root *os.Root) (bool, error) {
 }
 
 func createIntent(root *os.Root) error {
-	f, err := root.OpenFile(intentName, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0600)
+	parent, err := root.Open(".")
+	if err != nil {
+		return ErrDirectory
+	}
+	count := 0
+	total := 0
+	for {
+		entries, err := parent.ReadDir(128)
+		total += len(entries)
+		if total > 1024 {
+			parent.Close()
+			return ErrDirectory
+		}
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), ".homenode-init-") && strings.HasSuffix(entry.Name(), ".pending") {
+				count++
+				if count >= 64 {
+					parent.Close()
+					return ErrDirectory
+				}
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			parent.Close()
+			return ErrDirectory
+		}
+	}
+	parent.Close()
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		return ErrDirectory
+	}
+	temporary := ".homenode-init-" + hex.EncodeToString(nonce) + ".pending"
+	f, err := root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0600)
 	if err != nil {
 		return ErrDirectory
 	}
@@ -145,13 +184,5 @@ func createIntent(root *os.Root) error {
 	if writeErr != nil || syncErr != nil || closeErr != nil {
 		return ErrDirectory
 	}
-	parent, err := root.Open(".")
-	if err != nil {
-		return ErrDirectory
-	}
-	defer parent.Close()
-	if parent.Sync() != nil {
-		return ErrDirectory
-	}
-	return nil
+	return publishIntent(root, temporary)
 }

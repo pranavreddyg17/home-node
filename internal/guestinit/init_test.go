@@ -1,6 +1,7 @@
 package guestinit
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -150,6 +151,70 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 		}
 		if _, err := os.Stat(filepath.Join(parent, "objects")); !os.IsNotExist(err) {
 			t.Fatal("corrupt intent mutated storage")
+		}
+	})
+
+	t.Run("interrupted staging is preserved and retry succeeds", func(t *testing.T) {
+		parent := t.TempDir()
+		if err := os.Chmod(parent, 0755); err != nil {
+			t.Fatal(err)
+		}
+		pending := filepath.Join(parent, ".homenode-init-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.pending")
+		if err := os.WriteFile(pending, []byte("partial"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := Prepare(parent); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(pending)
+		if err != nil || string(data) != "partial" {
+			t.Fatal("interrupted staging changed")
+		}
+		intent, err := os.ReadFile(filepath.Join(parent, intentName))
+		if err != nil || string(intent) != intentBytes {
+			t.Fatal("active intent not completely published")
+		}
+	})
+	t.Run("publication never overwrites existing intent", func(t *testing.T) {
+		parent := t.TempDir()
+		root, err := os.OpenRoot(parent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer root.Close()
+		if err := os.WriteFile(filepath.Join(parent, intentName), []byte("foreign"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(parent, "pending"), []byte(intentBytes), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if publishIntent(root, "pending") == nil {
+			t.Fatal("occupied intent replaced")
+		}
+		data, err := os.ReadFile(filepath.Join(parent, intentName))
+		if err != nil || string(data) != "foreign" {
+			t.Fatal("existing intent changed")
+		}
+		if _, err := os.Stat(filepath.Join(parent, "pending")); err != nil {
+			t.Fatal("failed publication removed staging")
+		}
+	})
+	t.Run("bounded interrupted staging", func(t *testing.T) {
+		parent := t.TempDir()
+		if err := os.Chmod(parent, 0755); err != nil {
+			t.Fatal(err)
+		}
+		for n := range 64 {
+			name := fmt.Sprintf(".homenode-init-%032x.pending", n)
+			if err := os.WriteFile(filepath.Join(parent, name), []byte("partial"), 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if Prepare(parent) == nil {
+			t.Fatal("unbounded staging accepted")
+		}
+		if _, err := os.Stat(filepath.Join(parent, intentName)); !os.IsNotExist(err) {
+			t.Fatal("staging refusal published intent")
 		}
 	})
 

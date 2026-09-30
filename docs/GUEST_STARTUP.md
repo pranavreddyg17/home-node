@@ -191,9 +191,10 @@ for static unit verification and uses opt-in temporary-root ownership fixtures.
 This prepares a directory on an already mounted filesystem. Blank-volume
 formatting is still absent. A durable root-owned intent is now synced before directory creation. A crash
 between creation and ownership publication can resume only an empty root-owned
-private leaf covered by that admitted intent. Corrupt/partial intent data and
-nonempty incomplete directories are preserved and refused. Physical power-loss
-and recovery of partial intent publication remain required before release.
+private leaf covered by that admitted intent. Corrupt active intent data and nonempty incomplete directories are preserved
+and refused. Intent publication now uses synced private staging and Linux
+rename-without-replacement, so an interrupted staging write is not an active
+intent. Physical power-loss qualification remains required before release.
 
 Initializer intent reads use bounded no-follow/nonblocking regular-file
 descriptors, exact root ownership/mode and single-link admission. The intent
@@ -208,3 +209,11 @@ profile (CHOWN and DAC_READ_SEARCH), no inherited/ambient capabilities and
 no-new-privileges. It verifies the actual process sets before directory tests.
 This checks initializer operations under the requested capabilities; actual
 systemd mount namespace, device policy and full guest boot remain separate gates.
+
+Before directory creation, complete intent bytes are written and synced in a
+new private staging file, then published using Linux RENAME_NOREPLACE and the
+parent is synced. Existing active intent is never overwritten. Interrupted
+staging files are retained unchanged; a retry can publish a fresh complete
+record. Startup refuses after 64 retained staging records or more than 1,024
+mount-root entries, with enumeration in batches of 128. Retained metadata
+cleanup/diagnostics and physical storage fault testing remain release work.
