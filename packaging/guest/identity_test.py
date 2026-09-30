@@ -45,6 +45,30 @@ class IdentityTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 identity.read_file(root, "etc/shadow")
 
+    def test_replaceable_directories_and_unexpected_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            etc = root / "etc"
+            etc.mkdir()
+            shadow = etc / "shadow"
+            shadow.write_text(SHADOW)
+            shadow.chmod(0o600)
+            for target in (root, etc):
+                for mode in (0o777, 0o775):
+                    target.chmod(mode)
+                    with self.assertRaises(ValueError):
+                        identity.read_file(root, "etc/shadow")
+                target.chmod(0o755)
+            self.assertEqual(identity.read_file(root, "etc/shadow"), SHADOW)
+            for name in ("../etc/shadow", "/etc/shadow", "etc/../etc/shadow", "etc/gshadow"):
+                with self.assertRaises(ValueError):
+                    identity.read_file(root, name)
+            shadow.unlink()
+            etc.rmdir()
+            etc.symlink_to("/etc", target_is_directory=True)
+            with self.assertRaises(OSError):
+                identity.read_file(root, "etc/shadow")
+
     @unittest.skipUnless(os.getenv("HOMENODE_GUEST_ACCOUNT_INTEGRATION") == "1" and os.geteuid() == 0 and sys.platform == "linux", "disposable Linux root fixture only")
     def test_native_sysusers_exact_identity_and_collision(self):
         for collision in (False, True):

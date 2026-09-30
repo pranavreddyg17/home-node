@@ -117,3 +117,10 @@ conflicting UID/GID cannot pass admission. CI must prove this; the check is not
 a boot, actual device access, data-disk ownership or base-image signature gate.
 No account-check command edits or repairs account databases. Only the explicit
 native fixture performs creation, restricted to its temporary root.
+
+Account admission also requires the opened image root and each account parent
+directory to be owned by the checker UID and not writable by group/others.
+Reads are restricted to the four fixed account/NSS paths; unexpected paths and
+intermediate symlinks are rejected. Run admission against assembler-controlled
+staging with no concurrent writers. Descriptor pinning and permissions do not
+make a mutable staging tree an immutable release artifact.

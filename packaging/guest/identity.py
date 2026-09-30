@@ -9,15 +9,26 @@ import sys
 NAME = "homenode-guest"
 UID = GID = 900
 LIMIT = 1 << 20
+INPUTS = ("etc/passwd", "etc/group", "etc/shadow", "etc/nsswitch.conf")
+
+
+def protected_directory(fd):
+    info = os.fstat(fd)
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o022:
+        raise ValueError("unprotected identity directory")
 
 
 def read_file(root, name):
+    if name not in INPUTS:
+        raise ValueError("unexpected identity path")
     fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
+        protected_directory(fd)
         for part in name.split("/")[:-1]:
             next_fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
             os.close(fd)
             fd = next_fd
+            protected_directory(fd)
         file_fd = os.open(name.split("/")[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
         with os.fdopen(file_fd, "rb") as file:
             info = os.fstat(file.fileno())
@@ -88,7 +99,7 @@ def validate(passwd, groups, shadow, nss):
 
 
 def check(root):
-    validate(*(read_file(root, name) for name in ("etc/passwd", "etc/group", "etc/shadow", "etc/nsswitch.conf")))
+    validate(*(read_file(root, name) for name in INPUTS))
 
 
 if __name__ == "__main__":
