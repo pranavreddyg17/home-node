@@ -2,6 +2,7 @@ package workload
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
@@ -59,5 +60,57 @@ func TestMaintenanceBlocksWorkloadAdmissionWithoutNewIntents(t *testing.T) {
 	}
 	if _, err = s.CreateConversation(ctx, "after maintenance"); err != nil {
 		t.Fatal("release failed to reopen admission", err)
+	}
+}
+
+func TestMaintenancePreservesFilesAndRejectsNewDeletionIntent(t *testing.T) {
+	s, _, device := service(t)
+	ctx := context.Background()
+	startFiles(t, s, device)
+	data := []byte("maintenance fixture")
+	transfer, err := s.CreateTransfer(ctx, device, "original.txt", int64(len(data)), sum(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Upload(ctx, device, transfer.ID, 0, data, sum(data)); err != nil {
+		t.Fatal(err)
+	}
+	file, err := s.Finalize(ctx, device, transfer.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := s.CreateConversation(ctx, "retained")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := s.Store.BeginMaintenance(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range []string{"rename", "trash", "restore"} {
+		if err = s.ChangeFile(ctx, device, file.ID, action, "changed.txt"); !errors.Is(err, state.ErrMaintenance) {
+			t.Fatal(action, err)
+		}
+	}
+	stored, err := s.File(ctx, file.ID)
+	if err != nil || stored.Name != file.Name || stored.TrashUntil != nil {
+		t.Fatal("maintenance changed file metadata", stored, err)
+	}
+	err = s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		_, err := s.RequestConversationDeletionInTransaction(tx, device, state.Random(), conversation.ID)
+		return err
+	})
+	if !errors.Is(err, state.ErrMaintenance) {
+		t.Fatal("maintenance admitted deletion", err)
+	}
+	var count int
+	if err = s.Store.DB.QueryRow("SELECT count(*) FROM operations WHERE kind='conversation.delete'").Scan(&count); err != nil || count != 0 {
+		t.Fatal("rejected deletion retained authority", count, err)
+	}
+	if err = s.Store.EndMaintenance(ctx, token); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.ChangeFile(ctx, device, file.ID, "rename", "changed.txt"); err != nil {
+		t.Fatal("release did not allow file change", err)
 	}
 }

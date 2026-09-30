@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
+	"github.com/pranavreddyg17/home-node/internal/state"
 )
 
 type conversationDeleteIntent struct {
@@ -43,6 +44,9 @@ func (s *Service) RequestConversationDeletionInTransaction(tx *sql.Tx, device, k
 	op, replay, err := operation(tx, device, key, "conversation.delete", intent)
 	if err != nil || replay {
 		return op, err
+	}
+	if err := state.RequireAdmission(tx); err != nil {
+		return Operation{}, errors.Join(ErrConflict, err)
 	}
 	var pending bool
 	err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM operations WHERE kind='conversation.delete' AND state IN('pending','running','requires-action') AND id<>? AND json_extract(CASE WHEN json_valid(result) THEN result ELSE '{}' END,'$.conversationId')=?)", op.ID, id).Scan(&pending)

@@ -233,6 +233,9 @@ func (s *Service) ChangeFile(ctx context.Context, device, id, action, name strin
 	unlock := s.lock(id)
 	defer unlock()
 	return s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := state.RequireAdmission(tx); err != nil {
+			return errors.Join(ErrConflict, err)
+		}
 		var result sql.Result
 		var err error
 		switch action {
