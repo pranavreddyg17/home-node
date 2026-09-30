@@ -50,6 +50,10 @@ func TestConversationDeletionIntentIsTransactionalAndNotCompletion(t *testing.T)
 			t.Fatal(err)
 		}
 	}
+	listed, err := s.Conversations(context.Background())
+	if err != nil || len(listed) != 1 || !listed[0].DeletionPending {
+		t.Fatal("pending deletion absent from reload state", listed, err)
+	}
 	if first.State != "pending" {
 		t.Fatal("intent misreported completion", first)
 	}
