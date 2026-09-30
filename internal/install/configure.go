@@ -37,7 +37,7 @@ func (e *Engine) Configure(ctx context.Context, c Configuration) (ConfigurationP
 			return Accounts{}, Capacity{}, err
 		}
 		report := hostcheck.Inspect("/var/lib")
-		if !report.PrerequisitesMet {
+		if !report.PreparationPrerequisitesMet() {
 			return Accounts{}, Capacity{}, ErrConflict
 		}
 		return a, Capacity{MemoryBytes: report.Host.MemoryBytes, FreeDiskBytes: report.Host.AvailableDiskBytes, LogicalCPUs: runtime.NumCPU()}, nil
@@ -68,7 +68,21 @@ func (e *Engine) configure(ctx context.Context, c Configuration, now time.Time, 
 	c.Policy.ControllerUID = a.ControllerUID
 	c.Policy.TransferUID = a.TransferUID
 	c.Capacity = capacity
-	preview, err := ConfigurationPlan(c, now)
+	credit, cleaned, err := e.configurationImageCredit(ctx, c, now)
+	if err != nil {
+		return ConfigurationPreview{}, err
+	}
+	if cleaned {
+		a, capacity, err = observe(ctx)
+		if err != nil {
+			return ConfigurationPreview{}, err
+		}
+		if a != j.Accounts {
+			return ConfigurationPreview{}, ErrAccounts
+		}
+		c.Capacity = capacity
+	}
+	preview, err := configurationPlan(c, now, credit)
 	if err != nil {
 		return ConfigurationPreview{}, err
 	}

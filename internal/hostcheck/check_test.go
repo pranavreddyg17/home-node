@@ -46,3 +46,20 @@ func TestEvaluateRejectsMissingBoundaryAndResources(t *testing.T) {
 		})
 	}
 }
+
+func TestPreparationDefersOnlyStorageFloor(t *testing.T) {
+	facts := Facts{OS: "linux", Architecture: "amd64", Distribution: "ubuntu", DistributionVersion: "24.04", KVMUsable: true, AppArmorEnforcing: true, LibvirtReachable: true, MemoryBytes: 16 * gib, AvailableDiskBytes: 8 * gib, DiskProbePath: "/var/lib"}
+	report := Evaluate(facts, time.Now())
+	if report.PrerequisitesMet || !report.PreparationPrerequisitesMet() {
+		t.Fatal("storage floor not deferred")
+	}
+	facts.AvailableDiskBytes = 0
+	if Evaluate(facts, time.Now()).PreparationPrerequisitesMet() {
+		t.Fatal("missing disk observation admitted")
+	}
+	facts.AvailableDiskBytes = 8 * gib
+	facts.KVMUsable = false
+	if Evaluate(facts, time.Now()).PreparationPrerequisitesMet() {
+		t.Fatal("non-storage failure bypassed")
+	}
+}

@@ -193,3 +193,94 @@ func TestStreamedImageCopyIntegrityAndCancellation(t *testing.T) {
 		})
 	}
 }
+
+func TestRootConfigurationReplayCreditsOnlyOwnedImages(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("root-only temporary fixture")
+	}
+	for _, which := range []string{"published", "staged", "foreign", "changed"} {
+		t.Run(which, func(t *testing.T) {
+			e, c, host, _, source, now := imagePlacementFixture(t)
+			defer e.Close()
+			readyAccountIntent(t, e, c.Accounts, true)
+			initial, err := ConfigurationPlan(c, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if which == "staged" {
+				stopped := errors.New("staging result lost")
+				e.checkpoint = func(stage, name string) error {
+					if stage == "image-staged" {
+						return stopped
+					}
+					return nil
+				}
+				if err = e.placeImages(context.Background(), source, c.Publisher, c.MinimumCatalogVersion, now); !errors.Is(err, stopped) {
+					t.Fatal(err)
+				}
+				e.checkpoint = nil
+			} else if which != "foreign" {
+				if err = e.placeImages(context.Background(), source, c.Publisher, c.MinimumCatalogVersion, now); err != nil {
+					t.Fatal(err)
+				}
+			}
+			entries, err := os.ReadDir(source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if which == "foreign" {
+				data, err := os.ReadFile(filepath.Join(source, entries[0].Name()))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err = os.WriteFile(filepath.Join(host, "var/lib/homenode/images", entries[0].Name()), data, 0440); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if which == "changed" {
+				if err = os.Chmod(filepath.Join(host, "var/lib/homenode/images", entries[0].Name()), 0640); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var total uint64
+			for _, entry := range entries {
+				if filepath.Ext(entry.Name()) == ".raw" {
+					info, err := entry.Info()
+					if err != nil {
+						t.Fatal(err)
+					}
+					total += uint64(info.Size())
+				}
+			}
+			observed := c.Capacity
+			observed.FreeDiskBytes = initial.RequiredDiskBytes - total
+			calls := 0
+			observe := func(context.Context) (Accounts, Capacity, error) {
+				calls++
+				if which == "staged" && calls > 1 {
+					observed.FreeDiskBytes = initial.RequiredDiskBytes
+				}
+				return c.Accounts, observed, nil
+			}
+			preview, err := e.configure(context.Background(), c, now, observe)
+			if which == "foreign" || which == "changed" {
+				if err == nil {
+					t.Fatal("unowned/changed bytes credited")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if preview.ProvidedCapacity.FreeDiskBytes != observed.FreeDiskBytes {
+				t.Fatal("measurement replaced")
+			}
+			if which == "published" && (preview.VerifiedImageBytes != total || preview.RequiredFreeDiskBytes != initial.RequiredDiskBytes-total) {
+				t.Fatal("incorrect credit", preview)
+			}
+			if which == "staged" && (calls != 2 || preview.VerifiedImageBytes != 0) {
+				t.Fatal("staging counted without fresh measurement", calls, preview)
+			}
+		})
+	}
+}

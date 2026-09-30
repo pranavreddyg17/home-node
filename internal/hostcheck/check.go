@@ -206,3 +206,24 @@ func boolDetail(ok bool, good, bad string) string {
 	}
 	return bad
 }
+
+// PreparationPrerequisitesMet keeps host admission while deferring the
+// provisional free-space floor to the installer catalog's stronger allocation
+// calculation. This permits cleanup of journaled partial image staging before
+// measuring remaining space again. It is not permission to activate workloads.
+func (r Report) PreparationPrerequisitesMet() bool {
+	if r.Host.AvailableDiskBytes == 0 || len(r.Checks) == 0 {
+		return false
+	}
+	diskSeen := false
+	for _, check := range r.Checks {
+		if check.ID == "disk" {
+			diskSeen = true
+			continue
+		}
+		if check.Status == Fail {
+			return false
+		}
+	}
+	return diskSeen
+}

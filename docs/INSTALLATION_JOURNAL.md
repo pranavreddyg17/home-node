@@ -244,3 +244,25 @@ release download/update orchestration and data-aware uninstall remain separate
 unfinished work. Importing signed bytes is not proof of bootability, guest
 qualification, host isolation, or publisher release provenance. Physical
 power-loss durability and real boot tests remain acceptance gates.
+
+### Disk admission during image replay
+
+Configuration replay no longer counts journal-owned published images as future
+allocations. Credit requires the same configuration content digest and signed
+catalog, and rechecks each image's owner/group, mode, exact size and SHA256. A
+published effect with a lost acknowledgement can also receive credit; a missing
+completed image, changed artifact or foreign image receives no credit or stops
+reconciliation. Duplicate digest paths receive credit only once.
+
+Owned staging files are removed under the shared installation lock and the
+image directory is synced. Capacity is then observed again, rather than adding
+an estimated amount of reclaimed space. The preview preserves the actual
+`providedCapacity` and separately reports `verifiedImageBytes`, the original
+`requiredDiskBytes`, and the remaining `requiredFreeDiskBytes`.
+
+Preparation defers doctor's provisional 40 GiB free-space floor to this stronger
+catalog-derived allocation check so staging cleanup is possible on retry. Disk
+availability must still be measurable, and other host prerequisite failures
+remain fatal. Doctor's diagnostic floor is unchanged. This does not reserve
+space against other host programs or account for actual VM overhead; those
+resource enforcement and physical acceptance gates remain outstanding.

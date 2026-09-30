@@ -37,21 +37,27 @@ type Configuration struct {
 	Capacity              Capacity
 }
 type ConfigurationPreview struct {
-	Network           networkcheck.Config `json:"network"`
-	RuntimePolicy     supervisor.Policy   `json:"runtimePolicy"`
-	Accounts          Accounts            `json:"accounts"`
-	ProvidedCapacity  Capacity            `json:"providedCapacity"`
-	Plan              Plan                `json:"plan"`
-	CatalogVersion    int64               `json:"catalogVersion"`
-	PublisherKeyID    string              `json:"publisherKeyId"`
-	RequiredDiskBytes uint64              `json:"requiredDiskBytes"`
-	Pending           []string            `json:"pending"`
+	Network               networkcheck.Config `json:"network"`
+	RuntimePolicy         supervisor.Policy   `json:"runtimePolicy"`
+	Accounts              Accounts            `json:"accounts"`
+	ProvidedCapacity      Capacity            `json:"providedCapacity"`
+	Plan                  Plan                `json:"plan"`
+	CatalogVersion        int64               `json:"catalogVersion"`
+	PublisherKeyID        string              `json:"publisherKeyId"`
+	RequiredDiskBytes     uint64              `json:"requiredDiskBytes"`
+	VerifiedImageBytes    uint64              `json:"verifiedImageBytes"`
+	RequiredFreeDiskBytes uint64              `json:"requiredFreeDiskBytes"`
+	Pending               []string            `json:"pending"`
 }
 
 // ConfigurationPlan is deterministic and has no side effects. The caller must
 // supply independently trusted publisher identity, current account IDs and
 // measured capacity. Catalog signatures do not prove guest qualification.
 func ConfigurationPlan(c Configuration, now time.Time) (ConfigurationPreview, error) {
+	return configurationPlan(c, now, 0)
+}
+
+func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (ConfigurationPreview, error) {
 	var result ConfigurationPreview
 	if _, err := networkcheck.ValidateConfiguration(c.Network); err != nil {
 		return result, err
@@ -110,7 +116,10 @@ func ConfigurationPlan(c Configuration, now time.Time) (ConfigurationPreview, er
 	if c.Policy.MaxInstances > 3 {
 		required += uint64(videoImage.DataBytes) * uint64(c.Policy.MaxInstances-3)
 	}
-	if required > c.Capacity.FreeDiskBytes {
+	if imageCredit > required {
+		return result, ErrPlan
+	}
+	if required-imageCredit > c.Capacity.FreeDiskBytes {
 		return result, supervisor.ErrCapacity
 	}
 	plan := Plan{}
@@ -149,6 +158,6 @@ func ConfigurationPlan(c Configuration, now time.Time) (ConfigurationPreview, er
 	if _, _, err = planRecords(plan, 0); err != nil {
 		return result, err
 	}
-	result = ConfigurationPreview{Network: c.Network, RuntimePolicy: c.Policy, Accounts: c.Accounts, ProvidedCapacity: c.Capacity, Plan: plan, CatalogVersion: m.Version, PublisherKeyID: catalog.KeyID(c.Publisher), RequiredDiskBytes: required, Pending: []string{"verify actual service account memberships", "verify supported host enforcement and measured VM overhead", "place and verify immutable guest images", "verify live Tailscale and protected HTTPS identity", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
+	result = ConfigurationPreview{Network: c.Network, RuntimePolicy: c.Policy, Accounts: c.Accounts, ProvidedCapacity: c.Capacity, Plan: plan, CatalogVersion: m.Version, PublisherKeyID: catalog.KeyID(c.Publisher), RequiredDiskBytes: required, VerifiedImageBytes: imageCredit, RequiredFreeDiskBytes: required - imageCredit, Pending: []string{"verify actual service account memberships", "verify supported host enforcement and measured VM overhead", "place and verify immutable guest images", "verify live Tailscale and protected HTTPS identity", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
 	return result, nil
 }

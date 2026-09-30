@@ -178,3 +178,25 @@ func TestRootGeneratedConfigurationAppliesThroughJournal(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestConfigurationDiskCreditKeepsObservedCapacity(t *testing.T) {
+	c, _, _, now := configurationFixture(t)
+	initial, err := ConfigurationPlan(c, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Capacity.FreeDiskBytes = initial.RequiredDiskBytes - 3072
+	if _, err = ConfigurationPlan(c, now); err == nil {
+		t.Fatal("initial disk deficit admitted")
+	}
+	preview, err := configurationPlan(c, now, 3072)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.ProvidedCapacity != c.Capacity || preview.VerifiedImageBytes != 3072 || preview.RequiredFreeDiskBytes != initial.RequiredDiskBytes-3072 {
+		t.Fatal("disk observation replaced", preview)
+	}
+	if _, err = configurationPlan(c, now, initial.RequiredDiskBytes+1); err == nil {
+		t.Fatal("excessive credit admitted")
+	}
+}

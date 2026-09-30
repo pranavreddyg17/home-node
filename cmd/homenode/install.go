@@ -103,7 +103,7 @@ func installPrepare(args []string) {
 		fatal(err)
 	}
 	report := hostcheck.Inspect("/var/lib")
-	if !report.PrerequisitesMet {
+	if !report.PreparationPrerequisitesMet() {
 		_ = json.NewEncoder(os.Stdout).Encode(report)
 		fatal(errors.New("host prerequisites failed; installation was not started"))
 	}

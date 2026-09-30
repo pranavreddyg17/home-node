@@ -55,3 +55,11 @@ service validation/activation, passkey enrollment and the phone sample job
 before claiming a working deployment. Those activation/onboarding phases are
 not yet orchestrated by this command. See [the journal implementation](INSTALLATION_JOURNAL.md)
 and [network setup](NETWORK_SETUP.md).
+
+Replay accounts for verified images already published by this installation;
+matching foreign artifacts do not count. Owned partial staging is cleaned and
+capacity is observed again. JSON separates the original disk requirement,
+verified image bytes and free space still needed, while preserving measured
+capacity. Preparation uses that catalog-derived storage admission instead of
+doctor's provisional free-space floor; remaining host prerequisite checks are
+mandatory. Other host processes can still consume space between observations.
