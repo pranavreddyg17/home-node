@@ -31,6 +31,8 @@ func main() {
 		usage()
 	}
 	switch os.Args[1] {
+	case "install-prepare":
+		installPrepare(os.Args[2:])
 	case "doctor":
 		doctor(os.Args[2:])
 	case "serve":
@@ -48,7 +50,7 @@ func main() {
 	}
 }
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: homenode <doctor|accounts-provision|accounts-check|network-check|serve|setup-code> [options]")
+	fmt.Fprintln(os.Stderr, "usage: homenode <install-prepare|doctor|accounts-provision|accounts-check|network-check|serve|setup-code> [options]")
 	os.Exit(2)
 }
 func fatal(err error) { fmt.Fprintln(os.Stderr, err); os.Exit(1) }

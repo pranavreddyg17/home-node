@@ -22,6 +22,8 @@ Open `http://localhost:8787`, enter the code, create a passkey, and save the rec
 
 Run `go run ./cmd/homenode doctor` for machine-readable host diagnostics. Ubuntu Server 24.04 LTS on x86-64 is the initial host target; macOS can develop the interface but cannot qualify KVM/AppArmor isolation.
 
+Supported-host local release preparation is available through `homenode install-prepare`; see [installation preparation](docs/INSTALL_PREPARATION.md). It creates verified service identities, owned configuration and signed image placements while retaining resumable journals. Service activation and complete onboarding remain pending.
+
 Verification:
 
 ```sh
