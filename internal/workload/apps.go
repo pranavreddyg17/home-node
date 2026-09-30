@@ -160,7 +160,7 @@ func (s *Service) processAppKind(ctx context.Context, selectedKind string) error
 		return err
 	}
 	if currentOperation != opID {
-		return s.finish(ctx, opID, "failed", map[string]string{"code": "SUPERSEDED"})
+		return s.failApp(ctx, opID, device, intent, "pending", "SUPERSEDED")
 	}
 	var authorized int
 	err = s.Store.DB.QueryRowContext(ctx, "SELECT count(*) FROM devices WHERE id=? AND revoked_at IS NULL AND EXISTS(SELECT 1 FROM json_each(capabilities) WHERE value='admin')", device).Scan(&authorized)
@@ -168,8 +168,7 @@ func (s *Service) processAppKind(ctx context.Context, selectedKind string) error
 		return err
 	}
 	if authorized != 1 || time.Now().Unix()-created > 300 {
-		_, _ = s.Store.DB.ExecContext(ctx, "UPDATE apps SET state='failed' WHERE workload=? AND operation_id=?", intent.Workload, opID)
-		return s.finish(ctx, opID, "failed", map[string]string{"code": "AUTHORIZATION_EXPIRED"})
+		return s.failApp(ctx, opID, device, intent, "pending", "AUTHORIZATION_EXPIRED")
 	}
 	result, err := s.Store.DB.ExecContext(ctx, "UPDATE operations SET state='executing',updated_at=? WHERE id=? AND state='pending'", time.Now().Unix(), opID)
 	if err != nil {
@@ -203,8 +202,7 @@ func (s *Service) processAppKind(ctx context.Context, selectedKind string) error
 		}
 	}
 	if err != nil {
-		_, _ = s.Store.DB.ExecContext(ctx, "UPDATE apps SET state='failed',updated_at=? WHERE workload=? AND operation_id=?", time.Now().Unix(), intent.Workload, opID)
-		return s.finish(ctx, opID, "failed", map[string]string{"code": "RUNTIME_BLOCKED"})
+		return s.failApp(ctx, opID, device, intent, "executing", "RUNTIME_BLOCKED")
 	}
 	encoded, err := json.Marshal(instance)
 	if err != nil {
@@ -310,4 +308,42 @@ func (s *Service) waitApp(ctx context.Context, workload, instance, operation str
 		case <-ticker.C:
 		}
 	}
+}
+
+// failApp preserves newer app intent and refuses to rewrite interrupted authority.
+func (s *Service) failApp(ctx context.Context, operationID, device string, intent appIntent, from, code string) error {
+	if from != "pending" && from != "executing" {
+		return ErrConflict
+	}
+	return s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		var owned bool
+		if err := tx.QueryRow("SELECT EXISTS(SELECT 1 FROM apps WHERE workload=? AND operation_id=? AND revision=?)", intent.Workload, operationID, intent.Revision).Scan(&owned); err != nil {
+			return err
+		}
+		if !owned {
+			code = "SUPERSEDED"
+		}
+		result := map[string]string{"code": code}
+		encoded, err := json.Marshal(result)
+		if err != nil {
+			return err
+		}
+		update, err := tx.Exec("UPDATE operations SET state='failed',result=?,updated_at=? WHERE id=? AND device_id=? AND state=?", string(encoded), time.Now().Unix(), operationID, device, from)
+		if err != nil {
+			return err
+		}
+		count, err := update.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return ErrConflict
+		}
+		if owned {
+			if _, err = tx.Exec("UPDATE apps SET state='failed',updated_at=? WHERE workload=? AND operation_id=? AND revision=?", time.Now().Unix(), intent.Workload, operationID, intent.Revision); err != nil {
+				return err
+			}
+		}
+		return state.Event(tx, device, "operation.failed", operationID, result)
+	})
 }
