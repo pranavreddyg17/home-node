@@ -167,3 +167,101 @@ func (s *Service) MaintenanceRestart(ctx context.Context, token, device, name st
 	}
 	return op, nil
 }
+
+// RestoreMaintenanceApps waits for worker-confirmed restoration of apps this
+// owner stopped. The coordinator must release supervisor disk maintenance first
+// and use its cleanup/recovery context. It never releases management admission;
+// cancellation or failed/uncertain restart leaves the barrier for guided repair.
+func (s *Service) RestoreMaintenanceApps(ctx context.Context, token, device string) error {
+	if err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := state.RequireMaintenanceOwner(tx, token); err != nil {
+			return err
+		}
+		var authorized int
+		if err := tx.QueryRow("SELECT count(*) FROM devices WHERE id=? AND revoked_at IS NULL AND EXISTS(SELECT 1 FROM json_each(capabilities) WHERE value='admin')", device).Scan(&authorized); err != nil {
+			return err
+		}
+		if authorized != 1 {
+			return ErrConflict
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	for _, name := range []string{"files", "ai"} {
+		stopKey := sum([]byte("maintenance-stop\x00" + token + "\x00" + name))
+		var count, foreign int
+		if err := s.Store.DB.QueryRowContext(ctx, "SELECT count(*),coalesce(sum(device_id<>?),0) FROM operations WHERE idempotency_key=? AND kind='app.stop'", device, stopKey).Scan(&count, &foreign); err != nil {
+			return err
+		}
+		if count == 0 {
+			continue
+		}
+		if count != 1 || foreign != 0 {
+			return ErrConflict
+		}
+		var phase string
+		err := s.Store.DB.QueryRowContext(ctx, "SELECT state FROM operations WHERE device_id=? AND idempotency_key=? AND kind='app.stop'", device, stopKey).Scan(&phase)
+		if err != nil {
+			return err
+		}
+		if phase != "succeeded" {
+			return ErrConflict
+		}
+		op, err := s.MaintenanceRestart(ctx, token, device, name)
+		if err != nil {
+			return err
+		}
+		ticker := time.NewTicker(250 * time.Millisecond)
+		err = func() error {
+			defer ticker.Stop()
+			for {
+				complete := false
+				err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+					if err := state.RequireMaintenanceOwner(tx, token); err != nil {
+						return err
+					}
+					var operationPhase, appPhase, appOwner string
+					if err := tx.QueryRow("SELECT state FROM operations WHERE id=? AND device_id=?", op.ID, device).Scan(&operationPhase); err != nil {
+						return err
+					}
+					if operationPhase == "pending" || operationPhase == "executing" {
+						if err := tx.QueryRow("SELECT state,operation_id FROM apps WHERE workload=?", name).Scan(&appPhase, &appOwner); err != nil {
+							return err
+						}
+						if appPhase != "starting" || appOwner != op.ID {
+							return ErrConflict
+						}
+						return nil
+					}
+					if operationPhase != "succeeded" {
+						return ErrConflict
+					}
+					if err := tx.QueryRow("SELECT state,operation_id FROM apps WHERE workload=?", name).Scan(&appPhase, &appOwner); err != nil {
+						return err
+					}
+					if appPhase != "running" || appOwner != op.ID {
+						return ErrConflict
+					}
+					complete = true
+					return nil
+				})
+				if err != nil {
+					return err
+				}
+				if complete {
+					return nil
+				}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-ticker.C:
+				}
+			}
+		}()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
