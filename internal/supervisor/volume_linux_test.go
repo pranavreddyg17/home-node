@@ -4,8 +4,12 @@ package supervisor
 
 import (
 	"context"
+	"errors"
+	"golang.org/x/sys/unix"
+	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -72,9 +76,75 @@ func TestNativeFreshVolumeFormattingPreservesExistingData(t *testing.T) {
 	if prepareDataVolume(context.Background(), existing, size, 4<<30) == nil {
 		t.Fatal("hardlink alias volume admitted")
 	}
+	for _, kind := range []string{"fifo", "directory", "wide", "special", "wrong-size"} {
+		t.Run(kind, func(t *testing.T) {
+			candidate := filepath.Join(parent, kind+".raw")
+			switch kind {
+			case "fifo":
+				if err := unix.Mkfifo(candidate, 0600); err != nil {
+					t.Fatal(err)
+				}
+			case "directory":
+				if err := os.Mkdir(candidate, 0700); err != nil {
+					t.Fatal(err)
+				}
+			default:
+				f, err := os.OpenFile(candidate, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := f.Truncate(size); err != nil {
+					t.Fatal(err)
+				}
+				f.Close()
+				switch kind {
+				case "wide":
+					if err := os.Chmod(candidate, 0644); err != nil {
+						t.Fatal(err)
+					}
+				case "special":
+					if err := os.Chmod(candidate, 0600|os.ModeSetuid); err != nil {
+						t.Fatal(err)
+					}
+				case "wrong-size":
+					if err := os.Truncate(candidate, size-1); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			before, err := os.Lstat(candidate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if prepareDataVolume(context.Background(), candidate, size, 4<<30) == nil {
+				t.Fatal("unsafe existing volume admitted")
+			}
+			after, err := os.Lstat(candidate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !os.SameFile(before, after) || before.Mode() != after.Mode() || before.Size() != after.Size() {
+				t.Fatal("existing volume changed")
+			}
+		})
+	}
+	refused := filepath.Join(parent, "reserve.raw")
+	if !errors.Is(prepareDataVolume(context.Background(), refused, size, math.MaxInt64-size), ErrCapacity) {
+		t.Fatal("unavailable reserve not refused")
+	}
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.Name() == "reserve.raw" || strings.HasPrefix(entry.Name(), "reserve.raw.prepare-") {
+			t.Fatal("reserve refusal created storage")
+		}
+	}
+
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if prepareDataVolume(cancelled, filepath.Join(parent, "cancelled.raw"), size, 4<<30) == nil {
+	if !errors.Is(prepareDataVolume(cancelled, filepath.Join(parent, "cancelled.raw"), size, 4<<30), context.Canceled) {
 		t.Fatal("cancelled initialization accepted")
 	}
 	if _, err := os.Stat(filepath.Join(parent, "cancelled.raw")); !os.IsNotExist(err) {

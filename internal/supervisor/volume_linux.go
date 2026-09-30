@@ -7,15 +7,19 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"golang.org/x/sys/unix"
 	"math"
 	"os"
 	"path/filepath"
+
+	"golang.org/x/sys/unix"
 )
 
 // New volumes are formatted before exclusive publication. Existing data is never formatted.
 func prepareDataVolume(ctx context.Context, path string, size int64, reserve int64) error {
-	if os.Geteuid() != 0 || !filepath.IsAbs(path) || filepath.Clean(path) != path || reserve < 4<<30 || reserve > math.MaxInt64-size || size < 16<<20 || size > 512<<30 || ctx.Err() != nil {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if os.Geteuid() != 0 || !filepath.IsAbs(path) || filepath.Clean(path) != path || reserve < 4<<30 || reserve > math.MaxInt64-size || size < 16<<20 || size > 512<<30 {
 		return ErrPolicy
 	}
 	parentPath := filepath.Dir(path)
@@ -42,7 +46,7 @@ func prepareDataVolume(ctx context.Context, path string, size int64, reserve int
 		return ErrPolicy
 	}
 	name := filepath.Base(path)
-	existing, err := root.OpenFile(name, os.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+	existing, err := root.OpenFile(name, unix.O_PATH|unix.O_NOFOLLOW, 0)
 	if err == nil {
 		defer existing.Close()
 		return admitVolume(existing, size)
@@ -102,7 +106,7 @@ func prepareDataVolume(ctx context.Context, path string, size int64, reserve int
 
 func admitVolume(file *os.File, size int64) error {
 	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || info.Size() != size {
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || info.Size() != size {
 		return ErrPolicy
 	}
 	var native unix.Stat_t

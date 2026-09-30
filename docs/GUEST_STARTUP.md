@@ -261,3 +261,10 @@ files, complete volume provenance/restore activation, actual guest mounts and
 production-size formatting latency remain release work. The native fixture
 creates only small disposable regular files; ext4 magic is evidence of
 formatting, not a filesystem/boot/isolation qualification certificate.
+
+Existing volume admission now uses Linux O_PATH/no-follow descriptors, checking
+regular-file metadata without opening devices, FIFOs or data contents for I/O.
+Special permission bits, hardlink aliases, wrong sizes and nonprivate files
+are refused. Fresh reserve failure is checked before any staging file creation;
+already cancelled work preserves cancellation as its error. Native tests cover
+these cases and assert preserved existing metadata.
