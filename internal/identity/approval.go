@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -9,6 +10,7 @@ import (
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/pranavreddyg17/home-node/internal/state"
+	"io"
 	"net/http"
 	"regexp"
 	"slices"
@@ -281,4 +283,29 @@ func (s *Service) ConsumeApproval(ctx context.Context, actor Session, token, act
 		}
 		return mutation(tx)
 	})
+}
+
+// PairApproved decodes the exact approved bytes and commits invitation creation
+// with grant consumption. There is no alternate supplied name/capability set.
+func (s *Service) PairApproved(ctx context.Context, actor Session, grant string, body []byte, policy int64) (string, error) {
+	if len(body) > 4096 {
+		return "", ErrDenied
+	}
+	var input struct {
+		Name         string   `json:"name"`
+		Capabilities []string `json:"capabilities"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&input) != nil || decoder.Decode(new(any)) != io.EOF || !ValidName(input.Name) || !ValidCapabilities(input.Capabilities) {
+		return "", ErrDenied
+	}
+	token := state.Random()
+	err := s.ConsumeApproval(ctx, actor, grant, "device.pair", nil, body, policy, func(tx *sql.Tx) error {
+		return pairInTransaction(tx, actor, token, input.Name, input.Capabilities)
+	})
+	if err != nil {
+		return "", err
+	}
+	return token, nil
 }

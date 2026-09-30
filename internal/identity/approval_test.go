@@ -287,3 +287,33 @@ func TestApprovalConsumptionRejectsChangedGrantAuthority(t *testing.T) {
 		})
 	}
 }
+
+func TestApprovedPairingCreatesInvitationAndConsumesGrantTogether(t *testing.T) {
+	s := testService(t)
+	actor, _ := testDevice(t, s, AllCapabilities)
+	body := []byte(`{"name":"phone","capabilities":["files"]}`)
+	b, err := newApprovalBinding(actor, "device.pair", nil, body, 1, time.Now().Unix())
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant := state.Random()
+	data, _ := json.Marshal(challenge{Binding: &b})
+	if _, err := s.Store.DB.Exec("INSERT INTO challenges(token_hash,kind,payload,epoch,expires_at) VALUES(?,'approval-grant',?,?,?)", state.Hash(grant), string(data), actor.Epoch, b.ExpiresAt); err != nil {
+		t.Fatal(err)
+	}
+	changed := []byte(`{"name":"phone","capabilities":["admin"]}`)
+	if code, err := s.PairApproved(context.Background(), actor, grant, changed, 1); !errors.Is(err, ErrDenied) || code != "" {
+		t.Fatal("changed capabilities authorized", code, err)
+	}
+	code, err := s.PairApproved(context.Background(), actor, grant, body, 1)
+	if err != nil || code == "" {
+		t.Fatal("approved pairing failed", err)
+	}
+	var name, caps, issuer string
+	if err := s.Store.DB.QueryRow("SELECT name,capabilities,issuer FROM invitations WHERE token_hash=?", state.Hash(code)).Scan(&name, &caps, &issuer); err != nil || name != "phone" || caps != `["files"]` || issuer != actor.Device.ID {
+		t.Fatal("wrong invitation", name, caps, issuer, err)
+	}
+	if code, err := s.PairApproved(context.Background(), actor, grant, body, 1); !errors.Is(err, ErrDenied) || code != "" {
+		t.Fatal("pair approval replayed", code, err)
+	}
+}

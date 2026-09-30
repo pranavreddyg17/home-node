@@ -125,24 +125,28 @@ func (s *Service) Pair(ctx context.Context, actor Session, name string, caps []s
 		return "", ErrDenied
 	}
 	token := state.Random()
-	data, _ := json.Marshal(caps)
 	err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
 		if err := checkActor(tx, actor); err != nil {
 			return err
 		}
-		var count int
-		if err := tx.QueryRow("SELECT count(*) FROM invitations WHERE expires_at>?", time.Now().Unix()).Scan(&count); err != nil {
-			return err
-		}
-		if count >= 20 {
-			return ErrDenied
-		}
-		if _, err := tx.Exec("INSERT INTO invitations(token_hash,issuer,kind,name,capabilities,epoch,expires_at) VALUES(?,?,'pair',?,?,?,?)", state.Hash(token), actor.Device.ID, name, string(data), actor.Epoch, time.Now().Add(5*time.Minute).Unix()); err != nil {
-			return err
-		}
-		return state.Event(tx, actor.Device.ID, "device.invited", "", map[string]any{"capabilities": caps})
+		return pairInTransaction(tx, actor, token, name, caps)
 	})
 	return token, err
+}
+
+func pairInTransaction(tx *sql.Tx, actor Session, token, name string, caps []string) error {
+	data, _ := json.Marshal(caps)
+	var count int
+	if err := tx.QueryRow("SELECT count(*) FROM invitations WHERE expires_at>?", time.Now().Unix()).Scan(&count); err != nil {
+		return err
+	}
+	if count >= 20 {
+		return ErrDenied
+	}
+	if _, err := tx.Exec("INSERT INTO invitations(token_hash,issuer,kind,name,capabilities,epoch,expires_at) VALUES(?,?,'pair',?,?,?,?)", state.Hash(token), actor.Device.ID, name, string(data), actor.Epoch, time.Now().Add(5*time.Minute).Unix()); err != nil {
+		return err
+	}
+	return state.Event(tx, actor.Device.ID, "device.invited", "", map[string]any{"capabilities": caps})
 }
 
 func ValidName(name string) bool {
