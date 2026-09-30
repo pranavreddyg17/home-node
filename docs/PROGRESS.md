@@ -346,3 +346,9 @@ Development is on macOS; none of these hardware or external review gates may be 
 - Agent startup now rejects a nonprivate, foreign-owned or final-symlink object root and checks the opened root identity. Missing parents are not implicitly created; existing permissions/data are never silently repaired.
 - Added rejection tests preserving existing bytes/modes and refusing missing ancestry and symlinks. Existing guest fixtures now explicitly create private roots. Local guest/workload/controller tests passed.
 - Mount/serial CI `36668333488` remains running. This change is committed locally pending its completion; full boot initializer, mount provenance and booted filesystem/hardware qualification remain incomplete.
+
+## Native guest object ownership fixture
+
+- Linux CI `36668333488` passed real overlay packaging/import, installed-libvirt disk XML schema, mount/unit syntax, native account checks, root/package and browser workflows. This does not prove a booted disk mount or guest filesystem initialization.
+- Pushed private-root admission commit `ece64d4`. Added a separate opt-in root Linux fixture assigning a temporary directory to foreign UID/GID 900 and asserting rejection preserves its owner, mode and existing bytes. Only this disposable fixture changes ownership; agent admission never does.
+- Local guest tests passed with the native fixture skipped on macOS. The next Linux CI run must establish native ownership refusal. Guest-side blank-volume initialization and rootfs/kernel assembly remain unfinished.
