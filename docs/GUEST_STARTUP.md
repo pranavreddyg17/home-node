@@ -139,3 +139,20 @@ This requires the unfinished guest boot initializer to provide an appropriate
 parent and object directory after mounting the correct disk. It does not verify
 parent ancestry, mount provenance, filesystem type, available capacity or
 physical disk integrity. Those remain separate boot admission requirements.
+
+## Binary data-mount admission
+
+The production guest entrypoint now admits only `/data/objects`. Before opening
+the agent it checks the named data path is a block device, kernel serial is
+`homenode-data`, kernel read-only flag is zero and the current mount namespace
+contains exactly one `/data` mount of the same major/minor device. The mount
+must expose the whole ext4 filesystem with rw,nodev,nosuid,noexec and writable
+superblock options. Kernel mountinfo/attribute reads are bounded; non-Linux
+startup fails admission. The service still denies raw block-device access: the
+checker reads kernel metadata without opening the disk for I/O.
+
+Parser tests cover missing/duplicate mounts, another disk, subtree/bind roots,
+wrong filesystem, absent confinement flags, readonly superblocks and malformed
+or oversized evidence. Linux cross compilation passed. Real kernel/udev mount
+identity, safe formatting and post-crash filesystem behavior remain unverified
+until booted-image acceptance. This check does not initialize or repair storage.

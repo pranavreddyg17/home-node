@@ -352,3 +352,9 @@ Development is on macOS; none of these hardware or external review gates may be 
 - Linux CI `36668333488` passed real overlay packaging/import, installed-libvirt disk XML schema, mount/unit syntax, native account checks, root/package and browser workflows. This does not prove a booted disk mount or guest filesystem initialization.
 - Pushed private-root admission commit `ece64d4`. Added a separate opt-in root Linux fixture assigning a temporary directory to foreign UID/GID 900 and asserting rejection preserves its owner, mode and existing bytes. Only this disposable fixture changes ownership; agent admission never does.
 - Local guest tests passed with the native fixture skipped on macOS. The next Linux CI run must establish native ownership refusal. Guest-side blank-volume initialization and rootfs/kernel assembly remain unfinished.
+
+## Binary guest mount admission
+
+- Production guest entrypoint now checks fixed data path, named block device/serial, kernel writeability and a single whole ext4 mount of the same major/minor at `/data`, with nodev/nosuid/noexec and rw filesystem options. Kernel evidence reads are bounded; checks do not open raw disks for I/O or change mounts/data.
+- Mount parser and guest command tests passed; Linux cross compilation passed. Real mount/device metadata and blank-disk initialization remain booted-image qualification gaps.
+- Private-root CI `36668596200` remains running; the foreign-owner fixture and binary mount admission are committed locally pending its result. Full guest image assembly and end-to-end activation remain unfinished.
