@@ -1,5 +1,7 @@
 import importlib.util
 import json
+import hashlib
+import tarfile
 from pathlib import Path
 import sys
 import tempfile
@@ -30,6 +32,19 @@ class OverlayTests(unittest.TestCase):
             metadata.write_text(json.dumps(record))
             metadata.chmod(0o644)
             overlay.verify(root)
+            with tempfile.TemporaryDirectory() as archives:
+                first, second = Path(archives) / "first.tar", Path(archives) / "second.tar"
+                overlay.package(root, first, 1800000000)
+                overlay.package(root, second, 1800000000)
+                self.assertEqual(hashlib.sha256(first.read_bytes()).digest(), hashlib.sha256(second.read_bytes()).digest())
+                self.assertEqual(first.stat().st_mode & 0o777, 0o444)
+                with tarfile.open(first) as archive:
+                    for member in archive.getmembers():
+                        self.assertEqual((member.uid, member.gid, member.mtime), (0, 0, 1800000000))
+                        self.assertFalse(member.issym() or member.islnk())
+                        self.assertFalse(member.name.startswith("/") or ".." in member.name.split("/"))
+                with self.assertRaises(FileExistsError):
+                    overlay.package(root, first, 1800000000)
             binary = root / overlay.BINARY
             original = binary.read_bytes()
             binary.write_bytes(original + b"changed")

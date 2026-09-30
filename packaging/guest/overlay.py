@@ -2,11 +2,14 @@
 """Verify fixed adapter overlay bytes, without claiming boot/release acceptance."""
 import hashlib
 import json
+import io
 import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
 import sys
+import tarfile
+import tempfile
 
 PROFILES = {"files": 16 << 30, "video": 8 << 30, "ai": 16 << 30}
 BINARY = "usr/lib/homenode/guest/homenode-guest"
@@ -80,14 +83,97 @@ def verify(root):
         raise ValueError("invalid identity")
     if not re.fullmatch(r"[a-f0-9]{40}", record["sourceRevision"]) or not re.fullmatch(r"go[0-9]+\.[0-9]+\.[0-9]+", record["goToolchain"]):
         raise ValueError("invalid source identity")
-    if record["guestUID"] != 900 or record["guestGID"] != 900 or record["files"] != inventory(root, record["profile"]):
+    if type(record["guestUID"]) is not int or type(record["guestGID"]) is not int or record["guestUID"] != 900 or record["guestGID"] != 900 or record["files"] != inventory(root, record["profile"]):
         raise ValueError("integrity mismatch")
+    for item in record["files"]:
+        if type(item["mode"]) is not int or type(item["bytes"]) is not int:
+            raise ValueError("invalid numeric metadata")
+    return record
+
+
+class HashReader:
+    def __init__(self, file):
+        self.file = file
+        self.hash = hashlib.sha256()
+        self.size = 0
+
+    def read(self, size=-1):
+        chunk = self.file.read(size)
+        self.hash.update(chunk)
+        self.size += len(chunk)
+        return chunk
+
+
+def package(root, output, epoch):
+    record = verify(root)
+    if epoch < 0 or epoch > 4102444800:
+        raise ValueError("invalid source timestamp")
+    files = {item["path"]: item for item in record["files"]}
+    metadata_bytes = (json.dumps(record, sort_keys=True, indent=2) + "\n").encode()
+    names = list(files) + ["overlay.json"]
+    directories = set()
+    for name in names:
+        parent = PurePosixPath(name).parent
+        while str(parent) != ".":
+            directories.add(str(parent))
+            parent = parent.parent
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=output.parent, prefix=".homenode-overlay-", delete=False) as file:
+            temporary = Path(file.name)
+            with tarfile.open(fileobj=file, mode="w", format=tarfile.USTAR_FORMAT) as archive:
+                for name in sorted(directories | set(names)):
+                    path = root / name
+                    info = path.lstat()
+                    entry = tarfile.TarInfo(name)
+                    entry.uid = entry.gid = 0
+                    entry.uname = entry.gname = "root"
+                    entry.mtime = epoch
+                    entry.mode = 0o755 if name in directories else (0o644 if name == "overlay.json" else files[name]["mode"])
+                    if name in directories:
+                        entry.type = tarfile.DIRTYPE
+                        archive.addfile(entry)
+                    else:
+                        if not stat.S_ISREG(info.st_mode):
+                            raise ValueError("source changed during packaging")
+                        if name == "overlay.json":
+                            entry.size = len(metadata_bytes)
+                            archive.addfile(entry, io.BytesIO(metadata_bytes))
+                        else:
+                            entry.size = files[name]["bytes"]
+                            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                            with os.fdopen(fd, "rb") as source:
+                                opened = os.fstat(source.fileno())
+                                if not stat.S_ISREG(opened.st_mode) or opened.st_size != entry.size:
+                                    raise ValueError("source changed during packaging")
+                                reader = HashReader(source)
+                                archive.addfile(entry, reader)
+                                if reader.size != entry.size or reader.hash.hexdigest() != files[name]["sha256"]:
+                                    raise ValueError("archived bytes differ from metadata")
+            file.flush()
+            os.fsync(file.fileno())
+            os.fchmod(file.fileno(), 0o444)
+        # Revalidate before publishing: private build inputs must remain stable.
+        if verify(root) != record:
+            raise ValueError("source changed during packaging")
+        os.link(temporary, output)  # exclusive publication, including symlink destinations
+        directory = os.open(output.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        if temporary is not None:
+            temporary.unlink()
 
 
 def main():
     action, root = sys.argv[1], Path(sys.argv[2])
     if root.is_symlink() or not root.is_dir():
         raise ValueError("invalid root")
+    if action == "package":
+        package(root, Path(sys.argv[3]), int(sys.argv[4]))
+        return
     if action == "create":
         profile, revision, toolchain = sys.argv[3:]
         if profile not in PROFILES:

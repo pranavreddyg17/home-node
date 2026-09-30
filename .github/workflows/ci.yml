@@ -53,6 +53,10 @@ jobs:
           python3 packaging/guest/overlay_test.py
           for profile in files video ai; do
             sh packaging/guest/stage.sh "$profile" "$RUNNER_TEMP/homenode-guest-$profile"
+            epoch=$(git show -s --format=%ct HEAD)
+            python3 packaging/guest/overlay.py package "$RUNNER_TEMP/homenode-guest-$profile" "$RUNNER_TEMP/homenode-guest-$profile.tar" "$epoch"
+            python3 packaging/guest/overlay.py package "$RUNNER_TEMP/homenode-guest-$profile" "$RUNNER_TEMP/homenode-guest-$profile-repeat.tar" "$epoch"
+            cmp "$RUNNER_TEMP/homenode-guest-$profile.tar" "$RUNNER_TEMP/homenode-guest-$profile-repeat.tar"
           done
       - name: Validate guest service source
         run: systemd-analyze verify packaging/guest/homenode-guest@.service
@@ -68,5 +72,15 @@ jobs:
         with:
           name: homenode-development-amd64
           path: artifacts/homenode_0.1.0~ci_amd64.deb*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain unsigned guest adapter overlays
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: homenode-guest-adapter-overlays-unsigned
+          path: |
+            ${{ runner.temp }}/homenode-guest-files.tar
+            ${{ runner.temp }}/homenode-guest-video.tar
+            ${{ runner.temp }}/homenode-guest-ai.tar
           if-no-files-found: error
           retention-days: 14

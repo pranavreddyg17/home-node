@@ -60,3 +60,21 @@ actual boot tests and signed catalog publication are not produced by staging.
 The sysusers source fixes guest UID/GID 900; assembly must verify uniqueness and
 exact nologin identity before releasing an image, never accept allocator fallback.
 Linux CI stages all three overlays and runs portable mutation/refusal tests.
+
+## Assembly archives
+
+After staging, `python3 packaging/guest/overlay.py package /path/to/overlay
+/absolute/new/output.tar SOURCE_TIMESTAMP` produces a USTAR assembly archive.
+Use the source commit's Unix timestamp. Paths/modes are fixed, owner/group fields
+are root, metadata is canonical, and each copied file stream must match its
+verified size/hash before publication. The archive is synced and published with
+no overwrite, including refusal of occupied symlink destinations. Output mode is
+0444. Input verification runs again before publication.
+
+CI packages each real compiled overlay twice, compares complete archive bytes
+and retains only the original three archives as unsigned development artifacts
+for 14 days after all checks pass. This is repeatability of packaging the same
+overlay, not independent reproducibility of compiler output or filesystem images.
+The archives contain `bootable: false` metadata and provide no publisher signature
+or release qualification. Do not extract an arbitrary downloaded archive as root;
+a trusted assembler with explicit member/schema/digest admission is still pending.
