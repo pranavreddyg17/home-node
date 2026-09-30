@@ -151,6 +151,8 @@ func (m *Manager) Apply(ctx context.Context, r Request) (Instance, error) {
 		return m.start(ctx, r)
 	case "stop":
 		return m.stop(ctx, r)
+	case "shutdown":
+		return m.shutdown(ctx, r)
 	case "inspect":
 		return m.Inspect(ctx, r.InstanceID)
 	case "purge":
@@ -235,7 +237,7 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 			return ErrCapacity
 		}
 		var same int
-		if e = tx.QueryRow("SELECT count(*) FROM runtime_instances WHERE workload=? AND desired='running'", r.Workload).Scan(&same); e != nil {
+		if e = tx.QueryRow("SELECT count(*) FROM runtime_instances WHERE workload=? AND (desired='running' OR state IN('preparing','running','stopping','shutting-down'))", r.Workload).Scan(&same); e != nil {
 			return e
 		}
 		if r.Workload != "video" && same > 0 {

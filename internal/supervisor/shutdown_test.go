@@ -126,3 +126,74 @@ func TestShutdownAuditDeadlineAndEmergencyEnforcement(t *testing.T) {
 		})
 	}
 }
+
+type shutdownFixtureBackend struct {
+	*fakeBackend
+	shutdowns int
+	failure   error
+	during    func()
+}
+
+func (b *shutdownFixtureBackend) Shutdown(context.Context, string) error {
+	b.shutdowns++
+	if b.during != nil {
+		b.during()
+	}
+	if b.failure != nil {
+		return b.failure
+	}
+	b.running = false
+	return nil
+}
+
+func TestJournaledShutdownSuccessReplayAndInterveningTeardown(t *testing.T) {
+	for _, scenario := range []string{"success", "failure", "intervening-stop", "deadline-changed"} {
+		t.Run(scenario, func(t *testing.T) {
+			m, original := newManager(t)
+			b := &shutdownFixtureBackend{fakeBackend: original}
+			m.Backend = b
+			ctx := context.Background()
+			id := state.Random()
+			if _, err := m.Apply(ctx, Request{Version: 1, OperationID: state.Random(), Action: "start", Workload: "files", InstanceID: id, PolicyGeneration: 1, Revision: 1}); err != nil {
+				t.Fatal(err)
+			}
+			request := Request{Version: 1, OperationID: state.Random(), Action: "shutdown", InstanceID: id, PolicyGeneration: 1, Revision: 2}
+			b.during = func() {
+				instance, err := m.Inspect(ctx, id)
+				if err != nil || instance.State != "shutting-down" {
+					t.Fatal("runtime call preceded journal", instance, err)
+				}
+				if scenario == "deadline-changed" {
+					if _, err = m.Store.DB.Exec("UPDATE settings SET value='9999999999' WHERE key=?", shutdownDeadlineKey(id)); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if scenario == "intervening-stop" {
+					if _, err = m.Apply(ctx, Request{Version: 1, OperationID: state.Random(), Action: "stop", InstanceID: id, PolicyGeneration: 1, Revision: 3}); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			if scenario == "failure" {
+				b.failure = errors.New("fixture shutdown refusal")
+			}
+			result, err := m.Apply(ctx, request)
+			if scenario == "success" {
+				if err != nil || result.State != "stopped" || b.stops != 0 {
+					t.Fatal(result, err)
+				}
+				if _, err = m.Apply(ctx, request); err != nil || b.shutdowns != 1 {
+					t.Fatal("replay repeated shutdown", b.shutdowns, err)
+				}
+			} else {
+				if err == nil {
+					t.Fatal("failed/intervened shutdown reported success")
+				}
+				var phase string
+				if err = m.Store.DB.QueryRow("SELECT state FROM runtime_operations WHERE id=?", request.OperationID).Scan(&phase); err != nil || phase != "pending" {
+					t.Fatal("shutdown authority marked complete", phase, err)
+				}
+			}
+		})
+	}
+}
