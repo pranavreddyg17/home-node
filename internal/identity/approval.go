@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"time"
+	"unicode/utf8"
 )
 
 const approvalLifetimeSeconds int64 = 120
@@ -288,21 +289,13 @@ func (s *Service) ConsumeApproval(ctx context.Context, actor Session, token, act
 // PairApproved decodes the exact approved bytes and commits invitation creation
 // with grant consumption. There is no alternate supplied name/capability set.
 func (s *Service) PairApproved(ctx context.Context, actor Session, grant string, body []byte, policy int64) (string, error) {
-	if len(body) > 4096 {
-		return "", ErrDenied
-	}
-	var input struct {
-		Name         string   `json:"name"`
-		Capabilities []string `json:"capabilities"`
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&input) != nil || decoder.Decode(new(any)) != io.EOF || !ValidName(input.Name) || !ValidCapabilities(input.Capabilities) {
-		return "", ErrDenied
+	name, caps, err := parsePairApprovalBody(body)
+	if err != nil {
+		return "", err
 	}
 	token := state.Random()
-	err := s.ConsumeApproval(ctx, actor, grant, "device.pair", nil, body, policy, func(tx *sql.Tx) error {
-		return pairInTransaction(tx, actor, token, input.Name, input.Capabilities)
+	err = s.ConsumeApproval(ctx, actor, grant, "device.pair", nil, body, policy, func(tx *sql.Tx) error {
+		return pairInTransaction(tx, actor, token, name, caps)
 	})
 	if err != nil {
 		return "", err
@@ -312,15 +305,69 @@ func (s *Service) PairApproved(ctx context.Context, actor Session, grant string,
 
 // RevokeApproved binds the target ID and exact empty-object request body.
 func (s *Service) RevokeApproved(ctx context.Context, actor Session, grant, id string, body []byte, policy int64) error {
-	if len(body) > 4096 || len(bytes.TrimSpace(body)) == 0 || bytes.TrimSpace(body)[0] != '{' {
-		return ErrDenied
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(new(struct{})) != nil || decoder.Decode(new(any)) != io.EOF {
-		return ErrDenied
+	if _, err := approvalObject(body, nil); err != nil {
+		return err
 	}
 	return s.ConsumeApproval(ctx, actor, grant, "device.revoke", []string{id}, body, policy, func(tx *sql.Tx) error {
 		return revokeInTransaction(tx, actor, id)
 	})
+}
+
+func approvalObject(body []byte, fields []string) (map[string]json.RawMessage, error) {
+	if len(body) > 4096 || !utf8.Valid(body) {
+		return nil, ErrDenied
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	token, err := decoder.Token()
+	if err != nil || token != json.Delim('{') {
+		return nil, ErrDenied
+	}
+	result := map[string]json.RawMessage{}
+	for decoder.More() {
+		token, err := decoder.Token()
+		key, ok := token.(string)
+		if err != nil || !ok || !slices.Contains(fields, key) {
+			return nil, ErrDenied
+		}
+		if _, exists := result[key]; exists {
+			return nil, ErrDenied
+		}
+		var value json.RawMessage
+		if decoder.Decode(&value) != nil {
+			return nil, ErrDenied
+		}
+		result[key] = value
+	}
+	token, err = decoder.Token()
+	if err != nil || token != json.Delim('}') || decoder.Decode(new(any)) != io.EOF {
+		return nil, ErrDenied
+	}
+	return result, nil
+}
+
+func parsePairApprovalBody(body []byte) (string, []string, error) {
+	object, err := approvalObject(body, []string{"name", "capabilities"})
+	if err != nil {
+		return "", nil, err
+	}
+	var name string
+	var caps []string
+	if json.Unmarshal(object["name"], &name) != nil || json.Unmarshal(object["capabilities"], &caps) != nil || !ValidName(name) || !ValidCapabilities(caps) {
+		return "", nil, ErrDenied
+	}
+	return name, caps, nil
+}
+
+func (s *Service) BeginPairApproval(ctx context.Context, actor Session, body []byte, policy int64) (any, string, ApprovalBinding, error) {
+	if _, _, err := parsePairApprovalBody(body); err != nil {
+		return nil, "", ApprovalBinding{}, err
+	}
+	return s.BeginApproval(ctx, actor, "device.pair", nil, body, policy)
+}
+
+func (s *Service) BeginRevokeApproval(ctx context.Context, actor Session, id string, body []byte, policy int64) (any, string, ApprovalBinding, error) {
+	if _, err := approvalObject(body, nil); err != nil {
+		return nil, "", ApprovalBinding{}, err
+	}
+	return s.BeginApproval(ctx, actor, "device.revoke", []string{id}, body, policy)
 }

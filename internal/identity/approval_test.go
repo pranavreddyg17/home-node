@@ -364,3 +364,29 @@ func TestApprovedRevocationBindsTargetAndPreservesLastAdmin(t *testing.T) {
 		})
 	}
 }
+
+func TestApprovalRequestBodiesRejectAmbiguity(t *testing.T) {
+	for _, body := range []string{
+		`{"name":"first","name":"second","capabilities":["files"]}`,
+		`{"name":"first","na\u006de":"second","capabilities":["files"]}`,
+		`{"Name":"phone","capabilities":["files"]}`,
+		`{"name":"phone","capabilities":["files"],"extra":true}`,
+		`{"name":"phone","capabilities":["files"]} {}`,
+		`null`,
+		`{"name":"phone","capabilities":null}`,
+		"{\"name\":\"" + string([]byte{255}) + "\",\"capabilities\":[\"files\"]}",
+	} {
+		if _, _, err := parsePairApprovalBody([]byte(body)); !errors.Is(err, ErrDenied) {
+			t.Fatal("ambiguous pair body accepted", body, err)
+		}
+	}
+	name, caps, err := parsePairApprovalBody([]byte(` {"capabilities":["files"],"name":"phone"} `))
+	if err != nil || name != "phone" || len(caps) != 1 || caps[0] != "files" {
+		t.Fatal("valid body refused", err)
+	}
+	for _, body := range []string{`null`, `[]`, `{"target":"different"}`, `{} {}`} {
+		if _, err := approvalObject([]byte(body), nil); !errors.Is(err, ErrDenied) {
+			t.Fatal("invalid revoke body accepted", body, err)
+		}
+	}
+}
