@@ -230,3 +230,10 @@ test executable replacing ExecStart and RemainAfterExit disabled so the fixture
 can terminate. Unit mount dependencies/conditions are not replicated; actual
 virtio data mounts, production entrypoint admission and guest boot remain
 unverified. No fixture is run on the owner's machine by default.
+
+The source-unit fixture also requires an attempted exclusive probe creation in
+the root-owned system fixture directory to fail with EROFS, while initializer
+operations actually write under `/data`. A permissions-only refusal does not
+pass the read-only assertion. If protection is unexpectedly absent, the test
+removes only the probe it successfully created and fails. This checks the
+namespace write boundary for the fixture, not actual raw disk/device isolation.

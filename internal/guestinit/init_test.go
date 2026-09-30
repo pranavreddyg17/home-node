@@ -1,6 +1,7 @@
 package guestinit
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -65,6 +66,20 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 		}
 		if observed["NoNewPrivs:"] != 1 {
 			t.Fatal("missing privilege restriction evidence")
+		}
+	}
+	if os.Getenv("HOMENODE_GUEST_INIT_SERVICE") == "1" {
+		probe := fmt.Sprintf("/usr/lib/homenode-fixtures/readonly-probe-%d", os.Getpid())
+		file, err := os.OpenFile(probe, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if err == nil {
+			file.Close()
+			if removeErr := os.Remove(probe); removeErr != nil {
+				t.Error(removeErr)
+			}
+			t.Fatal("service system directory is writable")
+		}
+		if !errors.Is(err, syscall.EROFS) {
+			t.Fatal("missing read-only filesystem evidence")
 		}
 	}
 	if hidden := os.Getenv("HOMENODE_GUEST_INIT_HIDDEN_PATH"); hidden != "" {

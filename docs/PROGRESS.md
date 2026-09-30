@@ -407,3 +407,8 @@ Development is on macOS; none of these hardware or external review gates may be 
 - Full Linux `36670656479` passed complete-intent publication/retry/refusal, restricted capability evidence, native/root/package/browser workflows and real guest overlays. This is not guest boot or physical crash evidence.
 - Added an opt-in systemd fixture taking reviewed service protection properties directly from the initializer unit. It executes compiled native directory tests with their data in a fresh ordinary `/data` fixture, checks capabilities and PrivateTmp isolation, refuses any pre-existing `/data` and removes only its owned empty fixture directory. ExecStart/RemainAfterExit are adapted for the test harness; mount dependencies are deliberately outside this test's scope.
 - Local initializer tests and Python compilation passed. Native source-protection results are pending; full rootfs/kernel image assembly, formatting, actual data/device mounts and physical power-loss qualification remain incomplete.
+
+## Observe initializer system-path write protection
+
+- Extended the source-unit fixture to require observed EROFS on exclusive creation in a root-owned system directory while its object initialization tests write under `/data`. Permission-only errors do not pass; an unexpectedly created owned probe is removed before failure.
+- Local initializer tests passed and the Linux test binary cross-compiled. Systemd run `36671154395` remains active and predates this additional assertion. Actual guest disk/device boot and full image assembly remain unfinished.

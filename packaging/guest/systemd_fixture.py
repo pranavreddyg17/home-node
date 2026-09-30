@@ -45,7 +45,7 @@ try:
         command = ["/usr/bin/systemd-run", "--quiet", "--wait", "--pipe", "--collect", "--unit=homenode-init-fixture-" + uuid.uuid4().hex,
                    "--property=RemainAfterExit=no", *properties,
                    "--setenv=HOMENODE_GUEST_INIT_INTEGRATION=1", "--setenv=HOMENODE_GUEST_INIT_CAPABILITIES=1",
-                   "--setenv=HOMENODE_GUEST_INIT_PARENT=/data", "--setenv=HOMENODE_GUEST_INIT_HIDDEN_PATH=" + str(marker),
+                   "--setenv=HOMENODE_GUEST_INIT_PARENT=/data", "--setenv=HOMENODE_GUEST_INIT_SERVICE=1", "--setenv=HOMENODE_GUEST_INIT_HIDDEN_PATH=" + str(marker),
                    str(binary), "-test.run=^TestNativeGuestObjectInitialization$", "-test.count=1"]
         result = subprocess.run(command, timeout=45, check=False)
         if result.returncode:
