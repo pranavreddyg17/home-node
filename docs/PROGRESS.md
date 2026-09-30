@@ -422,3 +422,10 @@ Development is on macOS; none of these hardware or external review gates may be 
 
 - Added source-unit runtime assertions that AF_UNIX creation succeeds while AF_INET/AF_INET6 stream sockets are denied, accepting only explicit unsupported-family/permission refusal. No sockets are bound and no network connections occur.
 - Local initializer tests passed and Linux tests cross-compiled. Systemd CI `36671362054` remains active and predates this assertion. Guest adapter/model network policy and actual VM no-NIC isolation are not established by initializer socket tests.
+
+## Initialize fresh supervisor data volumes
+
+- Full Linux run `36671362054` passed source-unit protections including readonly paths and special-mode refusal, restricted capabilities, native/root/package/browser checks and real guest overlays. The socket-family assertion commit is now submitted with this functional change.
+- Linux volume preparation now exclusively creates private staging, preallocates its descriptor, formats only that new inode with fixed bounded mkfs.ext4 execution, syncs and publishes without replacement. Existing files are never formatted, mounted or parsed as filesystems; owner/mode/link/size admission is strengthened. Reserve policy is passed from the manager and checked before fresh allocation. Failed staging is retained.
+- Added explicit e2fsprogs dependency and an opt-in native fixture for fresh ext4 magic/metadata, existing-byte preservation, symlink/hardlink refusal and cancellation. Local supervisor tests and Linux test cross compilation passed; native formatting results remain pending.
+- Failed preparation reclaim, complete volume provenance and restore activation, legacy blank-data migration, production-size formatting performance, maintained rootfs/kernel assembly and actual guest boot/mount/isolation qualification remain incomplete.

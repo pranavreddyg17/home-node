@@ -19,7 +19,7 @@ jobs:
           go-version: '1.26.8'
           cache: true
       - name: Install guest test tools
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg libvirt-clients libxml2-utils restic
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libvirt-clients libxml2-utils restic e2fsprogs
       - name: Test Go and Linux adapters
         env:
           HOMENODE_GUEST_INTEGRATION: '1'
@@ -40,6 +40,8 @@ jobs:
           sudo install -d -m 0755 /usr/lib/homenode-fixtures
           sudo install -m 0755 "$RUNNER_TEMP/guest-init.test" /usr/lib/homenode-fixtures/guest-init.test
           sudo env HOMENODE_GUEST_SYSTEMD_INTEGRATION=1 python3 packaging/guest/systemd_fixture.py
+      - name: Test fresh raw volume initialization
+        run: sudo env HOMENODE_VOLUME_INTEGRATION=1 "$(command -v go)" test ./internal/supervisor -run '^TestNativeFreshVolumeFormattingPreservesExistingData$'
       - run: go vet ./...
       - run: go build ./cmd/...
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444

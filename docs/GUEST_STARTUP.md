@@ -243,3 +243,21 @@ succeed and AF_INET/AF_INET6 stream socket creation to be denied by the service
 restriction. It creates no listening socket or network connection. This checks
 the initializer's address-family boundary; adapter/model units have different
 requirements, and actual no-NIC VM isolation remains a separate gate.
+
+## Fresh host-created data files
+
+The Linux supervisor now formats only a newly and exclusively created private
+raw staging file before publishing a new data volume. Preallocation uses the
+opened inode, preserves the configured host reserve, and mkfs.ext4 receives
+that descriptor through a fixed `/proc/self/fd/3` argument. Completed bytes are
+synced and published with RENAME_NOREPLACE, then the parent is synced. This
+creates the ext4 prerequisite for guest mounting without mounting a guest disk
+on the host. Existing volume files are never formatted or scanned for
+filesystem content; they must meet protected owner/mode/link/size admission.
+
+Failed staging is retained and has never been attached to a guest. Recovery
+and reclaim of retained preparation files, migration of legacy blank data
+files, complete volume provenance/restore activation, actual guest mounts and
+production-size formatting latency remain release work. The native fixture
+creates only small disposable regular files; ext4 magic is evidence of
+formatting, not a filesystem/boot/isolation qualification certificate.

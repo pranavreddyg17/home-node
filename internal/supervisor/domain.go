@@ -14,6 +14,7 @@ import (
 type Domain struct {
 	ID                                string
 	Image                             catalog.Image
+	DiskReserveBytes                  int64
 	SystemPath, DataPath, ChannelPath string
 }
 

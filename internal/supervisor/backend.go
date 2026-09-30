@@ -39,9 +39,13 @@ func (b *boundedOutput) Write(p []byte) (int, error) {
 	return n, nil
 }
 func command(ctx context.Context, input string, name string, args ...string) (string, error) {
+	return commandWithFiles(ctx, input, nil, name, args...)
+}
+func commandWithFiles(ctx context.Context, input string, files []*os.File, name string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.ExtraFiles = files
 	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C"}
 	cmd.Stdin = strings.NewReader(input)
 	cmd.WaitDelay = 3 * time.Second
@@ -111,7 +115,7 @@ func cpuBound(directory string, vcpus int64) error {
 	return nil
 }
 func (b LinuxBackend) Prepare(ctx context.Context, d Domain) error {
-	if !guestproto.ValidID(d.ID) {
+	if !guestproto.ValidID(d.ID) || filepath.Base(d.DataPath) != d.ID+".raw" || d.DiskReserveBytes < 4<<30 {
 		return ErrPolicy
 	}
 	qemu, err := user.Lookup("libvirt-qemu")
@@ -132,19 +136,7 @@ func (b LinuxBackend) Prepare(ctx context.Context, d Domain) error {
 	if err = os.Chmod(channelDir, 0710); err != nil {
 		return err
 	}
-	if info, err := os.Lstat(d.DataPath); err == nil {
-		if !info.Mode().IsRegular() || info.Size() != d.Image.DataBytes {
-			return ErrPolicy
-		}
-		return nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	_, err = command(ctx, "", "/usr/bin/qemu-img", "create", "-f", "raw", "-o", "preallocation=falloc", d.DataPath, strconv.FormatInt(d.Image.DataBytes, 10))
-	if err != nil {
-		return err
-	}
-	return os.Chmod(d.DataPath, 0600)
+	return prepareDataVolume(ctx, d.DataPath, d.Image.DataBytes, d.DiskReserveBytes)
 }
 func (b LinuxBackend) Start(ctx context.Context, d Domain) error {
 	xml, err := d.XML()

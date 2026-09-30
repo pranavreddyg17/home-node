@@ -34,7 +34,7 @@ Section: net
 Priority: optional
 Architecture: amd64
 Maintainer: Pranav Reddy Gudipati <56127176+pranavreddyg17@users.noreply.github.com>
-Depends: libvirt-daemon-system, libvirt-clients, qemu-system-x86, qemu-utils, apparmor
+Depends: libvirt-daemon-system, libvirt-clients, qemu-system-x86, qemu-utils, e2fsprogs, apparmor
 Description: Private home compute server (development build)
  Passkey control plane, isolated workload services, and browser interface.
  This unsigned development package requires explicit host provisioning.

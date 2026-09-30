@@ -269,7 +269,7 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 	if err != nil {
 		return fail(err)
 	}
-	domain := Domain{ID: r.InstanceID, Image: image, SystemPath: systemPath, DataPath: filepath.Join(m.Volumes, r.InstanceID+".raw"), ChannelPath: filepath.Join(m.Channels, r.InstanceID, "adapter.sock")}
+	domain := Domain{ID: r.InstanceID, Image: image, DiskReserveBytes: m.Policy.DiskReserveBytes, SystemPath: systemPath, DataPath: filepath.Join(m.Volumes, r.InstanceID+".raw"), ChannelPath: filepath.Join(m.Channels, r.InstanceID, "adapter.sock")}
 	if err = m.Backend.Prepare(ctx, domain); err != nil {
 		return fail(err)
 	}
@@ -450,7 +450,7 @@ func (m *Manager) Audit(ctx context.Context) error {
 		image, imageErr := m.Manifest.Image(i.Workload)
 		stop := hostErr != nil || imageErr != nil || !m.Manifest.Expires.After(time.Now()) || i.State == "stopping" || i.Workload == "video" && time.Now().Unix()-i.CreatedAt >= 1800
 		if !stop {
-			d := Domain{ID: id, Image: image, SystemPath: filepath.Join(m.Images, image.SHA256+".raw"), DataPath: filepath.Join(m.Volumes, id+".raw"), ChannelPath: filepath.Join(m.Channels, id, "adapter.sock")}
+			d := Domain{ID: id, Image: image, DiskReserveBytes: m.Policy.DiskReserveBytes, SystemPath: filepath.Join(m.Images, image.SHA256+".raw"), DataPath: filepath.Join(m.Volumes, id+".raw"), ChannelPath: filepath.Join(m.Channels, id, "adapter.sock")}
 			stop = m.Backend.Verify(ctx, d) != nil
 		}
 		if stop {
