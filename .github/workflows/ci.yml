@@ -48,6 +48,12 @@ jobs:
           test -f usr/share/homenode/web/index.html
           sudo apt-get install -y "$GITHUB_WORKSPACE/artifacts/homenode_0.1.0~ci_amd64.deb"
           systemd-analyze verify "$GITHUB_WORKSPACE"/packaging/systemd/*.service "$GITHUB_WORKSPACE"/packaging/systemd/*.slice
+      - name: Build verified guest adapter overlays
+        run: |
+          python3 packaging/guest/overlay_test.py
+          for profile in files video ai; do
+            sh packaging/guest/stage.sh "$profile" "$RUNNER_TEMP/homenode-guest-$profile"
+          done
       - name: Validate guest service source
         run: systemd-analyze verify packaging/guest/homenode-guest@.service
       - name: Inspect native service accounts with installed CLI

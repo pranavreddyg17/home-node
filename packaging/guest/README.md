@@ -38,3 +38,25 @@ and explicitly creates the fixed device symlink. Ownership/mode keys follow the
 [systemd udev rule contract](https://cgit.freedesktop.org/systemd/systemd/tree/man/udev.xml).
 These upstream contracts guide the rule; they do not replace a booted-device
 permission check on the pinned guest kernel and udev build.
+
+## Adapter overlay staging
+
+From a clean committed checkout on a Linux build runner using the committed Go
+toolchain, run `sh packaging/guest/stage.sh files /absolute/new/output` (or select
+`video`/`ai`). It builds the static Linux/amd64 adapter, stages only the selected
+profile, unit/udev/sysusers sources and emits `overlay.json` with source revision,
+toolchain, numeric guest identity and streamed payload hashes. Output publication
+refuses an occupied path. Failed private staging is preserved; successful empty
+staging is removed without recursive cleanup. Normal owner installation must
+consume release artifacts, not build on the laptop.
+
+`python3 packaging/guest/overlay.py verify /path/to/overlay` checks exact regular
+file/directory inventory, modes, sizes/hashes, ELF architecture and quota. This
+verifies integrity against metadata, not metadata authenticity: the release
+pipeline still needs independent trust/signing and provenance. Metadata explicitly
+states `bootable: false`. Root filesystem/kernel/bootloader assembly, numeric
+identity collision checks, safe volume initialization, model/runtime packaging,
+actual boot tests and signed catalog publication are not produced by staging.
+The sysusers source fixes guest UID/GID 900; assembly must verify uniqueness and
+exact nologin identity before releasing an image, never accept allocator fallback.
+Linux CI stages all three overlays and runs portable mutation/refusal tests.
