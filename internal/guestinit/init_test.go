@@ -276,7 +276,18 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 						t.Fatal(err)
 					}
 				case "special mode intent":
-					if err := os.Chmod(marker, 0600|os.ModeSetuid); err != nil {
+					err := os.Chmod(marker, 0600|os.ModeSetuid)
+					if os.Getenv("HOMENODE_GUEST_INIT_SERVICE") == "1" {
+						if !errors.Is(err, syscall.EPERM) {
+							t.Fatal("service did not refuse special mode creation")
+						}
+						info, statErr := os.Stat(marker)
+						if statErr != nil || info.Mode()&os.ModeSetuid != 0 {
+							t.Fatal("refused special mode was applied")
+						}
+						return
+					}
+					if err != nil {
 						t.Fatal(err)
 					}
 				}
