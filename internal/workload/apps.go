@@ -151,9 +151,10 @@ func (s *Service) processAppKind(ctx context.Context, selectedKind string) error
 	if err != nil {
 		return err
 	}
-	var intent appIntent
-	if err = json.Unmarshal([]byte(data), &intent); err != nil {
-		return err
+	intent, err := parseAppIntent(data, kind)
+	if err != nil {
+		_, persistErr := s.Store.DB.ExecContext(ctx, "UPDATE operations SET state='requires-action',updated_at=? WHERE id=? AND device_id=? AND state='pending' AND result=?", time.Now().Unix(), opID, device, data)
+		return errors.Join(err, persistErr)
 	}
 	var currentOperation string
 	if err = s.Store.DB.QueryRowContext(ctx, "SELECT operation_id FROM apps WHERE workload=?", intent.Workload).Scan(&currentOperation); err != nil {
