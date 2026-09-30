@@ -32,7 +32,7 @@ type Job struct {
 	UpdatedAt      int64   `json:"updatedAt"`
 }
 
-const jobColumns = "group_id,id,input_id,preset,state,instance_id,operation_id,output_id,error_code,created_at,updated_at,start_requested,EXISTS(SELECT 1 FROM settings WHERE key='job.cleanup.'||jobs.id AND json_extract(value,'$.state')='pending' AND jobs.state IN('succeeded','failed','cancelled','interrupted'))"
+const jobColumns = "group_id,id,input_id,preset,state,instance_id,operation_id,output_id,error_code,created_at,updated_at,start_requested,EXISTS(SELECT 1 FROM settings WHERE key='job.cleanup.'||jobs.id AND CASE WHEN json_valid(value) THEN COALESCE(json_extract(value,'$.state'),'pending') ELSE 'pending' END<>'done' AND jobs.state IN('succeeded','failed','cancelled','interrupted'))"
 
 func scanJob(row interface{ Scan(...any) error }) (Job, error) {
 	var j Job

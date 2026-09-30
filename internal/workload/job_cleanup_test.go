@@ -73,3 +73,74 @@ func TestFailedVideoPurgeIsDurableAndRetried(t *testing.T) {
 		t.Fatal("completed cleanup repeated", err)
 	}
 }
+
+func TestMalformedCleanupDoesNotStarveValidPurge(t *testing.T) {
+	for _, payload := range []string{"{", `{"state":"pending","lastAttempt":"invalid"}`} {
+		t.Run(payload, func(t *testing.T) {
+			s, original, device, input := jobService(t)
+			backend := &purgeFailureBackend{jobBackend: original, fail: true}
+			s.Backend = backend
+			ctx := context.Background()
+			jobs := []Job{}
+			for i := 0; i < 2; i++ {
+				job, err := s.CreateJob(ctx, device, state.Random(), input.ID, "mp4-720p", "")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if i == 0 {
+					if err = s.processJob(ctx); err == nil {
+						t.Fatal("injected purge failure absent")
+					}
+				} else {
+					// A second retained cleanup journal is a scheduler fixture;
+					// the first failed purge correctly prevents new VM admission.
+					if _, err = s.Store.DB.Exec("UPDATE jobs SET state='interrupted',start_requested=1 WHERE id=?", job.AttemptID); err != nil {
+						t.Fatal(err)
+					}
+					if _, err = s.Store.DB.Exec("UPDATE operations SET state='interrupted' WHERE id=?", job.OperationID); err != nil {
+						t.Fatal(err)
+					}
+					if _, err = s.Store.DB.Exec("INSERT INTO settings VALUES(?,?)", cleanupKey(job.AttemptID), `{"state":"pending","lastAttempt":0}`); err != nil {
+						t.Fatal(err)
+					}
+				}
+				jobs = append(jobs, job)
+			}
+			if _, err := s.Store.DB.Exec("UPDATE settings SET value=? WHERE key=?", payload, cleanupKey(jobs[0].AttemptID)); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.Store.DB.Exec("UPDATE settings SET value=json_set(value,'$.lastAttempt',0) WHERE key=?", cleanupKey(jobs[1].AttemptID)); err != nil {
+				t.Fatal(err)
+			}
+			backend.fail = false
+			before := len(backend.requests)
+			if err := s.cleanupJobResources(ctx); err != nil {
+				t.Fatal("invalid record poisoned queue", err)
+			}
+			if len(backend.requests) != before+2 {
+				t.Fatal("unexpected runtime requests", backend.requests[before:])
+			}
+			for _, r := range backend.requests[before:] {
+				if r.InstanceID != jobs[1].InstanceID {
+					t.Fatal("invalid cleanup reached runtime", r)
+				}
+			}
+			bad, err := s.attempt(ctx, jobs[0].AttemptID)
+			if err != nil || !bad.CleanupPending {
+				t.Fatal("invalid cleanup hidden", bad, err)
+			}
+			good, err := s.attempt(ctx, jobs[1].AttemptID)
+			if err != nil || good.CleanupPending {
+				t.Fatal("valid cleanup did not finish", good, err)
+			}
+			token, err := s.Store.BeginMaintenance(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			inventory, err := s.Store.InspectMaintenance(ctx, token)
+			if err != nil || inventory.Cleanup != 1 {
+				t.Fatal("invalid cleanup not a maintenance blocker", inventory, err)
+			}
+		})
+	}
+}

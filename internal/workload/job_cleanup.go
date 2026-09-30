@@ -41,8 +41,10 @@ func (s *Service) cleanupJobResources(ctx context.Context) error {
 	}
 	var id string
 	err := s.Store.DB.QueryRowContext(ctx, `SELECT jobs.id FROM jobs JOIN settings ON settings.key='job.cleanup.'||jobs.id
-WHERE jobs.state IN('succeeded','failed','cancelled','interrupted') AND json_extract(settings.value,'$.state')='pending'
-AND json_extract(settings.value,'$.lastAttempt')<=? ORDER BY json_extract(settings.value,'$.lastAttempt') LIMIT 1`, time.Now().Unix()-30).Scan(&id)
+WHERE jobs.state IN('succeeded','failed','cancelled','interrupted') AND json_extract(CASE WHEN json_valid(settings.value) THEN settings.value ELSE '{}' END,'$.state')='pending'
+AND json_type(CASE WHEN json_valid(settings.value) THEN settings.value ELSE '{}' END,'$.lastAttempt')='integer'
+AND json_extract(CASE WHEN json_valid(settings.value) THEN settings.value ELSE '{}' END,'$.lastAttempt')>=0
+AND json_extract(CASE WHEN json_valid(settings.value) THEN settings.value ELSE '{}' END,'$.lastAttempt')<=? ORDER BY json_extract(CASE WHEN json_valid(settings.value) THEN settings.value ELSE '{}' END,'$.lastAttempt') LIMIT 1`, time.Now().Unix()-30).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
