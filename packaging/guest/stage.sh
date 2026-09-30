@@ -16,7 +16,7 @@ expected=$(awk '$1 == "toolchain" { print $2 }' go.mod)
 staging=$(mktemp -d)
 trap 'rmdir "$staging" 2>/dev/null || :' EXIT HUP INT TERM
 root="$staging/root"
-mkdir -p "$root/usr/lib/homenode/guest" "$root/usr/lib/systemd/system" "$root/usr/lib/udev/rules.d" "$root/usr/lib/sysusers.d" "$root/etc/homenode/guest"
+mkdir -p "$root/data" "$root/tmp" "$root/var" "$root/usr/lib/homenode/guest" "$root/usr/lib/systemd/system" "$root/usr/lib/udev/rules.d" "$root/usr/lib/sysusers.d" "$root/etc/homenode/guest"
 GOENV=off GOFLAGS= GOWORK=off GOEXPERIMENT= GOTOOLCHAIN=local GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=true -o "$root/usr/lib/homenode/guest/homenode-guest" ./cmd/homenode-guest
 GOENV=off GOFLAGS= GOWORK=off GOEXPERIMENT= GOTOOLCHAIN=local GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=true -o "$root/usr/lib/homenode/guest/homenode-guest-init" ./cmd/homenode-guest-init
 cp packaging/guest/homenode-data-init.service "$root/usr/lib/systemd/system/"

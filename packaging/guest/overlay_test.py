@@ -16,6 +16,8 @@ class OverlayTests(unittest.TestCase):
     def test_inventory_and_tamper(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            for mountpoint in overlay.MOUNTPOINTS:
+                (root / mountpoint).mkdir(mode=0o755)
             for name, mode in {**overlay.COMMON, "etc/homenode/guest/files.env": 0o644}.items():
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -32,6 +34,24 @@ class OverlayTests(unittest.TestCase):
             metadata.write_text(json.dumps(record))
             metadata.chmod(0o644)
             overlay.verify(root)
+            for mountpoint in sorted(overlay.MOUNTPOINTS):
+                path = root / mountpoint
+                path.rmdir()
+                with self.assertRaises(ValueError):
+                    overlay.verify(root)
+                path.symlink_to(root / "usr", target_is_directory=True)
+                with self.assertRaises(ValueError):
+                    overlay.verify(root)
+                path.unlink()
+                path.mkdir(mode=0o755)
+                path.chmod(0o777)
+                with self.assertRaises(ValueError):
+                    overlay.verify(root)
+                path.chmod(0o755)
+                (path / "unexpected").write_text("foreign")
+                with self.assertRaises(ValueError):
+                    overlay.verify(root)
+                (path / "unexpected").unlink()
             with tempfile.TemporaryDirectory() as archives:
                 first, second = Path(archives) / "first.tar", Path(archives) / "second.tar"
                 overlay.package(root, first, 1800000000)

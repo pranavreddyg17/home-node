@@ -163,3 +163,13 @@ profile. Existing distribution fstab/generator settings must be reconciled so
 no competing mount changes these limits. CI verifies source syntax and overlay
 integrity; real boot ordering, journal behavior, exhaustion, memory pressure and
 shutdown still require assembled-image qualification.
+
+The overlay itself now includes empty `/data`, `/tmp` and `/var` mountpoints,
+mode 0755 before mounting. The same fixed directory inventory is used for
+staging verification, archive creation and strict import. Missing mountpoints,
+symlinks, writable modes or unexpected contents are rejected. The mounted
+`/tmp` root gains its sticky mode from the mount options, not from this directory.
+These development overlays deliberately reject older inventories without the
+mountpoints. A base-root merger must preserve existing distribution contents
+beneath `/tmp` and `/var` according to its reviewed assembly policy; this importer
+still creates only a fresh overlay and does not merge or edit an existing rootfs.

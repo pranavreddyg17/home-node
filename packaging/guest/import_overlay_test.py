@@ -52,6 +52,8 @@ class ImportTests(unittest.TestCase):
             base = Path(directory)
             root = base / "source"
             root.mkdir()
+            for mountpoint in overlay.MOUNTPOINTS:
+                (root / mountpoint).mkdir(mode=0o755)
             for name, mode in {**overlay.COMMON, "etc/homenode/guest/files.env": 0o644}.items():
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -79,6 +81,11 @@ class ImportTests(unittest.TestCase):
             self.assertEqual(failed.stat().st_mode & 0o777, 0o700)
             import_overlay.import_overlay(archive, destination, digest, "files", "a" * 40)
             self.assertEqual(overlay.verify(destination), record)
+            for mountpoint in overlay.MOUNTPOINTS:
+                path = destination / mountpoint
+                self.assertTrue(path.is_dir())
+                self.assertEqual(path.stat().st_mode & 0o777, 0o755)
+                self.assertEqual(list(path.iterdir()), [])
             with self.assertRaises(FileExistsError):
                 import_overlay.import_overlay(archive, destination, digest, "files", "a" * 40)
 

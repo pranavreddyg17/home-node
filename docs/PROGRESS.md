@@ -460,3 +460,10 @@ Development is on macOS; none of these hardware or external review gates may be 
 - Full Linux CI `36674546120` passed native volume formatting/publication/reclaim under the supervisor source service protections, guest source protections, package/browser workflows and overlay pipelines. It does not execute production supervisor RPC/VM lifecycle or prove memory isolation of controller secrets.
 - Added guest-only `/tmp` and `/var` tmpfs mount inputs with separate 64 MiB/8192-inode ceilings, root ownership and nodev/nosuid/noexec. Adapter startup requires both units; all three overlays carry them through manifests, packaging and strict imports. CI includes mount-unit syntax validation.
 - Bootable rootfs/kernel/bootloader assembly, ephemeral directory population, generator reconciliation, actual mount/boot/resource-pressure behavior and physical acceptance remain incomplete. These sources do not change mounts on the owner's host.
+
+## Read-only root mountpoint inventory
+
+- Added empty mode-0755 `/data`, `/tmp` and `/var` directories to each guest overlay, so mounting does not require creating paths on a read-only system disk. Directory inventory now comes from one shared function used by verifier, packager and strict archive importer.
+- Local tests passed for packaging/import round trips and refusal of missing, symlinked, writable or populated mountpoints. These tests use fixture binaries; Linux CI remains responsible for real compiled artifacts and unit syntax. Run `36675536359` is still active for the preceding mount-unit change.
+- This provides assembly inputs only. Maintained base-root merging, distribution ephemeral state initialization, kernel/bootloader assembly and boot/hardware qualification remain unfinished.
+- Subsequently, full Linux CI `36675536359` succeeded for `e5ba790`, including real three-profile overlay packaging/import and tmpfs unit syntax checks. It predates the mountpoint inventory change and is not boot or memory-pressure evidence.

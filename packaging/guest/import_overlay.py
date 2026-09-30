@@ -3,7 +3,7 @@
 import hashlib
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import re
 import stat
 import sys
@@ -22,12 +22,7 @@ def import_overlay(archive_path, output, expected_digest, profile, revision):
     if not output.is_absolute() or not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.geteuid() or stat.S_IMODE(parent.st_mode) & 0o022:
         raise ValueError("assembly parent must be protected and owned")
     files = {**overlay.COMMON, f"etc/homenode/guest/{profile}.env": 0o644, "overlay.json": 0o644}
-    directories = set()
-    for name in files:
-        parent = PurePosixPath(name).parent
-        while str(parent) != ".":
-            directories.add(str(parent))
-            parent = parent.parent
+    directories = overlay.directories_for(files)
     fd = os.open(archive_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     with os.fdopen(fd, "rb") as source, tempfile.TemporaryFile() as snapshot:
         info = os.fstat(source.fileno())

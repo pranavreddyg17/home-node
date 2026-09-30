@@ -19,15 +19,24 @@ COMMON = {"usr/lib/systemd/system/tmp.mount": 0o644, "usr/lib/systemd/system/var
           "usr/lib/sysusers.d/homenode-guest.conf": 0o644}
 
 
+# Empty mountpoints must exist before booting a read-only system disk.
+MOUNTPOINTS = {"data", "tmp", "var"}
+
+
+def directories_for(files):
+    directories = set(MOUNTPOINTS)
+    for name in files:
+        parent = PurePosixPath(name).parent
+        while str(parent) != ".":
+            directories.add(str(parent))
+            parent = parent.parent
+    return directories
+
+
 def inventory(root, profile):
     expected = {**COMMON, f"etc/homenode/guest/{profile}.env": 0o644}
     observed = set()
-    expected_dirs = set()
-    for name in expected:
-        parent = PurePosixPath(name).parent
-        while str(parent) != ".":
-            expected_dirs.add(str(parent))
-            parent = parent.parent
+    expected_dirs = directories_for(expected)
     observed_dirs = set()
     for base, dirs, files in os.walk(root, followlinks=False):
         for name in dirs + files:
@@ -113,12 +122,7 @@ def package(root, output, epoch):
     files = {item["path"]: item for item in record["files"]}
     metadata_bytes = (json.dumps(record, sort_keys=True, indent=2) + "\n").encode()
     names = list(files) + ["overlay.json"]
-    directories = set()
-    for name in names:
-        parent = PurePosixPath(name).parent
-        while str(parent) != ".":
-            directories.add(str(parent))
-            parent = parent.parent
+    directories = directories_for(names)
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(dir=output.parent, prefix=".homenode-overlay-", delete=False) as file:
