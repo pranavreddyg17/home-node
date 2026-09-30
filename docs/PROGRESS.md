@@ -377,3 +377,9 @@ Development is on macOS; none of these hardware or external review gates may be 
 - Added a separate guest-only root initializer and oneshot dependency. After mount admission, it creates only a private object leaf under a protected root:root mount root, assigns fixed guest UID/GID 900 and syncs directories. Existing foreign, nonprivate, symlink or incomplete roots are preserved and refused.
 - Overlay staging/archive/import inventory carries the helper/unit and checks both executables are x86-64 ELF. CI adds disposable native creation/reopen/rejection fixtures and installs the helper only in the CI runner for static unit validation. Host packaging does not ship the initializer.
 - Local unprivileged initializer refusal, guest mount tests, overlay/import tests and Linux cross compilation passed. New native fixture results are pending. Blank-disk formatting and durable crash-between-create/chown recovery remain incomplete, alongside full rootfs/kernel image assembly and physical acceptance.
+
+## Resume owned guest object creation
+
+- Added a root-owned protected intent, synced with the mount parent before object leaf creation. Reads are bounded/no-follow/nonblocking and require exact bytes, mode/owner and one link. An admitted intent permits completing only an empty root-owned private leaf; unmarked, nonempty or corrupt states remain preserved and refused.
+- The root helper now includes CAP_DAC_READ_SEARCH to inspect previously initialized mode 0700 guest-owned directories; it still has no raw device access. CAP_CHOWN remains restricted to its creation workflow.
+- Added native fixtures for interrupted creation replay, nonempty incomplete-directory preservation and corrupt intent refusal. Local unprivileged refusal tests passed and Linux tests cross-compiled; native and actual unit capability results remain pending. Partial intent publication and physical power-loss qualification are not complete.

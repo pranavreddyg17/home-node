@@ -44,6 +44,74 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 			t.Fatal("incorrect private guest identity")
 		}
 	})
+	t.Run("resume owned empty creation", func(t *testing.T) {
+		parent := t.TempDir()
+		if err := os.Chmod(parent, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(parent, intentName), []byte(intentBytes), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Mkdir(filepath.Join(parent, "objects"), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := Prepare(parent); err != nil {
+			t.Fatal(err)
+		}
+		if err := Prepare(parent); err != nil {
+			t.Fatal(err)
+		}
+		info, err := os.Stat(filepath.Join(parent, "objects"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		owner := info.Sys().(*syscall.Stat_t)
+		if owner.Uid != 900 || owner.Gid != 900 {
+			t.Fatal("owned creation not completed")
+		}
+	})
+	t.Run("preserve nonempty owned creation", func(t *testing.T) {
+		parent := t.TempDir()
+		if err := os.Chmod(parent, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(parent, intentName), []byte(intentBytes), 0600); err != nil {
+			t.Fatal(err)
+		}
+		objects := filepath.Join(parent, "objects")
+		if err := os.Mkdir(objects, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(objects, "preserved"), []byte("data"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if Prepare(parent) == nil {
+			t.Fatal("nonempty root directory adopted")
+		}
+		info, err := os.Stat(objects)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Sys().(*syscall.Stat_t).Uid != 0 {
+			t.Fatal("rejected directory ownership changed")
+		}
+	})
+	t.Run("preserve corrupt intent", func(t *testing.T) {
+		parent := t.TempDir()
+		if err := os.Chmod(parent, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(parent, intentName), []byte("partial"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if Prepare(parent) == nil {
+			t.Fatal("corrupt intent accepted")
+		}
+		if _, err := os.Stat(filepath.Join(parent, "objects")); !os.IsNotExist(err) {
+			t.Fatal("corrupt intent mutated storage")
+		}
+	})
+
 	for _, kind := range []string{"foreign", "wide", "symlink", "incomplete"} {
 		t.Run(kind, func(t *testing.T) {
 			parent := t.TempDir()

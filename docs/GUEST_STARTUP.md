@@ -180,7 +180,7 @@ root:root mode 0755 mount root, creates only the `objects` leaf privately, sets
 its fixed UID/GID 900 and syncs the directory and parent. Existing objects roots
 must already be UID/GID 900 and private mode 0700; symlinks, foreign ownership,
 unsafe modes and incomplete root-owned directories are refused without repair
-or data removal. It has only CAP_CHOWN and no raw-device access. The adapter
+or data removal. It has CAP_CHOWN for new directory ownership and CAP_DAC_READ_SEARCH to inspect existing private guest directories, with no raw-device access. The adapter
 requires successful initialization.
 
 The helper and unit are now part of verified guest overlays; both guest
@@ -189,7 +189,16 @@ enable the initializer. CI installs its binary only in the disposable runner
 for static unit verification and uses opt-in temporary-root ownership fixtures.
 
 This prepares a directory on an already mounted filesystem. Blank-volume
-formatting is still absent. A crash between directory creation and ownership
-publication can leave a root-owned leaf; automatic recovery of that incomplete
-state is not implemented and startup refuses it. A durable initializer journal
-and power-loss acceptance remain required before production release.
+formatting is still absent. A durable root-owned intent is now synced before directory creation. A crash
+between creation and ownership publication can resume only an empty root-owned
+private leaf covered by that admitted intent. Corrupt/partial intent data and
+nonempty incomplete directories are preserved and refused. Physical power-loss
+and recovery of partial intent publication remain required before release.
+
+Initializer intent reads use bounded no-follow/nonblocking regular-file
+descriptors, exact root ownership/mode and single-link admission. The intent
+file and parent are synced before creating the object leaf. Without admitted
+intent, existing root-owned leaves cannot be adopted. An admitted already
+guest-owned private object root can reopen without recursively changing data.
+This depends on exclusive trusted startup and the root-controlled mount parent;
+it does not authorize arbitrary directory repair or offline disk formatting.
