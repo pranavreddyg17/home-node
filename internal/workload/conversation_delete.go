@@ -36,6 +36,14 @@ func (s *Service) RequestConversationDeletionInTransaction(tx *sql.Tx, device, k
 	if err != nil || replay {
 		return op, err
 	}
+	var pending bool
+	err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM operations WHERE kind='conversation.delete' AND state IN('pending','running') AND id<>? AND json_extract(result,'$.conversationId')=?)", op.ID, id).Scan(&pending)
+	if err != nil {
+		return Operation{}, err
+	}
+	if pending {
+		return Operation{}, ErrConflict
+	}
 	data, err := json.Marshal(intent)
 	if err != nil {
 		return Operation{}, err
@@ -45,4 +53,10 @@ func (s *Service) RequestConversationDeletionInTransaction(tx *sql.Tx, device, k
 	}
 	op.Result = data
 	return op, nil
+}
+
+func conversationDeletionPending(tx *sql.Tx, id string) (bool, error) {
+	var count int
+	err := tx.QueryRow("SELECT count(*) FROM operations WHERE kind='conversation.delete' AND state IN('pending','running') AND json_extract(result,'$.conversationId')=?", id).Scan(&count)
+	return count > 0, err
 }

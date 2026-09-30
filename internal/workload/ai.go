@@ -192,6 +192,13 @@ func (s *Service) CreateGeneration(ctx context.Context, device, key, conversatio
 	reference := objectReference{ID: state.Random(), Size: int64(len(data)), SHA256: sum(data)}
 	generationID := state.Random()
 	err = s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		deleting, err := conversationDeletionPending(tx, conversation)
+		if err != nil {
+			return err
+		}
+		if deleting {
+			return ErrConflict
+		}
 		op, replay, err := operation(tx, device, key, "generation", map[string]string{"conversationId": conversation, "prompt": prompt})
 		if err != nil {
 			return err
