@@ -32,7 +32,7 @@ jobs:
           go-version: '1.26.8'
           cache: true
       - name: Install disposable image build dependencies
-        run: sudo apt-get update && sudo apt-get install -y systemd-container dosfstools mtools grub-pc-bin e2fsprogs python3-pefile squashfs-tools qemu-system-x86
+        run: sudo apt-get update && sudo apt-get install -y systemd-container dosfstools mtools grub-pc-bin e2fsprogs python3-pefile squashfs-tools qemu-system-x86 ffmpeg
       - name: Stage and authenticate local development adapter overlay
         env:
           PROFILE: ${{ matrix.profile }}

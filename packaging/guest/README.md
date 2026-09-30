@@ -324,3 +324,20 @@ uses the pinned upstream default's 512 MiB ESP size. This remains within the
 system-image size admission limit. Successful formatting, BIOS installation
 and boot must still be demonstrated; a larger partition alone is not evidence
 of a complete image or sufficient space for every future kernel closure.
+
+Linux run `36732215628` built both files/video disks and executed each boot
+fixture successfully. Retained evidence binds files SHA256
+`ef6d79e38b461978cae8e06c0376a5e2251c498b7f7a37be7a0341f7f0f5455f`
+and video SHA256
+`ca385aa0923d4c246c3e8da58351f50959c2f11a074930165ac56c1b4c566680`
+to TCG health/object round trips. This establishes that narrow boot/startup/data
+workflow for these development images, not their release qualification.
+
+The next video fixture additionally uploads a generated one-frame 1080p source,
+executes both fixed presets inside the booted adapter, waits for durable success,
+retrieves/chunk-hashes the bounded outputs and checks H.264 codec and expected
+720p/1080p dimensions. Only the disposable unprivileged CI child probes those
+test outputs, with address-space/CPU/core limits; production host services never
+run FFmpeg/ffprobe on guest video bytes. This fixture does not cover audio,
+arbitrary codecs, cancellation/reboot recovery, quality/performance or a full
+controller/supervisor/UI lifecycle. Actual new conversion evidence is pending.

@@ -42,7 +42,7 @@ class BootProtocolTests(unittest.TestCase):
         self.assertEqual(response["state"], "ready")
 
     def test_invalid_guest_response_refused(self):
-        for kind in ("identity", "error", "unknown", "boolean", "duplicate"):
+        for kind in ("identity", "error", "unknown", "boolean", "duplicate", "float", "negative", "text-type"):
             with self.subTest(kind=kind):
                 def transform(request):
                     response = {"version": 1, "requestId": request["requestId"], "state": "ready"}
@@ -50,6 +50,9 @@ class BootProtocolTests(unittest.TestCase):
                     if kind == "error": response["error"] = "WORKLOAD_UNAVAILABLE"
                     if kind == "unknown": response["unrecognized"] = True
                     if kind == "boolean": response["version"] = True
+                    if kind == "float": response["offset"] = 1.0
+                    if kind == "negative": response["size"] = -1
+                    if kind == "text-type": response["data"] = []
                     if kind == "duplicate": return b'{"version":1,"version":1}'
                     return response
                 with self.assertRaises(ValueError):

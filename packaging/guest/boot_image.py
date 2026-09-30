@@ -41,7 +41,88 @@ def request(channel, operation, **fields):
     allowed = {"version", "requestId", "error", "state", "offset", "size", "sha256", "data", "text"}
     if not isinstance(response, dict) or set(response) - allowed or type(response.get("version")) is not int or response.get("version") != 1 or response.get("requestId") != identifier or response.get("error"):
         raise ValueError("guest request failed")
+    for name in ("offset", "size"):
+        if name in response and (type(response[name]) is not int or not 0 <= response[name] <= 512 << 30):
+            raise ValueError("invalid numeric guest response")
+    for name in ("error", "state", "sha256", "data", "text"):
+        if name in response and not isinstance(response[name], str):
+            raise ValueError("invalid text guest response")
     return response
+
+
+def video_roundtrip(channel, output):
+    # Source material is generated locally; no owner files are used. All probing
+    # happens only in this disposable unprivileged CI fixture, never the server.
+    source = output / "fixture-source.mp4"
+    fd = os.open(source, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        subprocess.run(["/usr/bin/ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+                        "-f", "lavfi", "-i", "color=c=black:s=1920x1080:r=1", "-frames:v", "1",
+                        "-threads", "1", "-c:v", "libx264", "-preset", "ultrafast", "-movflags", "+faststart",
+                        "-f", "mp4", "/proc/self/fd/" + str(fd)], pass_fds=(fd,), check=True, timeout=30)
+        if not 0 < os.fstat(fd).st_size <= 256 << 10:
+            raise ValueError("fixture source exceeds transfer bound")
+        os.lseek(fd, 0, os.SEEK_SET)
+        content = os.read(fd, 256 << 10)
+    finally:
+        os.close(fd)
+    input_id = uuid.uuid4().hex
+    checksum = hashlib.sha256(content).hexdigest()
+    uploaded = request(channel, "upload", objectId=input_id, size=len(content), sha256=checksum,
+                       data=base64.b64encode(content).decode())
+    if uploaded.get("offset") != len(content):
+        raise ValueError("video input upload mismatch")
+    finalized = request(channel, "finalize", objectId=input_id, size=len(content), sha256=checksum)
+    if finalized.get("size") != len(content) or finalized.get("sha256") != checksum:
+        raise ValueError("video input finalization mismatch")
+    evidence = []
+    for preset, width, height in [("mp4-720p", 1280, 720), ("mp4-1080p", 1920, 1080)]:
+        job_id = uuid.uuid4().hex
+        if request(channel, "run", objectId=job_id, inputId=input_id, preset=preset).get("state") != "running":
+            raise ValueError("video job was not started")
+        deadline = time.monotonic() + 120
+        while True:
+            status = request(channel, "result", objectId=job_id)
+            if status.get("state") == "succeeded":
+                break
+            if status.get("state") != "running" or time.monotonic() >= deadline:
+                raise ValueError("booted video conversion did not succeed")
+            time.sleep(0.2)
+        size = status.get("size")
+        if type(size) is not int or not 0 < size <= 2 << 20:
+            raise ValueError("video fixture output exceeds bound")
+        encoded = bytearray()
+        while len(encoded) < size:
+            part = request(channel, "download", objectId=job_id, offset=len(encoded))
+            chunk = base64.b64decode(part.get("data", ""), validate=True)
+            if not 0 < len(chunk) <= 256 << 10 or len(encoded) + len(chunk) > size or part.get("offset") != len(encoded) + len(chunk) or part.get("sha256") != hashlib.sha256(chunk).hexdigest():
+                raise ValueError("video output chunk mismatch")
+            encoded.extend(chunk)
+        if hashlib.sha256(encoded).hexdigest() != status.get("sha256"):
+            raise ValueError("video output digest mismatch")
+        result = output / ("fixture-" + preset + ".mp4")
+        fd = os.open(result, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        try:
+            with os.fdopen(os.dup(fd), "wb") as file:
+                file.write(encoded)
+                file.flush()
+                os.fsync(file.fileno())
+            probe = subprocess.run(["/usr/bin/prlimit", "--as=536870912", "--cpu=15", "--core=0",
+                                    "/usr/bin/ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe",
+                                    "-select_streams", "v:0", "-show_entries", "stream=codec_name,width,height",
+                                    "-of", "json", "/proc/self/fd/" + str(fd)],
+                                   pass_fds=(fd,), capture_output=True, check=True, timeout=20)
+        finally:
+            os.close(fd)
+        if len(probe.stdout) > 16384:
+            raise ValueError("video probe exceeds bound")
+        metadata = json.loads(probe.stdout, object_pairs_hook=overlay.unique_object)
+        if metadata.get("streams") != [{"codec_name": "h264", "width": width, "height": height}]:
+            raise ValueError("video preset codec or dimensions mismatch")
+        request(channel, "delete", objectId=job_id)
+        evidence.append({"preset": preset, "width": width, "height": height, "codec": "h264", "bytes": size})
+    request(channel, "delete", objectId=input_id)
+    return evidence
 
 
 def boot(image, manifest, output):
@@ -139,8 +220,9 @@ def boot_vm(system_fd, data_fd, output, record):
             if base64.b64decode(downloaded.get("data", ""), validate=True) != content:
                 raise ValueError("guest download mismatch")
             request(channel, "delete", objectId=object_id)
+            video_evidence = video_roundtrip(channel, output) if record["profile"] == "video" else []
         result = {"schema": 1, "profile": record["profile"], "imageSHA256": record["sha256"],
-                  "tcgBootAndObjectRoundTrip": True, "releaseQualified": False}
+                  "tcgBootAndObjectRoundTrip": True, "videoPresets": video_evidence, "releaseQualified": False}
         with (output / "boot-evidence.json").open("x") as file:
             json.dump(result, file, indent=2)
             file.write("\n")
