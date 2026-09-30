@@ -559,7 +559,7 @@ func (a *Agent) generate(ctx context.Context, r guestproto.Request) (string, err
 				FinishReason *string                    `json:"finish_reason"`
 			} `json:"choices"`
 		}
-		if json.Unmarshal([]byte(value), &token) != nil || len(token.Choices) > 1 {
+		if !validModelJSON(value) || json.Unmarshal([]byte(value), &token) != nil || len(token.Choices) > 1 {
 			return "", errors.New("invalid model output")
 		}
 		if len(token.Choices) == 0 {

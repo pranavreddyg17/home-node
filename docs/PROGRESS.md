@@ -667,3 +667,8 @@ Development is on macOS; none of these hardware or external review gates may be 
 
 - Production inference now admits only content and the pinned runtime's exact initial assistant-role/null-content event once before text/completion. Tool/function/other delta fields, foreign/repeated/late roles, roleless null content and null deltas fail generation instead of being silently ignored. Empty terminal delta remains compatible with approved finish events. No tool execution authority is added.
 - Added tool-delta, foreign-role, roleless-null and null-delta refusal streams alongside existing initial-event and complete-stream regressions. Guest race tests and the full Go suite passed locally; actual pinned-runtime VM compatibility remains pending. Duplicate JSON keys and full outer-event validation still need separate review; these checks are not a complete model-output trust boundary audit.
+
+## Reject ambiguous model event JSON
+
+- Before typed SSE event decoding, production inference now validates UTF-8, recursively rejects duplicate decoded object keys (including escaped equivalents), requires exactly one complete JSON value and limits nesting to 32. The existing scanner bounds individual event bytes and total stream input. This prevents Go's default last-key-wins and invalid-UTF-8 replacement behavior from masking malformed model events.
+- Regressions cover normal events, outer/nested/escaped duplicate keys, trailing values, truncation, invalid UTF-8 and excessive nesting. Guest race tests and the complete Go suite passed locally. Full outer-event schema qualification, booted runtime verification, action-bound approvals and production lifecycle/security gates remain unfinished.

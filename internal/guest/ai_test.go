@@ -107,3 +107,25 @@ func TestGenerationRequiresApprovedFinishAndDoneMarker(t *testing.T) {
 		})
 	}
 }
+
+func TestModelJSONRejectsAmbiguousOrUnboundedEvents(t *testing.T) {
+	for _, c := range []struct {
+		name, value string
+		want        bool
+	}{
+		{"normal", `{"choices":[{"delta":{"content":"hello"},"finish_reason":null}]}`, true},
+		{"duplicate outer", `{"choices":[],"choices":[{}]}`, false},
+		{"duplicate nested", `{"choices":[{"delta":{"content":"first","content":"second"}}]}`, false},
+		{"escaped duplicate", `{"delta":{"content":"first","con\u0074ent":"second"}}`, false},
+		{"trailing value", `{} {}`, false},
+		{"truncated", `{"choices":[`, false},
+		{"invalid utf8", "{\"content\":\"" + string([]byte{255}) + "\"}", false},
+		{"deep nesting", strings.Repeat("[", 34) + "0" + strings.Repeat("]", 34), false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := validModelJSON(c.value); got != c.want {
+				t.Fatalf("valid=%v want=%v", got, c.want)
+			}
+		})
+	}
+}
