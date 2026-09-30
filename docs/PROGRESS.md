@@ -401,3 +401,9 @@ Development is on macOS; none of these hardware or external review gates may be 
 - Full Linux run `36670377488` passed corrected restricted-capability initialization, unsafe intent refusal, durable directory replay, native/root/package/browser checks and guest overlays.
 - Intent creation now writes/fsyncs a new private staging file, uses Linux RENAME_NOREPLACE publication and syncs its parent before object creation. Existing active intent cannot be overwritten; incomplete staging is preserved and does not prevent a fresh retry within bounded limits. Enumeration is batched and limited to 1,024 root entries and fewer than 64 retained staging records.
 - Added native interrupted-staging retry/preservation, occupied publication refusal and staging bound fixtures. Local unprivileged tests and Linux test cross compilation passed; new native results are pending. Metadata cleanup/diagnostics, physical power-loss and blank-disk/image boot qualification remain incomplete.
+
+## Initializer source service protection fixture
+
+- Full Linux `36670656479` passed complete-intent publication/retry/refusal, restricted capability evidence, native/root/package/browser workflows and real guest overlays. This is not guest boot or physical crash evidence.
+- Added an opt-in systemd fixture taking reviewed service protection properties directly from the initializer unit. It executes compiled native directory tests with their data in a fresh ordinary `/data` fixture, checks capabilities and PrivateTmp isolation, refuses any pre-existing `/data` and removes only its owned empty fixture directory. ExecStart/RemainAfterExit are adapted for the test harness; mount dependencies are deliberately outside this test's scope.
+- Local initializer tests and Python compilation passed. Native source-protection results are pending; full rootfs/kernel image assembly, formatting, actual data/device mounts and physical power-loss qualification remain incomplete.

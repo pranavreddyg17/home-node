@@ -15,7 +15,7 @@ func TestUnprivilegedInitializerRefused(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("unprivileged fixture only")
 	}
-	root := t.TempDir()
+	root := fixtureDir(t)
 	if Prepare(root) == nil {
 		t.Fatal("unprivileged initialization admitted")
 	}
@@ -67,8 +67,13 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 			t.Fatal("missing privilege restriction evidence")
 		}
 	}
+	if hidden := os.Getenv("HOMENODE_GUEST_INIT_HIDDEN_PATH"); hidden != "" {
+		if _, err := os.Stat(hidden); !os.IsNotExist(err) {
+			t.Fatal("service private tmp exposed host fixture")
+		}
+	}
 	t.Run("create and reopen", func(t *testing.T) {
-		parent := t.TempDir()
+		parent := fixtureDir(t)
 		if err := os.Chmod(parent, 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -87,7 +92,7 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 		}
 	})
 	t.Run("resume owned empty creation", func(t *testing.T) {
-		parent := t.TempDir()
+		parent := fixtureDir(t)
 		if err := os.Chmod(parent, 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -113,7 +118,7 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 		}
 	})
 	t.Run("preserve nonempty owned creation", func(t *testing.T) {
-		parent := t.TempDir()
+		parent := fixtureDir(t)
 		if err := os.Chmod(parent, 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -139,7 +144,7 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 		}
 	})
 	t.Run("preserve corrupt intent", func(t *testing.T) {
-		parent := t.TempDir()
+		parent := fixtureDir(t)
 		if err := os.Chmod(parent, 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -155,7 +160,7 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 	})
 
 	t.Run("interrupted staging is preserved and retry succeeds", func(t *testing.T) {
-		parent := t.TempDir()
+		parent := fixtureDir(t)
 		if err := os.Chmod(parent, 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -176,7 +181,7 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 		}
 	})
 	t.Run("publication never overwrites existing intent", func(t *testing.T) {
-		parent := t.TempDir()
+		parent := fixtureDir(t)
 		root, err := os.OpenRoot(parent)
 		if err != nil {
 			t.Fatal(err)
@@ -200,7 +205,7 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 		}
 	})
 	t.Run("bounded interrupted staging", func(t *testing.T) {
-		parent := t.TempDir()
+		parent := fixtureDir(t)
 		if err := os.Chmod(parent, 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -220,7 +225,7 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 
 	for _, kind := range []string{"symlink intent", "hardlink intent", "fifo intent", "public intent", "foreign intent", "special mode intent"} {
 		t.Run(kind, func(t *testing.T) {
-			parent := t.TempDir()
+			parent := fixtureDir(t)
 			if err := os.Chmod(parent, 0755); err != nil {
 				t.Fatal(err)
 			}
@@ -283,13 +288,13 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 
 	for _, kind := range []string{"foreign", "wide", "symlink", "incomplete"} {
 		t.Run(kind, func(t *testing.T) {
-			parent := t.TempDir()
+			parent := fixtureDir(t)
 			if err := os.Chmod(parent, 0755); err != nil {
 				t.Fatal(err)
 			}
 			path := filepath.Join(parent, "objects")
 			if kind == "symlink" {
-				if err := os.Symlink(t.TempDir(), path); err != nil {
+				if err := os.Symlink(fixtureDir(t), path); err != nil {
 					t.Fatal(err)
 				}
 			} else {
@@ -344,4 +349,21 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 			}
 		})
 	}
+}
+
+func fixtureDir(t *testing.T) string {
+	t.Helper()
+	if os.Getenv("HOMENODE_GUEST_INIT_PARENT") != "/data" {
+		return t.TempDir()
+	}
+	directory, err := os.MkdirTemp("/data", "fixture-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(directory); err != nil {
+			t.Error(err)
+		}
+	})
+	return directory
 }

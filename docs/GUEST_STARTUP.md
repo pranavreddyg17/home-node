@@ -217,3 +217,16 @@ staging files are retained unchanged; a retry can publish a fresh complete
 record. Startup refuses after 64 retained staging records or more than 1,024
 mount-root entries, with enumeration in batches of 128. Retained metadata
 cleanup/diagnostics and physical storage fault testing remain release work.
+
+A separate opt-in disposable Linux CI fixture runs the compiled initializer
+tests through systemd using the guest initializer source's reviewed service
+properties. Tests create their temporary data under the fixture's exclusively
+created ordinary `/data` directory, verify capability evidence and check that
+PrivateTmp hides a host-side marker. The existing `/data` path is never adopted
+or removed; fixture cleanup removes only its own empty directory.
+
+This executes filesystem/privilege operations under unit protections, with a
+test executable replacing ExecStart and RemainAfterExit disabled so the fixture
+can terminate. Unit mount dependencies/conditions are not replicated; actual
+virtio data mounts, production entrypoint admission and guest boot remain
+unverified. No fixture is run on the owner's machine by default.
