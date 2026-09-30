@@ -317,6 +317,7 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 	return m.Inspect(ctx, r.InstanceID)
 }
 func (m *Manager) stop(ctx context.Context, r Request) (Instance, error) {
+	var existed bool
 	err := m.Store.Transaction(ctx, func(tx *sql.Tx) error {
 		if _, err := m.operation(tx, r); err != nil {
 			return err
@@ -328,6 +329,7 @@ func (m *Manager) stop(ctx context.Context, r Request) (Instance, error) {
 		if r.Revision < current {
 			return ErrPolicy
 		}
+		existed = current != 0
 		if _, err := tx.Exec("INSERT INTO runtime_stops VALUES(?,?) ON CONFLICT(instance_id) DO UPDATE SET revision=max(revision,excluded.revision)", r.InstanceID, r.Revision); err != nil {
 			return err
 		}
@@ -341,11 +343,38 @@ func (m *Manager) stop(ctx context.Context, r Request) (Instance, error) {
 		return Instance{}, err
 	}
 	err = m.Store.Transaction(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.Exec("UPDATE runtime_instances SET state='stopped' WHERE id=?", r.InstanceID); err != nil {
+		var current int64
+		if err := tx.QueryRow("SELECT coalesce(max(revision),0) FROM runtime_instances WHERE id=?", r.InstanceID).Scan(&current); err != nil {
 			return err
 		}
-		_, err := tx.Exec("UPDATE runtime_operations SET state='succeeded' WHERE id=?", r.OperationID)
-		return err
+		if existed && current == 0 || current != 0 && current != r.Revision {
+			return ErrPolicy
+		}
+		if current != 0 {
+			result, err := tx.Exec("UPDATE runtime_instances SET state='stopped' WHERE id=? AND revision=? AND state='stopping' AND desired='stopped'", r.InstanceID, r.Revision)
+			if err != nil {
+				return err
+			}
+			count, err := result.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if count != 1 {
+				return ErrPolicy
+			}
+		}
+		result, err := tx.Exec("UPDATE runtime_operations SET state='succeeded' WHERE id=? AND instance_id=? AND state IN('pending','succeeded')", r.OperationID, r.InstanceID)
+		if err != nil {
+			return err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return ErrPolicy
+		}
+		return nil
 	})
 	if err != nil {
 		return Instance{}, err
