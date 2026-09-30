@@ -129,3 +129,9 @@ The sysusers source explicitly declares the private group as well as the user.
 An explicit numeric primary GID requires an existing group; requesting both
 numbers in the user line alone does not create that prerequisite. The native
 fixture must pass for the pinned assembler systemd version before image release.
+
+The overlay also carries the guest-only `data.mount` source for the fixed named
+virtio data disk, using ext4 and `nodev,nosuid,noexec`. Adapter mount requirements
+pull it into the startup transaction. A blank disk is not formatted by this
+unit. Safe initialization, filesystem admission and private object ownership
+are still required before image qualification; never install it on the host.

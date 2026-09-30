@@ -110,3 +110,18 @@ Tests parse generated XML to bind both serials to their expected source paths,
 targets and access modes. Linux CI additionally uses the installed libvirt
 schema. Actual kernel serial/by-id discovery and safe blank-disk initialization
 remain booted-VM acceptance requirements.
+
+## Guest data mount source
+
+The verified adapter overlay now includes `data.mount`, selected by the adapter's
+existing `RequiresMountsFor=/data` dependency. It mounts only the fixed
+`/dev/disk/by-id/virtio-homenode-data` as ext4 at `/data` with `nodev,nosuid,noexec`.
+A missing named disk or unmountable filesystem prevents adapter startup. The
+unit belongs inside guest images; host packaging does not install it.
+
+This does not initialize blank raw disks, repair filesystems, admit expected
+block-device size/state or create the private guest-owned object directory.
+Those prerequisites remain mandatory before useful startup. The overlay digest
+inventory, deterministic packaging and fixed-member importer include this unit.
+Actual mount options, disk role/by-id discovery, initialization safety and
+power-loss recovery still require booted guest qualification.

@@ -333,3 +333,10 @@ Development is on macOS; none of these hardware or external review gates may be 
 - The supervisor now emits distinct fixed system/data serials on the existing isolated raw disks. Structured XML tests bind each role to its correct source, target and read-only/writable mode.
 - Local supervisor tests passed. Installed-libvirt schema validation is supplied by Linux CI; physical/kernel serial discovery, filesystem identity, safe initialization and actual mounts remain pending.
 - Corrected native account/unit CI `36668044046` is still running. The disk-role change is committed locally while that validation completes, to avoid cancelling its native fixture again.
+
+## Guest named data mount source
+
+- Full Linux run `36668044046` passed corrected native systemd-sysusers account/collision admission, protected directories, canonical device escaping/unit validation, real three-profile overlays, native/root/package and browser workflows. This is not booted guest evidence.
+- Added the guest-only ext4 `data.mount` using the fixed data serial/by-id path and nodev/nosuid/noexec. The existing adapter mount dependency selects it; no host installation, formatting or filesystem repair is performed.
+- Overlay inventory/staging, deterministic archive packaging and fixed-member import now carry the mount source. Portable overlay/import/account tests and shell syntax passed. Linux validation for disk-role XML and mount syntax is pending.
+- Safe blank-disk initialization, block/filesystem admission, private object ownership, full kernel/rootfs image assembly and actual boot/power-loss/isolation qualification remain incomplete.

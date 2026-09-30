@@ -1,0 +1,11 @@
+# Guest image only. Never install this unit on the owner's host.
+[Unit]
+Description=HomeNode isolated guest data volume
+Before=homenode-guest@files.service homenode-guest@video.service homenode-guest@ai.service
+
+[Mount]
+What=/dev/disk/by-id/virtio-homenode-data
+Where=/data
+Type=ext4
+Options=rw,nodev,nosuid,noexec
+TimeoutSec=30
