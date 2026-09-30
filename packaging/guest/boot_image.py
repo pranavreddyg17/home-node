@@ -28,7 +28,7 @@ def read_exact(channel, size):
     return bytes(data)
 
 
-def request(channel, operation, **fields):
+def request(channel, operation, allowed_error=None, **fields):
     identifier = uuid.uuid4().hex
     payload = json.dumps({"version": 1, "requestId": identifier, "operation": operation, **fields}).encode()
     if len(payload) > 512 << 10:
@@ -39,7 +39,7 @@ def request(channel, operation, **fields):
         raise ValueError("guest response exceeds frame bound")
     response = json.loads(read_exact(channel, size), object_pairs_hook=overlay.unique_object)
     allowed = {"version", "requestId", "error", "state", "offset", "size", "sha256", "data", "text"}
-    if not isinstance(response, dict) or set(response) - allowed or type(response.get("version")) is not int or response.get("version") != 1 or response.get("requestId") != identifier or response.get("error"):
+    if not isinstance(response, dict) or set(response) - allowed or type(response.get("version")) is not int or response.get("version") != 1 or response.get("requestId") != identifier:
         raise ValueError("guest request failed")
     for name in ("offset", "size"):
         if name in response and (type(response[name]) is not int or not 0 <= response[name] <= 512 << 30):
@@ -47,6 +47,8 @@ def request(channel, operation, **fields):
     for name in ("error", "state", "sha256", "data", "text"):
         if name in response and not isinstance(response[name], str):
             raise ValueError("invalid text guest response")
+    if response.get("error") and response["error"] != allowed_error:
+        raise ValueError("guest request failed")
     return response
 
 
@@ -80,6 +82,29 @@ def object_roundtrip(channel):
     return {"bytes": len(content), "chunkBytes": 256 << 10, "acknowledgedChunkReplay": True}
 
 
+def cancel_video(channel, input_id):
+    job_id = uuid.uuid4().hex
+    if request(channel, "run", objectId=job_id, inputId=input_id, preset="mp4-1080p").get("state") != "running":
+        raise ValueError("cancellation fixture was not started")
+    if request(channel, "cancel", objectId=job_id).get("state") != "cancelled":
+        raise ValueError("video cancellation did not take effect")
+    deadline = time.monotonic() + 30
+    while True:
+        if request(channel, "result", objectId=job_id).get("state") != "cancelled":
+            raise ValueError("cancelled video state changed")
+        response = request(channel, "delete", allowed_error="OBJECT_BUSY", objectId=job_id)
+        if not response.get("error"):
+            break
+        if time.monotonic() >= deadline:
+            raise ValueError("cancelled video worker did not release deletion")
+        time.sleep(0.1)
+    if request(channel, "result", allowed_error="NOT_FOUND", objectId=job_id).get("error") != "NOT_FOUND":
+        raise ValueError("deleted video task remains visible")
+    if request(channel, "health").get("state") != "ready":
+        raise ValueError("video adapter unavailable after cancellation")
+    return {"cancelled": True, "taskDeletionAcknowledged": True}
+
+
 def video_roundtrip(channel, output):
     # Source material is generated locally; no owner files are used. All probing
     # happens only in this disposable unprivileged CI fixture, never the server.
@@ -87,7 +112,7 @@ def video_roundtrip(channel, output):
     fd = os.open(source, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     try:
         subprocess.run(["/usr/bin/ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
-                        "-f", "lavfi", "-i", "color=c=black:s=1920x1080:r=1", "-frames:v", "1",
+                        "-f", "lavfi", "-i", "color=c=black:s=1920x1080:r=30", "-frames:v", "30",
                         "-threads", "1", "-c:v", "libx264", "-preset", "ultrafast", "-movflags", "+faststart",
                         "-f", "mp4", "/proc/self/fd/" + str(fd)], pass_fds=(fd,), check=True, timeout=30)
         if not 0 < os.fstat(fd).st_size <= 256 << 10:
@@ -105,6 +130,7 @@ def video_roundtrip(channel, output):
     finalized = request(channel, "finalize", objectId=input_id, size=len(content), sha256=checksum)
     if finalized.get("size") != len(content) or finalized.get("sha256") != checksum:
         raise ValueError("video input finalization mismatch")
+    cancellation = cancel_video(channel, input_id)
     evidence = []
     for preset, width, height in [("mp4-720p", 1280, 720), ("mp4-1080p", 1920, 1080)]:
         job_id = uuid.uuid4().hex
@@ -152,7 +178,7 @@ def video_roundtrip(channel, output):
         request(channel, "delete", objectId=job_id)
         evidence.append({"preset": preset, "width": width, "height": height, "codec": "h264", "bytes": size})
     request(channel, "delete", objectId=input_id)
-    return evidence
+    return evidence, cancellation
 
 
 def boot(image, manifest, output):
@@ -237,10 +263,10 @@ def boot_vm(system_fd, data_fd, output, record):
                 raise ValueError("guest did not report ready")
             channel.settimeout(30)
             object_evidence = object_roundtrip(channel)
-            video_evidence = video_roundtrip(channel, output) if record["profile"] == "video" else []
+            video_evidence, cancellation = video_roundtrip(channel, output) if record["profile"] == "video" else ([], None)
         result = {"schema": 1, "profile": record["profile"], "imageSHA256": record["sha256"],
                   "tcgBootAndObjectRoundTrip": True, "objectTransfer": object_evidence,
-                  "videoPresets": video_evidence, "releaseQualified": False}
+                  "videoPresets": video_evidence, "videoCancellation": cancellation, "releaseQualified": False}
         with (output / "boot-evidence.json").open("x") as file:
             json.dump(result, file, indent=2)
             file.write("\n")

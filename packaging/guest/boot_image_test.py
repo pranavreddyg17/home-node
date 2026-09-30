@@ -12,7 +12,7 @@ import boot_image
 
 
 class BootProtocolTests(unittest.TestCase):
-    def exchange(self, transform):
+    def exchange(self, transform, allowed_error=None):
         client, server = socket.socketpair()
         client.settimeout(2)
         server.settimeout(2)
@@ -21,6 +21,7 @@ class BootProtocolTests(unittest.TestCase):
             try:
                 size = struct.unpack(">I", boot_image.read_exact(server, 4))[0]
                 request = json.loads(boot_image.read_exact(server, size))
+                self.assertNotIn("allowed_error", request)
                 message = transform(request)
                 payload = message if isinstance(message, bytes) else json.dumps(message).encode()
                 frame = struct.pack(">I", len(payload)) + payload
@@ -33,7 +34,7 @@ class BootProtocolTests(unittest.TestCase):
         thread = threading.Thread(target=reply)
         thread.start()
         try:
-            return boot_image.request(client, "health")
+            return boot_image.request(client, "health", allowed_error=allowed_error)
         finally:
             client.close()
             thread.join(timeout=3)
@@ -70,6 +71,39 @@ class BootProtocolTests(unittest.TestCase):
             server.sendall(struct.pack(">I", (512 << 10) + 1))
             with self.assertRaises(ValueError):
                 boot_image.request(client, "health")
+
+    def test_only_explicit_guest_error_is_allowed(self):
+        response = self.exchange(lambda r: {"version": 1, "requestId": r["requestId"], "error": "OBJECT_BUSY"}, "OBJECT_BUSY")
+        self.assertEqual(response["error"], "OBJECT_BUSY")
+        with self.assertRaises(ValueError):
+            self.exchange(lambda r: {"version": 1, "requestId": r["requestId"], "error": "OPERATION_FAILED"}, "OBJECT_BUSY")
+
+
+class VideoCancellationTests(unittest.TestCase):
+    def test_cancel_waits_for_deletion_then_health(self):
+        with patch.object(boot_image, "request", side_effect=[
+                {"state": "running"}, {"state": "cancelled"}, {"state": "cancelled"},
+                {"error": "OBJECT_BUSY"}, {"state": "cancelled"}, {}, {"error": "NOT_FOUND"}, {"state": "ready"}]) as calls, \
+                patch.object(boot_image.time, "sleep"):
+            self.assertEqual(boot_image.cancel_video(None, "input"),
+                             {"cancelled": True, "taskDeletionAcknowledged": True})
+        self.assertEqual([c.args[1] for c in calls.call_args_list], ["run", "cancel", "result", "delete", "result", "delete", "result", "health"])
+        self.assertEqual(calls.call_args_list[3].kwargs["allowed_error"], "OBJECT_BUSY")
+        self.assertEqual(calls.call_args_list[0].kwargs["inputId"], "input")
+
+    def test_cancel_state_and_teardown_deadline_are_required(self):
+        sequences = [
+            [{"state": "succeeded"}],
+            [{"state": "running"}, {"state": "succeeded"}],
+            [{"state": "running"}, {"state": "cancelled"}, {"state": "succeeded"}],
+            [{"state": "running"}, {"state": "cancelled"}, {"state": "cancelled"}, {"error": "OBJECT_BUSY"}],
+            [{"state": "running"}, {"state": "cancelled"}, {"state": "cancelled"}, {}, {"state": "cancelled"}],
+            [{"state": "running"}, {"state": "cancelled"}, {"state": "cancelled"}, {}, {"error": "NOT_FOUND"}, {"state": "starting"}],
+        ]
+        for responses in sequences:
+            with self.subTest(responses=responses), patch.object(boot_image, "request", side_effect=responses), \
+                    patch.object(boot_image.time, "monotonic", side_effect=[0, 31]), self.assertRaises(ValueError):
+                boot_image.cancel_video(None, "input")
 
 
 class ObjectTransferTests(unittest.TestCase):
