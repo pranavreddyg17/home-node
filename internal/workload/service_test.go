@@ -245,3 +245,43 @@ func TestAppIntentParticipatesInCallerTransaction(t *testing.T) {
 		t.Fatal("committed intent bypassed worker")
 	}
 }
+
+func TestAppApprovalResourcesRefuseChangedRevision(t *testing.T) {
+	s, backend, device := service(t)
+	var resources []string
+	if err := s.Store.Transaction(context.Background(), func(tx *sql.Tx) error {
+		var err error
+		resources, err = s.AppApprovalResources(tx, "files")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(resources) != 2 || resources[0] != "files" || resources[1] != "revision_0" {
+		t.Fatal("unexpected initial resource", resources)
+	}
+	if _, err := s.AppAction(context.Background(), device, state.Random(), "files", "start"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.Transaction(context.Background(), func(tx *sql.Tx) error {
+		_, err := s.AppActionAtResourcesInTransaction(tx, device, state.Random(), "files", "stop", resources)
+		return err
+	}); !errors.Is(err, ErrConflict) {
+		t.Fatal("old app approval snapshot admitted", err)
+	}
+	if backend.starts != 0 {
+		t.Fatal("snapshot check caused runtime effect")
+	}
+	if err := s.Store.Transaction(context.Background(), func(tx *sql.Tx) error {
+		current, err := s.AppApprovalResources(tx, "files")
+		if err != nil {
+			return err
+		}
+		if len(current) != 3 || current[1] != "revision_1" {
+			t.Fatal("instance and revision missing", current)
+		}
+		_, err = s.AppActionAtResourcesInTransaction(tx, device, state.Random(), "files", "stop", current)
+		return err
+	}); err != nil {
+		t.Fatal("current snapshot refused", err)
+	}
+}

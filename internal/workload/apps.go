@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -95,6 +97,40 @@ func (s *Service) AppActionInTransaction(tx *sql.Tx, device, key, name, action s
 	}
 	_, err = tx.Exec("INSERT INTO apps(workload,instance_id,state,operation_id,updated_at,revision) VALUES(?,?,?,?,?,?) ON CONFLICT(workload) DO UPDATE SET state=excluded.state,operation_id=excluded.operation_id,updated_at=excluded.updated_at,revision=excluded.revision", name, instance, phase, op.ID, time.Now().Unix(), revision+1)
 	return op, err
+}
+
+// AppApprovalResources identifies the logical app and its exact current instance
+// and revision. A never-created app has revision zero and no instance ID.
+func (s *Service) AppApprovalResources(tx *sql.Tx, name string) ([]string, error) {
+	if name != "files" && name != "ai" {
+		return nil, ErrInvalid
+	}
+	var instance string
+	var revision int64
+	err := tx.QueryRow("SELECT instance_id,revision FROM apps WHERE workload=?", name).Scan(&instance, &revision)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	if revision < 0 {
+		return nil, ErrConflict
+	}
+	resources := []string{name, "revision_" + strconv.FormatInt(revision, 10)}
+	if instance != "" {
+		resources = append(resources, instance)
+	}
+	return resources, nil
+}
+
+// AppActionAtResourcesInTransaction refuses an app changed since approval.
+func (s *Service) AppActionAtResourcesInTransaction(tx *sql.Tx, device, key, name, action string, expected []string) (Operation, error) {
+	current, err := s.AppApprovalResources(tx, name)
+	if err != nil {
+		return Operation{}, err
+	}
+	if !slices.Equal(current, expected) {
+		return Operation{}, ErrConflict
+	}
+	return s.AppActionInTransaction(tx, device, key, name, action)
 }
 
 func (s *Service) processApp(ctx context.Context) error { return s.processAppKind(ctx, "") }
