@@ -435,3 +435,10 @@ Development is on macOS; none of these hardware or external review gates may be 
 - Full Linux `36672293927` passed actual small-file ext4 initialization and preservation checks, source-unit address-family restrictions, protected guest setup, native/root/package/browser workflows and real overlays. This does not qualify production-size formatting or guest boot/mount behavior.
 - Existing volumes now use O_PATH/no-follow metadata admission instead of opening contents/devices. Special permission bits are rejected and cancelled preparation returns its cancellation error.
 - Added native FIFO/directory/mode/size preservation and unavailable-reserve-before-staging cases. Local supervisor tests and Linux test cross compilation passed; new native evidence is pending. Recovery/reclaim/provenance, full bootable guest artifacts and hardware acceptance remain incomplete.
+
+## Reclaim abandoned volume preparation under root authorization
+
+- Full Linux `36672568648` passed metadata-only volume admission, native special-file/mode/size and reserve refusal, formatting, source-unit/root/package/browser checks and real guest overlays.
+- Added bounded complete-set staging cleanup for root-admitted preparation/retry and stopped-video purge. Only exact scoped nonce names, private root-owned single-link regular files of zero or expected size qualify; published volumes and other resources are excluded. Invalid metadata/names stop cleanup before deletion, and the parent is synced before success.
+- Root purge now leaves its durable operation pending and avoids final-volume deletion if staging cleanup fails. Added portable failure/replay evidence and native scoped preservation, complete-set refusal and abandoned-preparation-to-fresh-format fixtures.
+- All local Go packages passed; Linux supervisor tests cross-compiled. New native cleanup results remain pending. Complete volume provenance/restore activation, maintained bootable guest artifacts, production-size measurements and physical boot/isolation/power-loss acceptance remain incomplete.

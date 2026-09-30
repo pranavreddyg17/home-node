@@ -17,10 +17,10 @@ import (
 )
 
 type fakeBackend struct {
-	starts, stops      int
-	hostErr, verifyErr error
-	running            bool
-	free               int64
+	starts, stops                  int
+	hostErr, verifyErr, cleanupErr error
+	running                        bool
+	free                           int64
 }
 
 func (b *fakeBackend) ValidateHost(context.Context, Policy) error    { return b.hostErr }
@@ -30,6 +30,9 @@ func (b *fakeBackend) Stop(context.Context, string) error            { b.stops++
 func (b *fakeBackend) Running(context.Context, string) (bool, error) { return b.running, nil }
 func (b *fakeBackend) Verify(context.Context, Domain) error          { return b.verifyErr }
 func (b *fakeBackend) FreeBytes(string) (int64, error)               { return b.free, nil }
+func (b *fakeBackend) CleanupPreparation(context.Context, string, string, int64) error {
+	return b.cleanupErr
+}
 func newManager(t *testing.T) (*Manager, *fakeBackend) {
 	t.Helper()
 	dir := t.TempDir()
@@ -371,5 +374,43 @@ func TestOldLifecycleIntentCannotUndoNewerStopOrStart(t *testing.T) {
 	}
 	if !b.running {
 		t.Fatal("stale stop killed newer authorized instance")
+	}
+}
+
+func TestPurgeWaitsForPreparationCleanup(t *testing.T) {
+	m, b := newManager(t)
+	id := state.Random()
+	_, err := m.Store.DB.Exec("INSERT INTO runtime_instances(id,workload,state,desired,image_sha256,memory_mib,vcpus,data_bytes,created_at,revision) VALUES(?,'video','failed','stopped',?,512,1,?,0,1)", id, m.Manifest.Images[0].SHA256, catalog.GiB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(m.Volumes, id+".raw")
+	if err := os.WriteFile(path, []byte("owner data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	b.cleanupErr = errors.New("staging cleanup failed")
+	request := Request{Version: 1, OperationID: state.Random(), InstanceID: id, Action: "purge", Revision: 3, PolicyGeneration: 1}
+	if _, err := m.Apply(context.Background(), request); err == nil {
+		t.Fatal("cleanup failure hidden")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != "owner data" {
+		t.Fatal("failed cleanup erased published volume")
+	}
+	instance, err := m.Inspect(context.Background(), id)
+	if err != nil || instance.State == "removed" {
+		t.Fatal("failed cleanup marked removed")
+	}
+	var phase string
+	if err := m.Store.DB.QueryRow("SELECT state FROM runtime_operations WHERE id=?", request.OperationID).Scan(&phase); err != nil || phase != "pending" {
+		t.Fatal("failed cleanup completed operation", phase, err)
+	}
+	b.cleanupErr = nil
+	instance, err = m.Apply(context.Background(), request)
+	if err != nil || instance.State != "removed" {
+		t.Fatal("cleanup replay did not finish", instance, err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("successful purge retained published volume")
 	}
 }

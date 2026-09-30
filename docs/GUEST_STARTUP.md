@@ -268,3 +268,20 @@ Special permission bits, hardlink aliases, wrong sizes and nonprivate files
 are refused. Fresh reserve failure is checked before any staging file creation;
 already cancelled work preserves cancellation as its error. Native tests cover
 these cases and assert preserved existing metadata.
+
+## Reclaim unused volume preparation
+
+After root authorization of a recorded resource's preparation or stopped-video
+purge, the backend admits the complete set of that resource's preparation
+files before removing any. Names require the exact resource prefix and a
+canonical 128-bit nonce; descriptors must identify private root-owned regular
+files with one link and zero or expected full size. Enumeration and candidate
+counts are bounded. Symlinks, aliases, special files, malformed names and
+changed metadata stop cleanup and preserve pending state. Cleanup never
+selects a published `.raw` volume or another resource's staging.
+
+Persistent preparation retries can reclaim valid unpublished staging before
+fresh reserve admission/formatting. Stopped video purge cannot report removed
+until preparation cleanup and its parent sync succeed. A root operation remains
+pending on failure and can replay. This is scoped staging reclaim; it does not
+provide complete volume provenance, restore activation or forensic erasure.

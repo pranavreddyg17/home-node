@@ -136,6 +136,9 @@ func (b LinuxBackend) Prepare(ctx context.Context, d Domain) error {
 	if err = os.Chmod(channelDir, 0710); err != nil {
 		return err
 	}
+	if err := b.CleanupPreparation(ctx, filepath.Dir(d.DataPath), d.ID, d.Image.DataBytes); err != nil {
+		return err
+	}
 	return prepareDataVolume(ctx, d.DataPath, d.Image.DataBytes, d.DiskReserveBytes)
 }
 func (b LinuxBackend) Start(ctx context.Context, d Domain) error {
@@ -220,4 +223,8 @@ func (b LinuxBackend) FreeBytes(directory string) (int64, error) {
 		return 0, err
 	}
 	return int64(stat.Bavail) * int64(stat.Bsize), nil
+}
+
+func (b LinuxBackend) CleanupPreparation(ctx context.Context, directory, id string, size int64) error {
+	return purgeVolumePreparation(ctx, directory, id, size)
 }

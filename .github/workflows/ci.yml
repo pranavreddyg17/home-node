@@ -41,7 +41,7 @@ jobs:
           sudo install -m 0755 "$RUNNER_TEMP/guest-init.test" /usr/lib/homenode-fixtures/guest-init.test
           sudo env HOMENODE_GUEST_SYSTEMD_INTEGRATION=1 python3 packaging/guest/systemd_fixture.py
       - name: Test fresh raw volume initialization
-        run: sudo env HOMENODE_VOLUME_INTEGRATION=1 "$(command -v go)" test ./internal/supervisor -run '^TestNativeFreshVolumeFormattingPreservesExistingData$'
+        run: sudo env HOMENODE_VOLUME_INTEGRATION=1 "$(command -v go)" test ./internal/supervisor -run '^TestNative(FreshVolumeFormattingPreservesExistingData|PreparedVolumeCleanup)$'
       - run: go vet ./...
       - run: go build ./cmd/...
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444

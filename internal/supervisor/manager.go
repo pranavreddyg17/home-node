@@ -68,6 +68,7 @@ type Backend interface {
 	Running(context.Context, string) (bool, error)
 	Verify(context.Context, Domain) error
 	FreeBytes(string) (int64, error)
+	CleanupPreparation(context.Context, string, string, int64) error
 }
 type Manager struct {
 	Store                     *state.Store
@@ -484,6 +485,9 @@ func (m *Manager) purge(ctx context.Context, r Request) (Instance, error) {
 		return Instance{}, ErrPolicy
 	}
 	if err = m.Store.Transaction(ctx, func(tx *sql.Tx) error { _, err := m.operation(tx, r); return err }); err != nil {
+		return Instance{}, err
+	}
+	if err := m.Backend.CleanupPreparation(ctx, m.Volumes, r.InstanceID, instance.DataBytes); err != nil {
 		return Instance{}, err
 	}
 	for _, path := range []string{filepath.Join(m.Volumes, r.InstanceID+".raw"), filepath.Join(m.Channels, r.InstanceID, "adapter.sock"), filepath.Join(m.Channels, r.InstanceID)} {
