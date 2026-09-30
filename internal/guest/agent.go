@@ -64,37 +64,9 @@ func New(directory, kind string, quota int64) (*Agent, error) {
 	}
 	a := &Agent{root: root, kind: kind, quota: quota, tasks: map[string]*task{}, client: &http.Client{Timeout: 2 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect denied") }, Transport: &http.Transport{Proxy: nil, MaxConnsPerHost: 1, ResponseHeaderTimeout: 15 * time.Second}}}
 	a.readinessClient = &http.Client{Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect denied") }, Transport: &http.Transport{Proxy: nil, MaxConnsPerHost: 1, ResponseHeaderTimeout: time.Second}}
-	entries, err := fs.ReadDir(root.FS(), ".")
-	if err != nil {
+	if err = a.recoverTasks(); err != nil {
 		root.Close()
 		return nil, err
-	}
-	for _, entry := range entries {
-		if !strings.HasSuffix(entry.Name(), ".task.json") {
-			continue
-		}
-		id := strings.TrimSuffix(entry.Name(), ".task.json")
-		if !guestproto.ValidID(id) {
-			continue
-		}
-		data, err := root.ReadFile(entry.Name())
-		if err != nil || len(data) > 64<<10 {
-			root.Close()
-			return nil, errors.New("invalid task journal")
-		}
-		var task task
-		if json.Unmarshal(data, &task) != nil {
-			root.Close()
-			return nil, errors.New("invalid task journal")
-		}
-		if task.State == "running" {
-			task.State = "interrupted"
-		}
-		a.tasks[id] = &task
-		if err = a.save(id, &task); err != nil {
-			root.Close()
-			return nil, err
-		}
 	}
 	return a, nil
 }
@@ -378,6 +350,9 @@ func (a *Agent) sync() error {
 }
 func (a *Agent) save(id string, t *task) error {
 	data, err := json.Marshal(t)
+	if len(data) > maxTaskJournalBytes {
+		return errors.New("invalid task journal")
+	}
 	if err != nil {
 		return err
 	}

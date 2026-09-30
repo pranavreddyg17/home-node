@@ -81,7 +81,7 @@ func TestRejectsTraversalAndWrongWorkload(t *testing.T) {
 func TestRestartInterruptsInFlightTask(t *testing.T) {
 	dir := t.TempDir()
 	id := state.Random()
-	data, _ := json.Marshal(task{State: "running", InputID: state.Random()})
+	data, _ := json.Marshal(task{State: "running", InputID: state.Random(), Preset: "mp4-720p", PromptHash: promptDigest(guestproto.Request{})})
 	if err := os.WriteFile(filepath.Join(dir, id+".task.json"), data, 0600); err != nil {
 		t.Fatal(err)
 	}

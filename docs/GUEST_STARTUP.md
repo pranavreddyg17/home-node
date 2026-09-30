@@ -49,3 +49,21 @@ VM acceptance. An interrupted agent is not a cleanly powered-off VM: the current
 host ordinary stop still destroys the domain. This work does not provide the
 maintenance drain lease, guest quiesce acknowledgement, filesystem unmount or
 hypervisor power-off evidence required for a consistent backup.
+
+## Task recovery admission
+
+Startup enumerates the object directory in bounded batches and admits at most
+1,000 task records. Journals must be private mode 0600 regular files owned by
+the guest service UID; final symlinks and special files are rejected with
+no-follow/nonblocking descriptors. Reads are bounded before decoding to 256 KiB,
+which accommodates the existing 32 KiB text limit even when JSON escaping
+expands it. The writer enforces the same journal bound.
+
+Canonical fields, unique keys, no trailing JSON, recognized states, profile
+identities, bounded text/size and lowercase hashes are required. Files guests
+cannot recover executable tasks. Video success requires bounded nonempty output
+metadata; AI records cannot carry video fields. The complete task set is
+validated before any running intent is rewritten as interrupted. Invalid
+recovery data fails startup and is preserved for diagnosis. This is application
+journal admission; disk corruption recovery, filesystem mount/init and booted
+image qualification remain separate requirements.
