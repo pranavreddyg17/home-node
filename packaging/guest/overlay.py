@@ -151,8 +151,8 @@ def package(root, output, epoch):
                                 if reader.size != entry.size or reader.hash.hexdigest() != files[name]["sha256"]:
                                     raise ValueError("archived bytes differ from metadata")
             file.flush()
-            os.fsync(file.fileno())
             os.fchmod(file.fileno(), 0o444)
+            os.fsync(file.fileno())
         # Revalidate before publishing: private build inputs must remain stable.
         if verify(root) != record:
             raise ValueError("source changed during packaging")

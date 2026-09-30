@@ -51,12 +51,16 @@ jobs:
       - name: Build verified guest adapter overlays
         run: |
           python3 packaging/guest/overlay_test.py
+          python3 packaging/guest/import_overlay_test.py
           for profile in files video ai; do
             sh packaging/guest/stage.sh "$profile" "$RUNNER_TEMP/homenode-guest-$profile"
             epoch=$(git show -s --format=%ct HEAD)
             python3 packaging/guest/overlay.py package "$RUNNER_TEMP/homenode-guest-$profile" "$RUNNER_TEMP/homenode-guest-$profile.tar" "$epoch"
             python3 packaging/guest/overlay.py package "$RUNNER_TEMP/homenode-guest-$profile" "$RUNNER_TEMP/homenode-guest-$profile-repeat.tar" "$epoch"
             cmp "$RUNNER_TEMP/homenode-guest-$profile.tar" "$RUNNER_TEMP/homenode-guest-$profile-repeat.tar"
+            digest=$(sha256sum "$RUNNER_TEMP/homenode-guest-$profile.tar" | cut -d " " -f 1)
+            python3 packaging/guest/import_overlay.py "$RUNNER_TEMP/homenode-guest-$profile.tar" "$RUNNER_TEMP/homenode-guest-$profile-imported" "$digest" "$profile" "$(git rev-parse HEAD)"
+            python3 packaging/guest/overlay.py verify "$RUNNER_TEMP/homenode-guest-$profile-imported"
           done
       - name: Validate guest service source
         run: systemd-analyze verify packaging/guest/homenode-guest@.service

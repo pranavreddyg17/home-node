@@ -78,3 +78,23 @@ overlay, not independent reproducibility of compiler output or filesystem images
 The archives contain `bootable: false` metadata and provide no publisher signature
 or release qualification. Do not extract an arbitrary downloaded archive as root;
 a trusted assembler with explicit member/schema/digest admission is still pending.
+
+## Digest-pinned assembly import
+
+`python3 packaging/guest/import_overlay.py ARCHIVE NEW_STAGING EXPECTED_SHA256
+PROFILE EXPECTED_SOURCE_REVISION` snapshots and verifies the bounded archive
+before admitting any members. Obtain the digest/revision from trusted build
+records rather than accepting values supplied with an unknown archive. The new
+staging directory's parent must be protected, owned by the builder and selected
+with an absolute path. Existing output paths are never overwritten.
+
+Only the exact selected-profile file/directory set, canonical modes and root
+ownership headers are admitted. Links, special files, duplicate/missing/extra
+members and path escapes are rejected. Files are created exclusively without
+generic archive extraction and then verified against metadata/content/ELF/quota.
+The expected source revision must match. Staging remains private mode 0700 on
+failure and is made mode 0755 only after complete verification and sync; preserve
+failed staging for diagnosis. CI imports each real built archive into fresh
+staging and re-verifies it. Import does not install host files, create guest
+accounts, format disks, build bootable images or establish publisher signing
+trust. Safe rootfs/boot/data initialization and actual qualification are pending.
