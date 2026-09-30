@@ -97,6 +97,34 @@ func prepareDataVolume(ctx context.Context, path string, size int64, reserve int
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
+	return publishDataVolume(root, file, stage, name, size)
+}
+
+func publishDataVolume(root *os.Root, file *os.File, stage, name string, size int64) error {
+	if err := admitVolume(file, size); err != nil {
+		return err
+	}
+	prepared, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	current, err := root.OpenFile(stage, unix.O_PATH|unix.O_NOFOLLOW, 0)
+	if err != nil {
+		return err
+	}
+	defer current.Close()
+	if err := admitVolume(current, size); err != nil {
+		return err
+	}
+	observed, err := current.Stat()
+	if err != nil || !os.SameFile(prepared, observed) {
+		return ErrPolicy
+	}
+	parent, err := root.Open(".")
+	if err != nil {
+		return err
+	}
+	defer parent.Close()
 	fd := int(parent.Fd())
 	if err := unix.Renameat2(fd, stage, fd, name, unix.RENAME_NOREPLACE); err != nil {
 		return err

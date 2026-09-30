@@ -151,3 +151,64 @@ func TestNativeFreshVolumeFormattingPreservesExistingData(t *testing.T) {
 		t.Fatal("cancelled initialization published data")
 	}
 }
+
+func TestNativeVolumePublicationIdentity(t *testing.T) {
+	if os.Geteuid() != 0 || os.Getenv("HOMENODE_VOLUME_INTEGRATION") != "1" {
+		t.Skip("opt-in disposable Linux root fixture")
+	}
+	const size = 64 << 20
+	for _, scenario := range []string{"occupied destination", "swapped staging"} {
+		t.Run(scenario, func(t *testing.T) {
+			directory := t.TempDir()
+			root, err := os.OpenRoot(directory)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer root.Close()
+			file, err := root.OpenFile("stage", os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer file.Close()
+			if err := file.Truncate(size); err != nil {
+				t.Fatal(err)
+			}
+			if scenario == "occupied destination" {
+				if err := os.WriteFile(filepath.Join(directory, "data.raw"), []byte("existing owner data"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				if err := publishDataVolume(root, file, "stage", "data.raw", size); !errors.Is(err, unix.EEXIST) {
+					t.Fatal("occupied publication did not refuse", err)
+				}
+				data, err := os.ReadFile(filepath.Join(directory, "data.raw"))
+				if err != nil || string(data) != "existing owner data" {
+					t.Fatal("occupied destination changed")
+				}
+			} else {
+				if err := root.Rename("stage", "saved"); err != nil {
+					t.Fatal(err)
+				}
+				replacement, err := root.OpenFile("stage", os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := replacement.Truncate(size); err != nil {
+					t.Fatal(err)
+				}
+				replacement.Close()
+				if err := publishDataVolume(root, file, "stage", "data.raw", size); !errors.Is(err, ErrPolicy) {
+					t.Fatal("swapped source admitted", err)
+				}
+				if _, err := root.Stat("data.raw"); !os.IsNotExist(err) {
+					t.Fatal("swapped source published")
+				}
+				if _, err := root.Stat("saved"); err != nil {
+					t.Fatal("prepared inode removed")
+				}
+			}
+			if _, err := root.Stat("stage"); err != nil {
+				t.Fatal("failed publication removed staging")
+			}
+		})
+	}
+}

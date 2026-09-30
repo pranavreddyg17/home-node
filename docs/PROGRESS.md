@@ -442,3 +442,9 @@ Development is on macOS; none of these hardware or external review gates may be 
 - Added bounded complete-set staging cleanup for root-admitted preparation/retry and stopped-video purge. Only exact scoped nonce names, private root-owned single-link regular files of zero or expected size qualify; published volumes and other resources are excluded. Invalid metadata/names stop cleanup before deletion, and the parent is synced before success.
 - Root purge now leaves its durable operation pending and avoids final-volume deletion if staging cleanup fails. Added portable failure/replay evidence and native scoped preservation, complete-set refusal and abandoned-preparation-to-fresh-format fixtures.
 - All local Go packages passed; Linux supervisor tests cross-compiled. New native cleanup results remain pending. Complete volume provenance/restore activation, maintained bootable guest artifacts, production-size measurements and physical boot/isolation/power-loss acceptance remain incomplete.
+
+## Bind volume publication to the prepared inode
+
+- Added final metadata re-admission and same-inode checking between the formatter descriptor and staged pathname before non-replacing publication. No existing data content is read for this check.
+- Added native occupied-destination preservation and swapped-staging refusal fixtures. Local supervisor tests and Linux test cross compilation passed; native publication evidence is pending.
+- Run `36673378456` passed native staging cleanup/retry/formatting and source-unit protections so far, while the full run remains active. This publication change stays committed locally until that run completes. Full volume provenance, bootable guest artifacts and hardware acceptance remain unfinished.

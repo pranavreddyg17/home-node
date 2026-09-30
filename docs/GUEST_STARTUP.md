@@ -285,3 +285,11 @@ fresh reserve admission/formatting. Stopped video purge cannot report removed
 until preparation cleanup and its parent sync succeed. A root operation remains
 pending on failure and can replay. This is scoped staging reclaim; it does not
 provide complete volume provenance, restore activation or forensic erasure.
+
+Before final publication the supervisor reopens staged metadata with an O_PATH
+no-follow descriptor, rechecks private volume admission and requires the inode
+to match the descriptor given to the formatter. Native fixtures preserve an
+occupied destination and reject a changed staging inode without deleting
+either source. RENAME_NOREPLACE remains the atomic destination guard. This
+depends on exclusive trusted root writers in the protected parent; it does not
+provide complete volume provenance or physical storage crash qualification.
