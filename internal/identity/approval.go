@@ -9,6 +9,7 @@ import (
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/pranavreddyg17/home-node/internal/state"
+	"net/http"
 	"regexp"
 	"slices"
 	"time"
@@ -147,7 +148,7 @@ func (s *Service) BeginApproval(ctx context.Context, actor Session, action strin
 			return err
 		}
 		ceremony.Expires = time.Unix(binding.ExpiresAt, 0)
-		payload, err := json.Marshal(challenge{Session: *ceremony, Binding: &binding})
+		payload, err := json.Marshal(challenge{Session: *ceremony, Binding: &binding, Issuer: actor.Device.ID})
 		if err != nil {
 			return err
 		}
@@ -161,4 +162,72 @@ func (s *Service) BeginApproval(ctx context.Context, actor Session, action strin
 		return nil, "", ApprovalBinding{}, err
 	}
 	return options, token, binding, nil
+}
+
+// FinishApproval burns the ceremony even when verification fails. A verified
+// assertion yields an opaque, bounded grant; only transactional consumption
+// of that grant may eventually authorize its exact mutation.
+func (s *Service) FinishApproval(ctx context.Context, actor Session, token string, policy int64, request *http.Request) (string, error) {
+	if len(token) == 0 || len(token) > 128 {
+		return "", ErrDenied
+	}
+	c, kind, epoch, err := s.takeChallenge(ctx, token)
+	if err != nil {
+		return "", err
+	}
+	if kind != "approval" || c.Binding == nil || !c.Binding.valid(time.Now().Unix()) || epoch != actor.Epoch || c.Binding.Epoch != actor.Epoch || c.Binding.PolicyGeneration != policy || c.Binding.DeviceID != actor.Device.ID || c.Binding.SessionHash != actor.TokenHash {
+		return "", ErrDenied
+	}
+	cap := "admin"
+	if c.Binding.Action == "ai.delete" {
+		cap = "ai"
+	}
+	if !actor.Allows(cap) {
+		return "", ErrDenied
+	}
+	user, err := s.user(ctx)
+	if err != nil {
+		return "", err
+	}
+	credential, err := s.Web.FinishLogin(user, c.Session, request)
+	if err != nil || credential.Authenticator.CloneWarning {
+		return "", ErrDenied
+	}
+	data, err := json.Marshal(credential)
+	if err != nil {
+		return "", err
+	}
+	grant := state.Random()
+	err = s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := checkActor(tx, actor); err != nil {
+			return err
+		}
+		if !c.Binding.valid(time.Now().Unix()) {
+			return ErrDenied
+		}
+		var device string
+		if err := tx.QueryRow("SELECT c.device_id FROM credentials c JOIN devices d ON d.id=c.device_id WHERE c.id=? AND d.revoked_at IS NULL", credential.ID).Scan(&device); err != nil || device != actor.Device.ID {
+			return ErrDenied
+		}
+		var count int
+		if err := tx.QueryRow("SELECT count(*) FROM challenges WHERE kind='approval-grant' AND expires_at>? AND json_extract(payload,'$.binding.deviceId')=?", time.Now().Unix(), actor.Device.ID).Scan(&count); err != nil {
+			return err
+		}
+		if count >= 20 {
+			return ErrDenied
+		}
+		if _, err := tx.Exec("UPDATE credentials SET data=? WHERE id=?", string(data), credential.ID); err != nil {
+			return err
+		}
+		payload, err := json.Marshal(challenge{Issuer: actor.Device.ID, Binding: c.Binding})
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec("INSERT INTO challenges(token_hash,kind,payload,epoch,expires_at) VALUES(?,'approval-grant',?,?,?)", state.Hash(grant), string(payload), actor.Epoch, c.Binding.ExpiresAt)
+		return err
+	})
+	if err != nil {
+		return "", err
+	}
+	return grant, nil
 }

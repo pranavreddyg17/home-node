@@ -3,11 +3,14 @@ package identity
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/pranavreddyg17/home-node/internal/state"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestApprovalBindingCoversAuthorityAndCopiesResources(t *testing.T) {
@@ -109,5 +112,45 @@ func TestBeginApprovalRestrictsCredentialAndPersistsBinding(t *testing.T) {
 	}
 	if _, _, _, err := s.BeginApproval(context.Background(), actor, "device.revoke", []string{other.Device.ID}, nil, 1); err == nil {
 		t.Fatal("unbounded ceremonies accepted")
+	}
+}
+
+func TestFailedApprovalVerificationConsumesCeremonyWithoutGrant(t *testing.T) {
+	for _, change := range []string{"malformed assertion", "other session", "changed policy", "expired", "wrong kind"} {
+		t.Run(change, func(t *testing.T) {
+			s := testService(t)
+			actor, _ := testDevice(t, s, AllCapabilities)
+			b, err := newApprovalBinding(actor, "device.pair", nil, nil, 1, time.Now().Unix())
+			if err != nil {
+				t.Fatal(err)
+			}
+			kind := "approval"
+			policy := int64(1)
+			switch change {
+			case "other session":
+				b.SessionHash = strings.Repeat("c", 64)
+			case "changed policy":
+				policy = 2
+			case "expired":
+				b.ExpiresAt = time.Now().Unix() - 1
+			case "wrong kind":
+				kind = "login"
+			}
+			payload, _ := json.Marshal(challenge{Binding: &b, Issuer: actor.Device.ID})
+			token := state.Random()
+			if _, err := s.Store.DB.Exec("INSERT INTO challenges(token_hash,kind,payload,epoch,expires_at) VALUES(?,?,?,?,?)", state.Hash(token), kind, string(payload), actor.Epoch, time.Now().Unix()+120); err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < 2; i++ {
+				grant, err := s.FinishApproval(context.Background(), actor, token, policy, httptest.NewRequest("POST", "http://localhost:8787", strings.NewReader("{}")))
+				if !errors.Is(err, ErrDenied) || grant != "" {
+					t.Fatal("invalid verification authorized", grant, err)
+				}
+			}
+			var count int
+			if err := s.Store.DB.QueryRow("SELECT count(*) FROM challenges").Scan(&count); err != nil || count != 0 {
+				t.Fatal("ceremony reused or grant minted", count, err)
+			}
+		})
 	}
 }
