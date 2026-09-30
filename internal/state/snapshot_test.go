@@ -28,6 +28,7 @@ func TestRecoverySnapshotIncludesCommittedWALAndExcludesTrust(t *testing.T) {
 		{`INSERT INTO sessions VALUES(?,?,7,1,1,1,9999999999)`, []any{token, device}},
 		{`INSERT INTO settings VALUES('origin','https://old-host.example')`, nil},
 		{`INSERT INTO settings VALUES('host.maintenance','active-source-barrier')`, nil},
+		{`INSERT INTO settings VALUES('host.maintenance-job.root-token','source-root-token')`, nil},
 		{`INSERT INTO settings VALUES('host.activity.fixture','trash-expiry')`, nil},
 		{`INSERT INTO settings VALUES('retained-config','committed-WAL-value')`, nil},
 		{`INSERT INTO settings VALUES('job.cleanup.old-attempt','{"state":"pending","lastAttempt":0}')`, nil},
@@ -58,7 +59,7 @@ func TestRecoverySnapshotIncludesCommittedWALAndExcludesTrust(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(data, []byte(credential)) || bytes.Contains(data, []byte(token)) || bytes.Contains(data, []byte(approvalMarker)) {
+	if bytes.Contains(data, []byte(credential)) || bytes.Contains(data, []byte(token)) || bytes.Contains(data, []byte(approvalMarker)) || bytes.Contains(data, []byte("source-root-token")) {
 		t.Fatal("removed secrets remain in snapshot pages")
 	}
 	snapshotFile, err := os.Open(path)
@@ -113,6 +114,12 @@ func TestRecoverySnapshotIncludesCommittedWALAndExcludesTrust(t *testing.T) {
 	}
 	if err = s.DB.QueryRow("SELECT count(*) FROM settings WHERE key GLOB 'host.activity.*'").Scan(&count); err != nil || count != 1 {
 		t.Fatal("snapshot released live activity", count, err)
+	}
+	if err = restored.QueryRow("SELECT count(*) FROM settings WHERE key GLOB 'host.maintenance-job.*'").Scan(&count); err != nil || count != 0 {
+		t.Fatal("maintenance journal restored", count, err)
+	}
+	if err = s.DB.QueryRow("SELECT value FROM settings WHERE key='host.maintenance-job.root-token'").Scan(&value); err != nil || value != "source-root-token" {
+		t.Fatal("source maintenance journal changed", value, err)
 	}
 	var operationState, operationPayload string
 	if err = restored.QueryRow("SELECT state,result FROM operations WHERE id=?", deletionOp).Scan(&operationState, &operationPayload); err != nil || operationState != "interrupted" || operationPayload != "{}" {

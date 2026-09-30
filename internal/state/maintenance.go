@@ -66,7 +66,7 @@ func (s *Store) EndMaintenance(ctx context.Context, token string) error {
 			return ErrMaintenanceOwner
 		}
 		var active int
-		if err := tx.QueryRow("SELECT count(*) FROM settings WHERE key GLOB 'host.activity.*'").Scan(&active); err != nil {
+		if err := tx.QueryRow("SELECT count(*) FROM settings WHERE key GLOB 'host.activity.*' OR key GLOB 'host.maintenance-job.*'").Scan(&active); err != nil {
 			return err
 		}
 		if active != 0 {
@@ -79,7 +79,7 @@ func (s *Store) EndMaintenance(ctx context.Context, token string) error {
 // RequireAdmission runs in the same transaction as the new durable intent.
 func RequireAdmission(tx *sql.Tx) error {
 	var count int
-	if err := tx.QueryRow("SELECT count(*) FROM settings WHERE key=?", maintenanceKey).Scan(&count); err != nil {
+	if err := tx.QueryRow("SELECT count(*) FROM settings WHERE key=? OR key GLOB 'host.maintenance-job.*'", maintenanceKey).Scan(&count); err != nil {
 		return err
 	}
 	if count != 0 {
