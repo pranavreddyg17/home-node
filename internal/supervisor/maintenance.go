@@ -182,16 +182,27 @@ func (m *Manager) BeginRuntimeMaintenance(ctx context.Context) (string, error) {
 
 // EndRuntimeMaintenance requires the original coordinator token. Higher-level
 // recovery must establish safe disk/restart state before calling this method.
+// The most recent release has a durable hashed receipt for lost-response retry;
+// replay acknowledges that release without modifying a newer barrier.
 func (m *Manager) EndRuntimeMaintenance(ctx context.Context, token string) error {
 	unlock, err := m.lockRuntime(ctx, true)
 	if err != nil {
 		return err
 	}
 	defer unlock()
-	if token == "" {
+	if !guestproto.ValidID(token) {
 		return ErrPolicy
 	}
 	return m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		hash := state.Hash(token)
+		var receipt string
+		err := tx.QueryRow("SELECT value FROM settings WHERE key='runtime.maintenance-release'").Scan(&receipt)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if err == nil && receipt == hash {
+			return nil
+		}
 		result, err := tx.Exec("DELETE FROM settings WHERE key=? AND value=?", runtimeMaintenanceKey, token)
 		if err != nil {
 			return err
@@ -203,6 +214,7 @@ func (m *Manager) EndRuntimeMaintenance(ctx context.Context, token string) error
 		if count != 1 {
 			return ErrPolicy
 		}
-		return nil
+		_, err = tx.Exec("INSERT INTO settings(key,value) VALUES('runtime.maintenance-release',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", hash)
+		return err
 	})
 }

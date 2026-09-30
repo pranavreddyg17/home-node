@@ -58,8 +58,8 @@ func TestRuntimeMaintenancePreservesBarrierAcrossManagerReconstruction(t *testin
 	if _, err = restarted.Apply(ctx, next); err != nil {
 		t.Fatal("admission did not reopen", err)
 	}
-	if err = restarted.EndRuntimeMaintenance(ctx, token); !errors.Is(err, ErrPolicy) {
-		t.Fatal("released token accepted", err)
+	if err = restarted.EndRuntimeMaintenance(ctx, token); err != nil {
+		t.Fatal("release receipt retry refused", err)
 	}
 }
 
