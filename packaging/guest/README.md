@@ -308,3 +308,12 @@ Repository signature checking remains enabled. Availability in a signed archive
 is not proof of timely vulnerability fixes or maintenance coverage for every
 package: the release qualification still needs a reviewed support/patch policy
 and pinned package/license inventory for both system and initramfs closures.
+
+The image runner additionally requires `mtools`: actual ESP population failed
+without its `mcopy` binary, after successful ext4/initramfs generation. This is a
+host build dependency, not a new guest service. The template has no default
+instance; otherwise distribution `preset-all` enabled the files profile inside
+the video image. The profile conflict gate refused that image before publication.
+Only root finalization enables the selected instance. The recipe uses mkosi's
+conventional `mkosi.finalize` and `mkosi.repart` discovery rather than listing
+them a second time, avoiding duplicated finalize invocations and definitions.

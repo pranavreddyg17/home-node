@@ -43,4 +43,3 @@ TasksMax=128
 
 [Install]
 WantedBy=multi-user.target
-DefaultInstance=files
