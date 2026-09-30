@@ -96,8 +96,8 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/v1/session", s.require("", false, http.HandlerFunc(s.session)))
 	s.mux.Handle("POST /api/v1/logout", s.require("", false, http.HandlerFunc(s.logout)))
 	s.mux.Handle("GET /api/v1/devices", s.require("admin", false, http.HandlerFunc(s.devices)))
-	s.mux.Handle("POST /api/v1/devices/pair", s.require("admin", true, http.HandlerFunc(s.pair)))
-	s.mux.Handle("POST /api/v1/devices/{id}/revoke", s.require("admin", true, http.HandlerFunc(s.revoke)))
+	s.mux.Handle("POST /api/v1/devices/pair", s.require("admin", false, http.HandlerFunc(s.pair)))
+	s.mux.Handle("POST /api/v1/devices/{id}/revoke", s.require("admin", false, http.HandlerFunc(s.revoke)))
 	s.mux.Handle("GET /api/v1/host/report", s.require("", false, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.config.Report()) })))
 	s.mux.Handle("GET /api/v1/events", s.require("", false, http.HandlerFunc(s.events)))
 	s.mux.Handle("GET /api/v1/diagnostics", s.require("admin", false, http.HandlerFunc(s.diagnostics)))
@@ -318,14 +318,15 @@ func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, devices)
 }
 func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Name         string   `json:"name"`
-		Capabilities []string `json:"capabilities"`
-	}
-	if !decode(w, r, &input) {
+	body, ok := approvalBody(w, r)
+	if !ok {
 		return
 	}
-	code, err := s.Identity.Pair(r.Context(), actor(r), input.Name, input.Capabilities)
+	if r.Header.Get("X-Action-Approval") == "" {
+		fail(w, 403, "APPROVAL_REQUIRED", "Approve this device invitation with your passkey.")
+		return
+	}
+	code, err := s.Identity.PairApproved(r.Context(), actor(r), r.Header.Get("X-Action-Approval"), body, s.config.PolicyGeneration)
 	if err != nil {
 		s.authError(w, err)
 		return
@@ -333,7 +334,15 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, map[string]any{"code": code, "expiresIn": 300})
 }
 func (s *Server) revoke(w http.ResponseWriter, r *http.Request) {
-	if err := s.Identity.Revoke(r.Context(), actor(r), r.PathValue("id")); err != nil {
+	body, ok := approvalBody(w, r)
+	if !ok {
+		return
+	}
+	if r.Header.Get("X-Action-Approval") == "" {
+		fail(w, 403, "APPROVAL_REQUIRED", "Approve revoking this device with your passkey.")
+		return
+	}
+	if err := s.Identity.RevokeApproved(r.Context(), actor(r), r.Header.Get("X-Action-Approval"), r.PathValue("id"), body, s.config.PolicyGeneration); err != nil {
 		s.authError(w, err)
 		return
 	}

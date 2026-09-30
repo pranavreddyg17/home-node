@@ -10,6 +10,20 @@ async function signIn() {
   return api<Session>('/session')
 }
 
+async function approvedDeviceAction<T>(path: string, body: unknown): Promise<T> {
+  const exactBody = JSON.stringify(body)
+  const send = async <R,>(target: string, bytes: string, headers: Record<string, string> = {}): Promise<R> => {
+    const response = await fetch(`/api/v1${target}`, { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', ...headers }, body: bytes })
+    const value = await response.json()
+    if (!response.ok) throw new APIError(response.status, value.error?.code ?? 'REQUEST_FAILED', value.error?.message ?? 'The action failed.')
+    return value as R
+  }
+  const begin = await send<{ options: { publicKey: PublicKeyCredentialRequestOptionsJSON }; challengeToken: string }>(`${path}/approval`, exactBody)
+  const assertion = await startAuthentication({ optionsJSON: begin.options.publicKey })
+  const finish = await send<{ approvalToken: string }>('/auth/approval/finish', JSON.stringify(assertion), { 'X-Approval-Challenge': begin.challengeToken })
+  return send<T>(path, exactBody, { 'X-Action-Approval': finish.approvalToken })
+}
+
 export function IdentityBoundary({ children }: { children: (session: Session, logout: () => Promise<void>, verify: () => Promise<void>) => ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [ready, setReady] = useState(false)
@@ -74,8 +88,8 @@ export function Devices({ session, verify }: { session: Session; verify: () => P
   useEffect(() => { void refresh().catch(e => setError(message(e))) }, [])
   const run = async (work: () => Promise<void>) => { setBusy(true); setError(''); try { await work(); await refresh() } catch (e) { setError(message(e)) } finally { setBusy(false) } }
   if (!session.device.capabilities.includes('admin')) return <section className="panel"><h2>Device administration</h2><p>This device does not have administrative access.</p></section>
-  return <div className="stack">{error && <p role="alert" className="form-error">{error}</p>}<section className="panel"><div className="section-heading"><h2>Your devices</h2><button disabled={busy} onClick={() => void run(verify)}>Verify passkey again</button></div><p>Passkeys may sync through your password manager. A listed device represents its registered passkey and sessions, rather than verified physical hardware.</p>{devices.map(d => <div className="device-row" key={d.id}><div><strong>{d.name} {d.id === session.device.id && '(this session)'}</strong><p>{d.capabilities.join(' · ')} · {d.revokedAt ? 'Revoked' : 'Authorized'}</p></div>{!d.revokedAt && <button className="danger" disabled={busy} onClick={() => { if (window.confirm(`Revoke ${d.name}? Its passkey and sessions will lose access.`)) void run(async () => { await api(`/devices/${d.id}/revoke`, {}) }) }}>Revoke</button>}</div>)}</section>
-    <section className="panel"><h2>Pair another device</h2><form onSubmit={e => { e.preventDefault(); void run(async () => { const result = await api<{ code: string }>('/devices/pair', { name, capabilities: caps }); setInvitation(result.code) }) }}><label>Device name<input required maxLength={80} value={name} onChange={e => setName(e.target.value)} /></label><fieldset><legend>Access granted</legend>{['files', 'jobs', 'ai', 'admin'].map(cap => <label className="check-field" key={cap}><input type="checkbox" checked={caps.includes(cap)} onChange={e => setCaps(e.target.checked ? [...caps, cap] : caps.filter(c => c !== cap))} />{cap === 'admin' ? 'Administration (pair and revoke devices)' : cap.toUpperCase()}</label>)}</fieldset><button className="primary" disabled={busy || !caps.length}>Create invitation</button></form>{invitation && <div className="invitation"><p>Open this server on your other device, choose “Pair a device”, and enter this code within five minutes.</p><code>{invitation}</code><button onClick={() => setInvitation('')}>Hide code</button></div>}</section>
+  return <div className="stack">{error && <p role="alert" className="form-error">{error}</p>}<section className="panel"><div className="section-heading"><h2>Your devices</h2><button disabled={busy} onClick={() => void run(verify)}>Verify passkey again</button></div><p>Passkeys may sync through your password manager. A listed device represents its registered passkey and sessions, rather than verified physical hardware.</p>{devices.map(d => <div className="device-row" key={d.id}><div><strong>{d.name} {d.id === session.device.id && '(this session)'}</strong><p>{d.capabilities.join(' · ')} · {d.revokedAt ? 'Revoked' : 'Authorized'}</p></div>{!d.revokedAt && <button className="danger" disabled={busy} onClick={() => { if (window.confirm(`Revoke ${d.name}? Its passkey and sessions will lose access.`)) void run(async () => { await approvedDeviceAction(`/devices/${d.id}/revoke`, {}) }) }}>Revoke</button>}</div>)}</section>
+    <section className="panel"><h2>Pair another device</h2><form onSubmit={e => { e.preventDefault(); void run(async () => { const result = await approvedDeviceAction<{ code: string }>('/devices/pair', { name, capabilities: caps }); setInvitation(result.code) }) }}><label>Device name<input required maxLength={80} value={name} onChange={e => setName(e.target.value)} /></label><fieldset><legend>Access granted</legend>{['files', 'jobs', 'ai', 'admin'].map(cap => <label className="check-field" key={cap}><input type="checkbox" checked={caps.includes(cap)} onChange={e => setCaps(e.target.checked ? [...caps, cap] : caps.filter(c => c !== cap))} />{cap === 'admin' ? 'Administration (pair and revoke devices)' : cap.toUpperCase()}</label>)}</fieldset><button className="primary" disabled={busy || !caps.length}>Create invitation</button></form>{invitation && <div className="invitation"><p>Open this server on your other device, choose “Pair a device”, and enter this code within five minutes.</p><code>{invitation}</code><button onClick={() => setInvitation('')}>Hide code</button></div>}</section>
   </div>
 }
 

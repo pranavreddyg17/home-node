@@ -50,3 +50,15 @@ func TestApprovalHTTPAuthenticationAndBoundedBegin(t *testing.T) {
 		t.Fatal("missing challenge issued grant", w.Code)
 	}
 }
+
+func TestDeviceMutationsRequireActionGrantEvenWithFreshSession(t *testing.T) {
+	s := testServer(t)
+	token := seedSession(t, s, `["admin"]`)
+	origin := "http://localhost:8787"
+	for _, path := range []string{"/api/v1/devices/pair", "/api/v1/devices/device/revoke"} {
+		w := request(s, "POST", origin+path, `{}`, token, origin)
+		if w.Code != 403 || !strings.Contains(w.Body.String(), "APPROVAL_REQUIRED") {
+			t.Fatal("fresh session bypassed approval", path, w.Code, w.Body.String())
+		}
+	}
+}
