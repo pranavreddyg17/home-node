@@ -55,5 +55,33 @@ class CompilerConfigurationTests(unittest.TestCase):
                 runtime.check_cache(path)
 
 
+class RuntimeDependencyTests(unittest.TestCase):
+    def dynamic(self):
+        return "\n".join(" 0x0000000000000001 (NEEDED) Shared library: [" + name + "]"
+                         for name in sorted(runtime.SYSTEM_LIBRARIES))
+
+    def program(self):
+        return "      [Requesting program interpreter: " + runtime.INTERPRETER + "]\n"
+
+    def test_system_runtime_inventory(self):
+        self.assertEqual(runtime.dependencies(self.dynamic(), self.program()), sorted(runtime.SYSTEM_LIBRARIES))
+
+    def test_foreign_loader_paths_libraries_or_ambiguous_reports_refused(self):
+        cases = [
+            (self.dynamic().replace("libc.so.6", "libforeign.so"), self.program()),
+            (self.dynamic() + "\n 0x1 (NEEDED) Shared library: [libc.so.6]", self.program()),
+            (self.dynamic() + "\n 0x1 (NEEDED) malformed", self.program()),
+            (self.dynamic(), self.program().replace(runtime.INTERPRETER, "/tmp/loader")),
+            (self.dynamic(), self.program() * 2),
+            (self.dynamic(), ""),
+            ("x" * 65537, self.program()),
+        ]
+        cases.extend((self.dynamic() + "\n 0x1 (" + tag + ") [/tmp/runtime]", self.program())
+                     for tag in ("RPATH", "RUNPATH", "AUDIT", "DEPAUDIT", "FILTER", "AUXILIARY"))
+        for dynamic, program in cases:
+            with self.subTest(dynamic=dynamic[:50], program=program[:50]), self.assertRaises(ValueError):
+                runtime.dependencies(dynamic, program)
+
+
 if __name__ == "__main__":
     unittest.main()

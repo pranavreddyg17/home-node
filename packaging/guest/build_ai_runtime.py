@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import stat
 import subprocess
@@ -22,7 +23,29 @@ OPTIONS = {
     "GGML_METAL": "OFF", "GGML_RPC": "OFF", "GGML_BLAS": "OFF",
     "GGML_SSE42": "OFF", "GGML_AVX": "OFF", "GGML_AVX2": "OFF", "GGML_BMI2": "OFF",
     "GGML_FMA": "OFF", "GGML_F16C": "OFF",
+    "GGML_OPENMP": "ON", "GGML_OPENMP_FETCH": "OFF", "GGML_CPU_KLEIDIAI": "OFF",
 }
+SYSTEM_LIBRARIES = {"libstdc++.so.6", "libm.so.6", "libgomp.so.1", "libgcc_s.so.1", "libc.so.6"}
+INTERPRETER = "/lib64/ld-linux-x86-64.so.2"
+
+
+def dependencies(dynamic, program):
+    if len(dynamic) > 65536 or len(program) > 65536:
+        raise ValueError("ELF dependency report exceeds bound")
+    needed = set()
+    for line in dynamic.splitlines():
+        if any("(" + tag + ")" in line for tag in ("RPATH", "RUNPATH", "AUDIT", "DEPAUDIT", "FILTER", "AUXILIARY")):
+            raise ValueError("unexpected ELF loader policy")
+        if "(NEEDED)" not in line:
+            continue
+        match = re.fullmatch(r"\s*0x[0-9a-fA-F]+\s+\(NEEDED\)\s+Shared library: \[([^\]]+)\]\s*", line)
+        if not match or match[1] not in SYSTEM_LIBRARIES or match[1] in needed:
+            raise ValueError("unexpected ELF dependency")
+        needed.add(match[1])
+    interpreters = re.findall(r"\[Requesting program interpreter: ([^\]]+)\]", program)
+    if interpreters != [INTERPRETER] or "libc.so.6" not in needed or "libstdc++.so.6" not in needed:
+        raise ValueError("unexpected ELF runtime contract")
+    return sorted(needed)
 
 
 def private_directory(path):
@@ -93,6 +116,11 @@ def build(source, output):
             raise ValueError("expected Linux x86-64 inference binary")
         file.seek(0)
         checksum = hashlib.file_digest(file, "sha256").hexdigest()
+    reports = []
+    for option in ("--dynamic", "--program-headers"):
+        reports.append(subprocess.run(["/usr/bin/readelf", "--wide", option, str(binary)],
+                                      env=environment, capture_output=True, text=True, check=True, timeout=15).stdout)
+    libraries = dependencies(*reports)
     # This executes only a binary compiled from the admitted upstream revision,
     # in the disposable builder. No guest/owner-supplied executable is run.
     subprocess.run([str(binary), "--version"], env=environment, check=True, timeout=15)
@@ -103,6 +131,7 @@ def build(source, output):
     shutil.copyfile(source / "LICENSE", artifacts / "llama.cpp-LICENSE")
     record = {"schema": 1, "sourceRevision": REVISION, "cmakeOptions": OPTIONS,
               "cmakeCacheSHA256": cache_digest,
+              "dynamicLibraries": libraries, "interpreter": INTERPRETER,
               "binarySHA256": checksum, "binaryBytes": info.st_size,
               "releaseQualified": False, "modelIncluded": False}
     with (artifacts / "development-runtime.json").open("x") as file:

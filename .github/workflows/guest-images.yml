@@ -16,7 +16,7 @@ permissions:
   contents: read
 concurrency:
   group: guest-images-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-24.04
