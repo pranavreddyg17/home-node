@@ -166,9 +166,11 @@ func (a *Agent) Handle(r guestproto.Request) guestproto.Response {
 				err = e
 			}
 		}
-		delete(a.tasks, r.ObjectID)
 		if err == nil {
 			err = a.sync()
+		}
+		if err == nil {
+			delete(a.tasks, r.ObjectID)
 		}
 	case "run", "generate":
 		err = a.start(r)

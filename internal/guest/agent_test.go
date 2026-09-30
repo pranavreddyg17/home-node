@@ -44,6 +44,47 @@ func TestDeleteRemovesInterruptedJournalAndPreservesOtherObjects(t *testing.T) {
 	}
 }
 
+func TestFailedDeletionRetainsTaskUntilRetrySucceeds(t *testing.T) {
+	dir := privateDataDir(t)
+	a, err := New(dir, "ai", 1<<30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	id := state.Random()
+	a.tasks[id] = &task{State: "cancelled"}
+	// A nonempty directory injects a deterministic unlink failure even as root.
+	// It is a fault fixture, not an admitted production journal.
+	blocked := filepath.Join(dir, id+".task.tmp")
+	if err := os.Mkdir(blocked, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(blocked, "blocker"), []byte("fault"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	call := func(op string) guestproto.Response {
+		return a.Handle(guestproto.Request{Version: 1, RequestID: state.Random(), Operation: op, ObjectID: id})
+	}
+	if r := call("delete"); r.Error != "OPERATION_FAILED" {
+		t.Fatal("failed cleanup acknowledged", r)
+	}
+	if r := call("result"); r.Error != "" || r.State != "cancelled" {
+		t.Fatal("failed deletion discarded task", r)
+	}
+	if err := os.Remove(filepath.Join(blocked, "blocker")); err != nil {
+		t.Fatal(err)
+	}
+	if r := call("delete"); r.Error != "" {
+		t.Fatal("deletion retry failed", r)
+	}
+	if r := call("result"); r.Error != "NOT_FOUND" {
+		t.Fatal("deleted task remains", r)
+	}
+	if _, err := os.Stat(blocked); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("retry retained failed suffix", err)
+	}
+}
+
 func TestResumableIntegrityWorkflow(t *testing.T) {
 	dir := filepath.Join(privateDataDir(t), "objects")
 	a, err := New(dir, "files", 1<<30)
