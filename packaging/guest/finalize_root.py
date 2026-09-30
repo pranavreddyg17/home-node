@@ -33,12 +33,8 @@ def parents(root, relative, create=False):
     return True
 
 
-def admit_payload(root, source):
-    record = overlay.verify(source)
-    if not root.is_absolute() or root.resolve() == Path("/") or root != Path(os.path.abspath(root)) or root == source:
-        raise ValueError("expected separate assembly root")
-    directory(root)
-    for item in record["files"]:
+def admit_files(root, files):
+    for item in files:
         if not parents(root, item["path"]):
             raise ValueError("missing payload parent")
         fd = os.open(root / item["path"], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -56,6 +52,14 @@ def admit_payload(root, source):
                 digest.update(chunk)
             if file.read(1) or digest.hexdigest() != item["sha256"]:
                 raise ValueError("merged payload digest mismatch")
+
+
+def admit_payload(root, source):
+    record = overlay.verify(source)
+    if not root.is_absolute() or root.resolve() == Path("/") or root != Path(os.path.abspath(root)) or root == source:
+        raise ValueError("expected separate assembly root")
+    directory(root)
+    admit_files(root, record["files"])
     for name in overlay.MOUNTPOINTS:
         info = (root / name).lstat()
         allowed = (0o755, 0o1777) if name == "tmp" else (0o755,)
@@ -65,15 +69,27 @@ def admit_payload(root, source):
     return record
 
 
-def finalize(root, source):
+def finalize(root, source, ai_source=None):
     # Inputs must be exclusively controlled assembly staging throughout this call.
     record = admit_payload(root, source)
     profile = record["profile"]
+    if profile == "ai":
+        if ai_source is None:
+            raise ValueError("AI model payload is required")
+        import stage_ai_payload
+        ai_record = stage_ai_payload.verify(ai_source)
+        admit_files(root, ai_record["files"])
+        receipt = (ai_source / "ai-payload.json").read_bytes()
+        admit_files(root, [{"path": "ai-payload.json", "bytes": len(receipt), "sha256": hashlib.sha256(receipt).hexdigest(), "mode": 0o644}])
+    elif ai_source is not None:
+        raise ValueError("AI payload supplied for another profile")
     links = {
         "etc/systemd/system/local-fs.target.wants/tmp.mount": "/usr/lib/systemd/system/tmp.mount",
         "etc/systemd/system/local-fs.target.wants/var.mount": "/usr/lib/systemd/system/var.mount",
         f"etc/systemd/system/multi-user.target.wants/homenode-guest@{profile}.service": "/usr/lib/systemd/system/homenode-guest@.service",
     }
+    if profile == "ai":
+        links["etc/systemd/system/multi-user.target.wants/homenode-model.service"] = "/usr/lib/systemd/system/homenode-model.service"
     # Never replace an existing enablement or silently combine workload profiles.
     for prefix in ("etc", "usr/lib"):
         for other in overlay.PROFILES:
@@ -106,7 +122,7 @@ if __name__ == "__main__":
     try:
         if sys.platform != "linux" or os.geteuid() != 0 or os.getenv("HOMENODE_GUEST_IMAGE_BUILD") != "1":
             raise ValueError("requires explicit Linux image assembly")
-        finalize(Path(sys.argv[1]), Path(sys.argv[2]))
+        finalize(Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]) if len(sys.argv) == 4 else None)
     except (OSError, ValueError, IndexError, KeyError, TypeError, UnicodeError) as error:
         # Policy errors contain fixed messages; OS paths, process arguments and
         # account contents are deliberately absent from this summary.

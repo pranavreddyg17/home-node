@@ -14,11 +14,11 @@ import import_overlay
 MKOSI_REVISION = "52448a27f6f869c108352ed82fcfb9be633703fb"
 
 
-def build(archive, digest, profile, revision, output, tool):
+def build(archive, digest, profile, revision, output, tool, ai_payload=None):
     if sys.platform != "linux" or os.geteuid() != 0 or os.getenv("HOMENODE_GUEST_IMAGE_BUILD") != "1":
         raise ValueError("requires explicit disposable Linux image builder")
-    if profile not in ("files", "video"):
-        raise ValueError("AI runtime/model assembly is not implemented")
+    if profile not in ("files", "video", "ai") or (profile == "ai") != (ai_payload is not None):
+        raise ValueError("expected matching profile and AI payload")
     parent = output.parent.lstat()
     if not output.is_absolute() or output != Path(os.path.abspath(output)) or not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or stat.S_IMODE(parent.st_mode) & 0o077:
         raise ValueError("expected private root-owned output parent")
@@ -39,6 +39,21 @@ def build(archive, digest, profile, revision, output, tool):
     for name in ("finalize_root.py", "identity.py", "overlay.py"):
         shutil.copyfile(source / name, guest / name)
         (guest / name).chmod(0o644)
+    if profile == "ai":
+        import stage_ai_payload
+        stage_ai_payload.verify(ai_payload)
+        shutil.copytree(ai_payload, output / "recipe/ai-payload")
+        stage_ai_payload.verify(output / "recipe/ai-payload")
+        for name in ("stage_ai_payload.py", "build_ai_runtime.py", "download_ai_model.py", "homenode-model.service", "homenode-ai-model.conf"):
+            shutil.copyfile(source / name, guest / name)
+            (guest / name).chmod(0o644)
+        configuration = output / "recipe/mkosi.conf"
+        text = configuration.read_text()
+        if text.count("ExtraTrees=overlay\n") != 1 or text.count("BuildSources=guest:guest,overlay:overlay\n") != 1:
+            raise ValueError("unexpected AI assembly recipe")
+        text = text.replace("ExtraTrees=overlay\n", "ExtraTrees=overlay,ai-payload\n")
+        text = text.replace("BuildSources=guest:guest,overlay:overlay\n", "BuildSources=guest:guest,overlay:overlay,ai-payload:ai-payload\n")
+        configuration.write_text(text)
     # Move the new owned overlay into the recipe, without touching base/host data.
     os.rename(output / "overlay", output / "recipe/overlay")
     image_output = output / "artifacts"
@@ -47,6 +62,8 @@ def build(archive, digest, profile, revision, output, tool):
                  "--output-directory=" + str(image_output), "--output=homenode-development-" + profile]
     if profile == "video":
         arguments.append("--package=ffmpeg")
+    if profile == "ai":
+        arguments.append("--package=libstdc++6,libgomp1,libgcc-s1,libc6")
     subprocess.run(arguments + ["summary"], check=True, timeout=30)
     subprocess.run(arguments + ["build"], check=True, timeout=1200)
     image = image_output / ("homenode-development-" + profile + ".raw")
@@ -72,7 +89,7 @@ def build(archive, digest, profile, revision, output, tool):
 
 if __name__ == "__main__":
     try:
-        result = build(Path(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4], Path(sys.argv[5]), Path(sys.argv[6]))
+        result = build(Path(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4], Path(sys.argv[5]), Path(sys.argv[6]), Path(sys.argv[7]) if len(sys.argv) == 8 else None)
         print(json.dumps(result))
     except (OSError, ValueError, IndexError, subprocess.SubprocessError) as error:
         # Policy errors contain fixed messages; OS paths, process arguments and

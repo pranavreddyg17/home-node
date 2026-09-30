@@ -22,8 +22,9 @@ against the booted guest kernel/device and prove access before release.
 
 The service has no capabilities and requires writable data plus the fixed virtio
 port. Files/video images must provide their reviewed runtime dependencies. The
-AI image also needs a separate reviewed, licensed, hash-pinned CPU model server
-bound to loopback; that model unit/artifact pipeline remains pending. The host
+AI has separate development model-service sources and hash-pinned runtime/model
+assembly inputs. Full release license/profile review and actual guest execution
+remain pending. The host
 VM's absent NIC is the primary network boundary. RestrictAddressFamilies inside
 the guest is not an egress-policy certificate.
 

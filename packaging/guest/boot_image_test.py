@@ -106,6 +106,24 @@ class VideoCancellationTests(unittest.TestCase):
                 boot_image.cancel_video(None, "input")
 
 
+class AIInferenceTests(unittest.TestCase):
+    def test_actual_adapter_sequence_requires_terminal_text_and_delete(self):
+        with patch.object(boot_image, "request", side_effect=[{"state": "running"}, {"state": "running"},
+                {"state": "succeeded", "text": "héllo"}, {}]) as calls, patch.object(boot_image.time, "sleep"):
+            self.assertEqual(boot_image.ai_roundtrip(None), {"generationSucceeded": True, "textBytes": 6, "taskDeletionAcknowledged": True})
+        self.assertEqual([call.args[1] for call in calls.call_args_list], ["generate", "result", "result", "delete"])
+
+    def test_failed_empty_oversized_or_timed_out_inference_refused(self):
+        cases = [[{"state": "failed"}], [{"state": "running"}, {"state": "failed"}],
+                 [{"state": "running"}, {"state": "succeeded", "text": ""}],
+                 [{"state": "running"}, {"state": "succeeded", "text": "x" * 32769}],
+                 [{"state": "running"}, {"state": "running"}]]
+        for responses in cases:
+            with self.subTest(responses=responses[:1]), patch.object(boot_image, "request", side_effect=responses), \
+                    patch.object(boot_image.time, "monotonic", side_effect=[0, 121]), self.assertRaises(ValueError):
+                boot_image.ai_roundtrip(None)
+
+
 class ObjectTransferTests(unittest.TestCase):
     def transfer(self, fault=None):
         stored = bytearray()

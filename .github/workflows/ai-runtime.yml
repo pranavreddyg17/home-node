@@ -10,6 +10,14 @@ on:
       - 'packaging/guest/stage_ai_payload*.py'
       - 'packaging/guest/homenode-model.service'
       - 'packaging/guest/homenode-ai-model.conf'
+      - 'packaging/guest/build_image.py'
+      - 'packaging/guest/finalize_root*.py'
+      - 'packaging/guest/image/**'
+      - 'packaging/guest/boot_image*.py'
+      - 'internal/guest/**'
+      - 'internal/guestmount/**'
+      - 'internal/guestinit/**'
+      - 'cmd/homenode-guest*/**'
       - '.github/workflows/ai-runtime.yml'
   workflow_dispatch:
 permissions:
@@ -20,9 +28,13 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.26.8'
+          cache: true
       - name: Verify compiler configuration admission
         run: |
           python3 -B -W error::ResourceWarning -m unittest discover -s packaging/guest -p build_ai_runtime_test.py
@@ -30,7 +42,7 @@ jobs:
           python3 -B -W error::ResourceWarning -m unittest discover -s packaging/guest -p ai_runtime_fixture_test.py
           python3 -B -W error::ResourceWarning -m unittest discover -s packaging/guest -p stage_ai_payload_test.py
       - name: Install disposable compiler dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ make binutils util-linux iproute2
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ make binutils util-linux iproute2 systemd-container dosfstools mtools grub-pc-bin e2fsprogs python3-pefile squashfs-tools qemu-system-x86
       - name: Fetch pinned inference source
         run: |
           git init "$RUNNER_TEMP/llama-source"
@@ -95,3 +107,43 @@ jobs:
           path: ${{ runner.temp }}/ai-assembly/payload/
           retention-days: 7
           if-no-files-found: error
+      - name: Stage development AI adapter overlay
+        run: |
+          sh packaging/guest/stage.sh ai "$RUNNER_TEMP/overlay-ai"
+          python3 -B packaging/guest/overlay.py package "$RUNNER_TEMP/overlay-ai" "$RUNNER_TEMP/overlay-ai.tar" "$(git show -s --format=%ct HEAD)"
+      - name: Fetch pinned image builder source
+        run: |
+          sudo git init "$RUNNER_TEMP/mkosi-source"
+          sudo git -C "$RUNNER_TEMP/mkosi-source" remote add origin https://github.com/systemd/mkosi.git
+          sudo git -C "$RUNNER_TEMP/mkosi-source" fetch --depth=1 origin 52448a27f6f869c108352ed82fcfb9be633703fb
+          sudo git -C "$RUNNER_TEMP/mkosi-source" checkout --detach FETCH_HEAD
+          sudo install -d -m 0700 "$RUNNER_TEMP/ai-image"
+      - name: Build unsigned development AI system disk
+        run: |
+          sudo env HOMENODE_GUEST_IMAGE_BUILD=1 python3 -B -u packaging/guest/build_image.py \
+            "$RUNNER_TEMP/overlay-ai.tar" "$(sha256sum "$RUNNER_TEMP/overlay-ai.tar" | cut -d ' ' -f1)" \
+            ai "$(git rev-parse HEAD)" "$RUNNER_TEMP/ai-image/build" "$RUNNER_TEMP/mkosi-source" \
+            "$RUNNER_TEMP/ai-assembly/payload"
+          sudo chmod 0755 "$RUNNER_TEMP/ai-image" "$RUNNER_TEMP/ai-image/build" "$RUNNER_TEMP/ai-image/build/artifacts"
+          sudo chmod 0644 "$RUNNER_TEMP/ai-image/build/artifacts/"*
+      - name: Retain unsigned AI disk and package inventory
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: homenode-development-guest-ai
+          path: ${{ runner.temp }}/ai-image/build/artifacts/
+          retention-days: 7
+          if-no-files-found: error
+      - name: Boot AI guest and exercise actual adapter inference
+        env:
+          HOMENODE_GUEST_BOOT_INTEGRATION: '1'
+        run: python3 -B -u packaging/guest/boot_image.py "$RUNNER_TEMP/ai-image/build/artifacts/homenode-development-ai.raw" "$RUNNER_TEMP/ai-image/build/artifacts/development-build.json" "$RUNNER_TEMP/guest-boot-ai"
+      - name: Retain bounded AI guest boot diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: homenode-development-boot-ai
+          path: |
+            ${{ runner.temp }}/guest-boot-ai/boot-console.log
+            ${{ runner.temp }}/guest-boot-ai/boot-evidence.json
+          retention-days: 7
+          if-no-files-found: warn

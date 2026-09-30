@@ -1,13 +1,16 @@
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 sys.dont_write_bytecode = True
 import finalize_root
 import overlay
+import stage_ai_payload
 from identity_test import PASSWD, GROUP, SHADOW, NSS
 
 
@@ -41,8 +44,55 @@ def fixture(base, profile):
 
 
 class FinalizeTests(unittest.TestCase):
+    def test_ai_adapter_alone_is_not_enabled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, source = fixture(Path(directory), "ai")
+            with self.assertRaisesRegex(ValueError, "AI model payload is required"):
+                finalize_root.finalize(root, source)
+            self.assertFalse((root / "etc/systemd").exists())
+
+    def test_merged_ai_payload_enablement_replay_and_tamper(self):
+        content = b"test-only model and runtime bytes"
+        digest = hashlib.sha256(content).hexdigest()
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(stage_ai_payload, "BINARY_SIZE", len(content)), patch.object(stage_ai_payload, "BINARY_SHA256", digest), \
+                patch.object(stage_ai_payload.model, "SIZE", len(content)), patch.object(stage_ai_payload.model, "SHA256", digest):
+            root, source = fixture(Path(directory), "ai")
+            ai = Path(directory) / "ai-payload"
+            ai.mkdir(mode=0o755)
+            files = []
+            for name, incoming, size, checksum, mode in stage_ai_payload.inputs(None, None):
+                path = ai / name
+                path.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+                path.write_bytes(incoming.read_bytes() if incoming is not None else content)
+                path.chmod(mode)
+                files.append({"path": name, "bytes": size, "sha256": checksum, "mode": mode})
+            record = {"schema": 1, "runtimeRevision": stage_ai_payload.runtime.REVISION,
+                      "modelRevision": stage_ai_payload.model.REVISION, "files": files,
+                      "developmentOnly": True, "releaseQualified": False}
+            (ai / "ai-payload.json").write_text(json.dumps(record))
+            (ai / "ai-payload.json").chmod(0o644)
+            shutil.copytree(ai, root, dirs_exist_ok=True)
+            for _ in range(2):
+                finalize_root.finalize(root, source, ai)
+            wants = root / "etc/systemd/system/multi-user.target.wants"
+            self.assertEqual({p.name for p in wants.iterdir()}, {"homenode-model.service", "homenode-guest@ai.service"})
+            self.assertEqual(os.readlink(wants / "homenode-model.service"), "/usr/lib/systemd/system/homenode-model.service")
+            weights = root / "usr/lib/homenode/ai/model.gguf"
+            weights.write_bytes(b"x" * len(content))
+            with self.assertRaisesRegex(ValueError, "merged payload digest mismatch"):
+                finalize_root.finalize(root, source, ai)
+            self.assertEqual(weights.read_bytes(), b"x" * len(content))
+
+    def test_other_profile_refuses_model_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, source = fixture(Path(directory), "files")
+            with self.assertRaisesRegex(ValueError, "another profile"):
+                finalize_root.finalize(root, source, Path(directory) / "unexpected")
+            self.assertFalse((root / "etc/systemd").exists())
+
     def test_profile_enablement_and_replay(self):
-        for profile in overlay.PROFILES:
+        for profile in ("files", "video"):
             with self.subTest(profile=profile), tempfile.TemporaryDirectory() as directory:
                 root, source = fixture(Path(directory), profile)
                 finalize_root.finalize(root, source)

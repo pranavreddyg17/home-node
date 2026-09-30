@@ -2,4 +2,8 @@
 set -eu
 # mkosi supplies /buildroot and mounts only the declared assembly sources.
 [ "$BUILDROOT" = /buildroot ] || { echo 'Unexpected assembly root' >&2; exit 1; }
-HOMENODE_GUEST_IMAGE_BUILD=1 python3 "$SRCDIR/guest/finalize_root.py" "$BUILDROOT" "$SRCDIR/overlay"
+if [ -d "$SRCDIR/ai-payload" ]; then
+    HOMENODE_GUEST_IMAGE_BUILD=1 python3 "$SRCDIR/guest/finalize_root.py" "$BUILDROOT" "$SRCDIR/overlay" "$SRCDIR/ai-payload"
+else
+    HOMENODE_GUEST_IMAGE_BUILD=1 python3 "$SRCDIR/guest/finalize_root.py" "$BUILDROOT" "$SRCDIR/overlay"
+fi

@@ -105,6 +105,25 @@ def cancel_video(channel, input_id):
     return {"cancelled": True, "taskDeletionAcknowledged": True}
 
 
+def ai_roundtrip(channel):
+    generation = uuid.uuid4().hex
+    if request(channel, "generate", objectId=generation, prompt="Say hello briefly.").get("state") != "running":
+        raise ValueError("guest inference was not started")
+    deadline = time.monotonic() + 120
+    while True:
+        result = request(channel, "result", objectId=generation)
+        if result.get("state") == "succeeded":
+            break
+        if result.get("state") != "running" or time.monotonic() >= deadline:
+            raise ValueError("guest inference did not succeed")
+        time.sleep(0.2)
+    text = result.get("text", "")
+    if not 0 < len(text.encode("utf-8")) <= 32768:
+        raise ValueError("guest inference text exceeds bound")
+    request(channel, "delete", objectId=generation)
+    return {"generationSucceeded": True, "textBytes": len(text.encode("utf-8")), "taskDeletionAcknowledged": True}
+
+
 def video_roundtrip(channel, output):
     # Source material is generated locally; no owner files are used. All probing
     # happens only in this disposable unprivileged CI fixture, never the server.
@@ -193,7 +212,7 @@ def boot(image, manifest, output):
         if len(metadata) != metadata_info.st_size:
             raise ValueError("development manifest changed")
     record = json.loads(metadata, object_pairs_hook=overlay.unique_object)
-    if not isinstance(record, dict) or record.get("profile") not in ("files", "video") or record.get("releaseQualified") is not False or record.get("bootValidated") is not False:
+    if not isinstance(record, dict) or record.get("profile") not in ("files", "video", "ai") or record.get("releaseQualified") is not False or record.get("bootValidated") is not False:
         raise ValueError("expected unqualified development input")
     parent = output.parent.lstat()
     if not output.is_absolute() or not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.geteuid() or stat.S_IMODE(parent.st_mode) & 0o022:
@@ -228,7 +247,7 @@ def boot_vm(system_fd, data_fd, output, record):
     channel_path = output / "adapter.sock"
     if len(os.fsencode(channel_path)) > 100 or "," in str(channel_path) or "\n" in str(channel_path):
         raise ValueError("fixture socket path exceeds bound")
-    command = ["/usr/bin/qemu-system-x86_64", "-machine", "q35", "-accel", "tcg", "-m", "512", "-smp", "1",
+    command = ["/usr/bin/qemu-system-x86_64", "-machine", "q35", "-accel", "tcg", "-m", "1536" if record["profile"] == "ai" else "512", "-smp", "2" if record["profile"] == "ai" else "1",
                "-nodefaults", "-nic", "none", "-display", "none", "-monitor", "none", "-serial", "stdio", "-no-reboot",
                "-drive", f"file=/proc/self/fd/{system_fd},if=none,id=system,format=raw,readonly=on",
                "-device", "virtio-blk-pci,drive=system,serial=homenode-system",
@@ -259,14 +278,20 @@ def boot_vm(system_fd, data_fd, output, record):
                 except (FileNotFoundError, ConnectionRefusedError):
                     time.sleep(0.1)
             channel.settimeout(max(1, deadline - time.monotonic()))
-            if request(channel, "health").get("state") != "ready":
-                raise ValueError("guest did not report ready")
+            while True:
+                state = request(channel, "health").get("state")
+                if state == "ready":
+                    break
+                if state != "starting" or time.monotonic() >= deadline:
+                    raise ValueError("guest did not report ready")
+                time.sleep(0.2)
             channel.settimeout(30)
             object_evidence = object_roundtrip(channel)
             video_evidence, cancellation = video_roundtrip(channel, output) if record["profile"] == "video" else ([], None)
+            ai_evidence = ai_roundtrip(channel) if record["profile"] == "ai" else None
         result = {"schema": 1, "profile": record["profile"], "imageSHA256": record["sha256"],
                   "tcgBootAndObjectRoundTrip": True, "objectTransfer": object_evidence,
-                  "videoPresets": video_evidence, "videoCancellation": cancellation, "releaseQualified": False}
+                  "videoPresets": video_evidence, "videoCancellation": cancellation, "aiInference": ai_evidence, "releaseQualified": False}
         with (output / "boot-evidence.json").open("x") as file:
             json.dump(result, file, indent=2)
             file.write("\n")
