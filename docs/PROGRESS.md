@@ -417,3 +417,8 @@ Development is on macOS; none of these hardware or external review gates may be 
 
 - Linux `36671154395` passed ordinary/root and restricted-capability fixtures but the source-unit fixture failed while creating a setuid test input: RestrictSUIDSGID correctly returned EPERM. The source-unit variant now requires that kernel refusal and unchanged mode; separate native variants still create the unsafe input and test initializer admission refusal. Service protections remain unchanged.
 - The new EROFS write-boundary assertion is submitted with this correction. Local tests and Linux cross compilation passed; full native source-protection results remain pending. Actual guest boot/device and physical acceptance are not established.
+
+## Observe initializer address-family restriction
+
+- Added source-unit runtime assertions that AF_UNIX creation succeeds while AF_INET/AF_INET6 stream sockets are denied, accepting only explicit unsupported-family/permission refusal. No sockets are bound and no network connections occur.
+- Local initializer tests passed and Linux tests cross-compiled. Systemd CI `36671362054` remains active and predates this assertion. Guest adapter/model network policy and actual VM no-NIC isolation are not established by initializer socket tests.

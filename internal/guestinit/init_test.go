@@ -69,6 +69,21 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 		}
 	}
 	if os.Getenv("HOMENODE_GUEST_INIT_SERVICE") == "1" {
+		unixFD, err := syscall.Socket(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+		if err != nil {
+			t.Fatal("required Unix socket family refused", err)
+		}
+		syscall.Close(unixFD)
+		for _, family := range []int{syscall.AF_INET, syscall.AF_INET6} {
+			fd, err := syscall.Socket(family, syscall.SOCK_STREAM, 0)
+			if err == nil {
+				syscall.Close(fd)
+				t.Fatal("service allowed network socket family")
+			}
+			if !errors.Is(err, syscall.EAFNOSUPPORT) && !errors.Is(err, syscall.EPERM) {
+				t.Fatal("unexpected socket refusal", err)
+			}
+		}
 		probe := fmt.Sprintf("/usr/lib/homenode-fixtures/readonly-probe-%d", os.Getpid())
 		file, err := os.OpenFile(probe, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if err == nil {

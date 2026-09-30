@@ -237,3 +237,9 @@ operations actually write under `/data`. A permissions-only refusal does not
 pass the read-only assertion. If protection is unexpectedly absent, the test
 removes only the probe it successfully created and fails. This checks the
 namespace write boundary for the fixture, not actual raw disk/device isolation.
+
+The source-unit runtime fixture requires AF_UNIX stream socket creation to
+succeed and AF_INET/AF_INET6 stream socket creation to be denied by the service
+restriction. It creates no listening socket or network connection. This checks
+the initializer's address-family boundary; adapter/model units have different
+requirements, and actual no-NIC VM isolation remains a separate gate.
