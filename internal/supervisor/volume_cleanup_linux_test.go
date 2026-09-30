@@ -19,7 +19,7 @@ func TestNativePreparedVolumeCleanup(t *testing.T) {
 	}
 	const size = 64 << 20
 	t.Run("retry abandoned preparation", func(t *testing.T) {
-		parent := t.TempDir()
+		parent := volumeFixtureDir(t)
 		id := state.Random()
 		path := filepath.Join(parent, id+".raw")
 		stage := path + ".prepare-" + strings.Repeat("a", 32)
@@ -49,7 +49,7 @@ func TestNativePreparedVolumeCleanup(t *testing.T) {
 		}
 	})
 	t.Run("only scoped staging", func(t *testing.T) {
-		parent := t.TempDir()
+		parent := volumeFixtureDir(t)
 		id := state.Random()
 		selected := filepath.Join(parent, id+".raw.prepare-"+strings.Repeat("a", 32))
 		other := filepath.Join(parent, state.Random()+".raw.prepare-"+strings.Repeat("b", 32))
@@ -73,7 +73,7 @@ func TestNativePreparedVolumeCleanup(t *testing.T) {
 	})
 	for _, kind := range []string{"symlink", "fifo", "directory", "wide", "hardlink", "malformed", "wrong-size"} {
 		t.Run(kind, func(t *testing.T) {
-			parent := t.TempDir()
+			parent := volumeFixtureDir(t)
 			id := state.Random()
 			prefix := id + ".raw.prepare-"
 			good := filepath.Join(parent, prefix+strings.Repeat("a", 32))

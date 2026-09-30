@@ -293,3 +293,25 @@ occupied destination and reject a changed staging inode without deleting
 either source. RENAME_NOREPLACE remains the atomic destination guard. This
 depends on exclusive trusted root writers in the protected parent; it does not
 provide complete volume provenance or physical storage crash qualification.
+
+## Supervisor service volume fixture
+
+An opt-in disposable Linux CI fixture runs native volume preparation, cleanup
+and publication tests through systemd with protection properties taken from
+the supervisor source unit. It uses fresh fixture directories at the source
+write-path locations and refuses pre-existing leaf paths. Native data tests
+actually write under the configured volumes path. Cleanup removes generated
+markers and only directories created by the fixture.
+
+The fixture checks actual capability/no-new-privilege evidence, kernel cgroup
+memory/pid limits, AF_UNIX versus network socket creation, readonly system-path
+refusal, PrivateTmp isolation and inability to read generated controller/TLS
+marker files hidden by InaccessiblePaths. Special-mode fixture creation must be
+refused under RestrictSUIDSGID; separate unrestricted tests still cover existing
+unsafe mode admission. No real keys or controller data are used.
+
+ExecStart, environment, runtime/state directory management and restart behavior
+are adapted for the test harness; unit dependencies and the complete daemon's
+entrypoint/IPC lifecycle are not exercised. Filesystem marker hiding is not
+proof of complete process-memory isolation or VM confinement. Root/kernel
+image assembly and actual boot/hardware acceptance remain required.

@@ -17,7 +17,7 @@ func TestNativeFreshVolumeFormattingPreservesExistingData(t *testing.T) {
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_VOLUME_INTEGRATION") != "1" {
 		t.Skip("opt-in disposable Linux root fixture")
 	}
-	parent := t.TempDir()
+	parent := volumeFixtureDir(t)
 	path := filepath.Join(parent, "fresh.raw")
 	const size = 64 << 20
 	if err := prepareDataVolume(context.Background(), path, size, 4<<30); err != nil {
@@ -103,7 +103,14 @@ func TestNativeFreshVolumeFormattingPreservesExistingData(t *testing.T) {
 						t.Fatal(err)
 					}
 				case "special":
-					if err := os.Chmod(candidate, 0600|os.ModeSetuid); err != nil {
+					err := os.Chmod(candidate, 0600|os.ModeSetuid)
+					if os.Getenv("HOMENODE_SUPERVISOR_SOURCE_FIXTURE") == "1" {
+						if !errors.Is(err, unix.EPERM) {
+							t.Fatal("source service allowed special mode creation")
+						}
+						return
+					}
+					if err != nil {
 						t.Fatal(err)
 					}
 				case "wrong-size":
@@ -159,7 +166,7 @@ func TestNativeVolumePublicationIdentity(t *testing.T) {
 	const size = 64 << 20
 	for _, scenario := range []string{"occupied destination", "swapped staging"} {
 		t.Run(scenario, func(t *testing.T) {
-			directory := t.TempDir()
+			directory := volumeFixtureDir(t)
 			root, err := os.OpenRoot(directory)
 			if err != nil {
 				t.Fatal(err)
@@ -211,4 +218,21 @@ func TestNativeVolumePublicationIdentity(t *testing.T) {
 			}
 		})
 	}
+}
+
+func volumeFixtureDir(t *testing.T) string {
+	t.Helper()
+	if os.Getenv("HOMENODE_SUPERVISOR_VOLUME_PARENT") != "/var/lib/homenode/volumes" {
+		return t.TempDir()
+	}
+	directory, err := os.MkdirTemp("/var/lib/homenode/volumes", "fixture-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(directory); err != nil {
+			t.Error(err)
+		}
+	})
+	return directory
 }

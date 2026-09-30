@@ -448,3 +448,9 @@ Development is on macOS; none of these hardware or external review gates may be 
 - Added final metadata re-admission and same-inode checking between the formatter descriptor and staged pathname before non-replacing publication. No existing data content is read for this check.
 - Added native occupied-destination preservation and swapped-staging refusal fixtures. Local supervisor tests and Linux test cross compilation passed; native publication evidence is pending.
 - Run `36673378456` passed native staging cleanup/retry/formatting and source-unit protections so far, while the full run remains active. This publication change stays committed locally until that run completes. Full volume provenance, bootable guest artifacts and hardware acceptance remain unfinished.
+
+## Supervisor source-unit volume and secret-path fixture
+
+- Full Linux `36673645975` passed same-inode publication, occupied destination preservation, staging swap refusal, formatter/recovery, guest source-unit, root/package/browser and real-overlay checks.
+- Added opt-in native supervisor source-unit execution of volume formatting/cleanup/publication under its actual reviewed protection settings and write paths. Synthetic controller/TLS markers test InaccessiblePaths; runtime assertions cover capability sets, no-new-privileges, private tmp, readonly paths, socket families and cgroup memory/pid bounds. Existing fixture leaf paths are refused; only generated markers/owned empty directories are removed.
+- Local supervisor tests, Python source compilation and Linux test cross compilation passed; actual supervisor source-protection results are pending. Runtime/state management and restart/dependency/entrypoint lifecycle are adapted or excluded, and filesystem marker hiding does not prove total process-memory isolation. Maintained bootable images, production performance and physical acceptance remain incomplete.
