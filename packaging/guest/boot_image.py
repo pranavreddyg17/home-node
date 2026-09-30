@@ -50,6 +50,36 @@ def request(channel, operation, **fields):
     return response
 
 
+def object_roundtrip(channel):
+    object_id = uuid.uuid4().hex
+    content = bytes(range(256)) * 4096 + b"end"
+    checksum = hashlib.sha256(content).hexdigest()
+    for offset in range(0, len(content), 256 << 10):
+        chunk = content[offset:offset + (256 << 10)]
+        fields = {"objectId": object_id, "offset": offset, "size": len(content),
+                  "sha256": hashlib.sha256(chunk).hexdigest(), "data": base64.b64encode(chunk).decode()}
+        if request(channel, "upload", **fields).get("offset") != offset + len(chunk):
+            raise ValueError("guest chunk upload mismatch")
+        if offset == 256 << 10:
+            # Lost acknowledgement recovery must preserve bytes and progress.
+            if request(channel, "upload", **fields).get("offset") != offset + len(chunk):
+                raise ValueError("guest acknowledged chunk replay mismatch")
+    finalized = request(channel, "finalize", objectId=object_id, size=len(content), sha256=checksum)
+    if finalized.get("size") != len(content) or finalized.get("sha256") != checksum:
+        raise ValueError("guest finalization mismatch")
+    downloaded = bytearray()
+    while len(downloaded) < len(content):
+        part = request(channel, "download", objectId=object_id, offset=len(downloaded))
+        chunk = base64.b64decode(part.get("data", ""), validate=True)
+        if not 0 < len(chunk) <= 256 << 10 or len(downloaded) + len(chunk) > len(content) or part.get("offset") != len(downloaded) + len(chunk) or part.get("sha256") != hashlib.sha256(chunk).hexdigest():
+            raise ValueError("guest object chunk mismatch")
+        downloaded.extend(chunk)
+    if downloaded != content or hashlib.sha256(downloaded).hexdigest() != checksum:
+        raise ValueError("guest download mismatch")
+    request(channel, "delete", objectId=object_id)
+    return {"bytes": len(content), "chunkBytes": 256 << 10, "acknowledgedChunkReplay": True}
+
+
 def video_roundtrip(channel, output):
     # Source material is generated locally; no owner files are used. All probing
     # happens only in this disposable unprivileged CI fixture, never the server.
@@ -206,23 +236,11 @@ def boot_vm(system_fd, data_fd, output, record):
             if request(channel, "health").get("state") != "ready":
                 raise ValueError("guest did not report ready")
             channel.settimeout(30)
-            object_id = uuid.uuid4().hex
-            content = b"HomeNode booted guest object round trip\n" * 1024
-            checksum = hashlib.sha256(content).hexdigest()
-            uploaded = request(channel, "upload", objectId=object_id, size=len(content), sha256=checksum,
-                               data=base64.b64encode(content).decode())
-            if uploaded.get("offset") != len(content):
-                raise ValueError("guest upload mismatch")
-            finalized = request(channel, "finalize", objectId=object_id, size=len(content), sha256=checksum)
-            if finalized.get("size") != len(content) or finalized.get("sha256") != checksum:
-                raise ValueError("guest finalization mismatch")
-            downloaded = request(channel, "download", objectId=object_id)
-            if base64.b64decode(downloaded.get("data", ""), validate=True) != content:
-                raise ValueError("guest download mismatch")
-            request(channel, "delete", objectId=object_id)
+            object_evidence = object_roundtrip(channel)
             video_evidence = video_roundtrip(channel, output) if record["profile"] == "video" else []
         result = {"schema": 1, "profile": record["profile"], "imageSHA256": record["sha256"],
-                  "tcgBootAndObjectRoundTrip": True, "videoPresets": video_evidence, "releaseQualified": False}
+                  "tcgBootAndObjectRoundTrip": True, "objectTransfer": object_evidence,
+                  "videoPresets": video_evidence, "releaseQualified": False}
         with (output / "boot-evidence.json").open("x") as file:
             json.dump(result, file, indent=2)
             file.write("\n")

@@ -1,9 +1,12 @@
+import base64
+import hashlib
 import json
 import socket
 import struct
 import sys
 import threading
 import unittest
+from unittest.mock import patch
 sys.dont_write_bytecode = True
 import boot_image
 
@@ -67,6 +70,54 @@ class BootProtocolTests(unittest.TestCase):
             server.sendall(struct.pack(">I", (512 << 10) + 1))
             with self.assertRaises(ValueError):
                 boot_image.request(client, "health")
+
+
+class ObjectTransferTests(unittest.TestCase):
+    def transfer(self, fault=None):
+        stored = bytearray()
+        uploads = []
+        deleted = []
+        def adapter(channel, operation, **fields):
+            if operation == "upload":
+                chunk = base64.b64decode(fields["data"], validate=True)
+                self.assertEqual(hashlib.sha256(chunk).hexdigest(), fields["sha256"])
+                offset = fields["offset"]
+                uploads.append(offset)
+                if offset == len(stored):
+                    stored.extend(chunk)
+                else:
+                    self.assertEqual(stored[offset:offset + len(chunk)], chunk)
+                if fault == "replay" and len(uploads) == 3:
+                    return {"offset": 0}
+                return {"offset": len(stored)}
+            if operation == "finalize":
+                self.assertEqual(len(stored), fields["size"])
+                self.assertEqual(hashlib.sha256(stored).hexdigest(), fields["sha256"])
+                return {"size": len(stored), "sha256": "wrong" if fault == "finalize" else fields["sha256"]}
+            if operation == "download":
+                offset = fields["offset"]
+                chunk = stored[offset:offset + (256 << 10)]
+                if fault == "empty":
+                    chunk = b""
+                return {"offset": offset + len(chunk) + (1 if fault == "offset" else 0),
+                        "data": base64.b64encode(chunk).decode(),
+                        "sha256": "wrong" if fault == "digest" else hashlib.sha256(chunk).hexdigest()}
+            self.assertEqual(operation, "delete")
+            deleted.append(fields["objectId"])
+            return {}
+        with patch.object(boot_image, "request", side_effect=adapter):
+            evidence = boot_image.object_roundtrip(None)
+        self.assertEqual(uploads, [0, 262144, 262144, 524288, 786432, 1048576])
+        self.assertEqual(len(deleted), 1)
+        self.assertEqual(evidence, {"bytes": 1048579, "chunkBytes": 262144, "acknowledgedChunkReplay": True})
+
+    def test_chunked_transfer_and_replay(self):
+        self.transfer()
+
+    def test_bad_transfer_evidence_refused(self):
+        for fault in ("replay", "finalize", "empty", "offset", "digest"):
+            with self.subTest(fault=fault), self.assertRaises(ValueError):
+                self.transfer(fault)
 
 
 if __name__ == "__main__":
