@@ -371,3 +371,16 @@ func (s *Service) BeginRevokeApproval(ctx context.Context, actor Session, id str
 	}
 	return s.BeginApproval(ctx, actor, "device.revoke", []string{id}, body, policy)
 }
+
+// ParseAppApprovalAction admits only the implemented lifecycle actions.
+func ParseAppApprovalAction(body []byte) (string, error) {
+	object, err := approvalObject(body, []string{"action"})
+	if err != nil {
+		return "", err
+	}
+	var action string
+	if json.Unmarshal(object["action"], &action) != nil || action != "start" && action != "stop" {
+		return "", ErrDenied
+	}
+	return action, nil
+}

@@ -390,3 +390,16 @@ func TestApprovalRequestBodiesRejectAmbiguity(t *testing.T) {
 		}
 	}
 }
+
+func TestAppApprovalActionIsStrictAndPresetOnly(t *testing.T) {
+	for _, body := range []string{`{"action":"shell"}`, `{"action":"start","action":"stop"}`, `{"Action":"start"}`, `{"action":"start","command":"shell"}`, `null`} {
+		if _, err := ParseAppApprovalAction([]byte(body)); !errors.Is(err, ErrDenied) {
+			t.Fatal("invalid app approval accepted", body, err)
+		}
+	}
+	for _, action := range []string{"start", "stop"} {
+		if got, err := ParseAppApprovalAction([]byte(`{"action":"` + action + `"}`)); err != nil || got != action {
+			t.Fatal("valid action refused", got, err)
+		}
+	}
+}
