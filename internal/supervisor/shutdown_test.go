@@ -147,7 +147,7 @@ func (b *shutdownFixtureBackend) Shutdown(context.Context, string) error {
 }
 
 func TestJournaledShutdownSuccessReplayAndInterveningTeardown(t *testing.T) {
-	for _, scenario := range []string{"success", "failure", "intervening-stop", "deadline-changed"} {
+	for _, scenario := range []string{"success", "failure", "intervening-stop", "deadline-changed", "audit-interruption"} {
 		t.Run(scenario, func(t *testing.T) {
 			m, original := newManager(t)
 			b := &shutdownFixtureBackend{fakeBackend: original}
@@ -162,6 +162,12 @@ func TestJournaledShutdownSuccessReplayAndInterveningTeardown(t *testing.T) {
 				instance, err := m.Inspect(ctx, id)
 				if err != nil || instance.State != "shutting-down" {
 					t.Fatal("runtime call preceded journal", instance, err)
+				}
+				if scenario == "audit-interruption" {
+					b.hostErr = errors.New("fixture host failure during shutdown")
+					if err = m.Audit(ctx); err != nil {
+						t.Fatal(err)
+					}
 				}
 				if scenario == "deadline-changed" {
 					if _, err = m.Store.DB.Exec("UPDATE settings SET value='9999999999' WHERE key=?", shutdownDeadlineKey(id)); err != nil {
@@ -193,6 +199,53 @@ func TestJournaledShutdownSuccessReplayAndInterveningTeardown(t *testing.T) {
 				if err = m.Store.DB.QueryRow("SELECT state FROM runtime_operations WHERE id=?", request.OperationID).Scan(&phase); err != nil || phase != "pending" {
 					t.Fatal("shutdown authority marked complete", phase, err)
 				}
+			}
+		})
+	}
+}
+
+func TestShutdownAdmissionRejectsInvalidAuthorityWithoutJournal(t *testing.T) {
+	for _, scenario := range []string{"unsupported-backend", "wrong-workload", "video-instance", "stale-revision", "wrong-policy"} {
+		t.Run(scenario, func(t *testing.T) {
+			m, original := newManager(t)
+			ctx := context.Background()
+			id := state.Random()
+			if _, err := m.Apply(ctx, Request{Version: 1, OperationID: state.Random(), Action: "start", Workload: "files", InstanceID: id, PolicyGeneration: 1, Revision: 1}); err != nil {
+				t.Fatal(err)
+			}
+			b := &shutdownFixtureBackend{fakeBackend: original}
+			if scenario != "unsupported-backend" {
+				m.Backend = b
+			}
+			request := Request{Version: 1, OperationID: state.Random(), Action: "shutdown", InstanceID: id, PolicyGeneration: 1, Revision: 2}
+			switch scenario {
+			case "wrong-workload":
+				request.Workload = "ai"
+			case "video-instance":
+				if _, err := m.Store.DB.Exec("UPDATE runtime_instances SET workload='video' WHERE id=?", id); err != nil {
+					t.Fatal(err)
+				}
+			case "stale-revision":
+				request.Revision = 1
+			case "wrong-policy":
+				request.PolicyGeneration = 2
+			}
+			if _, err := m.Apply(ctx, request); !errors.Is(err, ErrPolicy) {
+				t.Fatal("invalid shutdown admitted", err)
+			}
+			if b.shutdowns != 0 || b.stops != 0 {
+				t.Fatal("denial issued runtime effects", b.shutdowns, b.stops)
+			}
+			var count int
+			if err := m.Store.DB.QueryRow("SELECT count(*) FROM runtime_operations WHERE id=?", request.OperationID).Scan(&count); err != nil || count != 0 {
+				t.Fatal("denial retained operation", count, err)
+			}
+			if err := m.Store.DB.QueryRow("SELECT count(*) FROM settings WHERE key IN(?,?)", shutdownOwnerKey(id), shutdownDeadlineKey(id)).Scan(&count); err != nil || count != 0 {
+				t.Fatal("denial retained shutdown authority", count, err)
+			}
+			instance, err := m.Inspect(ctx, id)
+			if err != nil || instance.State != "running" || instance.Revision != 1 {
+				t.Fatal("denial changed runtime intent", instance, err)
 			}
 		})
 	}

@@ -301,8 +301,9 @@ Failure termination is teardown of test-only state and cannot count as shutdown
 evidence. These checks do not establish full backup consistency, physical
 power-loss durability or production-host shutdown qualification.
 
-Historical assembled boot results are recorded in docs/PROGRESS.md. The new
-shutdown gate still requires an inspected assembled-image result. TCG and a tiny test disk also
+Inspected assembled files/video boot and shutdown results are recorded in
+docs/PROGRESS.md. AI shutdown and production-host lifecycle qualification
+still require separate evidence. TCG and a tiny test disk also
 do not prove KVM/AppArmor confinement, production disk quotas, video conversion,
 model loading, memory/thermal envelopes, client networking or full host lifecycle.
 The real image build and boot results must be inspected before those claims.
