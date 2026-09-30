@@ -30,6 +30,8 @@ jobs:
         run: sudo "$(command -v go)" test ./internal/install ./cmd/homenode-supervisor
       - name: Test guest object root ownership with disposable fixture
         run: sudo env HOMENODE_GUEST_ROOT_INTEGRATION=1 "$(command -v go)" test ./internal/guest -run '^TestNativeForeignDataRootPreserved$'
+      - name: Test guest object directory initialization
+        run: sudo env HOMENODE_GUEST_INIT_INTEGRATION=1 "$(command -v go)" test ./internal/guestinit
       - run: go vet ./...
       - run: go build ./cmd/...
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
@@ -69,7 +71,8 @@ jobs:
       - name: Validate guest service source
         run: |
           test "$(systemd-escape --path --suffix=device /dev/virtio-ports/org.homenode.adapter)" = 'dev-virtio\x2dports-org.homenode.adapter.device'
-          systemd-analyze verify packaging/guest/data.mount packaging/guest/homenode-guest@.service
+          sudo install -m 0755 "$RUNNER_TEMP/homenode-guest-files/usr/lib/homenode/guest/homenode-guest-init" /usr/lib/homenode/guest/homenode-guest-init
+          systemd-analyze verify packaging/guest/data.mount packaging/guest/homenode-data-init.service packaging/guest/homenode-guest@.service
       - name: Inspect native service accounts with installed CLI
         run: sudo env HOMENODE_ACCOUNT_INSPECTION_INTEGRATION=1 "$(command -v go)" test ./internal/install -run '^TestInstalledAccountInspection$'
       - name: Install browser

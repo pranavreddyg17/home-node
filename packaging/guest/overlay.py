@@ -13,7 +13,8 @@ import tempfile
 
 PROFILES = {"files": 16 << 30, "video": 8 << 30, "ai": 16 << 30}
 BINARY = "usr/lib/homenode/guest/homenode-guest"
-COMMON = {BINARY: 0o755, "usr/lib/systemd/system/data.mount": 0o644, "usr/lib/systemd/system/homenode-guest@.service": 0o644,
+COMMON = {BINARY: 0o755, "usr/lib/homenode/guest/homenode-guest-init": 0o755,
+          "usr/lib/systemd/system/homenode-data-init.service": 0o644, "usr/lib/systemd/system/data.mount": 0o644, "usr/lib/systemd/system/homenode-guest@.service": 0o644,
           "usr/lib/udev/rules.d/60-homenode-adapter.rules": 0o644,
           "usr/lib/sysusers.d/homenode-guest.conf": 0o644}
 
@@ -53,10 +54,11 @@ def inventory(root, profile):
             while chunk := file.read(1 << 20):
                 digest.update(chunk)
         records.append({"path": name, "mode": mode, "bytes": info.st_size, "sha256": digest.hexdigest()})
-    with (root / BINARY).open("rb") as file:
-        header = file.read(20)
-    if len(header) != 20 or header[:6] != b"\x7fELF\x02\x01" or header[18:20] != b"\x3e\x00":
-        raise ValueError("expected ELF x86-64")
+    for binary in (BINARY, "usr/lib/homenode/guest/homenode-guest-init"):
+        with (root / binary).open("rb") as file:
+            header = file.read(20)
+        if len(header) != 20 or header[:6] != b"\x7fELF\x02\x01" or header[18:20] != b"\x3e\x00":
+            raise ValueError("expected ELF x86-64")
     if (root / f"etc/homenode/guest/{profile}.env").read_text() != f"QUOTA_BYTES={PROFILES[profile]}\n":
         raise ValueError("quota mismatch")
     return records

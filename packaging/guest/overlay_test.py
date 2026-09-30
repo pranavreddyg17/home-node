@@ -20,7 +20,7 @@ class OverlayTests(unittest.TestCase):
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 content = b"fixture"
-                if name == overlay.BINARY:
+                if name in (overlay.BINARY, "usr/lib/homenode/guest/homenode-guest-init"):
                     content = b"\x7fELF\x02\x01" + bytes(12) + b"\x3e\x00"
                 if name.endswith("files.env"):
                     content = b"QUOTA_BYTES=17179869184\n"

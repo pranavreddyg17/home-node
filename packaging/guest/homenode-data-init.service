@@ -1,0 +1,32 @@
+# Guest image only. This does not initialize or format a block device.
+[Unit]
+Description=HomeNode guest private object directory
+RequiresMountsFor=/data
+BindsTo=data.mount
+After=data.mount
+ConditionPathIsMountPoint=/data
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/lib/homenode/guest/homenode-guest-init
+RemainAfterExit=yes
+UMask=0077
+TimeoutStartSec=15
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_CHOWN
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+RestrictAddressFamilies=AF_UNIX
+DevicePolicy=closed
+ReadWritePaths=/data
+TasksMax=8

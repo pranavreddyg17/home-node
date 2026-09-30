@@ -56,7 +56,7 @@ class ImportTests(unittest.TestCase):
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 data = b"fixture"
-                if name == overlay.BINARY:
+                if name in (overlay.BINARY, "usr/lib/homenode/guest/homenode-guest-init"):
                     data = b"\x7fELF\x02\x01" + bytes(12) + b"\x3e\x00"
                 if name.endswith("files.env"):
                     data = b"QUOTA_BYTES=17179869184\n"

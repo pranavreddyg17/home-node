@@ -135,3 +135,11 @@ virtio data disk, using ext4 and `nodev,nosuid,noexec`. Adapter mount requiremen
 pull it into the startup transaction. A blank disk is not formatted by this
 unit. Safe initialization, filesystem admission and private object ownership
 are still required before image qualification; never install it on the host.
+
+The guest-only `homenode-data-init.service` runs the verified initializer binary
+after mount admission and before the adapter. It creates only the private guest
+object leaf under a root:root mode 0755 mount root. Existing foreign/unsafe or
+incomplete roots are refused, never repaired. The unit and binary are included
+in overlay manifests/imports, with ELF checks on both executables. This does not
+format data disks; durable incomplete-creation recovery and boot qualification
+remain pending. No initializer is installed by ordinary host packaging.

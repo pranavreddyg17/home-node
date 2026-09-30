@@ -171,3 +171,25 @@ the production fdinfo reader's mount ID with the current kernel mountinfo
 record and descriptor filesystem device. It rejects invalid descriptors. This
 is native descriptor evidence only: it does not emulate a virtio disk, establish
 the `/data` contract, exercise systemd protections or prove boot admission.
+
+## Guest object directory initializer
+
+A separate guest-only root oneshot now runs after the admitted data mount and
+before the unprivileged adapter. It calls the same mount admission, requires a
+root:root mode 0755 mount root, creates only the `objects` leaf privately, sets
+its fixed UID/GID 900 and syncs the directory and parent. Existing objects roots
+must already be UID/GID 900 and private mode 0700; symlinks, foreign ownership,
+unsafe modes and incomplete root-owned directories are refused without repair
+or data removal. It has only CAP_CHOWN and no raw-device access. The adapter
+requires successful initialization.
+
+The helper and unit are now part of verified guest overlays; both guest
+executables require ELF x86-64 admission. Host packaging does not install or
+enable the initializer. CI installs its binary only in the disposable runner
+for static unit verification and uses opt-in temporary-root ownership fixtures.
+
+This prepares a directory on an already mounted filesystem. Blank-volume
+formatting is still absent. A crash between directory creation and ownership
+publication can leave a root-owned leaf; automatic recovery of that incomplete
+state is not implemented and startup refuses it. A durable initializer journal
+and power-loss acceptance remain required before production release.

@@ -2,6 +2,8 @@
 Description=HomeNode %i guest adapter
 BindsTo=dev-virtio\x2dports-org.homenode.adapter.device
 After=dev-virtio\x2dports-org.homenode.adapter.device
+Requires=homenode-data-init.service
+After=homenode-data-init.service
 RequiresMountsFor=/data
 ConditionPathIsMountPoint=/data
 ConditionPathExists=/dev/virtio-ports/org.homenode.adapter
