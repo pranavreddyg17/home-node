@@ -219,3 +219,29 @@ and read-only temporary storage, followed by private-temp/read-only-var views.
 All mounts disappear when that child namespace exits. It does not boot a guest or
 execute the production adapter systemd unit; actual boot and source-unit startup
 qualification remain mandatory.
+
+## Merged-root finalization
+
+`finalize_root.py ROOT VERIFIED_OVERLAY` provides the admission/enablement phase
+for exclusively controlled assembly staging. The CLI requires Linux root and
+explicit `HOMENODE_GUEST_IMAGE_BUILD=1`; never target an installed host. It checks
+the overlay inventory, every merged payload's digest/size/mode/owner, protected
+non-symlink parents and the admitted local guest account before enabling mounts
+and the selected adapter instance. Accounts must already have been created by
+the assembler's sysusers phase. The merged base may contain distribution files;
+this helper does not authenticate their source or establish publisher trust.
+
+Enablement creates only three known symlinks below `/etc/systemd/system`, with
+no overwrite of foreign entries. Existing matching links support replay; another
+profile in the normal `/etc` or `/usr/lib` multi-user target is refused. It is not
+a general scan of all possible custom units, generators or startup mechanisms:
+the maintained base's complete enabled-unit inventory must also be qualified.
+Failed staging is retained. Directory/link creation does not provide an atomic
+three-link transaction or independent physical crash evidence.
+
+The BIOS supervisor contract requires an actual GRUB/kernel/initramfs/system
+image. The pinned [mkosi v25 build contract](https://github.com/systemd/mkosi/tree/52448a27f6f869c108352ed82fcfb9be633703fb)
+provides a candidate BIOS GRUB assembly path; no recipe/build or maintained
+release acceptance is established by root finalization. Base packages, tool
+security coverage, initramfs content, bootloader and all workload runtimes still
+need assembly/provenance and boot qualification.
