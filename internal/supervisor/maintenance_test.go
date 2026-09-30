@@ -145,3 +145,33 @@ func TestRuntimeMaintenanceRefusesUncertainRecordedWork(t *testing.T) {
 		})
 	}
 }
+
+func TestMaintenanceDiskRequiresExactOwnerBeforeCallingCopier(t *testing.T) {
+	m, _ := newManager(t)
+	ctx := context.Background()
+	start := startRequest()
+	if _, err := m.Apply(ctx, start); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Apply(ctx, Request{Version: 1, OperationID: state.Random(), InstanceID: start.InstanceID, Action: "stop", Revision: 2, PolicyGeneration: 1}); err != nil {
+		t.Fatal(err)
+	}
+	token, err := m.BeginRuntimeMaintenance(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	copyDisk := func(context.Context, *os.File, Instance) error { called = true; return nil }
+	if err = m.WithMaintenanceDisk(ctx, state.Random(), start.InstanceID, copyDisk); !errors.Is(err, ErrPolicy) || called {
+		t.Fatal("foreign copy authority accepted", err, called)
+	}
+	if err = m.WithMaintenanceDisk(ctx, token, "../escape", copyDisk); !errors.Is(err, ErrPolicy) || called {
+		t.Fatal("path authority accepted", err, called)
+	}
+	if err = m.EndRuntimeMaintenance(ctx, token); err != nil {
+		t.Fatal(err)
+	}
+	if err = m.WithMaintenanceDisk(ctx, token, start.InstanceID, copyDisk); err == nil || called {
+		t.Fatal("released authority accepted", err, called)
+	}
+}

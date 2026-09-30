@@ -46,7 +46,7 @@ jobs:
           sudo install -m 0755 "$RUNNER_TEMP/guestmount.test" /usr/lib/homenode-fixtures/guestmount.test
           sudo env HOMENODE_GUEST_RUNTIME_INTEGRATION=1 python3 packaging/guest/runtime_fixture.py
       - name: Test fresh raw volume initialization
-        run: sudo env HOMENODE_VOLUME_INTEGRATION=1 "$(command -v go)" test ./internal/supervisor -run '^TestNative(FreshVolumeFormattingPreservesExistingData|PreparedVolumeCleanup|VolumePublicationIdentity)$'
+        run: sudo env HOMENODE_VOLUME_INTEGRATION=1 "$(command -v go)" test ./internal/supervisor -run '^TestNative(FreshVolumeFormattingPreservesExistingData|PreparedVolumeCleanup|VolumePublicationIdentity|MaintenanceVolume)$'
       - name: Test volume operations with supervisor source protections
         run: |
           go test -c -o "$RUNNER_TEMP/supervisor.test" ./internal/supervisor

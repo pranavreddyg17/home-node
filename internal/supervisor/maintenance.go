@@ -3,6 +3,8 @@ package supervisor
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"os"
 	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
@@ -43,6 +45,54 @@ func (m *Manager) lockRuntime(ctx context.Context, exclusive bool) (func(), erro
 		case <-timer.C:
 		}
 	}
+}
+
+// WithMaintenanceDisk retains exclusive live-manager access and a read-only
+// disk descriptor for a trusted internal copier. No public RPC accepts a path
+// or callback. The caller must separately qualify filesystem consistency and
+// copy into protected staging; this method neither parses nor repairs ext4.
+func (m *Manager) WithMaintenanceDisk(ctx context.Context, token, id string, copyDisk func(context.Context, *os.File, Instance) error) (resultErr error) {
+	if token == "" || !guestproto.ValidID(id) || copyDisk == nil {
+		return ErrPolicy
+	}
+	unlock, err := m.lockRuntime(ctx, true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	err = m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		var owner string
+		if err := tx.QueryRow("SELECT value FROM settings WHERE key=?", runtimeMaintenanceKey).Scan(&owner); err != nil {
+			return err
+		}
+		if owner != token {
+			return ErrPolicy
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	instance, err := m.Inspect(ctx, id)
+	if err != nil {
+		return err
+	}
+	if instance.State != "stopped" || instance.Desired != "stopped" || instance.Workload != "files" && instance.Workload != "ai" {
+		return ErrPolicy
+	}
+	running, err := m.Backend.Running(ctx, id)
+	if err != nil {
+		return err
+	}
+	if running {
+		return ErrPolicy
+	}
+	file, err := openMaintenanceVolume(ctx, m.Volumes, id, instance.DataBytes)
+	if err != nil {
+		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, file.Close()) }()
+	return copyDisk(ctx, file, instance)
 }
 
 func requireRuntimeAdmission(tx *sql.Tx) error {
