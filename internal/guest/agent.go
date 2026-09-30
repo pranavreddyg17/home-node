@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
@@ -55,12 +56,25 @@ func New(directory, kind string, quota int64) (*Agent, error) {
 	if kind != "files" && kind != "video" && kind != "ai" || quota < 1<<30 || quota > 512<<30 {
 		return nil, errors.New("invalid guest profile")
 	}
-	if err := os.MkdirAll(directory, 0700); err != nil {
+	if err := os.Mkdir(directory, 0700); err != nil && !errors.Is(err, os.ErrExist) {
 		return nil, err
+	}
+	before, err := os.Lstat(directory)
+	if err != nil || !before.IsDir() || before.Mode().Perm() != 0700 {
+		return nil, errors.New("guest data root is not private")
+	}
+	owner, ok := before.Sys().(*syscall.Stat_t)
+	if !ok || int(owner.Uid) != os.Geteuid() {
+		return nil, errors.New("guest data root ownership mismatch")
 	}
 	root, err := os.OpenRoot(directory)
 	if err != nil {
 		return nil, err
+	}
+	opened, err := root.Stat(".")
+	if err != nil || !os.SameFile(before, opened) || opened.Mode().Perm() != 0700 {
+		root.Close()
+		return nil, errors.New("guest data root changed during admission")
 	}
 	a := &Agent{root: root, kind: kind, quota: quota, tasks: map[string]*task{}, client: &http.Client{Timeout: 2 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect denied") }, Transport: &http.Transport{Proxy: nil, MaxConnsPerHost: 1, ResponseHeaderTimeout: 15 * time.Second}}}
 	a.readinessClient = &http.Client{Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect denied") }, Transport: &http.Transport{Proxy: nil, MaxConnsPerHost: 1, ResponseHeaderTimeout: time.Second}}

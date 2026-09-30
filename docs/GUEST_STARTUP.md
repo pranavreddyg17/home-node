@@ -125,3 +125,17 @@ Those prerequisites remain mandatory before useful startup. The overlay digest
 inventory, deterministic packaging and fixed-member importer include this unit.
 Actual mount options, disk role/by-id discovery, initialization safety and
 power-loss recovery still require booted guest qualification.
+
+## Agent object-root admission
+
+Before recovering journals or serving requests, the agent requires its object
+root to be a mode 0700 directory owned by its effective UID. A final symlink,
+foreign owner or nonprivate permissions fail startup; admission does not chmod,
+chown or remove existing data. It may create the requested leaf at mode 0700,
+but does not create missing parents. The opened root is checked against the
+observed directory identity before it is used.
+
+This requires the unfinished guest boot initializer to provide an appropriate
+parent and object directory after mounting the correct disk. It does not verify
+parent ancestry, mount provenance, filesystem type, available capacity or
+physical disk integrity. Those remain separate boot admission requirements.

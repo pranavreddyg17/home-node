@@ -15,7 +15,7 @@ import (
 )
 
 func TestCloseJoinsWorkerAndPersistsInterruptedTask(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateDataDir(t)
 	a, err := New(dir, "ai", 1<<30)
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func TestCloseJoinsWorkerAndPersistsInterruptedTask(t *testing.T) {
 }
 
 func TestClosingAgentCannotAdvertiseLateReadiness(t *testing.T) {
-	a, err := New(t.TempDir(), "ai", 1<<30)
+	a, err := New(privateDataDir(t), "ai", 1<<30)
 	if err != nil {
 		t.Fatal(err)
 	}

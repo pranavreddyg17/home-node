@@ -23,7 +23,7 @@ func TestAIHealthWaitsForLoadedModel(t *testing.T) {
 		{200, strings.Repeat("x", 4097), "starting"}, {200, `{}`, "starting"}, {200, `{"status":"ok","tools":true}`, "starting"},
 	} {
 		t.Run(test.want+test.body[:min(12, len(test.body))], func(t *testing.T) {
-			a, err := New(t.TempDir(), "ai", 1<<30)
+			a, err := New(privateDataDir(t), "ai", 1<<30)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -45,7 +45,7 @@ func TestAIHealthWaitsForLoadedModel(t *testing.T) {
 	}
 }
 func TestAIHealthFailureDoesNotClaimReady(t *testing.T) {
-	a, err := New(t.TempDir(), "ai", 1<<30)
+	a, err := New(privateDataDir(t), "ai", 1<<30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestAIHealthFailureDoesNotClaimReady(t *testing.T) {
 }
 
 func TestAIReadinessCannotFollowRedirects(t *testing.T) {
-	a, err := New(t.TempDir(), "ai", 1<<30)
+	a, err := New(privateDataDir(t), "ai", 1<<30)
 	if err != nil {
 		t.Fatal(err)
 	}

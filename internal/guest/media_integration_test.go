@@ -25,7 +25,7 @@ func TestRealVideoConversion(t *testing.T) {
 	if _, err := os.Stat("/usr/bin/ffmpeg"); err != nil {
 		t.Fatal(err)
 	}
-	inputPath := filepath.Join(t.TempDir(), "input.mp4")
+	inputPath := filepath.Join(privateDataDir(t), "input.mp4")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "/usr/bin/ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=10", "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p", inputPath)
@@ -36,7 +36,7 @@ func TestRealVideoConversion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := New(t.TempDir(), "video", 8<<30)
+	a, err := New(privateDataDir(t), "video", 8<<30)
 	if err != nil {
 		t.Fatal(err)
 	}

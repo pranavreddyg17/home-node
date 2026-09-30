@@ -16,7 +16,7 @@ type roundTrip func(*http.Request) (*http.Response, error)
 
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 func TestBoundedChatStreamAndPersistedOutput(t *testing.T) {
-	a, err := New(t.TempDir(), "ai", 1<<30)
+	a, err := New(privateDataDir(t), "ai", 1<<30)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -16,7 +16,7 @@ import (
 func TestTaskRecoveryRejectsUnsafeJournalsBeforeRewriting(t *testing.T) {
 	for _, which := range []string{"oversize", "symlink", "fifo", "unknown", "duplicate", "trailing", "state", "profile"} {
 		t.Run(which, func(t *testing.T) {
-			dir := t.TempDir()
+			dir := privateDataDir(t)
 			id := state.Random()
 			good, _ := json.Marshal(task{State: "running", InputID: state.Random(), Preset: "mp4-720p", PromptHash: promptDigest(guestproto.Request{})})
 			goodPath := filepath.Join(dir, id+".task.json")
@@ -62,7 +62,7 @@ func TestTaskRecoveryRejectsUnsafeJournalsBeforeRewriting(t *testing.T) {
 	}
 }
 func TestEscapedMaximumAITextRemainsRecoverable(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateDataDir(t)
 	a, err := New(dir, "ai", 1<<30)
 	if err != nil {
 		t.Fatal(err)

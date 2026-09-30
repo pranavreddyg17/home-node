@@ -11,7 +11,7 @@ import (
 )
 
 func TestResumableIntegrityWorkflow(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "objects")
+	dir := filepath.Join(privateDataDir(t), "objects")
 	a, err := New(dir, "files", 1<<30)
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +62,7 @@ func TestResumableIntegrityWorkflow(t *testing.T) {
 	}
 }
 func TestRejectsTraversalAndWrongWorkload(t *testing.T) {
-	a, err := New(t.TempDir(), "files", 1<<30)
+	a, err := New(privateDataDir(t), "files", 1<<30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestRejectsTraversalAndWrongWorkload(t *testing.T) {
 	}
 }
 func TestRestartInterruptsInFlightTask(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateDataDir(t)
 	id := state.Random()
 	data, _ := json.Marshal(task{State: "running", InputID: state.Random(), Preset: "mp4-720p", PromptHash: promptDigest(guestproto.Request{})})
 	if err := os.WriteFile(filepath.Join(dir, id+".task.json"), data, 0600); err != nil {
@@ -96,7 +96,7 @@ func TestRestartInterruptsInFlightTask(t *testing.T) {
 	}
 }
 func TestSymlinkCannotEscapeGuestData(t *testing.T) {
-	base := t.TempDir()
+	base := privateDataDir(t)
 	dir := filepath.Join(base, "objects")
 	a, err := New(dir, "files", 1<<30)
 	if err != nil {
