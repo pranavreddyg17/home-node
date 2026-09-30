@@ -87,6 +87,7 @@ func New(store *state.Store, config Config) (*Server, error) {
 
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/setup", s.setupStatus)
+	s.approvalRoutes()
 	s.mux.HandleFunc("POST /api/v1/auth/register/begin", s.registerBegin)
 	s.mux.HandleFunc("POST /api/v1/auth/register/finish", s.registerFinish)
 	s.mux.HandleFunc("POST /api/v1/auth/login/begin", s.loginBegin)
@@ -154,7 +155,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		limit = 512 << 10
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
-	if strings.HasPrefix(r.URL.Path, "/api/v1/auth/") && !s.allowAuth() {
+	if (strings.HasPrefix(r.URL.Path, "/api/v1/auth/") || strings.HasSuffix(r.URL.Path, "/approval")) && !s.allowAuth() {
 		w.Header().Set("Retry-After", "60")
 		fail(w, 429, "RATE_LIMITED", "Wait a minute before another authentication attempt.")
 		return
