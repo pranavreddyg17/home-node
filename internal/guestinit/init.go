@@ -107,7 +107,7 @@ func admitIntent(root *os.Root) (bool, error) {
 	}
 	defer f.Close()
 	info, err := f.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || info.Size() != int64(len(intentBytes)) {
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || info.Size() != int64(len(intentBytes)) {
 		return false, ErrDirectory
 	}
 	owner, ok := info.Sys().(*syscall.Stat_t)
@@ -126,7 +126,20 @@ func createIntent(root *os.Root) error {
 	if err != nil {
 		return ErrDirectory
 	}
-	_, writeErr := io.WriteString(f, intentBytes)
+	info, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return ErrDirectory
+	}
+	owner, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || owner.Uid != 0 || owner.Gid != 0 || owner.Nlink != 1 || info.Mode().Perm() != 0600 {
+		f.Close()
+		return ErrDirectory
+	}
+	n, writeErr := io.WriteString(f, intentBytes)
+	if n != len(intentBytes) && writeErr == nil {
+		writeErr = io.ErrShortWrite
+	}
 	syncErr := f.Sync()
 	closeErr := f.Close()
 	if writeErr != nil || syncErr != nil || closeErr != nil {

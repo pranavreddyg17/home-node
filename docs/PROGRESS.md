@@ -389,3 +389,9 @@ Development is on macOS; none of these hardware or external review gates may be 
 - Full Linux run `36669688520` passed initial directory creation/reopen/rejection fixtures, both guest ELF overlays, unit syntax, package/browser and root/native checks. It predates durable-intent recovery and restricted-capability execution.
 - CI now runs the native guest initializer fixtures with only CHOWN and DAC_READ_SEARCH in effective/permitted/bounding sets, cleared inheritable/ambient capabilities and no-new-privileges. The test checks actual `/proc/self/status` evidence before exercising the workflow. Fixture cleanup restores only its own disposable directories after preservation assertions.
 - Local unprivileged tests passed. Native durable-intent and restricted-capability results remain pending; actual systemd namespace/device and power-loss acceptance are not established by this fixture.
+
+## Guest intent admission and capability fixture correction
+
+- Linux `36670164196` passed durable initializer replay with unrestricted root but failed restricted fixture setup: the test tried chmod after chown, requiring a capability intentionally absent from the service. Fixture setup now applies mode before transferring ownership. Service limits are unchanged; corrected native evidence is pending.
+- Intent creation now checks its newly created descriptor's root ownership/link count/mode and short writes. Admission also rejects special permission bits. Added native preservation/refusal cases for symlink, hardlink, FIFO, public, foreign and special-mode intent inputs.
+- Local unprivileged tests passed and Linux tests cross-compiled. Full native/capability/unit validation remains pending, with partial intent publication, physical power-loss and complete guest image boot still incomplete.

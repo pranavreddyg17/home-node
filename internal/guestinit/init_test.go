@@ -153,6 +153,69 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 		}
 	})
 
+	for _, kind := range []string{"symlink intent", "hardlink intent", "fifo intent", "public intent", "foreign intent", "special mode intent"} {
+		t.Run(kind, func(t *testing.T) {
+			parent := t.TempDir()
+			if err := os.Chmod(parent, 0755); err != nil {
+				t.Fatal(err)
+			}
+			marker := filepath.Join(parent, intentName)
+			switch kind {
+			case "symlink intent":
+				target := filepath.Join(parent, "other")
+				if err := os.WriteFile(target, []byte(intentBytes), 0600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(target, marker); err != nil {
+					t.Fatal(err)
+				}
+			case "fifo intent":
+				if err := syscall.Mkfifo(marker, 0600); err != nil {
+					t.Fatal(err)
+				}
+			default:
+				if err := os.WriteFile(marker, []byte(intentBytes), 0600); err != nil {
+					t.Fatal(err)
+				}
+				switch kind {
+				case "hardlink intent":
+					if err := os.Link(marker, filepath.Join(parent, "alias")); err != nil {
+						t.Fatal(err)
+					}
+				case "public intent":
+					if err := os.Chmod(marker, 0644); err != nil {
+						t.Fatal(err)
+					}
+				case "foreign intent":
+					if err := os.Chown(marker, 901, 901); err != nil {
+						t.Fatal(err)
+					}
+				case "special mode intent":
+					if err := os.Chmod(marker, 0600|os.ModeSetuid); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			before, err := os.Lstat(marker)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if Prepare(parent) == nil {
+				t.Fatal("unsafe intent accepted")
+			}
+			after, err := os.Lstat(marker)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !os.SameFile(before, after) || before.Mode() != after.Mode() {
+				t.Fatal("rejected intent changed")
+			}
+			if _, err := os.Stat(filepath.Join(parent, "objects")); !os.IsNotExist(err) {
+				t.Fatal("rejected intent created objects")
+			}
+		})
+	}
+
 	for _, kind := range []string{"foreign", "wide", "symlink", "incomplete"} {
 		t.Run(kind, func(t *testing.T) {
 			parent := t.TempDir()
@@ -178,10 +241,10 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 					}
 				}
 				if kind == "wide" {
-					if err := os.Chown(path, 900, 900); err != nil {
+					if err := os.Chmod(path, 0755); err != nil {
 						t.Fatal(err)
 					}
-					if err := os.Chmod(path, 0755); err != nil {
+					if err := os.Chown(path, 900, 900); err != nil {
 						t.Fatal(err)
 					}
 				}
