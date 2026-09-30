@@ -109,8 +109,8 @@ class VideoCancellationTests(unittest.TestCase):
 class AIInferenceTests(unittest.TestCase):
     def test_actual_adapter_sequence_requires_terminal_text_and_delete(self):
         with patch.object(boot_image, "request", side_effect=[{"state": "running"}, {"state": "running"},
-                {"state": "succeeded", "text": "héllo"}, {}]) as calls, patch.object(boot_image.time, "sleep"):
-            self.assertEqual(boot_image.ai_roundtrip(None), {"generationSucceeded": True, "textBytes": 6, "taskDeletionAcknowledged": True})
+                {"state": "succeeded", "text": "héllo"}, {}]) as calls, patch.object(boot_image.time, "sleep"), patch.object(boot_image, "cancel_ai", return_value={"cancelled": True, "taskDeletionAcknowledged": True}):
+            self.assertEqual(boot_image.ai_roundtrip(None), {"generationSucceeded": True, "textBytes": 6, "taskDeletionAcknowledged": True, "cancellation": {"cancelled": True, "taskDeletionAcknowledged": True}})
         self.assertEqual([call.args[1] for call in calls.call_args_list], ["generate", "result", "result", "delete"])
 
     def test_failed_empty_oversized_or_timed_out_inference_refused(self):
@@ -120,7 +120,7 @@ class AIInferenceTests(unittest.TestCase):
                  [{"state": "running"}, {"state": "running"}]]
         for responses in cases:
             with self.subTest(responses=responses[:1]), patch.object(boot_image, "request", side_effect=responses), \
-                    patch.object(boot_image.time, "monotonic", side_effect=[0, 121]), self.assertRaises(ValueError):
+                    patch.object(boot_image.time, "monotonic", side_effect=[0, 121]), patch.object(boot_image, "cancel_ai"), self.assertRaises(ValueError):
                 boot_image.ai_roundtrip(None)
 
 
@@ -170,6 +170,28 @@ class ObjectTransferTests(unittest.TestCase):
         for fault in ("replay", "finalize", "empty", "offset", "digest"):
             with self.subTest(fault=fault), self.assertRaises(ValueError):
                 self.transfer(fault)
+
+
+class AICancellationTests(unittest.TestCase):
+    def test_ai_cancel_waits_for_worker_and_deletion(self):
+        with patch.object(boot_image, "request", side_effect=[
+                {"state": "running"}, {"state": "cancelled"}, {"state": "cancelled"},
+                {"error": "OBJECT_BUSY"}, {"state": "cancelled"}, {}, {"error": "NOT_FOUND"}, {"state": "ready"}]) as calls, \
+                patch.object(boot_image.time, "sleep"):
+            self.assertEqual(boot_image.cancel_ai(None), {"cancelled": True, "taskDeletionAcknowledged": True})
+        self.assertEqual([c.args[1] for c in calls.call_args_list], ["generate", "cancel", "result", "delete", "result", "delete", "result", "health"])
+        ids = [c.kwargs["objectId"] for c in calls.call_args_list[:-1]]
+        self.assertEqual(len(set(ids)), 1)
+
+    def test_ai_completion_is_not_counted_as_cancellation(self):
+        with patch.object(boot_image, "request", side_effect=[{"state": "running"}, {"state": "succeeded"}]), self.assertRaises(ValueError):
+            boot_image.cancel_ai(None)
+
+    def test_cancellation_failure_prevents_recovery_generation(self):
+        with patch.object(boot_image, "cancel_ai", side_effect=ValueError("cancellation failed")), \
+                patch.object(boot_image, "request") as calls, self.assertRaises(ValueError):
+            boot_image.ai_roundtrip(None)
+        calls.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -86,26 +86,38 @@ def cancel_video(channel, input_id):
     job_id = uuid.uuid4().hex
     if request(channel, "run", objectId=job_id, inputId=input_id, preset="mp4-1080p").get("state") != "running":
         raise ValueError("cancellation fixture was not started")
+    return cancel_task(channel, job_id)
+
+
+def cancel_ai(channel):
+    job_id = uuid.uuid4().hex
+    if request(channel, "generate", objectId=job_id, prompt="Count slowly from one to one hundred.").get("state") != "running":
+        raise ValueError("AI cancellation fixture was not started")
+    return cancel_task(channel, job_id)
+
+
+def cancel_task(channel, job_id):
     if request(channel, "cancel", objectId=job_id).get("state") != "cancelled":
-        raise ValueError("video cancellation did not take effect")
+        raise ValueError("task cancellation did not take effect")
     deadline = time.monotonic() + 30
     while True:
         if request(channel, "result", objectId=job_id).get("state") != "cancelled":
-            raise ValueError("cancelled video state changed")
+            raise ValueError("cancelled task state changed")
         response = request(channel, "delete", allowed_error="OBJECT_BUSY", objectId=job_id)
         if not response.get("error"):
             break
         if time.monotonic() >= deadline:
-            raise ValueError("cancelled video worker did not release deletion")
+            raise ValueError("cancelled worker did not release deletion")
         time.sleep(0.1)
     if request(channel, "result", allowed_error="NOT_FOUND", objectId=job_id).get("error") != "NOT_FOUND":
-        raise ValueError("deleted video task remains visible")
+        raise ValueError("deleted task remains visible")
     if request(channel, "health").get("state") != "ready":
-        raise ValueError("video adapter unavailable after cancellation")
+        raise ValueError("adapter unavailable after cancellation")
     return {"cancelled": True, "taskDeletionAcknowledged": True}
 
 
 def ai_roundtrip(channel):
+    cancellation = cancel_ai(channel)
     generation = uuid.uuid4().hex
     if request(channel, "generate", objectId=generation, prompt="Say hello briefly.").get("state") != "running":
         raise ValueError("guest inference was not started")
@@ -121,7 +133,7 @@ def ai_roundtrip(channel):
     if not 0 < len(text.encode("utf-8")) <= 32768:
         raise ValueError("guest inference text exceeds bound")
     request(channel, "delete", objectId=generation)
-    return {"generationSucceeded": True, "textBytes": len(text.encode("utf-8")), "taskDeletionAcknowledged": True}
+    return {"generationSucceeded": True, "textBytes": len(text.encode("utf-8")), "taskDeletionAcknowledged": True, "cancellation": cancellation}
 
 
 def video_roundtrip(channel, output):
