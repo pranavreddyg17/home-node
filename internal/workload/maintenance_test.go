@@ -163,3 +163,44 @@ func TestMaintenancePausesTrashExpiryUntilRelease(t *testing.T) {
 		t.Fatal("completed worker leaked activity", count, err)
 	}
 }
+
+func TestMaintenanceInventoryTracksPendingWorkAndUnknownStates(t *testing.T) {
+	s, _, device, conversation := aiService(t)
+	ctx := context.Background()
+	generation, err := s.CreateGeneration(ctx, device, state.Random(), conversation.ID, "inventory fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := s.Store.BeginMaintenance(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inventory, err := s.Store.InspectMaintenance(ctx, token)
+	if err != nil || inventory.Generations != 1 || inventory.Operations != 1 || inventory.Apps != 1 {
+		t.Fatal("pending work missing from inventory", inventory, err)
+	}
+	if _, err = s.Store.InspectMaintenance(ctx, state.Random()); !errors.Is(err, state.ErrMaintenanceOwner) {
+		t.Fatal("foreign token inspected inventory", err)
+	}
+	if _, err = s.Store.DB.Exec("UPDATE generations SET state='unrecognized' WHERE id=?", generation.ID); err != nil {
+		t.Fatal(err)
+	}
+	inventory, err = s.Store.InspectMaintenance(ctx, token)
+	if err != nil || inventory.Generations != 1 {
+		t.Fatal("unknown state treated as drained", inventory, err)
+	}
+	if _, err = s.Store.DB.Exec("INSERT INTO settings VALUES('job.cleanup.fixture','malformed-json')"); err != nil {
+		t.Fatal(err)
+	}
+	inventory, err = s.Store.InspectMaintenance(ctx, token)
+	if err != nil || inventory.Cleanup != 1 {
+		t.Fatal("invalid cleanup record treated as drained", inventory, err)
+	}
+	if _, err = s.Store.DB.Exec("UPDATE generations SET state='failed' WHERE id=?", generation.ID); err != nil {
+		t.Fatal(err)
+	}
+	inventory, err = s.Store.InspectMaintenance(ctx, token)
+	if err != nil || inventory.Generations != 0 || inventory.Operations != 1 {
+		t.Fatal("inventory conflated generation and operation completion", inventory, err)
+	}
+}

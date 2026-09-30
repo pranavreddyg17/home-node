@@ -138,3 +138,49 @@ func (s *Store) MaintenanceActivitiesDrained(ctx context.Context, token string) 
 	})
 	return ready, err
 }
+
+// MaintenanceInventory describes durable blockers in one management snapshot.
+// Zero counts do not prove guest shutdown: the coordinator must independently
+// verify supervisor state, disk unmount and all in-flight host byte operations.
+type MaintenanceInventory struct {
+	Activities  int `json:"activities"`
+	Transfers   int `json:"transfers"`
+	Jobs        int `json:"jobs"`
+	Generations int `json:"generations"`
+	Operations  int `json:"operations"`
+	Apps        int `json:"apps"`
+	Cleanup     int `json:"cleanup"`
+	Orphans     int `json:"orphans"`
+}
+
+func (s *Store) InspectMaintenance(ctx context.Context, token string) (MaintenanceInventory, error) {
+	var inventory MaintenanceInventory
+	err := s.Transaction(ctx, func(tx *sql.Tx) error {
+		var owner string
+		err := tx.QueryRow("SELECT value FROM settings WHERE key=?", maintenanceKey).Scan(&owner)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrMaintenanceOwner
+		}
+		if err != nil {
+			return err
+		}
+		if token == "" || owner != token {
+			return ErrMaintenanceOwner
+		}
+		return tx.QueryRow(`SELECT
+   (SELECT count(*) FROM settings WHERE key GLOB 'host.activity.*'),
+   (SELECT count(*) FROM transfers WHERE state NOT IN('ready','cancelled','expired')),
+   (SELECT count(*) FROM jobs WHERE state NOT IN('succeeded','failed','cancelled','interrupted')),
+   (SELECT count(*) FROM generations WHERE state NOT IN('succeeded','failed','cancelled','interrupted')),
+   (SELECT count(*) FROM operations WHERE state NOT IN('succeeded','failed','cancelled','interrupted')),
+   (SELECT count(*) FROM apps WHERE state<>'stopped'),
+   (SELECT count(*) FROM settings WHERE key GLOB 'job.cleanup.*' AND
+     CASE WHEN json_valid(value) THEN COALESCE(json_extract(value,'$.state'),'') ELSE '' END<>'done'),
+   (SELECT count(*) FROM orphan_objects)
+  `).Scan(&inventory.Activities, &inventory.Transfers, &inventory.Jobs, &inventory.Generations, &inventory.Operations, &inventory.Apps, &inventory.Cleanup, &inventory.Orphans)
+	})
+	if err != nil {
+		return MaintenanceInventory{}, err
+	}
+	return inventory, nil
+}
