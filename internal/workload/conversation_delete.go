@@ -5,7 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
 )
@@ -42,7 +45,7 @@ func (s *Service) RequestConversationDeletionInTransaction(tx *sql.Tx, device, k
 		return op, err
 	}
 	var pending bool
-	err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM operations WHERE kind='conversation.delete' AND state IN('pending','running') AND id<>? AND json_extract(result,'$.conversationId')=?)", op.ID, id).Scan(&pending)
+	err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM operations WHERE kind='conversation.delete' AND state IN('pending','running','requires-action') AND id<>? AND json_extract(CASE WHEN json_valid(result) THEN result ELSE '{}' END,'$.conversationId')=?)", op.ID, id).Scan(&pending)
 	if err != nil {
 		return Operation{}, err
 	}
@@ -62,28 +65,25 @@ func (s *Service) RequestConversationDeletionInTransaction(tx *sql.Tx, device, k
 
 func conversationDeletionPending(tx *sql.Tx, id string) (bool, error) {
 	var count int
-	err := tx.QueryRow("SELECT count(*) FROM operations WHERE kind='conversation.delete' AND state IN('pending','running') AND json_extract(result,'$.conversationId')=?", id).Scan(&count)
+	err := tx.QueryRow("SELECT count(*) FROM operations WHERE kind='conversation.delete' AND state IN('pending','running','requires-action') AND json_extract(CASE WHEN json_valid(result) THEN result ELSE '{}' END,'$.conversationId')=?", id).Scan(&count)
 	return count > 0, err
 }
 
 func (s *Service) processConversationDeletion(ctx context.Context) error {
 	var operationID, device, payload string
-	err := s.Store.DB.QueryRowContext(ctx, "SELECT id,device_id,result FROM operations WHERE kind='conversation.delete' AND state='pending' AND COALESCE(json_extract(result,'$.nextAttemptAt'),0)<=? ORDER BY updated_at,created_at,id LIMIT 1", time.Now().Unix()).Scan(&operationID, &device, &payload)
+	err := s.Store.DB.QueryRowContext(ctx, "SELECT id,device_id,result FROM operations WHERE kind='conversation.delete' AND state='pending' AND CASE WHEN json_valid(result) THEN CASE WHEN json_type(result,'$.nextAttemptAt')='integer' THEN json_extract(result,'$.nextAttemptAt') ELSE 0 END ELSE 0 END<=? ORDER BY updated_at,created_at,id LIMIT 1", time.Now().Unix()).Scan(&operationID, &device, &payload)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	var object map[string]json.RawMessage
-	var intent conversationDeleteIntent
-	if len(payload) > 512 || json.Unmarshal([]byte(payload), &object) != nil || len(object) < 1 || len(object) > 3 || object["conversationId"] == nil || json.Unmarshal([]byte(payload), &intent) != nil || !guestproto.ValidID(intent.ConversationID) || intent.Attempts < 0 || intent.Attempts > 10 || intent.NextAttemptAt < 0 {
-		return ErrConflict
-	}
-	for key := range object {
-		if key != "conversationId" && key != "attempts" && key != "nextAttemptAt" {
-			return ErrConflict
-		}
+	intent, parseErr := parseConversationDeleteIntent(payload)
+	if parseErr != nil {
+		// Preserve the record for diagnosis and never derive deletion authority
+		// from ambiguous data. Quarantine it so later valid work can proceed.
+		_, persistErr := s.Store.DB.ExecContext(ctx, "UPDATE operations SET state='requires-action',updated_at=? WHERE id=? AND kind='conversation.delete' AND state='pending'", time.Now().Unix(), operationID)
+		return errors.Join(parseErr, persistErr)
 	}
 	deadline, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -102,4 +102,48 @@ func (s *Service) processConversationDeletion(ctx context.Context) error {
 	}
 	_, persistErr := s.Store.DB.ExecContext(ctx, "UPDATE operations SET result=?,updated_at=? WHERE id=? AND kind='conversation.delete' AND state='pending'", string(updated), time.Now().Unix(), operationID)
 	return errors.Join(err, persistErr)
+}
+
+func parseConversationDeleteIntent(payload string) (conversationDeleteIntent, error) {
+	var intent conversationDeleteIntent
+	if len(payload) > 512 || !utf8.ValidString(payload) {
+		return intent, ErrConflict
+	}
+	decoder := json.NewDecoder(strings.NewReader(payload))
+	token, err := decoder.Token()
+	if err != nil || token != json.Delim('{') {
+		return intent, ErrConflict
+	}
+	seen := map[string]bool{}
+	for decoder.More() {
+		token, err := decoder.Token()
+		key, ok := token.(string)
+		if err != nil || !ok || seen[key] || (key != "conversationId" && key != "attempts" && key != "nextAttemptAt") {
+			return intent, ErrConflict
+		}
+		seen[key] = true
+		var raw json.RawMessage
+		if decoder.Decode(&raw) != nil || string(raw) == "null" {
+			return intent, ErrConflict
+		}
+		switch key {
+		case "conversationId":
+			err = json.Unmarshal(raw, &intent.ConversationID)
+		case "attempts":
+			err = json.Unmarshal(raw, &intent.Attempts)
+		case "nextAttemptAt":
+			err = json.Unmarshal(raw, &intent.NextAttemptAt)
+		}
+		if err != nil {
+			return intent, ErrConflict
+		}
+	}
+	token, err = decoder.Token()
+	if err != nil || token != json.Delim('}') {
+		return intent, ErrConflict
+	}
+	if _, err = decoder.Token(); err != io.EOF || !guestproto.ValidID(intent.ConversationID) || intent.Attempts < 0 || intent.Attempts > 10 || intent.NextAttemptAt < 0 {
+		return intent, ErrConflict
+	}
+	return intent, nil
 }

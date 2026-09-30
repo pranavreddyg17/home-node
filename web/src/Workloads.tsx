@@ -114,7 +114,7 @@ export function Jobs() {
   </div>
 }
 
-type Conversation = { id: string; title: string; createdAt: number; deletionPending: boolean }
+type Conversation = { id: string; title: string; createdAt: number; deletionPending: boolean; deletionRequiresAction: boolean }
 type Generation = { id: string; conversationId: string; prompt: string; output: string; state: string; createdAt: number }
 export function AI({ verify }: { verify: () => Promise<void> }) {
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -126,6 +126,7 @@ export function AI({ verify }: { verify: () => Promise<void> }) {
   const [active, setActive] = useState<string | null>(null)
   const refresh = () => api<Conversation[]>('/ai/conversations').then(setConversations)
   const deleting = conversations.find(c => c.id === selected)?.deletionPending ?? false
+  const deletionRequiresAction = conversations.find(c => c.id === selected)?.deletionRequiresAction ?? false
   const pendingDeletion = conversations.some(c => c.deletionPending)
   useEffect(() => {
     if (!pendingDeletion) return
@@ -162,7 +163,7 @@ export function AI({ verify }: { verify: () => Promise<void> }) {
       if (!completed) throw new Error(`Deletion remains pending (operation ${op.id}). The server will retry cleanup; data has not been reported as deleted.`);
       setSelected(''); await refresh() } catch (e) { setError(message(e)) } finally { setBusy(false) } }
   return <div className="stack">{error && <p className="form-error" role="alert">{error}</p>}<section className="panel"><div className="section-heading"><h2>Private AI</h2><button disabled={busy} onClick={() => void create()}>New conversation</button></div><p>Start the installed CPU model profile in Apps. Chat stays on the AI guest disk. The model has no network access or administrative tools.</p><p>Context includes up to eight recent turns within a bounded size. Responses are limited to 256 tokens in this profile.</p><label className="conversation-picker">Conversation<select value={selected} onChange={e => setSelected(e.target.value)}><option value="">Choose a conversation</option>{conversations.map(c => <option key={c.id} value={c.id}>{c.title}{c.deletionPending ? ' (deletion pending)' : ''}</option>)}</select></label>{selected && <div className="button-row"><a className="download-link" href={`/api/v1/ai/conversations/${selected}/export`} download>Export history</a><button disabled={busy || Boolean(active) || deleting} onClick={() => void remove()}>Delete conversation</button><button onClick={() => void verify().catch(e => setError(message(e)))}>Verify passkey</button></div>}</section>
-    {selected && deleting && <p role="status">Deletion is pending. The server will retry cleanup automatically. New messages are disabled until cleanup finishes.</p>}
+    {selected && deleting && <p role="status">{deletionRequiresAction ? 'Deletion needs attention because its saved cleanup record is invalid. New messages remain disabled; check the server operation before attempting recovery.' : 'Deletion is pending. The server will retry cleanup automatically. New messages are disabled until cleanup finishes.'}</p>}
     {selected && !deleting && <section className="panel chat-panel"><div className="chat-history" aria-live="polite">{!history.length && <p>Ask your first question.</p>}{history.map(g => <article key={g.id}><div className="chat-message user-message"><strong>You</strong><p>{g.prompt}</p></div><div className="chat-message assistant-message"><strong>Private AI</strong><p>{g.output || (['queued', 'running'].includes(g.state) ? 'Waiting for the local model…' : 'No response was completed.')}</p><small>{g.state}</small></div></article>)}</div><form onSubmit={e => { e.preventDefault(); void send() }}><label>Message<textarea value={prompt} onChange={e => setPrompt(e.target.value)} maxLength={2048} rows={4} required placeholder="Ask your local model…" /></label><div className="button-row"><button className="primary" disabled={busy || Boolean(active) || !prompt.trim()}>Send message</button>{active && <button type="button" onClick={() => void api(`/ai/generations/${active}/cancel`, {}).catch(e => setError(message(e)))}>Cancel generation</button>}</div></form></section>}
   </div>
 }

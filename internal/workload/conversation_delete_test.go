@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -301,5 +302,85 @@ func TestDeletionCheckpointsAcknowledgedGenerationsBeforeRetry(t *testing.T) {
 	completed, err := restarted.Operation(ctx, device, op.ID)
 	if err != nil || completed.State != "succeeded" {
 		t.Fatal("checkpointed cleanup did not finish", completed, err)
+	}
+}
+
+func TestMalformedDeletionIsQuarantinedWithoutStarvingCleanup(t *testing.T) {
+	for _, payload := range []string{
+		`{`,
+		`{"conversationId":"FIRST","conversationId":"SECOND"}`,
+		`{"conversationId":"FIRST","attempts":null}`,
+		`{"conversationId":"FIRST","conversation\u0049d":"SECOND"}`,
+		`{"conversationId":"FIRST","nextAttemptAt":"tomorrow"}`,
+		`{"conversationId":"FIRST","unexpected":1}`,
+	} {
+		t.Run(payload, func(t *testing.T) {
+			s, _, device := service(t)
+			ctx := context.Background()
+			first, err := s.CreateConversation(ctx, device)
+			if err != nil {
+				t.Fatal(err)
+			}
+			second, err := s.CreateConversation(ctx, device)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var invalid, valid Operation
+			for i, id := range []string{first.ID, second.ID} {
+				err = s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+					op, err := s.RequestConversationDeletionInTransaction(tx, device, state.Random(), id)
+					if i == 0 {
+						invalid = op
+					} else {
+						valid = op
+					}
+					return err
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			malformed := strings.ReplaceAll(strings.ReplaceAll(payload, "FIRST", first.ID), "SECOND", second.ID)
+			if _, err = s.Store.DB.Exec("UPDATE operations SET result=?,updated_at=0 WHERE id=?", malformed, invalid.ID); err != nil {
+				t.Fatal(err)
+			}
+			if err = s.processConversationDeletion(ctx); !errors.Is(err, ErrConflict) {
+				t.Fatal("invalid intent accepted", err)
+			}
+			op, err := s.Operation(ctx, device, invalid.ID)
+			if err != nil || op.State != "requires-action" {
+				t.Fatal(op, err)
+			}
+			var count int
+			if err = s.Store.DB.QueryRow("SELECT count(*) FROM conversations WHERE id=?", first.ID).Scan(&count); err != nil || count != 1 {
+				t.Fatal("invalid intent removed metadata", count, err)
+			}
+			if err = s.processConversationDeletion(ctx); err != nil {
+				t.Fatal("invalid record starved valid cleanup", err)
+			}
+			op, err = s.Operation(ctx, device, valid.ID)
+			if err != nil || op.State != "succeeded" {
+				t.Fatal(op, err)
+			}
+			listed, err := s.Conversations(ctx)
+			if err != nil {
+				t.Fatal("invalid JSON poisoned listings", err)
+			}
+			if payload != "{" && !strings.Contains(payload, "SECOND") {
+				if len(listed) != 1 || !listed[0].DeletionPending || !listed[0].DeletionRequiresAction {
+					t.Fatal("quarantined cleanup not visible", listed)
+				}
+				err = s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+					blocked, err := conversationDeletionPending(tx, first.ID)
+					if err == nil && !blocked {
+						t.Fatal("quarantine reopened generation admission")
+					}
+					return err
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
 	}
 }

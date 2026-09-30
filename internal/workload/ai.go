@@ -14,10 +14,11 @@ import (
 )
 
 type Conversation struct {
-	DeletionPending bool   `json:"deletionPending"`
-	ID              string `json:"id"`
-	Title           string `json:"title"`
-	CreatedAt       int64  `json:"createdAt"`
+	DeletionRequiresAction bool   `json:"deletionRequiresAction"`
+	DeletionPending        bool   `json:"deletionPending"`
+	ID                     string `json:"id"`
+	Title                  string `json:"title"`
+	CreatedAt              int64  `json:"createdAt"`
 }
 type Generation struct {
 	ID             string `json:"id"`
@@ -37,7 +38,7 @@ type objectReference struct {
 }
 
 func (s *Service) Conversations(ctx context.Context) ([]Conversation, error) {
-	rows, err := s.Store.DB.QueryContext(ctx, "SELECT c.id,c.title,c.created_at,EXISTS(SELECT 1 FROM operations o WHERE o.kind='conversation.delete' AND o.state IN('pending','running') AND json_extract(o.result,'$.conversationId')=c.id) FROM conversations c ORDER BY c.created_at DESC LIMIT 100")
+	rows, err := s.Store.DB.QueryContext(ctx, "SELECT c.id,c.title,c.created_at,EXISTS(SELECT 1 FROM operations o WHERE o.kind='conversation.delete' AND o.state IN('pending','running','requires-action') AND json_extract(CASE WHEN json_valid(o.result) THEN o.result ELSE '{}' END,'$.conversationId')=c.id),EXISTS(SELECT 1 FROM operations o WHERE o.kind='conversation.delete' AND o.state='requires-action' AND json_extract(CASE WHEN json_valid(o.result) THEN o.result ELSE '{}' END,'$.conversationId')=c.id) FROM conversations c ORDER BY c.created_at DESC LIMIT 100")
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +46,7 @@ func (s *Service) Conversations(ctx context.Context) ([]Conversation, error) {
 	items := []Conversation{}
 	for rows.Next() {
 		var item Conversation
-		if err = rows.Scan(&item.ID, &item.Title, &item.CreatedAt, &item.DeletionPending); err != nil {
+		if err = rows.Scan(&item.ID, &item.Title, &item.CreatedAt, &item.DeletionPending, &item.DeletionRequiresAction); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
