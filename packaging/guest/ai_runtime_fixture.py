@@ -16,7 +16,7 @@ import overlay
 
 
 def streaming_result(stream):
-    total, text_bytes, finished, done = 0, 0, False, False
+    total, text_bytes, finished, done, role_started = 0, 0, False, False, False
     while line := stream.readline(65537):
         total += len(line)
         if len(line) > 65536 or total > 256 << 10:
@@ -35,6 +35,9 @@ def streaming_result(stream):
         if not isinstance(choice, dict) or not isinstance(choice.get("delta"), dict):
             raise ValueError("invalid inference delta")
         text = choice["delta"].get("content", "")
+        if text is None and choice["delta"] == {"role": "assistant", "content": None} and choice.get("finish_reason") is None and not finished and text_bytes == 0 and not role_started:
+            role_started = True
+            continue
         if not isinstance(text, str) or finished:
             raise ValueError("invalid inference continuation")
         text_bytes += len(text.encode("utf-8"))

@@ -15,6 +15,14 @@ class InferenceStreamTests(unittest.TestCase):
         self.assertEqual(fixture.streaming_result(io.BytesIO(stream())), 5)
         self.assertEqual(fixture.streaming_result(io.BytesIO(stream("héllo", "length"))), 6)
 
+    def test_pinned_server_initial_assistant_null_content(self):
+        initial = b'data: {"choices":[{"delta":{"role":"assistant","content":null},"finish_reason":null}]}\n\n'
+        self.assertEqual(fixture.streaming_result(io.BytesIO(initial + stream())), 5)
+        for prefix in (initial + initial, initial.replace(b'assistant', b'tool'),
+                       initial.replace(b'"role":"assistant",', b'')):
+            with self.subTest(prefix=prefix), self.assertRaises(ValueError):
+                fixture.streaming_result(io.BytesIO(prefix + stream()))
+
     def test_partial_empty_oversized_or_unapproved_output_refused(self):
         cases = [stream().replace(b"data: [DONE]\n\n", b""),
                  b"data: [DONE]\n\n", stream(""), stream("x" * 32769), stream(finish="tool_calls"),
