@@ -84,8 +84,8 @@ const domainXML = `<domain type='kvm'>
  <devices>
   <emulator>/usr/bin/qemu-system-x86_64</emulator>
   <controller type='usb' model='none'/>
-  <disk type='file' device='disk'><driver name='qemu' type='raw' cache='none'/><source file='{{xml .SystemPath}}'/><target dev='vda' bus='virtio'/><readonly/><iotune><read_bytes_sec>104857600</read_bytes_sec></iotune></disk>
-  <disk type='file' device='disk'><driver name='qemu' type='raw' cache='none'/><source file='{{xml .DataPath}}'/><target dev='vdb' bus='virtio'/><iotune><read_bytes_sec>52428800</read_bytes_sec><write_bytes_sec>52428800</write_bytes_sec></iotune></disk>
+  <disk type='file' device='disk'><driver name='qemu' type='raw' cache='none'/><source file='{{xml .SystemPath}}'/><target dev='vda' bus='virtio'/><serial>homenode-system</serial><readonly/><iotune><read_bytes_sec>104857600</read_bytes_sec></iotune></disk>
+  <disk type='file' device='disk'><driver name='qemu' type='raw' cache='none'/><source file='{{xml .DataPath}}'/><target dev='vdb' bus='virtio'/><serial>homenode-data</serial><iotune><read_bytes_sec>52428800</read_bytes_sec><write_bytes_sec>52428800</write_bytes_sec></iotune></disk>
   <controller type='virtio-serial' index='0'/>
   <channel type='unix'><source mode='bind' path='{{xml .ChannelPath}}'/><target type='virtio' name='org.homenode.adapter'/></channel>
   <memballoon model='none'/>

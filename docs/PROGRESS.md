@@ -327,3 +327,9 @@ Development is on macOS; none of these hardware or external review gates may be 
 - Linux run `36667770808` failed the positive native sysusers identity fixture; Go/root tests, builds, package inspection and real overlay compilation passed, while later unit/browser checks were skipped.
 - Upstream systemd v255 sysusers implementation requires an explicitly supplied numeric primary GID to exist. The guest source now declares its fixed private group before the user. Exact observed identity and collision admission remain mandatory; native validation of the corrected source is pending.
 - Directory-protection commit `bbf1414` and this repair are shipped together for the next CI run. This is account assembly repair, not completed guest image boot qualification.
+
+## Guest disk role serials
+
+- The supervisor now emits distinct fixed system/data serials on the existing isolated raw disks. Structured XML tests bind each role to its correct source, target and read-only/writable mode.
+- Local supervisor tests passed. Installed-libvirt schema validation is supplied by Linux CI; physical/kernel serial discovery, filesystem identity, safe initialization and actual mounts remain pending.
+- Corrected native account/unit CI `36668044046` is still running. The disk-role change is committed locally while that validation completes, to avoid cancelling its native fixture again.

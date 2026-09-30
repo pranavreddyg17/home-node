@@ -94,3 +94,19 @@ restart after device removal/reappearance is not claimed.
 This follows the upstream [systemd device-unit tag/alias contract](https://github.com/systemd/systemd/blob/main/man/systemd.device.xml) and unit dependencies. Static unit validation and path escaping are checked in Linux CI;
 real virtio enumeration, delayed arrival, disappearance and shutdown behavior
 still require booted-image qualification.
+
+## Guest disk role identifiers
+
+The fixed supervisor XML exposes serial `homenode-system` on the read-only
+system disk and `homenode-data` on the separate writable data disk. These are
+role identifiers within one isolated VM, not globally unique volume IDs or
+publisher authentication. Future guest initialization must verify the named
+virtio device, actual block identity, expected size, read-only/writeable role
+and filesystem state before mounting or initializing data. Positions `vda`/`vdb`
+alone do not establish those checks. No formatter or mount action is enabled
+by this change; existing disk bytes are untouched.
+
+Tests parse generated XML to bind both serials to their expected source paths,
+targets and access modes. Linux CI additionally uses the installed libvirt
+schema. Actual kernel serial/by-id discovery and safe blank-disk initialization
+remain booted-VM acceptance requirements.

@@ -214,6 +214,31 @@ func TestDomainHasOnlyApprovedDevices(t *testing.T) {
 			t.Fatalf("missing %s", required)
 		}
 	}
+	var parsed struct {
+		Disks []struct {
+			Serial string `xml:"serial"`
+			Target struct {
+				Dev string `xml:"dev,attr"`
+			} `xml:"target"`
+			Source struct {
+				File string `xml:"file,attr"`
+			} `xml:"source"`
+			ReadOnly *struct{} `xml:"readonly"`
+		} `xml:"devices>disk"`
+	}
+	if err := xml.Unmarshal([]byte(text), &parsed); err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed.Disks) != 2 {
+		t.Fatalf("unexpected disk count: %d", len(parsed.Disks))
+	}
+	system, data := parsed.Disks[0], parsed.Disks[1]
+	if system.Serial != "homenode-system" || system.Target.Dev != "vda" || system.Source.File != d.SystemPath || system.ReadOnly == nil {
+		t.Fatal("system disk role is not uniquely bound to its read-only source")
+	}
+	if data.Serial != "homenode-data" || data.Target.Dev != "vdb" || data.Source.File != d.DataPath || data.ReadOnly != nil {
+		t.Fatal("data disk role is not uniquely bound to its writable source")
+	}
 	d.ID = "../../inject"
 	if _, err = d.XML(); err == nil {
 		t.Fatal("unsafe domain id accepted")
