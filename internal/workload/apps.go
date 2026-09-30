@@ -196,15 +196,19 @@ func (s *Service) processAppKind(ctx context.Context, selectedKind string) error
 	}
 	if err == nil && intent.Action == "start" && instance.State == "running" {
 		err = s.waitApp(ctx, intent.Workload, intent.InstanceID, opID)
-		if err != nil {
-			cleanup, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-			_, _ = s.Backend.Apply(cleanup, supervisor.Request{Version: 1, OperationID: state.Random(), Action: "stop", InstanceID: intent.InstanceID, Revision: intent.Revision, PolicyGeneration: s.PolicyGeneration})
-			cancel()
-		}
 	}
 	if err != nil {
+		if intent.Action == "start" {
+			cleanup, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			stopped, stopErr := s.Backend.Apply(cleanup, supervisor.Request{Version: 1, OperationID: state.Random(), Action: "stop", InstanceID: intent.InstanceID, Revision: intent.Revision, PolicyGeneration: s.PolicyGeneration})
+			cancel()
+			if stopErr != nil || stopped.ID != intent.InstanceID || stopped.Revision != intent.Revision || stopped.State != "stopped" {
+				return s.requireAppAttention(ctx, opID, device, intent)
+			}
+		}
 		return s.failApp(ctx, opID, device, intent, "executing", "RUNTIME_BLOCKED")
 	}
+
 	encoded, err := json.Marshal(instance)
 	if err != nil {
 		return err
@@ -346,5 +350,38 @@ func (s *Service) failApp(ctx context.Context, operationID, device string, inten
 			}
 		}
 		return state.Event(tx, device, "operation.failed", operationID, result)
+	})
+}
+
+func (s *Service) requireAppAttention(ctx context.Context, operationID, device string, intent appIntent) error {
+	result := map[string]any{"code": "START_CLEANUP_REQUIRED", "intent": intent}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	return s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		update, err := tx.Exec("UPDATE apps SET state='failed',updated_at=? WHERE workload=? AND operation_id=? AND revision=?", time.Now().Unix(), intent.Workload, operationID, intent.Revision)
+		if err != nil {
+			return err
+		}
+		count, err := update.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return ErrConflict
+		}
+		update, err = tx.Exec("UPDATE operations SET state='requires-action',result=?,updated_at=? WHERE id=? AND device_id=? AND state='executing'", string(encoded), time.Now().Unix(), operationID, device)
+		if err != nil {
+			return err
+		}
+		count, err = update.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return ErrConflict
+		}
+		return state.Event(tx, device, "operation.requires-action", operationID, result)
 	})
 }
