@@ -1,6 +1,7 @@
 [Unit]
 Description=HomeNode %i guest adapter
-After=systemd-udev-settle.service
+BindsTo=dev-virtio\x2dports-org.homenode.adapter.device
+After=dev-virtio\x2dports-org.homenode.adapter.device
 RequiresMountsFor=/data
 ConditionPathIsMountPoint=/data
 ConditionPathExists=/dev/virtio-ports/org.homenode.adapter

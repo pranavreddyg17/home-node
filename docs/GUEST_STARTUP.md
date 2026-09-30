@@ -79,3 +79,18 @@ these sources are not installed or enabled on the owner's host by packaging.
 Static unit validation is included in Linux CI after the development guest
 binary is installed. Actual boot, user/device access and confinement remain
 unverified until maintained images are built and exercised.
+
+## Named port startup ordering
+
+The adapter unit now orders startup after and binds its lifetime to the fixed
+virtio-port device unit. The matching guest-only udev rule tags the port for
+systemd and sets its fixed absolute device alias, in addition to its private
+ownership and symlink. The service no longer relies on an ordering-only edge
+to a global udev settle service: a port that appears later must satisfy the
+actual device dependency before service conditions are evaluated. Device loss
+stops the adapter. The enabled profile is started on normal guest boot; automatic
+restart after device removal/reappearance is not claimed.
+
+This follows the upstream [systemd device-unit tag/alias contract](https://github.com/systemd/systemd/blob/main/man/systemd.device.xml) and unit dependencies. Static unit validation and path escaping are checked in Linux CI;
+real virtio enumeration, delayed arrival, disappearance and shutdown behavior
+still require booted-image qualification.

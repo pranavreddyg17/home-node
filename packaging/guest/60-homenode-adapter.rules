@@ -1,2 +1,2 @@
 # Installed only in the immutable guest image, never on the owner's host.
-SUBSYSTEM=="virtio-ports", ATTR{name}=="org.homenode.adapter", OWNER="homenode-guest", GROUP="homenode-guest", MODE="0600", SYMLINK+="virtio-ports/org.homenode.adapter"
+SUBSYSTEM=="virtio-ports", ATTR{name}=="org.homenode.adapter", OWNER="homenode-guest", GROUP="homenode-guest", MODE="0600", SYMLINK+="virtio-ports/org.homenode.adapter", TAG+="systemd", ENV{SYSTEMD_ALIAS}="/dev/virtio-ports/org.homenode.adapter"
