@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/identity"
+	"github.com/pranavreddyg17/home-node/internal/state"
 	"github.com/pranavreddyg17/home-node/internal/workload"
 )
 
@@ -40,6 +41,8 @@ func (s *Server) workloadRoutes() {
 }
 func workloadError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, state.ErrMaintenance):
+		fail(w, 409, "POLICY_DENIED", "Host maintenance is in progress. Existing work may drain; new work is blocked until maintenance safely finishes.")
 	case errors.Is(err, workload.ErrUnavailable):
 		fail(w, 503, "WORKLOAD_UNAVAILABLE", "Start the required app on a qualified Linux host with verified guest images.")
 	case errors.Is(err, workload.ErrInvalid):

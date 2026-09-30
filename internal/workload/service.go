@@ -107,6 +107,9 @@ func (s *Service) CreateTransfer(ctx context.Context, device, name string, size 
 	}
 	transfer := Transfer{ID: state.Random(), Name: name, Size: size, SHA256: hash, State: "uploading", ExpiresAt: time.Now().Add(24 * time.Hour).Unix()}
 	err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := state.RequireAdmission(tx); err != nil {
+			return errors.Join(ErrConflict, err)
+		}
 		var reserved int64
 		var count int
 		if err := tx.QueryRow("SELECT coalesce(sum(size),0),count(*) FROM transfers WHERE state IN('uploading','verifying','cancelling')").Scan(&reserved, &count); err != nil {

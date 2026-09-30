@@ -59,6 +59,9 @@ func (s *Service) CreateConversation(ctx context.Context, title string) (Convers
 	}
 	item := Conversation{ID: state.Random(), Title: title, CreatedAt: time.Now().Unix()}
 	err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := state.RequireAdmission(tx); err != nil {
+			return errors.Join(ErrConflict, err)
+		}
 		var count int
 		if err := tx.QueryRow("SELECT count(*) FROM conversations").Scan(&count); err != nil {
 			return err
@@ -208,6 +211,10 @@ func (s *Service) CreateGeneration(ctx context.Context, device, key, conversatio
 		if replay {
 			return tx.QueryRow("SELECT id FROM generations WHERE operation_id=?", op.ID).Scan(&generationID)
 		}
+		if err := state.RequireAdmission(tx); err != nil {
+			return errors.Join(ErrConflict, err)
+		}
+
 		var active, total, conversationCount int
 		if err = tx.QueryRow("SELECT count(*) FROM generations WHERE state IN('staging','queued','running','cancelling')").Scan(&active); err != nil {
 			return err

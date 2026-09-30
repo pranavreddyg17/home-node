@@ -74,6 +74,9 @@ func (s *Service) CreateJob(ctx context.Context, device, key, input, preset, ret
 		if replay {
 			return tx.QueryRow("SELECT id FROM jobs WHERE operation_id=?", op.ID).Scan(&attemptID)
 		}
+		if err := state.RequireAdmission(tx); err != nil {
+			return errors.Join(ErrConflict, err)
+		}
 		var size int64
 		if err = tx.QueryRow("SELECT size FROM files WHERE id=? AND trash_until IS NULL", input).Scan(&size); err != nil {
 			return ErrInvalid

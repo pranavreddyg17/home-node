@@ -89,6 +89,7 @@ DELETE FROM invitations; DELETE FROM challenges; DELETE FROM recovery_codes;
 UPDATE devices SET capabilities='[]',revoked_at=coalesce(revoked_at,unixepoch());
 UPDATE identity SET claimed=0,epoch=epoch+1,owner_id=?;
 DELETE FROM settings WHERE key='origin';
+DELETE FROM settings WHERE key='host.maintenance';
 DELETE FROM settings WHERE key GLOB 'job.cleanup.*';
 UPDATE jobs SET start_requested=0;
 UPDATE transfers SET state='cancelling' WHERE state IN('uploading','verifying');

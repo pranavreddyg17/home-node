@@ -83,6 +83,9 @@ func (s *Service) AppActionInTransaction(tx *sql.Tx, device, key, name, action s
 	if err != nil || replay {
 		return op, err
 	}
+	if err := state.RequireAdmission(tx); err != nil {
+		return Operation{}, errors.Join(ErrConflict, err)
+	}
 	if phase == "stopping" || action == "start" && (phase == "running" || phase == "starting") {
 		return Operation{}, ErrConflict
 	}
