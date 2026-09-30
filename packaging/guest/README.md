@@ -300,3 +300,11 @@ No successful assembled boot is established yet. TCG and a tiny test disk also
 do not prove KVM/AppArmor confinement, production disk quotas, video conversion,
 model loading, memory/thermal envelopes, client networking or full host lifecycle.
 The real image build and boot results must be inspected before those claims.
+
+The development recipe explicitly includes Ubuntu's universe component. Actual
+Linux build logs showed that mkosi's default initramfs package set requires
+`erofs-utils`, which was unavailable with main alone; video also requires FFmpeg.
+Repository signature checking remains enabled. Availability in a signed archive
+is not proof of timely vulnerability fixes or maintenance coverage for every
+package: the release qualification still needs a reviewed support/patch policy
+and pinned package/license inventory for both system and initramfs closures.
