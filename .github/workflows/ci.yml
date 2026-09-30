@@ -83,6 +83,8 @@ jobs:
           done
       - name: Validate native guest image identity
         run: sudo env HOMENODE_GUEST_ACCOUNT_INTEGRATION=1 python3 packaging/guest/identity_test.py
+      - name: Validate guest ephemeral directory creation
+        run: sudo env HOMENODE_GUEST_VOLATILE_INTEGRATION=1 python3 packaging/guest/volatile_test.py
       - name: Validate guest service source
         run: |
           test "$(systemd-escape --path --suffix=device /dev/virtio-ports/org.homenode.adapter)" = 'dev-virtio\x2dports-org.homenode.adapter.device'

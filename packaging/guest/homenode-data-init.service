@@ -1,5 +1,7 @@
 # Guest image only. This does not initialize or format a block device.
 [Unit]
+Requires=systemd-tmpfiles-setup.service
+After=systemd-tmpfiles-setup.service
 Description=HomeNode guest private object directory
 RequiresMountsFor=/data
 BindsTo=data.mount

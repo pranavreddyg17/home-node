@@ -13,7 +13,8 @@ import tempfile
 
 PROFILES = {"files": 16 << 30, "video": 8 << 30, "ai": 16 << 30}
 BINARY = "usr/lib/homenode/guest/homenode-guest"
-COMMON = {"usr/lib/systemd/system/tmp.mount": 0o644, "usr/lib/systemd/system/var.mount": 0o644, BINARY: 0o755, "usr/lib/homenode/guest/homenode-guest-init": 0o755,
+COMMON = {"usr/lib/tmpfiles.d/homenode-volatile.conf": 0o644,
+          "usr/lib/systemd/journald.conf.d/60-homenode.conf": 0o644, "usr/lib/systemd/system/tmp.mount": 0o644, "usr/lib/systemd/system/var.mount": 0o644, BINARY: 0o755, "usr/lib/homenode/guest/homenode-guest-init": 0o755,
           "usr/lib/systemd/system/homenode-data-init.service": 0o644, "usr/lib/systemd/system/data.mount": 0o644, "usr/lib/systemd/system/homenode-guest@.service": 0o644,
           "usr/lib/udev/rules.d/60-homenode-adapter.rules": 0o644,
           "usr/lib/sysusers.d/homenode-guest.conf": 0o644}

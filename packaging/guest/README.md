@@ -173,3 +173,28 @@ These development overlays deliberately reject older inventories without the
 mountpoints. A base-root merger must preserve existing distribution contents
 beneath `/tmp` and `/var` according to its reviewed assembly policy; this importer
 still creates only a fresh overlay and does not merge or edit an existing rootfs.
+
+## Volatile OS directory and journal inputs
+
+The overlay carries `usr/lib/tmpfiles.d/homenode-volatile.conf`, creating only
+`/var/tmp` (root:root 1777), `/var/log` and `/var/lib` (root:root 0755).
+Initializer and adapter explicitly require and follow the distribution's
+`systemd-tmpfiles-setup.service`, which must run after the guest `/var` mount.
+These rules neither recurse into workload objects nor remove existing files.
+The opt-in Linux fixture runs the actual installed `systemd-tmpfiles` twice
+against a fresh temporary root and verifies modes, replay and workload marker
+preservation. It never applies the rules to the owner's host.
+
+`usr/lib/systemd/journald.conf.d/60-homenode.conf` selects volatile logs under
+`/run`, requests 16 MiB total use, 4 MiB files, four retained files and one-day
+retention, and disables syslog/kernel/console/wall forwarding. Rate limiting
+requests 1000 messages per 30 seconds; systemd adjusts effective limits according
+to free space. Journal retention is not a hard filesystem quota: active files
+and rotation can exceed configured targets. See the pinned upstream
+[journal contract](https://raw.githubusercontent.com/systemd/systemd/v255/man/journald.conf.xml)
+and [tmpfiles contract](https://raw.githubusercontent.com/systemd/systemd/v255/man/tmpfiles.d.xml).
+Actual `/run` bounds, default-namespace configuration precedence, rotation under
+load and aggregate VM memory measurements still need image qualification.
+Guest-local logs disappear at reboot; authoritative owner audit history remains
+in the host controller. No native journal daemon or guest boot is exercised by
+the directory fixture.

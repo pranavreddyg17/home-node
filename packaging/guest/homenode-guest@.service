@@ -1,4 +1,6 @@
 [Unit]
+Requires=systemd-tmpfiles-setup.service
+After=systemd-tmpfiles-setup.service
 Description=HomeNode %i guest adapter
 BindsTo=dev-virtio\x2dports-org.homenode.adapter.device
 After=dev-virtio\x2dports-org.homenode.adapter.device
