@@ -187,7 +187,11 @@ func (s *Service) processAppKind(ctx context.Context, selectedKind string) error
 		runtimeAction = "shutdown"
 	}
 	instance, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: opID, InstanceID: intent.InstanceID, Workload: intent.Workload, Action: runtimeAction, Revision: intent.Revision, PolicyGeneration: s.PolicyGeneration})
-	if err == nil && runtimeAction == "shutdown" && instance.State != "stopped" {
+	expectedState := "running"
+	if intent.Action == "stop" {
+		expectedState = "stopped"
+	}
+	if err == nil && (instance.ID != intent.InstanceID || instance.Revision != intent.Revision || instance.State != expectedState || instance.Workload != "" && instance.Workload != intent.Workload || (intent.Action == "start" || intent.CooperativeStop) && instance.Workload != intent.Workload) {
 		err = ErrConflict
 	}
 	if err == nil && intent.Action == "start" && instance.State == "running" {
@@ -202,10 +206,35 @@ func (s *Service) processAppKind(ctx context.Context, selectedKind string) error
 		_, _ = s.Store.DB.ExecContext(ctx, "UPDATE apps SET state='failed',updated_at=? WHERE workload=? AND operation_id=?", time.Now().Unix(), intent.Workload, opID)
 		return s.finish(ctx, opID, "failed", map[string]string{"code": "RUNTIME_BLOCKED"})
 	}
-	if _, err = s.Store.DB.ExecContext(ctx, "UPDATE apps SET state=?,updated_at=? WHERE workload=? AND operation_id=?", instance.State, time.Now().Unix(), intent.Workload, opID); err != nil {
+	encoded, err := json.Marshal(instance)
+	if err != nil {
 		return err
 	}
-	return s.finish(ctx, opID, "succeeded", instance)
+	return s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		result, err := tx.Exec("UPDATE apps SET state=?,updated_at=? WHERE workload=? AND operation_id=? AND revision=?", instance.State, time.Now().Unix(), intent.Workload, opID, intent.Revision)
+		if err != nil {
+			return err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return ErrConflict
+		}
+		result, err = tx.Exec("UPDATE operations SET state='succeeded',result=?,updated_at=? WHERE id=? AND device_id=? AND state='executing'", string(encoded), time.Now().Unix(), opID, device)
+		if err != nil {
+			return err
+		}
+		count, err = result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return ErrConflict
+		}
+		return state.Event(tx, device, "operation.succeeded", opID, instance)
+	})
 }
 func (s *Service) Reconcile(ctx context.Context) error {
 	if _, err := s.Store.DB.ExecContext(ctx, "INSERT OR IGNORE INTO settings(key,value) SELECT 'job.cleanup.'||id,json_object('state','pending','lastAttempt',0) FROM jobs WHERE start_requested=1"); err != nil {

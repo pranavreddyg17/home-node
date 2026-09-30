@@ -35,7 +35,7 @@ func (b *jobBackend) Apply(_ context.Context, r supervisor.Request) (supervisor.
 		b.purges++
 		phase = "removed"
 	}
-	return supervisor.Instance{ID: r.InstanceID, State: phase, Workload: r.Workload}, nil
+	return supervisor.Instance{ID: r.InstanceID, State: phase, Workload: r.Workload, Revision: r.Revision}, nil
 }
 func (b *jobBackend) Call(_ context.Context, id string, r guestproto.Request) (guestproto.Response, error) {
 	agent := b.files

@@ -35,7 +35,7 @@ func (b *testBackend) Apply(_ context.Context, r supervisor.Request) (supervisor
 	if b.running {
 		phase = "running"
 	}
-	return supervisor.Instance{ID: r.InstanceID, State: phase, Workload: r.Workload}, nil
+	return supervisor.Instance{ID: r.InstanceID, State: phase, Workload: r.Workload, Revision: r.Revision}, nil
 }
 func (b *testBackend) Call(_ context.Context, _ string, r guestproto.Request) (guestproto.Response, error) {
 	return b.agent.Handle(r), nil
