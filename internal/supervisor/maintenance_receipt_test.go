@@ -96,9 +96,13 @@ func TestRootReleaseLostAcknowledgementCanResumeManagementCheckpoint(t *testing.
 	if err = management.AdvanceMaintenanceJob(ctx, token, job.ID, "draining", "freezing"); err != nil {
 		t.Fatal(err)
 	}
-	rootToken, err := m.BeginRuntimeMaintenance(ctx)
+	rootToken, err := m.BeginRuntimeMaintenanceForJob(ctx, job.ID)
 	if err != nil {
 		t.Fatal(err)
+	}
+	replayed, err := m.BeginRuntimeMaintenanceForJob(ctx, job.ID)
+	if err != nil || replayed != rootToken {
+		t.Fatal("acquisition retry changed root authority", replayed, err)
 	}
 	if err = management.AttachMaintenanceRoot(ctx, token, job.ID, rootToken); err != nil {
 		t.Fatal(err)

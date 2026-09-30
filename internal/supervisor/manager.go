@@ -456,7 +456,7 @@ func (m *Manager) reconcile(ctx context.Context) error {
 	if len(failures) > 0 {
 		return errors.Join(failures...)
 	}
-	_, err = m.Store.DB.ExecContext(ctx, "UPDATE runtime_operations SET state='interrupted' WHERE state='pending'")
+	_, err = m.Store.DB.ExecContext(ctx, "UPDATE runtime_operations SET state='interrupted' WHERE state='pending' AND id NOT IN(SELECT value FROM settings WHERE key='runtime.maintenance-job')")
 	return err
 }
 func (m *Manager) Channel(ctx context.Context, id string) (string, error) {
