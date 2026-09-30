@@ -384,3 +384,8 @@ func ParseAppApprovalAction(body []byte) (string, error) {
 	}
 	return action, nil
 }
+
+func ValidEmptyApprovalBody(body []byte) bool {
+	_, err := approvalObject(body, nil)
+	return err == nil
+}

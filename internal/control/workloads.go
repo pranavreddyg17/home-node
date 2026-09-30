@@ -19,7 +19,7 @@ func (s *Server) workloadRoutes() {
 	s.mux.Handle("POST /api/v1/ai/conversations", s.require("ai", false, http.HandlerFunc(s.createConversation)))
 	s.mux.Handle("GET /api/v1/ai/conversations/{id}/history", s.require("ai", false, http.HandlerFunc(s.history)))
 	s.mux.Handle("GET /api/v1/ai/conversations/{id}/export", s.require("ai", false, http.HandlerFunc(s.exportConversation)))
-	s.mux.Handle("POST /api/v1/ai/conversations/{id}/delete", s.require("ai", true, http.HandlerFunc(s.deleteConversation)))
+	s.mux.Handle("POST /api/v1/ai/conversations/{id}/delete", s.require("ai", false, http.HandlerFunc(s.deleteConversation)))
 	s.mux.Handle("POST /api/v1/ai/generations", s.require("ai", false, http.HandlerFunc(s.createGeneration)))
 	s.mux.Handle("GET /api/v1/ai/generations/{id}", s.require("ai", false, http.HandlerFunc(s.generation)))
 	s.mux.Handle("POST /api/v1/ai/generations/{id}/cancel", s.require("ai", false, http.HandlerFunc(s.cancelGeneration)))
@@ -345,11 +345,40 @@ func (s *Server) cancelGeneration(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 202, map[string]bool{"cancellationRequested": true})
 }
 func (s *Server) deleteConversation(w http.ResponseWriter, r *http.Request) {
-	if err := s.Workloads.DeleteConversation(r.Context(), actor(r).Device.ID, r.PathValue("id")); err != nil {
+	body, ok := approvalBody(w, r)
+	if !ok {
+		return
+	}
+	if !identity.ValidEmptyApprovalBody(body) {
+		s.authError(w, identity.ErrDenied)
+		return
+	}
+	grant := r.Header.Get("X-Action-Approval")
+	if grant == "" {
+		fail(w, 403, "APPROVAL_REQUIRED", "Approve deleting this conversation with your passkey.")
+		return
+	}
+	id, key := r.PathValue("id"), r.Header.Get("Idempotency-Key")
+	resources, err := s.conversationDeleteResources(id, key)
+	if err != nil {
 		workloadError(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]bool{"deleted": true})
+	var op workload.Operation
+	err = s.Identity.ConsumeApproval(r.Context(), actor(r), grant, "ai.delete", resources, body, s.config.PolicyGeneration, func(tx *sql.Tx) error {
+		var err error
+		op, err = s.Workloads.RequestConversationDeletionInTransaction(tx, actor(r).Device.ID, key, id)
+		return err
+	})
+	if err != nil {
+		if errors.Is(err, identity.ErrDenied) {
+			s.authError(w, err)
+		} else {
+			workloadError(w, err)
+		}
+		return
+	}
+	writeJSON(w, 202, op)
 }
 func (s *Server) exportConversation(w http.ResponseWriter, r *http.Request) {
 	items, err := s.Workloads.History(r.Context(), r.PathValue("id"))

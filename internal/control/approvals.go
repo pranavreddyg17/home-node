@@ -11,6 +11,7 @@ import (
 )
 
 func (s *Server) approvalRoutes() {
+	s.mux.Handle("POST /api/v1/ai/conversations/{id}/delete/approval", s.require("ai", false, http.HandlerFunc(s.conversationDeleteApproval)))
 	s.mux.Handle("POST /api/v1/apps/{workload}/actions/approval", s.require("admin", false, http.HandlerFunc(s.appApproval)))
 	s.mux.Handle("POST /api/v1/devices/pair/approval", s.require("admin", false, http.HandlerFunc(s.pairApproval)))
 	s.mux.Handle("POST /api/v1/devices/{id}/revoke/approval", s.require("admin", false, http.HandlerFunc(s.revokeApproval)))
@@ -98,6 +99,45 @@ func (s *Server) appApproval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	options, token, binding, err := s.Identity.BeginApproval(r.Context(), actor(r), "app."+action, resources, body, s.config.PolicyGeneration)
+	if err != nil {
+		s.authError(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"options": options, "challengeToken": token, "expiresAt": binding.ExpiresAt})
+}
+
+func (s *Server) conversationDeleteResources(id, key string) ([]string, error) {
+	if len(key) < 16 || len(key) > 128 {
+		return nil, workload.ErrInvalid
+	}
+	return []string{id, state.Hash(key)}, nil
+}
+
+func (s *Server) conversationDeleteApproval(w http.ResponseWriter, r *http.Request) {
+	body, ok := approvalBody(w, r)
+	if !ok {
+		return
+	}
+	if !identity.ValidEmptyApprovalBody(body) {
+		s.authError(w, identity.ErrDenied)
+		return
+	}
+	id := r.PathValue("id")
+	resources, err := s.conversationDeleteResources(id, r.Header.Get("Idempotency-Key"))
+	if err != nil {
+		workloadError(w, err)
+		return
+	}
+	var exists, active int
+	if err := s.Store.DB.QueryRowContext(r.Context(), "SELECT count(*) FROM conversations WHERE id=?", id).Scan(&exists); err != nil || exists != 1 {
+		workloadError(w, workload.ErrInvalid)
+		return
+	}
+	if err := s.Store.DB.QueryRowContext(r.Context(), "SELECT count(*) FROM generations WHERE conversation_id=? AND state IN('staging','queued','running','cancelling')", id).Scan(&active); err != nil || active > 0 {
+		workloadError(w, workload.ErrConflict)
+		return
+	}
+	options, token, binding, err := s.Identity.BeginApproval(r.Context(), actor(r), "ai.delete", resources, body, s.config.PolicyGeneration)
 	if err != nil {
 		s.authError(w, err)
 		return

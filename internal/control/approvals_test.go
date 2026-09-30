@@ -123,3 +123,17 @@ func TestAppActionConsumesExactGrantWithDurableIntent(t *testing.T) {
 		t.Fatal("wrong intent count", count, err)
 	}
 }
+
+func TestConversationDeleteRequiresActionGrant(t *testing.T) {
+	s := testServer(t)
+	token := seedSession(t, s, `["ai"]`)
+	origin := "http://localhost:8787"
+	w := request(s, "POST", origin+"/api/v1/ai/conversations/"+state.Random()+"/delete", `{}`, token, origin)
+	if w.Code != 403 || !strings.Contains(w.Body.String(), "APPROVAL_REQUIRED") {
+		t.Fatal("fresh AI session bypassed approval", w.Code, w.Body.String())
+	}
+	var count int
+	if err := s.Store.DB.QueryRow("SELECT count(*) FROM operations WHERE kind='conversation.delete'").Scan(&count); err != nil || count != 0 {
+		t.Fatal("unapproved intent persisted", count, err)
+	}
+}
