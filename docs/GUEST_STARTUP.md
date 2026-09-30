@@ -67,3 +67,15 @@ validated before any running intent is rewritten as interrupted. Invalid
 recovery data fails startup and is preserved for diagnosis. This is application
 journal admission; disk corruption recovery, filesystem mount/init and booted
 image qualification remain separate requirements.
+
+## Image service sources
+
+`packaging/guest/` now contains a guest-only service template, fixed profile
+quotas and a named virtio-port access rule. The template requires `/data` to be a
+mountpoint, uses a dedicated nologin guest account with no capabilities, restricts
+writes to data and closes the worker process group on timeout. Builder-installed
+account, mount ownership and runtime dependencies are mandatory prerequisites;
+these sources are not installed or enabled on the owner's host by packaging.
+Static unit validation is included in Linux CI after the development guest
+binary is installed. Actual boot, user/device access and confinement remain
+unverified until maintained images are built and exercised.

@@ -1,0 +1,41 @@
+[Unit]
+Description=HomeNode %i guest adapter
+After=systemd-udev-settle.service
+RequiresMountsFor=/data
+ConditionPathIsMountPoint=/data
+ConditionPathExists=/dev/virtio-ports/org.homenode.adapter
+ConditionPathExists=/etc/homenode/guest/%i.env
+
+[Service]
+Type=simple
+User=homenode-guest
+Group=homenode-guest
+EnvironmentFile=/etc/homenode/guest/%i.env
+ExecStart=/usr/lib/homenode/guest/homenode-guest --workload %i --data-dir /data/objects --quota-bytes ${QUOTA_BYTES} --channel /dev/virtio-ports/org.homenode.adapter
+UMask=0077
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=15
+KillMode=control-group
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+RestrictAddressFamilies=AF_UNIX AF_INET
+DevicePolicy=closed
+DeviceAllow=/dev/virtio-ports/org.homenode.adapter rw
+ReadWritePaths=/data
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target
+DefaultInstance=files
