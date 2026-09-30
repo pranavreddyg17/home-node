@@ -217,3 +217,30 @@ lock. Replay must match the original installed configuration. This API does not
 fetch guest images, issue certificates, start services or certify isolation.
 Host preflight observations are admission checks, not physical acceptance tests.
 A user-facing installation command and remaining phases are still pending.
+
+### Immutable image publication
+
+`Engine.PlaceImages` is a Linux/root-only local release import phase. It requires
+fully installed, unchanged owned configuration; the supplied independent
+publisher key must match the committed key, and its version floor is checked
+against the signed, current catalog. All three catalog images are required.
+The source directory contains fixed `<sha256>.raw` files; input symlinks and
+nonregular files are rejected. There is no URL, shell, archive extraction or
+unsigned image fallback in this phase.
+
+A private `images.json` ledger binds progress to the configuration transaction
+and catalog bytes. Before recording initial intent, every destination must be
+absent. Streams are bounded to the signed sizes and hashed during copying;
+private staging files become root-owned, QEMU-group-readable mode 0440 only after
+verification. File sync, no-overwrite hard-link publication, directory sync and
+journal sync precede completed progress. Replay rehashes published images,
+reconciles a publication whose acknowledgement was lost, and refuses a missing
+completed image. Partial owned staging is rebuilt on retry. Unchanged foreign
+images are not adopted at initial admission.
+
+These images deliberately occupy the configuration-owned image directory;
+configuration rollback therefore cannot recursively erase them. Image removal,
+release download/update orchestration and data-aware uninstall remain separate
+unfinished work. Importing signed bytes is not proof of bootability, guest
+qualification, host isolation, or publisher release provenance. Physical
+power-loss durability and real boot tests remain acceptance gates.
