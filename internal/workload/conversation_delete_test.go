@@ -109,3 +109,78 @@ func TestPendingConversationDeletionBlocksNewIntentAndAdmission(t *testing.T) {
 		t.Fatal("duplicate intent retained", count, err)
 	}
 }
+
+func TestDeletionWorkerCompletesMetadataAndOperationAtomically(t *testing.T) {
+	s, _, device := service(t)
+	ctx := context.Background()
+	conversation, err := s.CreateConversation(ctx, device)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var op Operation
+	if err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		var err error
+		op, err = s.RequestConversationDeletionInTransaction(tx, device, state.Random(), conversation.ID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.processConversationDeletion(ctx); err != nil {
+		t.Fatal(err)
+	}
+	completed, err := s.Operation(ctx, device, op.ID)
+	if err != nil || completed.State != "succeeded" || string(completed.Result) != `{"deleted":true}` {
+		t.Fatal("completion not committed", completed, err)
+	}
+	var count int
+	if err := s.Store.DB.QueryRow("SELECT count(*) FROM conversations WHERE id=?", conversation.ID).Scan(&count); err != nil || count != 0 {
+		t.Fatal("conversation retained", count, err)
+	}
+	if err := s.processConversationDeletion(ctx); err != nil {
+		t.Fatal("idle replay failed", err)
+	}
+}
+
+func TestDeletionWorkerRetriesAfterUnavailableGuestAndServiceRestart(t *testing.T) {
+	s, backend, device, conversation := aiService(t)
+	ctx := context.Background()
+	if _, err := s.CreateGeneration(ctx, device, state.Random(), conversation.ID, "private fixture"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.processGeneration(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var op Operation
+	if err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		var err error
+		op, err = s.RequestConversationDeletionInTransaction(tx, device, state.Random(), conversation.ID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.DB.Exec("UPDATE apps SET state='stopped' WHERE workload='ai'"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.processConversationDeletion(ctx); !errors.Is(err, ErrUnavailable) {
+		t.Fatal("unavailable guest acknowledged deletion", err)
+	}
+	pending, err := s.Operation(ctx, device, op.ID)
+	if err != nil || pending.State != "pending" {
+		t.Fatal("failed deletion lost intent", pending, err)
+	}
+	var count int
+	if err := s.Store.DB.QueryRow("SELECT count(*) FROM generations WHERE conversation_id=?", conversation.ID).Scan(&count); err != nil || count != 1 {
+		t.Fatal("failure removed metadata", count, err)
+	}
+	restarted := New(s.Store, backend, 1)
+	if _, err := s.Store.DB.Exec("UPDATE apps SET state='running' WHERE workload='ai'"); err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.processConversationDeletion(ctx); err != nil {
+		t.Fatal("restart retry failed", err)
+	}
+	completed, err := restarted.Operation(ctx, device, op.ID)
+	if err != nil || completed.State != "succeeded" {
+		t.Fatal("retry did not complete", completed, err)
+	}
+}

@@ -412,6 +412,10 @@ func (s *Service) endGeneration(ctx context.Context, g Generation, phase, code s
 }
 
 func (s *Service) DeleteConversation(ctx context.Context, device, id string) error {
+	return s.deleteConversation(ctx, device, id, "")
+}
+
+func (s *Service) deleteConversation(ctx context.Context, device, id, operationID string) error {
 	unlock := s.lock(id)
 	defer unlock()
 	var active int
@@ -470,6 +474,19 @@ func (s *Service) DeleteConversation(ctx context.Context, device, id string) err
 		}
 		if n != 1 {
 			return ErrInvalid
+		}
+		if operationID != "" {
+			result, err := tx.Exec("UPDATE operations SET state='succeeded',result='{\"deleted\":true}',updated_at=? WHERE id=? AND kind='conversation.delete' AND state='pending'", time.Now().Unix(), operationID)
+			if err != nil {
+				return err
+			}
+			count, err := result.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if count != 1 {
+				return ErrConflict
+			}
 		}
 		return state.Event(tx, device, "conversation.deleted", id, map[string]any{})
 	})

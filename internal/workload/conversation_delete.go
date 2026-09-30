@@ -1,8 +1,11 @@
 package workload
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
 )
@@ -59,4 +62,23 @@ func conversationDeletionPending(tx *sql.Tx, id string) (bool, error) {
 	var count int
 	err := tx.QueryRow("SELECT count(*) FROM operations WHERE kind='conversation.delete' AND state IN('pending','running') AND json_extract(result,'$.conversationId')=?", id).Scan(&count)
 	return count > 0, err
+}
+
+func (s *Service) processConversationDeletion(ctx context.Context) error {
+	var operationID, device, payload string
+	err := s.Store.DB.QueryRowContext(ctx, "SELECT id,device_id,result FROM operations WHERE kind='conversation.delete' AND state='pending' ORDER BY created_at LIMIT 1").Scan(&operationID, &device, &payload)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var object map[string]json.RawMessage
+	var intent conversationDeleteIntent
+	if len(payload) > 256 || json.Unmarshal([]byte(payload), &object) != nil || len(object) != 1 || object["conversationId"] == nil || json.Unmarshal([]byte(payload), &intent) != nil || !guestproto.ValidID(intent.ConversationID) {
+		return ErrConflict
+	}
+	deadline, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	return s.deleteConversation(deadline, device, intent.ConversationID, operationID)
 }
