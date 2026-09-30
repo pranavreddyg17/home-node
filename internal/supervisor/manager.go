@@ -162,6 +162,9 @@ func (m *Manager) Apply(ctx context.Context, r Request) (Instance, error) {
 	}
 }
 func (m *Manager) operation(tx *sql.Tx, r Request) (bool, error) {
+	if err := requireRuntimeAdmission(tx); err != nil {
+		return false, err
+	}
 	data, _ := json.Marshal(r)
 	hash := state.Hash(string(data))
 	var existing, phase string
