@@ -74,5 +74,8 @@ if __name__ == "__main__":
     try:
         result = build(Path(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4], Path(sys.argv[5]), Path(sys.argv[6]))
         print(json.dumps(result))
-    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
-        sys.exit("Development image build failed; retain private assembly staging")
+    except (OSError, ValueError, IndexError, subprocess.SubprocessError) as error:
+        # Policy errors contain fixed messages; OS paths, process arguments and
+        # account contents are deliberately absent from this summary.
+        reason = str(error)[:240] if type(error) is ValueError else type(error).__name__
+        sys.exit("Development image build failed: " + reason + "; retain assembly staging")

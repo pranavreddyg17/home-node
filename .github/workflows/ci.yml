@@ -77,6 +77,7 @@ jobs:
           python3 packaging/guest/overlay_test.py
           python3 packaging/guest/import_overlay_test.py
           python3 packaging/guest/finalize_root_test.py
+          python3 packaging/guest/boot_image_test.py
           for profile in files video ai; do
             sh packaging/guest/stage.sh "$profile" "$RUNNER_TEMP/homenode-guest-$profile"
             epoch=$(git show -s --format=%ct HEAD)

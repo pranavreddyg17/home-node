@@ -277,3 +277,26 @@ inventories do not provide an independently reproducible pinned package closure.
 No source-signature promotion, current tool security qualification, complete
 license inventory, model/runtime qualification, VM boot/health acceptance or
 signed release publication is implied. These remain mandatory release work.
+
+## Development VM boot fixture
+
+`boot_image.py IMAGE DEVELOPMENT_MANIFEST NEW_OUTPUT` requires an unprivileged
+Linux user and `HOMENODE_GUEST_BOOT_INTEGRATION=1`. The fixture bounds and verifies
+the manifest/image digest, creates only new private fixture staging, and formats
+an exclusive 128 MiB test data file. It never mounts guest filesystems on the host.
+QEMU runs q35 BIOS/TCG with a read-only system descriptor, separate data descriptor,
+512 MiB RAM, one vCPU, virtio RNG/serial and no NIC, monitor or display. Only a
+fixture-private Unix socket carries bounded typed adapter frames.
+
+Within a bounded boot deadline the fixture requires adapter health and a small
+upload/finalize/download/content-verification/delete-ack round trip. It retains
+at most 8 MiB of console diagnostics and writes separate boot evidence on success;
+it does not edit the build manifest's unqualified flags. The CI workflow retains
+console/evidence even after a failed boot, with no fixture data disk upload.
+Termination is deliberate teardown of test-only state, not clean shutdown,
+backup consistency, physical power-loss or filesystem durability qualification.
+
+No successful assembled boot is established yet. TCG and a tiny test disk also
+do not prove KVM/AppArmor confinement, production disk quotas, video conversion,
+model loading, memory/thermal envelopes, client networking or full host lifecycle.
+The real image build and boot results must be inspected before those claims.

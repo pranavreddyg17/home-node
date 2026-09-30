@@ -107,5 +107,8 @@ if __name__ == "__main__":
         if sys.platform != "linux" or os.geteuid() != 0 or os.getenv("HOMENODE_GUEST_IMAGE_BUILD") != "1":
             raise ValueError("requires explicit Linux image assembly")
         finalize(Path(sys.argv[1]), Path(sys.argv[2]))
-    except (OSError, ValueError, IndexError, KeyError, TypeError, UnicodeError):
-        sys.exit("Guest root finalization failed; retain assembly staging")
+    except (OSError, ValueError, IndexError, KeyError, TypeError, UnicodeError) as error:
+        # Policy errors contain fixed messages; OS paths, process arguments and
+        # account contents are deliberately absent from this summary.
+        reason = str(error)[:240] if type(error) is ValueError else type(error).__name__
+        sys.exit("Guest root finalization failed: " + reason + "; retain assembly staging")
