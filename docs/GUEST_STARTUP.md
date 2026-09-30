@@ -202,3 +202,9 @@ intent, existing root-owned leaves cannot be adopted. An admitted already
 guest-owned private object root can reopen without recursively changing data.
 This depends on exclusive trusted startup and the root-controlled mount parent;
 it does not authorize arbitrary directory repair or offline disk formatting.
+
+Linux CI also repeats initializer fixtures under an observed two-capability
+profile (CHOWN and DAC_READ_SEARCH), no inherited/ambient capabilities and
+no-new-privileges. It verifies the actual process sets before directory tests.
+This checks initializer operations under the requested capabilities; actual
+systemd mount namespace, device policy and full guest boot remain separate gates.

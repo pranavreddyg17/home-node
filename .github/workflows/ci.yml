@@ -32,6 +32,8 @@ jobs:
         run: sudo env HOMENODE_GUEST_ROOT_INTEGRATION=1 "$(command -v go)" test ./internal/guest -run '^TestNativeForeignDataRootPreserved$'
       - name: Test guest object directory initialization
         run: sudo env HOMENODE_GUEST_INIT_INTEGRATION=1 "$(command -v go)" test ./internal/guestinit
+      - name: Test guest initializer with service capabilities
+        run: sudo setpriv --bounding-set=-all,+chown,+dac_read_search --inh-caps=-all --ambient-caps=-all --no-new-privs env HOMENODE_GUEST_INIT_INTEGRATION=1 HOMENODE_GUEST_INIT_CAPABILITIES=1 "$(command -v go)" test -count=1 ./internal/guestinit -run '^TestNativeGuestObjectInitialization$'
       - run: go vet ./...
       - run: go build ./cmd/...
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444

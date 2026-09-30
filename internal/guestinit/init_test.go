@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 )
@@ -24,6 +26,45 @@ func TestUnprivilegedInitializerRefused(t *testing.T) {
 func TestNativeGuestObjectInitialization(t *testing.T) {
 	if runtime.GOOS != "linux" || os.Geteuid() != 0 || os.Getenv("HOMENODE_GUEST_INIT_INTEGRATION") != "1" {
 		t.Skip("opt-in disposable Linux root fixture")
+	}
+	if os.Getenv("HOMENODE_GUEST_INIT_CAPABILITIES") == "1" {
+		status, err := os.ReadFile("/proc/self/status")
+		if err != nil {
+			t.Fatal(err)
+		}
+		observed := map[string]uint64{}
+		for _, line := range strings.Split(string(status), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) != 2 {
+				continue
+			}
+			switch fields[0] {
+			case "CapEff:", "CapPrm:", "CapBnd:", "CapInh:", "CapAmb:":
+				value, err := strconv.ParseUint(fields[1], 16, 64)
+				if err != nil {
+					t.Fatal(err)
+				}
+				observed[fields[0]] = value
+			case "NoNewPrivs:":
+				if fields[1] != "1" {
+					t.Fatal("new privileges not disabled")
+				}
+				observed[fields[0]] = 1
+			}
+		}
+		for _, name := range []string{"CapEff:", "CapPrm:", "CapBnd:"} {
+			if observed[name] != 5 {
+				t.Fatal("unexpected service capability set")
+			}
+		}
+		for _, name := range []string{"CapInh:", "CapAmb:"} {
+			if value, ok := observed[name]; !ok || value != 0 {
+				t.Fatal("unexpected inherited capabilities")
+			}
+		}
+		if observed["NoNewPrivs:"] != 1 {
+			t.Fatal("missing privilege restriction evidence")
+		}
 	}
 	t.Run("create and reopen", func(t *testing.T) {
 		parent := t.TempDir()
@@ -144,6 +185,13 @@ func TestNativeGuestObjectInitialization(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
+			}
+			if kind != "symlink" {
+				t.Cleanup(func() {
+					if err := os.Chown(path, 0, 0); err != nil {
+						t.Error(err)
+					}
+				})
 			}
 			before, err := os.Lstat(path)
 			if err != nil {
