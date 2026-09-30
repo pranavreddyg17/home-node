@@ -1,6 +1,11 @@
 package identity
 
 import (
+	"context"
+	"encoding/json"
+	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/pranavreddyg17/home-node/internal/state"
 	"strings"
 	"testing"
 )
@@ -60,5 +65,49 @@ func TestApprovalBindingRejectsInvalidOrExpiredAuthority(t *testing.T) {
 	}
 	if b.valid(1120) || b.valid(999) {
 		t.Fatal("expired binding or rollback accepted")
+	}
+}
+
+func TestBeginApprovalRestrictsCredentialAndPersistsBinding(t *testing.T) {
+	s := testService(t)
+	actor, _ := testDevice(t, s, AllCapabilities)
+	other, _ := testDevice(t, s, AllCapabilities)
+	if _, err := s.Store.DB.Exec("UPDATE identity SET claimed=1"); err != nil {
+		t.Fatal(err)
+	}
+	for _, device := range []string{actor.Device.ID, other.Device.ID} {
+		c := webauthn.Credential{ID: []byte(device), PublicKey: []byte("fixture-only")}
+		data, _ := json.Marshal(c)
+		if _, err := s.Store.DB.Exec("INSERT INTO credentials(id,device_id,data) VALUES(?,?,?)", c.ID, device, string(data)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	options, token, b, err := s.BeginApproval(context.Background(), actor, "device.revoke", []string{other.Device.ID}, []byte("body"), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertion := options.(*protocol.CredentialAssertion)
+	if len(assertion.Response.AllowedCredentials) != 1 || string(assertion.Response.AllowedCredentials[0].CredentialID) != actor.Device.ID || assertion.Response.UserVerification != protocol.VerificationRequired {
+		t.Fatal("ceremony widened authority")
+	}
+	var payload, kind string
+	var expires int64
+	if err := s.Store.DB.QueryRow("SELECT kind,payload,expires_at FROM challenges WHERE token_hash=?", state.Hash(token)).Scan(&kind, &payload, &expires); err != nil {
+		t.Fatal(err)
+	}
+	var c challenge
+	if err := json.Unmarshal([]byte(payload), &c); err != nil {
+		t.Fatal(err)
+	}
+	if kind != "approval" || c.Binding == nil || c.Binding.digest() != b.digest() || expires != b.ExpiresAt || c.Session.Expires.Unix() != expires {
+		t.Fatal("binding not persisted")
+	}
+	for i := 1; i < 20; i++ {
+		if _, _, _, err := s.BeginApproval(context.Background(), actor, "device.revoke", []string{other.Device.ID}, nil, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, _, err := s.BeginApproval(context.Background(), actor, "device.revoke", []string{other.Device.ID}, nil, 1); err == nil {
+		t.Fatal("unbounded ceremonies accepted")
 	}
 }

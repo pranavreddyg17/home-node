@@ -59,6 +59,7 @@ func (s Session) Fresh() bool {
 }
 
 type challenge struct {
+	Binding      *ApprovalBinding     `json:"binding,omitempty"`
 	Issuer       string               `json:"issuer,omitempty"`
 	Session      webauthn.SessionData `json:"session"`
 	Name         string               `json:"name"`

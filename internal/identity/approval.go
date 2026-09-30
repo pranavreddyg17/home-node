@@ -1,11 +1,17 @@
 package identity
 
 import (
+	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/pranavreddyg17/home-node/internal/state"
 	"regexp"
 	"slices"
+	"time"
 )
 
 const approvalLifetimeSeconds int64 = 120
@@ -69,4 +75,90 @@ func (b ApprovalBinding) digest() string {
 	}{"homenode-sensitive-approval", 1, b})
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+// BeginApproval persists a UV-required ceremony scoped to this session's device.
+// Routes must derive action/resources/body/policy themselves, never trust a
+// client-supplied binding. This method alone cannot issue a grant.
+func (s *Service) BeginApproval(ctx context.Context, actor Session, action string, resources []string, body []byte, policy int64) (any, string, ApprovalBinding, error) {
+	now := time.Now().Unix()
+	binding, err := newApprovalBinding(actor, action, resources, body, policy, now)
+	if err != nil {
+		return nil, "", ApprovalBinding{}, err
+	}
+	cap := "admin"
+	if action == "ai.delete" {
+		cap = "ai"
+	}
+	if !actor.Allows(cap) {
+		return nil, "", ApprovalBinding{}, ErrDenied
+	}
+	var options any
+	token := state.Random()
+	err = s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := checkActor(tx, actor); err != nil {
+			return err
+		}
+		var user User
+		var claimed bool
+		if err := tx.QueryRow("SELECT owner_id,claimed FROM identity WHERE singleton=1 AND epoch=?", actor.Epoch).Scan(&user.ID, &claimed); err != nil {
+			return ErrDenied
+		}
+		if !claimed {
+			return ErrDenied
+		}
+		rows, err := tx.Query("SELECT data FROM credentials WHERE device_id=?", actor.Device.ID)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var data string
+			var credential webauthn.Credential
+			if err := rows.Scan(&data); err != nil {
+				rows.Close()
+				return err
+			}
+			if err := json.Unmarshal([]byte(data), &credential); err != nil {
+				rows.Close()
+				return err
+			}
+			user.Credentials = append(user.Credentials, credential)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		if len(user.Credentials) == 0 {
+			return ErrDenied
+		}
+		if _, err := tx.Exec("DELETE FROM challenges WHERE expires_at<=?", now); err != nil {
+			return err
+		}
+		var count int
+		if err := tx.QueryRow("SELECT count(*) FROM challenges WHERE kind='approval' AND json_extract(payload,'$.binding.deviceId')=?", actor.Device.ID).Scan(&count); err != nil {
+			return err
+		}
+		if count >= 20 {
+			return ErrDenied
+		}
+		assertion, ceremony, err := s.Web.BeginLogin(user, webauthn.WithUserVerification(protocol.VerificationRequired))
+		if err != nil {
+			return err
+		}
+		ceremony.Expires = time.Unix(binding.ExpiresAt, 0)
+		payload, err := json.Marshal(challenge{Session: *ceremony, Binding: &binding})
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec("INSERT INTO challenges(token_hash,kind,payload,epoch,expires_at) VALUES(?,'approval',?,?,?)", state.Hash(token), string(payload), actor.Epoch, binding.ExpiresAt); err != nil {
+			return err
+		}
+		options = assertion
+		return nil
+	})
+	if err != nil {
+		return nil, "", ApprovalBinding{}, err
+	}
+	return options, token, binding, nil
 }
