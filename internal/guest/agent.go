@@ -36,6 +36,7 @@ type task struct {
 	Size       int64  `json:"size,omitempty"`
 	SHA256     string `json:"sha256,omitempty"`
 	cancel     context.CancelFunc
+	active     bool // Cancellation is visible before the worker has joined.
 }
 type Agent struct {
 	root            *os.Root
@@ -155,7 +156,7 @@ func (a *Agent) Handle(r guestproto.Request) guestproto.Response {
 		response.Offset = r.Offset + int64(len(response.Data))
 	case "delete":
 		for id, t := range a.tasks {
-			if t.State == "running" && (t.InputID == r.ObjectID || id == r.ObjectID) {
+			if (t.active || t.State == "running") && (t.InputID == r.ObjectID || id == r.ObjectID) {
 				response.Error = "OBJECT_BUSY"
 				return response
 			}
@@ -403,7 +404,7 @@ func (a *Agent) start(r guestproto.Request) error {
 		return errQuota
 	}
 	for _, t := range a.tasks {
-		if t.State == "running" {
+		if t.active || t.State == "running" {
 			return errors.New("workload busy")
 		}
 	}
@@ -419,7 +420,7 @@ func (a *Agent) start(r guestproto.Request) error {
 		duration = 2 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
-	t := &task{State: "running", InputID: r.InputID, Preset: r.Preset, PromptHash: promptDigest(r), cancel: cancel}
+	t := &task{State: "running", InputID: r.InputID, Preset: r.Preset, PromptHash: promptDigest(r), cancel: cancel, active: true}
 	if err = a.save(r.ObjectID, t); err != nil {
 		cancel()
 		return err
@@ -438,6 +439,7 @@ func (a *Agent) start(r guestproto.Request) error {
 		}
 		a.mu.Lock()
 		defer a.mu.Unlock()
+		defer func() { t.active = false }()
 		if t.State == "cancelled" {
 			_ = a.root.Remove(r.ObjectID + ".working")
 			return

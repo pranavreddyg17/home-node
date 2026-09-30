@@ -7,12 +7,84 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
 	"github.com/pranavreddyg17/home-node/internal/state"
 )
+
+func TestCancelledWorkerRetainsAdmissionUntilExit(t *testing.T) {
+	a, err := New(privateDataDir(t), "ai", 1<<30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started, cancelled, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var startOnce, cancelOnce, releaseOnce sync.Once
+	defer a.Close()
+	defer releaseOnce.Do(func() { close(release) })
+	a.client = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		startOnce.Do(func() { close(started) })
+		<-r.Context().Done()
+		cancelOnce.Do(func() { close(cancelled) })
+		<-release // Simulate transport/process teardown after cancellation.
+		return nil, r.Context().Err()
+	})}
+	input, id := state.Random(), state.Random()
+	if err = a.root.WriteFile(input+".blob", []byte(`[{"role":"user","content":"test"}]`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	call := func(operation, object string) guestproto.Response {
+		return a.Handle(guestproto.Request{Version: 1, RequestID: state.Random(), Operation: operation, ObjectID: object})
+	}
+	response := a.Handle(guestproto.Request{Version: 1, RequestID: state.Random(), Operation: "generate", ObjectID: id, InputID: input})
+	if response.Error != "" {
+		t.Fatal(response)
+	}
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("worker did not start")
+	}
+	if response = call("cancel", id); response.Error != "" || response.State != "cancelled" {
+		t.Fatal(response)
+	}
+	select {
+	case <-cancelled:
+	case <-time.After(3 * time.Second):
+		t.Fatal("worker did not receive cancellation")
+	}
+	for _, object := range []string{id, input} {
+		if response = call("delete", object); response.Error != "OBJECT_BUSY" {
+			t.Fatal("cancelled worker lost deletion protection", response)
+		}
+	}
+	response = a.Handle(guestproto.Request{Version: 1, RequestID: state.Random(), Operation: "generate", ObjectID: state.Random(), Prompt: "second"})
+	if response.Error == "" {
+		t.Fatal("overlapping worker admitted during cancellation", response)
+	}
+	releaseOnce.Do(func() { close(release) })
+	joined := make(chan struct{})
+	go func() { a.workers.Wait(); close(joined) }()
+	select {
+	case <-joined:
+	case <-time.After(3 * time.Second):
+		t.Fatal("cancelled worker did not join")
+	}
+	if response = call("result", id); response.State != "cancelled" {
+		t.Fatal("cancelled state changed", response)
+	}
+	for _, object := range []string{id, input} {
+		if response = call("delete", object); response.Error != "" {
+			t.Fatal("joined worker retained deletion protection", response)
+		}
+	}
+	response = a.Handle(guestproto.Request{Version: 1, RequestID: state.Random(), Operation: "generate", ObjectID: state.Random(), Prompt: "after teardown"})
+	if response.Error != "" {
+		t.Fatal("joined worker retained execution admission", response)
+	}
+}
 
 func TestCloseJoinsWorkerAndPersistsInterruptedTask(t *testing.T) {
 	dir := privateDataDir(t)
