@@ -10,6 +10,8 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/state"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -206,5 +208,82 @@ func TestApprovalConsumptionCommitsOnceAndRollsBackFailedMutation(t *testing.T) 
 	}
 	if calls != 2 {
 		t.Fatal("denied mutation ran", calls)
+	}
+}
+
+func TestConcurrentApprovalGrantOnlyCommitsOneMutation(t *testing.T) {
+	s := testService(t)
+	actor, _ := testDevice(t, s, AllCapabilities)
+	b, err := newApprovalBinding(actor, "device.pair", nil, nil, 1, time.Now().Unix())
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := state.Random()
+	payload, _ := json.Marshal(challenge{Binding: &b})
+	if _, err := s.Store.DB.Exec("INSERT INTO challenges(token_hash,kind,payload,epoch,expires_at) VALUES(?,'approval-grant',?,?,?)", state.Hash(token), string(payload), actor.Epoch, b.ExpiresAt); err != nil {
+		t.Fatal(err)
+	}
+	var successes, mutations atomic.Int32
+	var workers sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < 8; i++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			err := s.ConsumeApproval(context.Background(), actor, token, "device.pair", nil, nil, 1, func(tx *sql.Tx) error {
+				mutations.Add(1)
+				_, err := tx.Exec("UPDATE identity SET claimed=1")
+				return err
+			})
+			if err == nil {
+				successes.Add(1)
+			}
+		}()
+	}
+	close(start)
+	workers.Wait()
+	if successes.Load() != 1 || mutations.Load() != 1 {
+		t.Fatal("concurrent grant reuse", successes.Load(), mutations.Load())
+	}
+}
+
+func TestApprovalConsumptionRejectsChangedGrantAuthority(t *testing.T) {
+	for _, change := range []string{"resource", "device", "session", "epoch", "expiry", "revoked"} {
+		t.Run(change, func(t *testing.T) {
+			s := testService(t)
+			actor, _ := testDevice(t, s, AllCapabilities)
+			b, err := newApprovalBinding(actor, "device.pair", []string{"phone"}, nil, 1, time.Now().Unix())
+			if err != nil {
+				t.Fatal(err)
+			}
+			resources := []string{"phone"}
+			switch change {
+			case "resource":
+				resources = []string{"different"}
+			case "device":
+				b.DeviceID = "different-device"
+			case "session":
+				b.SessionHash = strings.Repeat("c", 64)
+			case "epoch":
+				b.Epoch++
+			case "expiry":
+				b.ExpiresAt = time.Now().Unix() - 1
+			case "revoked":
+				if _, err := s.Store.DB.Exec("UPDATE devices SET revoked_at=? WHERE id=?", time.Now().Unix(), actor.Device.ID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			token := state.Random()
+			payload, _ := json.Marshal(challenge{Binding: &b})
+			if _, err := s.Store.DB.Exec("INSERT INTO challenges(token_hash,kind,payload,epoch,expires_at) VALUES(?,'approval-grant',?,?,?)", state.Hash(token), string(payload), actor.Epoch, b.ExpiresAt); err != nil {
+				t.Fatal(err)
+			}
+			calls := 0
+			err = s.ConsumeApproval(context.Background(), actor, token, "device.pair", resources, nil, 1, func(*sql.Tx) error { calls++; return nil })
+			if !errors.Is(err, ErrDenied) || calls != 0 {
+				t.Fatal("changed grant authority ran mutation", err, calls)
+			}
+		})
 	}
 }
