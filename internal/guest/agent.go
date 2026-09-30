@@ -538,6 +538,7 @@ func (a *Agent) generate(ctx context.Context, r guestproto.Request) (string, err
 	scan.Buffer(make([]byte, 4096), 64<<10)
 	text := ""
 	stopped := false
+	done := false
 	for scan.Scan() {
 		line := scan.Text()
 		if !strings.HasPrefix(line, "data: ") {
@@ -545,7 +546,11 @@ func (a *Agent) generate(ctx context.Context, r guestproto.Request) (string, err
 		}
 		value := strings.TrimPrefix(line, "data: ")
 		if value == "[DONE]" {
+			done = true
 			break
+		}
+		if stopped {
+			return "", errors.New("model output after completion")
 		}
 		var token struct {
 			Choices []struct {
@@ -563,6 +568,9 @@ func (a *Agent) generate(ctx context.Context, r guestproto.Request) (string, err
 		}
 		content := token.Choices[0].Delta.Content
 		if token.Choices[0].FinishReason != nil {
+			if reason := *token.Choices[0].FinishReason; reason != "stop" && reason != "length" {
+				return "", errors.New("invalid model finish reason")
+			}
 			stopped = true
 		}
 
@@ -575,15 +583,11 @@ func (a *Agent) generate(ctx context.Context, r guestproto.Request) (string, err
 			task.Text = text
 		}
 		a.mu.Unlock()
-		if stopped {
-			stopped = true
-			break
-		}
 	}
 	if err = scan.Err(); err != nil {
 		return "", err
 	}
-	if !stopped {
+	if !stopped || !done {
 		return "", errors.New("incomplete model output")
 	}
 	return text, nil
