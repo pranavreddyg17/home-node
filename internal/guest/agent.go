@@ -161,7 +161,7 @@ func (a *Agent) Handle(r guestproto.Request) guestproto.Response {
 				return response
 			}
 		}
-		for _, suffix := range []string{".part", ".blob", ".task.json", ".working"} {
+		for _, suffix := range []string{".part", ".blob", ".task.json", ".task.tmp", ".working"} {
 			if e := a.root.Remove(r.ObjectID + suffix); e != nil && !errors.Is(e, os.ErrNotExist) {
 				err = e
 			}

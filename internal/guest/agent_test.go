@@ -2,6 +2,7 @@ package guest
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,39 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
 	"github.com/pranavreddyg17/home-node/internal/state"
 )
+
+func TestDeleteRemovesInterruptedJournalAndPreservesOtherObjects(t *testing.T) {
+	a, err := New(privateDataDir(t), "ai", 1<<30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	id, other := state.Random(), state.Random()
+	suffixes := []string{".part", ".blob", ".task.json", ".task.tmp", ".working"}
+	for _, suffix := range suffixes {
+		if err = a.root.WriteFile(id+suffix, []byte("interrupted object bytes"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = a.root.WriteFile(other+".task.tmp", []byte("unrelated task"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		response := a.Handle(guestproto.Request{Version: 1, RequestID: state.Random(), Operation: "delete", ObjectID: id})
+		if response.Error != "" {
+			t.Fatal("delete/replay failed", response)
+		}
+		for _, suffix := range suffixes {
+			if _, err = a.root.Stat(id + suffix); !errors.Is(err, os.ErrNotExist) {
+				t.Fatal("deleted object retained data", suffix, err)
+			}
+		}
+		data, err := a.root.ReadFile(other + ".task.tmp")
+		if err != nil || string(data) != "unrelated task" {
+			t.Fatal("unrelated object was modified", err)
+		}
+	}
+}
 
 func TestResumableIntegrityWorkflow(t *testing.T) {
 	dir := filepath.Join(privateDataDir(t), "objects")
