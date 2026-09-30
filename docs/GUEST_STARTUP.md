@@ -165,3 +165,9 @@ mount. A missing/duplicate selected ID or unsafe visible overmount fails. Parser
 tests cover a valid visible mount above a hidden entry and an unsafe visible
 mount above a valid hidden entry. Real systemd namespace/boot acceptance remains
 required; these parser tests do not prove that runtime behavior.
+
+A Linux-only descriptor fixture opens a real temporary directory and compares
+the production fdinfo reader's mount ID with the current kernel mountinfo
+record and descriptor filesystem device. It rejects invalid descriptors. This
+is native descriptor evidence only: it does not emulate a virtio disk, establish
+the `/data` contract, exercise systemd protections or prove boot admission.

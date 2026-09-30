@@ -46,30 +46,8 @@ func Check() error {
 	if unix.Fstat(dataFD, &mounted) != nil || mounted.Dev != native.Rdev {
 		return ErrMount
 	}
-	fdinfo, err := os.Open("/proc/self/fdinfo/" + strconv.Itoa(dataFD))
+	mountID, err := descriptorMountID(dataFD)
 	if err != nil {
-		return ErrMount
-	}
-	descriptor, err := io.ReadAll(io.LimitReader(fdinfo, 4097))
-	fdinfo.Close()
-	if err != nil || len(descriptor) > 4096 {
-		return ErrMount
-	}
-	mountID := ""
-	for _, line := range strings.Split(string(descriptor), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) > 0 && fields[0] == "mnt_id:" {
-			if len(fields) != 2 || mountID != "" {
-				return ErrMount
-			}
-			number, err := strconv.ParseUint(fields[1], 10, 64)
-			if err != nil || number == 0 || strconv.FormatUint(number, 10) != fields[1] {
-				return ErrMount
-			}
-			mountID = fields[1]
-		}
-	}
-	if mountID == "" {
 		return ErrMount
 	}
 	mounts, err := os.Open("/proc/self/mountinfo")
@@ -82,4 +60,34 @@ func Check() error {
 		return ErrMount
 	}
 	return admit(string(data), identity, mountID)
+}
+
+func descriptorMountID(fd int) (string, error) {
+	fdinfo, err := os.Open("/proc/self/fdinfo/" + strconv.Itoa(fd))
+	if err != nil {
+		return "", ErrMount
+	}
+	descriptor, err := io.ReadAll(io.LimitReader(fdinfo, 4097))
+	fdinfo.Close()
+	if err != nil || len(descriptor) > 4096 {
+		return "", ErrMount
+	}
+	mountID := ""
+	for _, line := range strings.Split(string(descriptor), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) > 0 && fields[0] == "mnt_id:" {
+			if len(fields) != 2 || mountID != "" {
+				return "", ErrMount
+			}
+			number, err := strconv.ParseUint(fields[1], 10, 64)
+			if err != nil || number == 0 || strconv.FormatUint(number, 10) != fields[1] {
+				return "", ErrMount
+			}
+			mountID = fields[1]
+		}
+	}
+	if mountID == "" {
+		return "", ErrMount
+	}
+	return mountID, nil
 }

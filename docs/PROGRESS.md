@@ -364,3 +364,9 @@ Development is on macOS; none of these hardware or external review gates may be 
 - Mount admission now opens `/data` without following a final symlink, verifies the directory's filesystem device, reads bounded kernel fdinfo and selects mountinfo using the opened mount ID. Hidden stacked mounts cannot authorize an unsafe visible mount; repeated selected IDs fail.
 - Parser/guest command tests and Linux cross compilation passed, including safe and unsafe visible mounts stacked above hidden entries. Actual systemd mount namespace and booted-device validation remain pending.
 - CI `36668972192` passed the disposable foreign-owner preservation fixture and root tests so far; the full run is still active. This change stays committed locally until that run finishes. Full disk initialization and maintained guest image assembly remain unfinished.
+
+## Native descriptor mount evidence fixture
+
+- Full Linux run `36668972192` passed foreign-owner preservation, root/native account checks, package/browser workflows and real guest overlays. It predates the mount-ID selection changes and is not evidence of booted guest mount admission.
+- Extracted the production bounded descriptor mount-ID reader and added a Linux-only test opening an actual temporary directory, selecting its current kernel mount record and comparing the descriptor filesystem device to mountinfo. Invalid descriptors fail. No mount, format or host disk modification occurs.
+- Local parser/guest command tests passed and the Linux test binary cross-compiled. The actual native descriptor test must run in the next Linux CI build. Both this fixture and `25f42da` are now submitted together; safe data initialization and full bootable image assembly remain unfinished.
