@@ -3,6 +3,7 @@ package workload
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/pranavreddyg17/home-node/internal/state"
@@ -75,7 +76,7 @@ func TestFailedVideoPurgeIsDurableAndRetried(t *testing.T) {
 }
 
 func TestMalformedCleanupDoesNotStarveValidPurge(t *testing.T) {
-	for _, payload := range []string{"{", `{"state":"pending","lastAttempt":"invalid"}`} {
+	for _, payload := range []string{"{", `{"state":"pending","lastAttempt":"invalid"}`, `{"state":"pending","lastAttempt":0,"state":"done"}`, `{"state":"pending","lastAttempt":0,"last\u0041ttempt":1}`, `{"state":"pending","lastAttempt":0,"unexpected":true}`} {
 		t.Run(payload, func(t *testing.T) {
 			s, original, device, input := jobService(t)
 			backend := &purgeFailureBackend{jobBackend: original, fail: true}
@@ -109,13 +110,26 @@ func TestMalformedCleanupDoesNotStarveValidPurge(t *testing.T) {
 			if _, err := s.Store.DB.Exec("UPDATE settings SET value=? WHERE key=?", payload, cleanupKey(jobs[0].AttemptID)); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := s.Store.DB.Exec("UPDATE settings SET value=json_set(value,'$.lastAttempt',0) WHERE key=?", cleanupKey(jobs[1].AttemptID)); err != nil {
+			if _, err := s.Store.DB.Exec("UPDATE settings SET value=json_set(value,'$.lastAttempt',1) WHERE key=?", cleanupKey(jobs[1].AttemptID)); err != nil {
 				t.Fatal(err)
 			}
 			backend.fail = false
 			before := len(backend.requests)
-			if err := s.cleanupJobResources(ctx); err != nil {
+			if err := s.cleanupJobResources(ctx); errors.Is(err, ErrConflict) {
+				if len(backend.requests) != before {
+					t.Fatal("invalid journal reached runtime")
+				}
+				var status, original string
+				if err = s.Store.DB.QueryRow("SELECT json_extract(value,'$.state'),json_extract(value,'$.original') FROM settings WHERE key=?", cleanupKey(jobs[0].AttemptID)).Scan(&status, &original); err != nil || status != "requires-action" || original != payload {
+					t.Fatal("invalid record not retained for recovery", status, err)
+				}
+				if err = s.cleanupJobResources(ctx); err != nil {
+					t.Fatal("quarantined record starved queue", err)
+				}
+			} else if err != nil {
 				t.Fatal("invalid record poisoned queue", err)
+			} else if strings.Contains(payload, `"lastAttempt":0`) {
+				t.Fatal("eligible invalid journal was not quarantined")
 			}
 			if len(backend.requests) != before+2 {
 				t.Fatal("unexpected runtime requests", backend.requests[before:])
