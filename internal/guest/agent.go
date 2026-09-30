@@ -37,12 +37,13 @@ type task struct {
 	cancel     context.CancelFunc
 }
 type Agent struct {
-	root   *os.Root
-	kind   string
-	quota  int64
-	mu     sync.Mutex
-	tasks  map[string]*task
-	client *http.Client
+	root            *os.Root
+	kind            string
+	quota           int64
+	mu              sync.Mutex
+	tasks           map[string]*task
+	client          *http.Client
+	readinessClient *http.Client
 }
 
 func New(directory, kind string, quota int64) (*Agent, error) {
@@ -57,6 +58,7 @@ func New(directory, kind string, quota int64) (*Agent, error) {
 		return nil, err
 	}
 	a := &Agent{root: root, kind: kind, quota: quota, tasks: map[string]*task{}, client: &http.Client{Timeout: 2 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect denied") }, Transport: &http.Transport{Proxy: nil, MaxConnsPerHost: 1, ResponseHeaderTimeout: 15 * time.Second}}}
+	a.readinessClient = &http.Client{Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect denied") }, Transport: &http.Transport{Proxy: nil, MaxConnsPerHost: 1, ResponseHeaderTimeout: time.Second}}
 	entries, err := fs.ReadDir(root.FS(), ".")
 	if err != nil {
 		root.Close()
@@ -99,6 +101,8 @@ func (a *Agent) Close() error {
 		}
 	}
 	a.mu.Unlock()
+	a.client.CloseIdleConnections()
+	a.readinessClient.CloseIdleConnections()
 	return a.root.Close()
 }
 func (a *Agent) Serve(stream io.ReadWriter) error {
@@ -117,6 +121,13 @@ func (a *Agent) Handle(r guestproto.Request) guestproto.Response {
 	response := guestproto.Response{Version: 1, RequestID: r.RequestID}
 	if err := guestproto.Validate(r); err != nil {
 		response.Error = "INVALID_REQUEST"
+		return response
+	}
+	if r.Operation == "health" && a.kind == "ai" {
+		response.State = "starting"
+		if a.modelReady() {
+			response.State = "ready"
+		}
 		return response
 	}
 	a.mu.Lock()
