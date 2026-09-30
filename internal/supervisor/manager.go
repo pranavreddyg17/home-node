@@ -77,7 +77,8 @@ type Manager struct {
 	Images, Volumes, Channels string
 	Backend                   Backend
 	startMu                   sync.Mutex
-	shuttingDown              bool // guarded by startMu
+	runtimeMu                 sync.RWMutex // external calls versus maintenance acquisition
+	shuttingDown              bool         // guarded by startMu
 }
 
 func (m *Manager) Initialize(ctx context.Context) error {
@@ -143,6 +144,11 @@ func (m *Manager) Inspect(ctx context.Context, id string) (Instance, error) {
 	return i, err
 }
 func (m *Manager) Apply(ctx context.Context, r Request) (Instance, error) {
+	unlock, err := m.lockRuntime(ctx, false)
+	if err != nil {
+		return Instance{}, err
+	}
+	defer unlock()
 	if r.Version != 1 || !guestproto.ValidID(r.OperationID) || !guestproto.ValidID(r.InstanceID) || r.PolicyGeneration != m.Policy.Generation || r.Action != "inspect" && (r.Revision < 1 || r.Revision > 1<<53) {
 		return Instance{}, ErrPolicy
 	}
@@ -394,13 +400,27 @@ func (m *Manager) stop(ctx context.Context, r Request) (Instance, error) {
 // Shutdown permanently closes start admission on this manager. Guest stop is
 // a safety boundary, not an application-consistent backup operation.
 func (m *Manager) Shutdown(ctx context.Context) error {
+	unlock, err := m.lockRuntime(ctx, false)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	m.startMu.Lock()
 	defer m.startMu.Unlock()
 	m.shuttingDown = true
-	return m.Reconcile(ctx)
+	return m.reconcile(ctx)
 }
 
 func (m *Manager) Reconcile(ctx context.Context) error {
+	unlock, err := m.lockRuntime(ctx, false)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return m.reconcile(ctx)
+}
+
+func (m *Manager) reconcile(ctx context.Context) error {
 	rows, err := m.Store.DB.QueryContext(ctx, "SELECT id FROM runtime_instances WHERE state IN('preparing','running','stopping','shutting-down')")
 	if err != nil {
 		return err
@@ -458,6 +478,11 @@ func (m *Manager) Channel(ctx context.Context, id string) (string, error) {
 // Audit enforces expiration, the finite-job wall clock and confinement even
 // when the controller or guest adapter is unavailable or dishonest.
 func (m *Manager) Audit(ctx context.Context) error {
+	unlock, lockErr := m.lockRuntime(ctx, false)
+	if lockErr != nil {
+		return lockErr
+	}
+	defer unlock()
 	rows, err := m.Store.DB.QueryContext(ctx, "SELECT id FROM runtime_instances WHERE state IN('running','stopping','shutting-down')")
 	if err != nil {
 		return err

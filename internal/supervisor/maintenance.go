@@ -3,11 +3,46 @@ package supervisor
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/state"
 )
 
 const runtimeMaintenanceKey = "runtime.maintenance"
+
+// The service owns one live Manager. Readers cover whole external calls, not
+// just database admission. Maintenance waits with its caller's deadline rather
+// than blocking indefinitely on a mutex. Audit/recovery remain concurrent with
+// normal mutations, preserving emergency teardown while a guest is stopping.
+func (m *Manager) lockRuntime(ctx context.Context, exclusive bool) (func(), error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		acquired := false
+		unlock := m.runtimeMu.RUnlock
+		if exclusive {
+			acquired = m.runtimeMu.TryLock()
+			unlock = m.runtimeMu.Unlock
+		} else {
+			acquired = m.runtimeMu.TryRLock()
+		}
+		if acquired {
+			if err := ctx.Err(); err != nil {
+				unlock()
+				return nil, err
+			}
+			return unlock, nil
+		}
+		timer := time.NewTimer(10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
 
 func requireRuntimeAdmission(tx *sql.Tx) error {
 	var count int
@@ -22,13 +57,18 @@ func requireRuntimeAdmission(tx *sql.Tx) error {
 
 // BeginRuntimeMaintenance closes supervisor mutation admission after recorded
 // runtime work is terminal. Its durable barrier does not expire on a crash.
-// This is only the admission component of a disk lease: it does not drain calls
-// already outside their admission transaction, attest clean unmount, pin disk
-// descriptors, or freeze independent root recovery/audit. It must not be used
+// It waits for admitted calls, audit and recovery on this live Manager before
+// checking inventory. This is only part of a disk lease: it does not attest
+// clean unmount, pin disk descriptors or freeze other root processes. It must not be used
 // alone to authorize a backup copy. No public controller route exposes it.
 func (m *Manager) BeginRuntimeMaintenance(ctx context.Context) (string, error) {
+	unlock, err := m.lockRuntime(ctx, true)
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
 	token := state.Random()
-	err := m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+	err = m.Store.Transaction(ctx, func(tx *sql.Tx) error {
 		if err := requireRuntimeAdmission(tx); err != nil {
 			return err
 		}
@@ -53,6 +93,11 @@ func (m *Manager) BeginRuntimeMaintenance(ctx context.Context) (string, error) {
 // EndRuntimeMaintenance requires the original coordinator token. Higher-level
 // recovery must establish safe disk/restart state before calling this method.
 func (m *Manager) EndRuntimeMaintenance(ctx context.Context, token string) error {
+	unlock, err := m.lockRuntime(ctx, true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if token == "" {
 		return ErrPolicy
 	}
