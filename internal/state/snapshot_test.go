@@ -16,6 +16,8 @@ func TestRecoverySnapshotIncludesCommittedWALAndExcludesTrust(t *testing.T) {
 	}
 	defer s.Close()
 	device, credential, token := Random(), "PRIVATE-CREDENTIAL-MARKER-"+Random(), "PRIVATE-SESSION-MARKER-"+Random()
+	conversation, deletionOp, approvalMarker := Random(), Random(), "PRIVATE-APPROVAL-MARKER-"+Random()
+	deletionPayload := `{"conversationId":"` + conversation + `","attempts":3,"nextAttemptAt":9999999999}`
 	for _, statement := range []struct {
 		sql  string
 		args []any
@@ -27,6 +29,10 @@ func TestRecoverySnapshotIncludesCommittedWALAndExcludesTrust(t *testing.T) {
 		{`INSERT INTO settings VALUES('origin','https://old-host.example')`, nil},
 		{`INSERT INTO settings VALUES('retained-config','committed-WAL-value')`, nil},
 		{`INSERT INTO settings VALUES('job.cleanup.old-attempt','{"state":"pending","lastAttempt":0}')`, nil},
+		{`INSERT INTO conversations(id,title,created_at) VALUES(?,'retained conversation',1)`, []any{conversation}},
+		{`INSERT INTO operations(id,device_id,kind,state,request_hash,idempotency_key,result,created_at,updated_at) VALUES(?,?,'conversation.delete','pending',?,'delete-key',?,1,1)`, []any{deletionOp, device, Hash("delete request"), deletionPayload}},
+		{`INSERT INTO challenges(token_hash,kind,payload,epoch,expires_at) VALUES(?,'approval-grant',?,7,9999999999)`, []any{Hash("grant"), approvalMarker}},
+		{`INSERT INTO challenges(token_hash,kind,payload,epoch,expires_at) VALUES(?,'approval',?,7,9999999999)`, []any{Hash("ceremony"), approvalMarker}},
 		{`INSERT INTO apps(workload,instance_id,state,updated_at,revision) VALUES('files',?,'running',1,9)`, []any{Random()}},
 		{`INSERT INTO transfers(id,device_id,name,size,sha256,state,created_at,expires_at) VALUES(?,?,'unfinished',1,?,'uploading',1,9999999999)`, []any{Random(), device, Hash("content")}},
 	} {
@@ -50,7 +56,7 @@ func TestRecoverySnapshotIncludesCommittedWALAndExcludesTrust(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(data, []byte(credential)) || bytes.Contains(data, []byte(token)) {
+	if bytes.Contains(data, []byte(credential)) || bytes.Contains(data, []byte(token)) || bytes.Contains(data, []byte(approvalMarker)) {
 		t.Fatal("removed secrets remain in snapshot pages")
 	}
 	snapshotFile, err := os.Open(path)
@@ -93,6 +99,19 @@ func TestRecoverySnapshotIncludesCommittedWALAndExcludesTrust(t *testing.T) {
 	}
 	if err = s.DB.QueryRow("SELECT count(*) FROM settings WHERE key GLOB 'job.cleanup.*'").Scan(&count); err != nil || count != 1 {
 		t.Fatal("source cleanup intent modified", count, err)
+	}
+	var operationState, operationPayload string
+	if err = restored.QueryRow("SELECT state,result FROM operations WHERE id=?", deletionOp).Scan(&operationState, &operationPayload); err != nil || operationState != "interrupted" || operationPayload != "{}" {
+		t.Fatal("recovery retained destructive authority", operationState, operationPayload, err)
+	}
+	if err = s.DB.QueryRow("SELECT state,result FROM operations WHERE id=?", deletionOp).Scan(&operationState, &operationPayload); err != nil || operationState != "pending" || operationPayload != deletionPayload {
+		t.Fatal("source deletion authority changed", operationState, operationPayload, err)
+	}
+	if err = restored.QueryRow("SELECT count(*) FROM conversations WHERE id=?", conversation).Scan(&count); err != nil || count != 1 {
+		t.Fatal("recovery removed conversation prematurely", count, err)
+	}
+	if err = s.DB.QueryRow("SELECT count(*) FROM challenges").Scan(&count); err != nil || count != 2 {
+		t.Fatal("source approval authority changed", count, err)
 	}
 	var phase string
 	var revision int
