@@ -69,6 +69,7 @@ class RuntimeDependencyTests(unittest.TestCase):
     def test_foreign_loader_paths_libraries_or_ambiguous_reports_refused(self):
         cases = [
             (self.dynamic().replace("libc.so.6", "libforeign.so"), self.program()),
+            (self.dynamic().replace("ld-linux-x86-64.so.2", "ld-foreign.so.2"), self.program()),
             (self.dynamic() + "\n 0x1 (NEEDED) Shared library: [libc.so.6]", self.program()),
             (self.dynamic() + "\n 0x1 (NEEDED) malformed", self.program()),
             (self.dynamic(), self.program().replace(runtime.INTERPRETER, "/tmp/loader")),

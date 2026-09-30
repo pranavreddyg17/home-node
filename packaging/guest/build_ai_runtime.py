@@ -25,7 +25,7 @@ OPTIONS = {
     "GGML_FMA": "OFF", "GGML_F16C": "OFF",
     "GGML_OPENMP": "ON", "GGML_OPENMP_FETCH": "OFF", "GGML_CPU_KLEIDIAI": "OFF",
 }
-SYSTEM_LIBRARIES = {"libstdc++.so.6", "libm.so.6", "libgomp.so.1", "libgcc_s.so.1", "libc.so.6"}
+SYSTEM_LIBRARIES = {"libstdc++.so.6", "libm.so.6", "libgomp.so.1", "libgcc_s.so.1", "libc.so.6", "ld-linux-x86-64.so.2"}
 INTERPRETER = "/lib64/ld-linux-x86-64.so.2"
 
 
