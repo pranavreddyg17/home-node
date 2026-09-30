@@ -3,21 +3,13 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packaging/guest/build_ai_runtime.py'
-      - 'packaging/guest/build_ai_runtime_test.py'
-      - 'packaging/guest/download_ai_model*.py'
-      - 'packaging/guest/ai_runtime_fixture*.py'
-      - 'packaging/guest/stage_ai_payload*.py'
-      - 'packaging/guest/homenode-model.service'
-      - 'packaging/guest/homenode-ai-model.conf'
-      - 'packaging/guest/build_image.py'
-      - 'packaging/guest/finalize_root*.py'
-      - 'packaging/guest/image/**'
-      - 'packaging/guest/boot_image*.py'
+      - 'packaging/guest/**'
       - 'internal/guest/**'
       - 'internal/guestmount/**'
       - 'internal/guestinit/**'
       - 'cmd/homenode-guest*/**'
+      - 'go.mod'
+      - 'go.sum'
       - '.github/workflows/ai-runtime.yml'
   workflow_dispatch:
 permissions:
