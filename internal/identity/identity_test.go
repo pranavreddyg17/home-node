@@ -179,3 +179,30 @@ func TestRecoveryCodeIsOneUse(t *testing.T) {
 		t.Fatalf("recovery replay accepted: %v", err)
 	}
 }
+
+func TestFreshVerificationRejectsClockRollbackAndExpiredSessions(t *testing.T) {
+	now := time.Now().Unix()
+	cases := []struct {
+		name              string
+		verified, expires int64
+		want              bool
+	}{
+		{"current", now, now + 3600, true},
+		{"recent", now - 60, now + 3600, true},
+		{"five minute boundary", now - 300, now + 3600, false},
+		{"old", now - 3600, now + 3600, false},
+		{"future after clock rollback", now + 3600, now + 7200, false},
+		{"missing verification", 0, now + 3600, false},
+		{"expired", now - 60, now - 1, false},
+		{"expiry boundary", now, now, false},
+		{"missing expiry", now, 0, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := Session{VerifiedAt: c.verified, ExpiresAt: c.expires}
+			if got := s.Fresh(); got != c.want {
+				t.Fatalf("Fresh() = %v, want %v", got, c.want)
+			}
+		})
+	}
+}

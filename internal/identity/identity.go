@@ -53,7 +53,10 @@ type Session struct {
 func (s Session) Allows(capability string) bool {
 	return slices.Contains(s.Device.Capabilities, capability)
 }
-func (s Session) Fresh() bool { return time.Now().Unix()-s.VerifiedAt < 300 }
+func (s Session) Fresh() bool {
+	now := time.Now().Unix()
+	return s.VerifiedAt > 0 && s.VerifiedAt <= now && now-s.VerifiedAt < 300 && s.ExpiresAt > now
+}
 
 type challenge struct {
 	Issuer       string               `json:"issuer,omitempty"`
