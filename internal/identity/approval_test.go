@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"github.com/go-webauthn/webauthn/protocol"
@@ -152,5 +153,58 @@ func TestFailedApprovalVerificationConsumesCeremonyWithoutGrant(t *testing.T) {
 				t.Fatal("ceremony reused or grant minted", count, err)
 			}
 		})
+	}
+}
+
+func TestApprovalConsumptionCommitsOnceAndRollsBackFailedMutation(t *testing.T) {
+	s := testService(t)
+	actor, _ := testDevice(t, s, AllCapabilities)
+	body := []byte("exact body")
+	binding, err := newApprovalBinding(actor, "device.pair", []string{"phone"}, body, 1, time.Now().Unix())
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := state.Random()
+	data, _ := json.Marshal(challenge{Binding: &binding, Issuer: actor.Device.ID})
+	if _, err := s.Store.DB.Exec("INSERT INTO challenges(token_hash,kind,payload,epoch,expires_at) VALUES(?,'approval-grant',?,?,?)", state.Hash(token), string(data), actor.Epoch, binding.ExpiresAt); err != nil {
+		t.Fatal(err)
+	}
+	consume := func(body []byte, policy int64, fn func(*sql.Tx) error) error {
+		return s.ConsumeApproval(context.Background(), actor, token, "device.pair", []string{"phone"}, body, policy, fn)
+	}
+	calls := 0
+	failed := errors.New("injected mutation failure")
+	if err := consume(body, 1, func(tx *sql.Tx) error {
+		calls++
+		if _, err := tx.Exec("UPDATE identity SET claimed=1"); err != nil {
+			return err
+		}
+		return failed
+	}); !errors.Is(err, failed) {
+		t.Fatal(err)
+	}
+	var claimed bool
+	if err := s.Store.DB.QueryRow("SELECT claimed FROM identity").Scan(&claimed); err != nil || claimed {
+		t.Fatal("mutation did not roll back", claimed, err)
+	}
+	for _, change := range []string{"body", "policy"} {
+		b, p := body, int64(1)
+		if change == "body" {
+			b = []byte("changed body")
+		} else {
+			p = 2
+		}
+		if err := consume(b, p, func(*sql.Tx) error { calls++; return nil }); !errors.Is(err, ErrDenied) {
+			t.Fatal("changed authority accepted", change, err)
+		}
+	}
+	if err := consume(body, 1, func(tx *sql.Tx) error { calls++; _, err := tx.Exec("UPDATE identity SET claimed=1"); return err }); err != nil {
+		t.Fatal("retry failed", err)
+	}
+	if err := consume(body, 1, func(*sql.Tx) error { calls++; return nil }); !errors.Is(err, ErrDenied) {
+		t.Fatal("grant replay accepted", err)
+	}
+	if calls != 2 {
+		t.Fatal("denied mutation ran", calls)
 	}
 }

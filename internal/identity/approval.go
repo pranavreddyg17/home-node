@@ -231,3 +231,54 @@ func (s *Service) FinishApproval(ctx context.Context, actor Session, token strin
 	}
 	return grant, nil
 }
+
+// ConsumeApproval commits grant consumption and mutation together. Callers must
+// derive the requested authority from the actual route/body/current policy and
+// use only tx for durable mutation; external effects belong to persisted intent.
+func (s *Service) ConsumeApproval(ctx context.Context, actor Session, token, action string, resources []string, body []byte, policy int64, mutation func(*sql.Tx) error) error {
+	if token == "" || len(token) > 128 || mutation == nil {
+		return ErrDenied
+	}
+	return s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := checkActor(tx, actor); err != nil {
+			return err
+		}
+		var payload string
+		var epoch, expires int64
+		if err := tx.QueryRow("SELECT payload,epoch,expires_at FROM challenges WHERE token_hash=? AND kind='approval-grant'", state.Hash(token)).Scan(&payload, &epoch, &expires); err != nil {
+			return ErrDenied
+		}
+		var grant challenge
+		if json.Unmarshal([]byte(payload), &grant) != nil || grant.Binding == nil {
+			return ErrDenied
+		}
+		now := time.Now().Unix()
+		expected, err := newApprovalBinding(actor, action, resources, body, policy, now)
+		if err != nil {
+			return err
+		}
+		expected.ExpiresAt = expires
+		if !grant.Binding.valid(now) || !expected.valid(now) || epoch != actor.Epoch || grant.Binding.ExpiresAt != expires || grant.Binding.digest() != expected.digest() {
+			return ErrDenied
+		}
+		cap := "admin"
+		if action == "ai.delete" {
+			cap = "ai"
+		}
+		if !actor.Allows(cap) {
+			return ErrDenied
+		}
+		result, err := tx.Exec("DELETE FROM challenges WHERE token_hash=? AND kind='approval-grant'", state.Hash(token))
+		if err != nil {
+			return err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return ErrDenied
+		}
+		return mutation(tx)
+	})
+}
