@@ -84,6 +84,7 @@ def finalize(root, source, ai_source=None):
     elif ai_source is not None:
         raise ValueError("AI payload supplied for another profile")
     links = {
+        "etc/systemd/system/multi-user.target.wants/systemd-logind.service": "/usr/lib/systemd/system/systemd-logind.service",
         "etc/systemd/system/local-fs.target.wants/tmp.mount": "/usr/lib/systemd/system/tmp.mount",
         "etc/systemd/system/local-fs.target.wants/var.mount": "/usr/lib/systemd/system/var.mount",
         f"etc/systemd/system/multi-user.target.wants/homenode-guest@{profile}.service": "/usr/lib/systemd/system/homenode-guest@.service",

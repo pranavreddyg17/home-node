@@ -76,7 +76,8 @@ class FinalizeTests(unittest.TestCase):
             for _ in range(2):
                 finalize_root.finalize(root, source, ai)
             wants = root / "etc/systemd/system/multi-user.target.wants"
-            self.assertEqual({p.name for p in wants.iterdir()}, {"homenode-model.service", "homenode-guest@ai.service"})
+            self.assertEqual(os.readlink(wants / "systemd-logind.service"), "/usr/lib/systemd/system/systemd-logind.service")
+            self.assertEqual({p.name for p in wants.iterdir()}, {"homenode-model.service", "homenode-guest@ai.service", "systemd-logind.service"})
             self.assertEqual(os.readlink(wants / "homenode-model.service"), "/usr/lib/systemd/system/homenode-model.service")
             weights = root / "usr/lib/homenode/ai/model.gguf"
             weights.write_bytes(b"x" * len(content))
@@ -99,7 +100,8 @@ class FinalizeTests(unittest.TestCase):
                 (root / "tmp").chmod(0o1777)  # distribution tmpfiles may prepare it
                 finalize_root.finalize(root, source)
                 wants = root / "etc/systemd/system/multi-user.target.wants"
-                self.assertEqual([p.name for p in wants.iterdir()], [f"homenode-guest@{profile}.service"])
+                self.assertEqual({p.name for p in wants.iterdir()}, {f"homenode-guest@{profile}.service", "systemd-logind.service"})
+                self.assertEqual(os.readlink(wants / "systemd-logind.service"), "/usr/lib/systemd/system/systemd-logind.service")
                 self.assertEqual(os.readlink(wants / f"homenode-guest@{profile}.service"),
                                  "/usr/lib/systemd/system/homenode-guest@.service")
                 for name in ("tmp", "var"):

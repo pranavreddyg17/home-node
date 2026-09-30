@@ -368,3 +368,21 @@ Actual Linux compile results, model source/digest/license admission, complete
 third-party notices/SBOM, vulnerability maintenance, model-server source unit,
 booted inference/cancellation and measured memory/context/CPU profiles remain
 unfinished. No model SKU is selected as the production default by this build.
+
+### Guest ACPI shutdown preparation
+
+Development image assembly includes the system D-Bus package and explicitly
+starts systemd-logind. The admitted adapter overlay contains a guest-only logind
+drop-in selecting poweroff for the power key and ignoring suspend, hibernate,
+lid and idle actions. These paths belong inside the image; do not copy this
+policy onto the owner host. The drop-in is included in the protected overlay
+inventory and root finalization preserves conflicting enablement instead of
+overwriting it.
+
+This prepares ACPI handling for the bounded cooperative shutdown primitive.
+It does not qualify clean shutdown: an assembled image must demonstrate ACPI
+handling, adapter/model termination, data.mount unmount and domain exit under
+idle/load/failure conditions. Inhibitor handling and the added package/service
+closure need security review and release inventory qualification. Domain exit
+alone does not authorize copying a data disk. Supervisor maintenance coordination,
+independent disk-copy checks and guaranteed restart remain required.

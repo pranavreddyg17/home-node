@@ -16,10 +16,11 @@ expected=$(awk '$1 == "toolchain" { print $2 }' go.mod)
 staging=$(mktemp -d)
 trap 'rmdir "$staging" 2>/dev/null || :' EXIT HUP INT TERM
 root="$staging/root"
-mkdir -p "$root/data" "$root/tmp" "$root/var" "$root/usr/lib/homenode/guest" "$root/usr/lib/systemd/system" "$root/usr/lib/systemd/journald.conf.d" "$root/usr/lib/tmpfiles.d" "$root/usr/lib/udev/rules.d" "$root/usr/lib/sysusers.d" "$root/etc/homenode/guest"
+mkdir -p "$root/data" "$root/tmp" "$root/var" "$root/usr/lib/homenode/guest" "$root/usr/lib/systemd/system" "$root/usr/lib/systemd/journald.conf.d" "$root/usr/lib/systemd/logind.conf.d" "$root/usr/lib/tmpfiles.d" "$root/usr/lib/udev/rules.d" "$root/usr/lib/sysusers.d" "$root/etc/homenode/guest"
 GOENV=off GOFLAGS= GOWORK=off GOEXPERIMENT= GOTOOLCHAIN=local GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=true -o "$root/usr/lib/homenode/guest/homenode-guest" ./cmd/homenode-guest
 GOENV=off GOFLAGS= GOWORK=off GOEXPERIMENT= GOTOOLCHAIN=local GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=true -o "$root/usr/lib/homenode/guest/homenode-guest-init" ./cmd/homenode-guest-init
 cp packaging/guest/homenode-volatile.conf "$root/usr/lib/tmpfiles.d/"
+cp packaging/guest/homenode-power.conf "$root/usr/lib/systemd/logind.conf.d/60-homenode.conf"
 cp packaging/guest/homenode-journal.conf "$root/usr/lib/systemd/journald.conf.d/60-homenode.conf"
 cp packaging/guest/homenode-data-init.service "$root/usr/lib/systemd/system/"
 cp packaging/guest/tmp.mount packaging/guest/var.mount "$root/usr/lib/systemd/system/"
