@@ -98,3 +98,22 @@ failed staging for diagnosis. CI imports each real built archive into fresh
 staging and re-verifies it. Import does not install host files, create guest
 accounts, format disks, build bootable images or establish publisher signing
 trust. Safe rootfs/boot/data initialization and actual qualification are pending.
+
+## Guest account admission
+
+After applying sysusers inside the assembly root, run
+`python3 packaging/guest/identity.py /path/to/image-root`. The checker reads bounded
+protected local account/NSS files by descriptors, rejects symlinks and verifies
+the exact locked nologin guest identity at UID/GID 900, private group and absence
+of numeric aliases, foreign primary members or supplementary privileges. Local
+`files` (optionally followed by `systemd`) identity sources are mandatory.
+Admission errors are generic and never print password/shadow contents.
+
+The [systemd sysusers format](https://manpages.debian.org/testing/systemd/sysusers.d.5.en.html)
+supports explicit user/group IDs, but the requested declaration is not accepted
+as evidence of the observed identity. The native disposable fixture creates the
+identity with systemd-sysusers in an isolated temporary root and verifies a
+conflicting UID/GID cannot pass admission. CI must prove this; the check is not
+a boot, actual device access, data-disk ownership or base-image signature gate.
+No account-check command edits or repairs account databases. Only the explicit
+native fixture performs creation, restricted to its temporary root.
