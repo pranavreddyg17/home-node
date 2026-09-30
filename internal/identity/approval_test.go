@@ -317,3 +317,50 @@ func TestApprovedPairingCreatesInvitationAndConsumesGrantTogether(t *testing.T) 
 		t.Fatal("pair approval replayed", code, err)
 	}
 }
+
+func TestApprovedRevocationBindsTargetAndPreservesLastAdmin(t *testing.T) {
+	for _, lastAdmin := range []bool{false, true} {
+		t.Run(map[bool]string{false: "target revoked", true: "last admin protected"}[lastAdmin], func(t *testing.T) {
+			s := testService(t)
+			actor, _ := testDevice(t, s, AllCapabilities)
+			target := actor
+			var targetToken string
+			if !lastAdmin {
+				target, targetToken = testDevice(t, s, []string{"files"})
+			}
+			body := []byte(`{}`)
+			b, err := newApprovalBinding(actor, "device.revoke", []string{target.Device.ID}, body, 1, time.Now().Unix())
+			if err != nil {
+				t.Fatal(err)
+			}
+			grant := state.Random()
+			payload, _ := json.Marshal(challenge{Binding: &b, Issuer: actor.Device.ID})
+			if _, err := s.Store.DB.Exec("INSERT INTO challenges(token_hash,kind,payload,epoch,expires_at) VALUES(?,'approval-grant',?,?,?)", state.Hash(grant), string(payload), actor.Epoch, b.ExpiresAt); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.RevokeApproved(context.Background(), actor, grant, "other-target", body, 1); !errors.Is(err, ErrDenied) {
+				t.Fatal("changed target accepted", err)
+			}
+			err = s.RevokeApproved(context.Background(), actor, grant, target.Device.ID, body, 1)
+			var count int
+			if e := s.Store.DB.QueryRow("SELECT count(*) FROM challenges WHERE token_hash=?", state.Hash(grant)).Scan(&count); e != nil {
+				t.Fatal(e)
+			}
+			if lastAdmin {
+				if !errors.Is(err, ErrConflict) || count != 1 {
+					t.Fatal("last admin or grant rollback failed", err, count)
+				}
+				return
+			}
+			if err != nil || count != 0 {
+				t.Fatal("revocation did not consume approval", err, count)
+			}
+			if _, err := s.Authenticate(context.Background(), targetToken); !errors.Is(err, ErrDenied) {
+				t.Fatal("revoked session survived", err)
+			}
+			if err := s.RevokeApproved(context.Background(), actor, grant, target.Device.ID, body, 1); !errors.Is(err, ErrDenied) {
+				t.Fatal("revocation approval replayed", err)
+			}
+		})
+	}
+}

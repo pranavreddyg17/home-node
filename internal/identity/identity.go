@@ -480,40 +480,44 @@ func (s *Service) Revoke(ctx context.Context, actor Session, id string) error {
 		if err := checkActor(tx, actor); err != nil {
 			return err
 		}
-		var caps string
-		if err := tx.QueryRow("SELECT capabilities FROM devices WHERE id=? AND revoked_at IS NULL", id).Scan(&caps); err != nil {
-			return ErrDenied
-		}
-		var capabilities []string
-		if err := json.Unmarshal([]byte(caps), &capabilities); err != nil {
-			return err
-		}
-		if slices.Contains(capabilities, "admin") {
-			var remaining int
-			if err := tx.QueryRow(`SELECT count(*) FROM devices WHERE id<>? AND revoked_at IS NULL AND EXISTS(SELECT 1 FROM json_each(capabilities) WHERE value='admin')`, id).Scan(&remaining); err != nil {
-				return err
-			}
-			if remaining == 0 {
-				return ErrConflict
-			}
-		}
-		if _, err := tx.Exec("UPDATE devices SET revoked_at=? WHERE id=?", time.Now().Unix(), id); err != nil {
-			return err
-		}
-		if _, err := tx.Exec("DELETE FROM sessions WHERE device_id=?", id); err != nil {
-			return err
-		}
-		if _, err := tx.Exec("DELETE FROM credentials WHERE device_id=?", id); err != nil {
-			return err
-		}
-		if _, err := tx.Exec("DELETE FROM invitations WHERE issuer=?", id); err != nil {
-			return err
-		}
-		if _, err := tx.Exec("DELETE FROM challenges WHERE json_extract(payload,'$.issuer')=?", id); err != nil {
-			return err
-		}
-		return state.Event(tx, actor.Device.ID, "device.revoked", id, map[string]any{})
+		return revokeInTransaction(tx, actor, id)
 	})
+}
+
+func revokeInTransaction(tx *sql.Tx, actor Session, id string) error {
+	var caps string
+	if err := tx.QueryRow("SELECT capabilities FROM devices WHERE id=? AND revoked_at IS NULL", id).Scan(&caps); err != nil {
+		return ErrDenied
+	}
+	var capabilities []string
+	if err := json.Unmarshal([]byte(caps), &capabilities); err != nil {
+		return err
+	}
+	if slices.Contains(capabilities, "admin") {
+		var remaining int
+		if err := tx.QueryRow(`SELECT count(*) FROM devices WHERE id<>? AND revoked_at IS NULL AND EXISTS(SELECT 1 FROM json_each(capabilities) WHERE value='admin')`, id).Scan(&remaining); err != nil {
+			return err
+		}
+		if remaining == 0 {
+			return ErrConflict
+		}
+	}
+	if _, err := tx.Exec("UPDATE devices SET revoked_at=? WHERE id=?", time.Now().Unix(), id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM sessions WHERE device_id=?", id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM credentials WHERE device_id=?", id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM invitations WHERE issuer=?", id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM challenges WHERE json_extract(payload,'$.issuer')=?", id); err != nil {
+		return err
+	}
+	return state.Event(tx, actor.Device.ID, "device.revoked", id, map[string]any{})
 }
 
 // A recovery code authorizes only registering a replacement passkey. The old

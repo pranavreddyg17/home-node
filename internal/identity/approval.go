@@ -309,3 +309,18 @@ func (s *Service) PairApproved(ctx context.Context, actor Session, grant string,
 	}
 	return token, nil
 }
+
+// RevokeApproved binds the target ID and exact empty-object request body.
+func (s *Service) RevokeApproved(ctx context.Context, actor Session, grant, id string, body []byte, policy int64) error {
+	if len(body) > 4096 || len(bytes.TrimSpace(body)) == 0 || bytes.TrimSpace(body)[0] != '{' {
+		return ErrDenied
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(new(struct{})) != nil || decoder.Decode(new(any)) != io.EOF {
+		return ErrDenied
+	}
+	return s.ConsumeApproval(ctx, actor, grant, "device.revoke", []string{id}, body, policy, func(tx *sql.Tx) error {
+		return revokeInTransaction(tx, actor, id)
+	})
+}
