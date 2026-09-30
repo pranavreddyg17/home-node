@@ -6,6 +6,7 @@ on:
       - 'packaging/guest/build_ai_runtime.py'
       - 'packaging/guest/build_ai_runtime_test.py'
       - 'packaging/guest/download_ai_model*.py'
+      - 'packaging/guest/ai_runtime_fixture*.py'
       - '.github/workflows/ai-runtime.yml'
   workflow_dispatch:
 permissions:
@@ -23,8 +24,9 @@ jobs:
         run: |
           python3 -B -W error::ResourceWarning -m unittest discover -s packaging/guest -p build_ai_runtime_test.py
           python3 -B -W error::ResourceWarning -m unittest discover -s packaging/guest -p download_ai_model_test.py
+          python3 -B -W error::ResourceWarning -m unittest discover -s packaging/guest -p ai_runtime_fixture_test.py
       - name: Install disposable compiler dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ make binutils
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ make binutils util-linux iproute2
       - name: Fetch pinned inference source
         run: |
           git init "$RUNNER_TEMP/llama-source"
@@ -51,5 +53,24 @@ jobs:
         with:
           name: homenode-development-ai-model
           path: ${{ runner.temp }}/ai-model/
+          retention-days: 7
+          if-no-files-found: error
+      - name: Verify isolated offline streaming inference
+        run: |
+          fixture_net=$(readlink /proc/self/ns/net)
+          sudo env HOMENODE_AI_RUNTIME_INTEGRATION=1 HOMENODE_FIXTURE_PARENT_NET="$fixture_net" \
+            unshare --net --fork /bin/sh -c '
+              set -eu
+              /usr/sbin/ip link set lo up
+              exec /usr/bin/setpriv --reuid "$1" --regid "$2" --clear-groups --no-new-privs \
+                --bounding-set=-all --inh-caps=-all --ambient-caps=-all \
+                /usr/bin/python3 -B "$3" "$4" "$5" "$6"
+            ' fixture "$(id -u)" "$(id -g)" "$PWD/packaging/guest/ai_runtime_fixture.py" \
+              "$RUNNER_TEMP/ai-runtime/artifacts" "$RUNNER_TEMP/ai-model" "$RUNNER_TEMP/ai-inference"
+      - name: Retain bounded inference evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: homenode-development-ai-inference
+          path: ${{ runner.temp }}/ai-inference/inference-evidence.json
           retention-days: 7
           if-no-files-found: error
