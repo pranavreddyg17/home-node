@@ -33,6 +33,32 @@ def private_directory(path):
         raise ValueError("expected protected owned directory")
 
 
+def check_cache(path):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as file:
+        info = os.fstat(file.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_nlink != 1 or info.st_mode & 0o022 or not 0 < info.st_size <= 1 << 20:
+            raise ValueError("unexpected compiler configuration")
+        data = file.read((1 << 20) + 1)
+    if len(data) != info.st_size or b"\0" in data:
+        raise ValueError("compiler configuration changed")
+    found = {}
+    for line in data.decode("utf-8").splitlines():
+        if line.startswith(("#", "//")) or not line.strip():
+            continue
+        entry, separator, value = line.partition("=")
+        key, colon, kind = entry.partition(":")
+        if key not in OPTIONS:
+            continue
+        expected_kind = "STRING" if key == "CMAKE_BUILD_TYPE" else "BOOL"
+        if not separator or not colon or key in found or kind != expected_kind or value != OPTIONS[key]:
+            raise ValueError("compiler option was not admitted")
+        found[key] = value
+    if found != OPTIONS:
+        raise ValueError("compiler options are missing")
+    return hashlib.sha256(data).hexdigest()
+
+
 def build(source, output):
     if sys.platform != "linux" or platform.machine() != "x86_64" or os.geteuid() == 0 or os.getenv("HOMENODE_AI_RUNTIME_BUILD") != "1":
         raise ValueError("requires explicit unprivileged disposable Linux x86-64 builder")
@@ -51,8 +77,11 @@ def build(source, output):
     subprocess.run(["/usr/bin/cmake", "-S", str(source), "-B", str(build_dir)] +
                    ["-D" + key + "=" + value for key, value in OPTIONS.items()],
                    env=environment, check=True, timeout=120)
+    cache_digest = check_cache(build_dir / "CMakeCache.txt")
     subprocess.run(["/usr/bin/cmake", "--build", str(build_dir), "--target", "llama-server", "--parallel", "2"],
                    env=environment, check=True, timeout=1200)
+    if check_cache(build_dir / "CMakeCache.txt") != cache_digest:
+        raise ValueError("compiler configuration changed during build")
     binary = build_dir / "bin/llama-server"
     fd = os.open(binary, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     with os.fdopen(fd, "rb") as file:
@@ -73,6 +102,7 @@ def build(source, output):
     (artifacts / "llama-server").chmod(0o755)
     shutil.copyfile(source / "LICENSE", artifacts / "llama.cpp-LICENSE")
     record = {"schema": 1, "sourceRevision": REVISION, "cmakeOptions": OPTIONS,
+              "cmakeCacheSHA256": cache_digest,
               "binarySHA256": checksum, "binaryBytes": info.st_size,
               "releaseQualified": False, "modelIncluded": False}
     with (artifacts / "development-runtime.json").open("x") as file:
@@ -84,6 +114,6 @@ def build(source, output):
 if __name__ == "__main__":
     try:
         print(json.dumps(build(Path(sys.argv[1]), Path(sys.argv[2]))))
-    except (OSError, ValueError, IndexError, subprocess.SubprocessError) as error:
+    except (OSError, ValueError, IndexError, UnicodeError, subprocess.SubprocessError) as error:
         reason = str(error)[:240] if type(error) is ValueError else type(error).__name__
         sys.exit("Development inference build failed: " + reason + "; retain build diagnostics")
