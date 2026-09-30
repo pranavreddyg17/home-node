@@ -50,7 +50,7 @@ var directories = map[string]bool{
 }
 var files = map[string]bool{
 	"etc/homenode/services.env": true, "etc/homenode/runtime-policy.json": true,
-	"etc/homenode/catalog.pub": true, "var/lib/homenode/catalog/catalog.json": true,
+	"etc/homenode/catalog.pub": true, "etc/homenode/catalog-floor": true, "var/lib/homenode/catalog/catalog.json": true,
 	"etc/systemd/system/homenode-control.service":    true,
 	"etc/systemd/system/homenode-supervisor.service": true,
 	"etc/systemd/system/homenode-transfer.service":   true,

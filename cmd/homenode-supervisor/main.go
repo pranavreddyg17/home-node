@@ -39,11 +39,18 @@ func readProtected(path string, limit int64) ([]byte, error) {
 	if st, ok := info.Sys().(*syscall.Stat_t); !ok || st.Uid != 0 {
 		return nil, fmt.Errorf("configuration must be root owned: %s", path)
 	}
-	file, err := os.Open(path)
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
+	opened, err := file.Stat()
+	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(info, opened) || opened.Mode().Perm()&0022 != 0 {
+		return nil, fmt.Errorf("configuration changed while opening")
+	}
+	if st, ok := opened.Sys().(*syscall.Stat_t); !ok || st.Uid != 0 {
+		return nil, fmt.Errorf("configuration ownership changed")
+	}
 	data, err := io.ReadAll(io.LimitReader(file, limit+1))
 	if err != nil {
 		return nil, err
@@ -56,6 +63,7 @@ func readProtected(path string, limit int64) ([]byte, error) {
 func main() {
 	config := flag.String("policy", "/etc/homenode/runtime-policy.json", "protected enforcement policy")
 	publisher := flag.String("publisher-key", "/etc/homenode/catalog.pub", "pinned hex Ed25519 publisher key")
+	floorPath := flag.String("catalog-floor", "/etc/homenode/catalog-floor", "protected independent minimum catalog version")
 	manifestPath := flag.String("catalog", "/var/lib/homenode/catalog/catalog.json", "verified catalog envelope")
 	root := flag.String("state-dir", "/var/lib/homenode/supervisor", "protected runtime journal")
 	images := flag.String("images", "/var/lib/homenode/images", "immutable image directory")
@@ -78,6 +86,9 @@ func main() {
 	if err = decoder.Decode(&policy); err != nil {
 		fatal(err)
 	}
+	if decoder.Decode(new(any)) != io.EOF {
+		fatal(fmt.Errorf("invalid trailing policy data"))
+	}
 	if err = policy.Validate(); err != nil {
 		fatal(err)
 	}
@@ -93,16 +104,23 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	floorBytes, err := readProtected(*floorPath, 32)
+	if err != nil {
+		fatal(err)
+	}
+	minimum, err := catalog.VersionFloor(floorBytes)
+	if err != nil {
+		fatal(err)
+	}
 	store, err := state.Open(*root)
 	if err != nil {
 		fatal(err)
 	}
 	defer store.Close()
-	var minimum int64
 	var stored string
 	err = store.DB.QueryRow("SELECT value FROM settings WHERE key='catalog-version'").Scan(&stored)
 	if err == nil {
-		minimum, err = strconv.ParseInt(stored, 10, 64)
+		minimum, err = raiseCatalogFloor(minimum, stored)
 		if err != nil {
 			fatal(err)
 		}
@@ -207,4 +225,18 @@ func main() {
 	if err = errors.Join(err, <-shutdownDone); err != nil {
 		fatal(err)
 	}
+}
+
+func raiseCatalogFloor(configured int64, stored string) (int64, error) {
+	if configured < 1 {
+		return 0, catalog.ErrUntrusted
+	}
+	accepted, err := catalog.VersionFloor([]byte(stored))
+	if err != nil {
+		return 0, err
+	}
+	if accepted > configured {
+		return accepted, nil
+	}
+	return configured, nil
 }

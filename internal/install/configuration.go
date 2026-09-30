@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/catalog"
@@ -145,6 +146,7 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 	addFile("etc/homenode/services.env", 0644, []byte(env))
 	addFile("etc/homenode/runtime-policy.json", 0600, append(policy, '\n'))
 	addFile("etc/homenode/catalog.pub", 0644, []byte(hex.EncodeToString(c.Publisher)+"\n"))
+	addFile("etc/homenode/catalog-floor", 0600, []byte(strconv.FormatInt(c.MinimumCatalogVersion, 10)+"\n"))
 	addFile("var/lib/homenode/catalog/catalog.json", 0600, c.Catalog)
 	for _, name := range []string{"homenode-control.service", "homenode-supervisor.service", "homenode-transfer.service"} {
 		data, err := servicetemplates.Unit(name)

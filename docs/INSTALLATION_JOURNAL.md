@@ -266,3 +266,21 @@ availability must still be measurable, and other host prerequisite failures
 remain fatal. Doctor's diagnostic floor is unchanged. This does not reserve
 space against other host programs or account for actual VM overhead; those
 resource enforcement and physical acceptance gates remain outstanding.
+
+### Independent catalog floor at first activation
+
+Generated configuration now includes root-owned mode 0600
+`/etc/homenode/catalog-floor`, containing the independent minimum catalog
+version as canonical positive decimal plus newline. It is part of the owned
+configuration content digest. The supervisor requires this protected file
+before opening its runtime state and checks catalogs against the higher of
+this floor and the highest version already recorded in its runtime journal.
+Missing, zero, noncanonical and corrupted floors fail closed; first activation
+has no implicit zero-version fallback.
+
+The supervisor unit requires the floor path. Earlier development configuration
+journals do not automatically gain a new file or change their content digest;
+existing installed transactions require a reviewed migration rather than
+implicit adoption or journal deletion. The complete update/migration workflow
+remains unfinished. A catalog signature/floor is still not TUF release metadata,
+release qualification or independent package provenance.

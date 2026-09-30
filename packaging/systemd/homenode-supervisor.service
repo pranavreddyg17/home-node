@@ -5,6 +5,7 @@ After=libvirtd.service homenode.slice
 ConditionPathExists=/etc/homenode/services.env
 ConditionPathExists=/etc/homenode/runtime-policy.json
 ConditionPathExists=/etc/homenode/catalog.pub
+ConditionPathExists=/etc/homenode/catalog-floor
 ConditionPathExists=/var/lib/homenode/catalog/catalog.json
 
 [Service]

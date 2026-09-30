@@ -66,6 +66,10 @@ func TestConfigurationPlanBindsPolicyUnitsAndCatalog(t *testing.T) {
 	if len(result.Pending) == 0 || result.CatalogVersion != 4 || result.RequiredDiskBytes != 44*uint64(catalog.GiB)+3072 {
 		t.Fatal("incorrect preview", result)
 	}
+	floor := findConfiguration(t, result.Plan, "etc/homenode/catalog-floor")
+	if string(floor.Data) != "4\n" || floor.Mode != 0600 || floor.UID != 0 {
+		t.Fatal("independent floor not committed", floor)
+	}
 	env := string(findConfiguration(t, result.Plan, "etc/homenode/services.env").Data)
 	for _, value := range []string{"TAILNET_IP=100.100.1.2\n", "HTTPS_ORIGIN=https://home.example.ts.net:8787\n", "POLICY_GENERATION=7\n", "CONTROLLER_UID=800\n", "RUNTIME_GID=802\n", "TRANSFER_GID=801\n"} {
 		if !strings.Contains(env, value) {
