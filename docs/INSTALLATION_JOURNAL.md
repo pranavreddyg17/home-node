@@ -284,3 +284,12 @@ existing installed transactions require a reviewed migration rather than
 implicit adoption or journal deletion. The complete update/migration workflow
 remains unfinished. A catalog signature/floor is still not TUF release metadata,
 release qualification or independent package provenance.
+
+Supervisor catalog admission reads the recorded floor, verifies the signed
+catalog, advances the record and commits in one SQLite transaction. Competing
+startup connections cannot write a new floor from a stale read snapshot; a
+transaction conflict fails startup rather than retrying with stale authorization.
+Rejected signatures, rollback versions and malformed recorded floors leave the
+trust record unchanged. This prevents overlapping startup admissions from
+regressing the highest successfully committed catalog version. It does not
+implement release download, TUF metadata or update/boot rollback orchestration.

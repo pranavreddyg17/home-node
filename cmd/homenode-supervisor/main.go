@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -117,23 +116,9 @@ func main() {
 		fatal(err)
 	}
 	defer store.Close()
-	var stored string
-	err = store.DB.QueryRow("SELECT value FROM settings WHERE key='catalog-version'").Scan(&stored)
-	if err == nil {
-		minimum, err = raiseCatalogFloor(minimum, stored)
-		if err != nil {
-			fatal(err)
-		}
-	}
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		fatal(err)
-	}
 	public := ed25519.PublicKey(key)
-	manifest, err := catalog.Verify(data, map[string]ed25519.PublicKey{catalog.KeyID(public): public}, minimum, time.Now())
+	manifest, err := acceptCatalog(context.Background(), store.DB, data, public, minimum, time.Now())
 	if err != nil {
-		fatal(err)
-	}
-	if _, err = store.DB.Exec("INSERT INTO settings(key,value) VALUES('catalog-version',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", strconv.FormatInt(manifest.Version, 10)); err != nil {
 		fatal(err)
 	}
 	for _, directory := range []string{*images, *volumes, *channels} {
