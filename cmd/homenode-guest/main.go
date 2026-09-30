@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
-	"time"
+	"os/signal"
+	"syscall"
 
 	"github.com/pranavreddyg17/home-node/internal/guest"
 )
@@ -20,16 +23,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "guest initialization failed:", err)
 		os.Exit(1)
 	}
-	defer agent.Close()
-	for {
-		stream, err := os.OpenFile(*channel, os.O_RDWR, 0)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "guest channel unavailable")
-			time.Sleep(time.Second)
-			continue
-		}
-		_ = agent.Serve(stream)
-		_ = stream.Close()
-		time.Sleep(time.Second)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	_ = runGuest(ctx, agent, func() (io.ReadWriteCloser, error) { return os.OpenFile(*channel, os.O_RDWR, 0) })
+	if err = agent.Close(); err != nil {
+		fmt.Fprintln(os.Stderr, "guest shutdown failed:", err)
+		os.Exit(1)
 	}
 }

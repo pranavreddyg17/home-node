@@ -44,6 +44,11 @@ type Agent struct {
 	tasks           map[string]*task
 	client          *http.Client
 	readinessClient *http.Client
+	workers         sync.WaitGroup
+	closeOnce       sync.Once
+	closed          bool
+	closeErr        error
+	workerErr       error
 }
 
 func New(directory, kind string, quota int64) (*Agent, error) {
@@ -94,16 +99,21 @@ func New(directory, kind string, quota int64) (*Agent, error) {
 	return a, nil
 }
 func (a *Agent) Close() error {
-	a.mu.Lock()
-	for _, t := range a.tasks {
-		if t.cancel != nil {
-			t.cancel()
+	a.closeOnce.Do(func() {
+		a.mu.Lock()
+		a.closed = true
+		for _, t := range a.tasks {
+			if t.cancel != nil {
+				t.cancel()
+			}
 		}
-	}
-	a.mu.Unlock()
-	a.client.CloseIdleConnections()
-	a.readinessClient.CloseIdleConnections()
-	return a.root.Close()
+		a.mu.Unlock()
+		a.workers.Wait()
+		a.client.CloseIdleConnections()
+		a.readinessClient.CloseIdleConnections()
+		a.closeErr = errors.Join(a.workerErr, a.sync(), a.root.Close())
+	})
+	return a.closeErr
 }
 func (a *Agent) Serve(stream io.ReadWriter) error {
 	for {
@@ -123,14 +133,26 @@ func (a *Agent) Handle(r guestproto.Request) guestproto.Response {
 		response.Error = "INVALID_REQUEST"
 		return response
 	}
+	a.mu.Lock()
+	if a.closed {
+		a.mu.Unlock()
+		response.Error = "WORKLOAD_UNAVAILABLE"
+		return response
+	}
 	if r.Operation == "health" && a.kind == "ai" {
+		a.mu.Unlock()
 		response.State = "starting"
 		if a.modelReady() {
 			response.State = "ready"
 		}
+		a.mu.Lock()
+		if a.closed {
+			response.State = ""
+			response.Error = "WORKLOAD_UNAVAILABLE"
+		}
+		a.mu.Unlock()
 		return response
 	}
-	a.mu.Lock()
 	defer a.mu.Unlock()
 	var err error
 	switch r.Operation {
@@ -414,7 +436,9 @@ func (a *Agent) start(r guestproto.Request) error {
 		return err
 	}
 	a.tasks[r.ObjectID] = t
+	a.workers.Add(1)
 	go func() {
+		defer a.workers.Done()
 		defer cancel()
 		var text string
 		var err error
@@ -429,7 +453,10 @@ func (a *Agent) start(r guestproto.Request) error {
 			_ = a.root.Remove(r.ObjectID + ".working")
 			return
 		}
-		if err != nil {
+		if a.closed {
+			t.State = "interrupted"
+			_ = a.root.Remove(r.ObjectID + ".working")
+		} else if err != nil {
 			t.State = "failed"
 			_ = a.root.Remove(r.ObjectID + ".working")
 		} else {
@@ -446,6 +473,7 @@ func (a *Agent) start(r guestproto.Request) error {
 		}
 		if err = a.save(r.ObjectID, t); err != nil {
 			t.State = "interrupted"
+			a.workerErr = errors.Join(a.workerErr, err)
 		}
 	}()
 	return nil

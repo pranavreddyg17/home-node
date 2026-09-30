@@ -31,3 +31,21 @@ model. These probes do not prove model licensing, model identity, acceptable
 inference latency or resource isolation; release qualification must prove those.
 The controller's existing bounded app-start loop waits for guest readiness and
 reports failure if it never arrives.
+
+## Agent shutdown
+
+The guest process handles SIGINT/SIGTERM by closing its active virtio channel
+and interrupting reconnect waits. Once the serving loop exits, the agent rejects
+new requests, cancels workers and waits for their final journal writes before
+syncing/closing its data root. Interrupted tasks persist as interrupted and are
+not automatically executed on reopen. Repeated agent close is idempotent;
+late model probes cannot advertise ready after shutdown. Journal write failures
+are retained as shutdown errors instead of silently claiming successful closure.
+The existing FFmpeg process cancellation and bounded wait remain in effect.
+
+Tests use real task journals and blocked framed-channel substitutes. Actual
+virtio device opening/closing and systemd shutdown timing still require booted
+VM acceptance. An interrupted agent is not a cleanly powered-off VM: the current
+host ordinary stop still destroys the domain. This work does not provide the
+maintenance drain lease, guest quiesce acknowledgement, filesystem unmount or
+hypervisor power-off evidence required for a consistent backup.
