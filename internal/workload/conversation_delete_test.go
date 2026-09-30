@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pranavreddyg17/home-node/internal/guestproto"
 	"github.com/pranavreddyg17/home-node/internal/state"
 )
 
@@ -219,5 +220,86 @@ func TestDeletionWorkerRetriesAfterUnavailableGuestAndServiceRestart(t *testing.
 	completed, err := restarted.Operation(ctx, device, op.ID)
 	if err != nil || completed.State != "succeeded" {
 		t.Fatal("retry did not complete", completed, err)
+	}
+}
+
+type deletionFaultBackend struct {
+	*aiBackend
+	failID  string
+	deletes map[string]int
+}
+
+func (b *deletionFaultBackend) Call(ctx context.Context, instance string, r guestproto.Request) (guestproto.Response, error) {
+	if r.Operation == "delete" {
+		b.deletes[r.ObjectID]++
+		if r.ObjectID == b.failID {
+			return guestproto.Response{}, ErrUnavailable
+		}
+	}
+	return b.aiBackend.Call(ctx, instance, r)
+}
+
+func TestDeletionCheckpointsAcknowledgedGenerationsBeforeRetry(t *testing.T) {
+	s, base, device, conversation := aiService(t)
+	ctx := context.Background()
+	for i := 0; i < 2; i++ {
+		if _, err := s.CreateGeneration(ctx, device, state.Random(), conversation.ID, "fixture prompt"); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.processGeneration(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, err := s.Store.DB.Query("SELECT id FROM generations WHERE conversation_id=? ORDER BY id", conversation.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil || len(ids) != 2 {
+		t.Fatal(ids, err)
+	}
+	backend := &deletionFaultBackend{aiBackend: base, failID: ids[1], deletes: map[string]int{}}
+	s.Backend = backend
+	var op Operation
+	if err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		var err error
+		op, err = s.RequestConversationDeletionInTransaction(tx, device, state.Random(), conversation.ID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.processConversationDeletion(ctx); !errors.Is(err, ErrUnavailable) {
+		t.Fatal("injected failure ignored", err)
+	}
+	var count int
+	if err := s.Store.DB.QueryRow("SELECT count(*) FROM generations WHERE conversation_id=?", conversation.ID).Scan(&count); err != nil || count != 1 {
+		t.Fatal("acknowledged checkpoint missing", count, err)
+	}
+	if backend.deletes[ids[0]] != 1 {
+		t.Fatal("first task cleanup not acknowledged")
+	}
+	backend.failID = ""
+	if _, err := s.Store.DB.Exec("UPDATE operations SET result=json_set(result,'$.nextAttemptAt',0) WHERE id=?", op.ID); err != nil {
+		t.Fatal(err)
+	}
+	restarted := New(s.Store, backend, 1)
+	if err := restarted.processConversationDeletion(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if backend.deletes[ids[0]] != 1 {
+		t.Fatal("retry restarted completed object cleanup")
+	}
+	completed, err := restarted.Operation(ctx, device, op.ID)
+	if err != nil || completed.State != "succeeded" {
+		t.Fatal("checkpointed cleanup did not finish", completed, err)
 	}
 }

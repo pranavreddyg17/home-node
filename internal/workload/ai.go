@@ -426,11 +426,11 @@ func (s *Service) deleteConversation(ctx context.Context, device, id, operationI
 	if active > 0 {
 		return ErrConflict
 	}
-	rows, err := s.Store.DB.QueryContext(ctx, "SELECT id,prompt FROM generations WHERE conversation_id=?", id)
+	rows, err := s.Store.DB.QueryContext(ctx, "SELECT id,prompt FROM generations WHERE conversation_id=? ORDER BY id", id)
 	if err != nil {
 		return err
 	}
-	objects := []string{}
+	objects := [][2]string{}
 	for rows.Next() {
 		var generation, encoded string
 		if err = rows.Scan(&generation, &encoded); err != nil {
@@ -442,7 +442,11 @@ func (s *Service) deleteConversation(ctx context.Context, device, id, operationI
 			rows.Close()
 			return err
 		}
-		objects = append(objects, generation, reference.ID)
+		if !guestproto.ValidID(generation) || !guestproto.ValidID(reference.ID) {
+			rows.Close()
+			return ErrConflict
+		}
+		objects = append(objects, [2]string{generation, reference.ID})
 	}
 	err = rows.Err()
 	rows.Close()
@@ -456,9 +460,26 @@ func (s *Service) deleteConversation(ctx context.Context, device, id, operationI
 			return err
 		}
 	}
-	for _, object := range objects {
-		if _, err = s.call(ctx, instance, guestproto.Request{Operation: "delete", ObjectID: object}); err != nil {
-			return err
+	for _, pair := range objects {
+		for _, object := range pair {
+			if _, err = s.call(ctx, instance, guestproto.Request{Operation: "delete", ObjectID: object}); err != nil {
+				return err
+			}
+		}
+		if operationID != "" {
+			// Removing only acknowledged generation metadata is the durable
+			// checkpoint. Restart scans remaining rows, never a guessed cursor.
+			result, err := s.Store.DB.ExecContext(ctx, "DELETE FROM generations WHERE id=? AND conversation_id=? AND EXISTS(SELECT 1 FROM operations WHERE id=? AND kind='conversation.delete' AND state='pending' AND json_extract(result,'$.conversationId')=?)", pair[0], id, operationID, id)
+			if err != nil {
+				return err
+			}
+			count, err := result.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if count != 1 {
+				return ErrConflict
+			}
 		}
 	}
 	return s.Store.Transaction(ctx, func(tx *sql.Tx) error {
