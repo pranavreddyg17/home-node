@@ -422,12 +422,20 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 }
 
 func checkActor(tx *sql.Tx, actor Session) error {
-	var n int
-	err := tx.QueryRow(`SELECT count(*) FROM sessions s JOIN devices d ON d.id=s.device_id JOIN identity i ON i.epoch=s.epoch WHERE s.token_hash=? AND d.id=? AND d.revoked_at IS NULL AND s.expires_at>? AND s.last_seen>?`, actor.TokenHash, actor.Device.ID, time.Now().Unix(), time.Now().Add(-30*time.Minute).Unix()).Scan(&n)
+	var verified, expires, epoch int64
+	var capsJSON string
+	err := tx.QueryRow(`SELECT s.verified_at,s.expires_at,s.epoch,d.capabilities FROM sessions s JOIN devices d ON d.id=s.device_id JOIN identity i ON i.epoch=s.epoch WHERE s.token_hash=? AND d.id=? AND d.revoked_at IS NULL AND s.expires_at>? AND s.last_seen>?`, actor.TokenHash, actor.Device.ID, time.Now().Unix(), time.Now().Add(-30*time.Minute).Unix()).Scan(&verified, &expires, &epoch, &capsJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrDenied
+	}
 	if err != nil {
 		return err
 	}
-	if n != 1 {
+	var caps []string
+	if err := json.Unmarshal([]byte(capsJSON), &caps); err != nil {
+		return err
+	}
+	if verified != actor.VerifiedAt || expires != actor.ExpiresAt || epoch != actor.Epoch || !slices.Equal(caps, actor.Device.Capabilities) {
 		return ErrDenied
 	}
 	return nil

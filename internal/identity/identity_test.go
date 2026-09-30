@@ -206,3 +206,33 @@ func TestFreshVerificationRejectsClockRollbackAndExpiredSessions(t *testing.T) {
 		})
 	}
 }
+
+func TestIdentityMutationRejectsChangedAuthoritySnapshot(t *testing.T) {
+	for _, change := range []string{"verification", "expiry", "epoch", "capabilities"} {
+		t.Run(change, func(t *testing.T) {
+			s := testService(t)
+			actor, _ := testDevice(t, s, AllCapabilities)
+			var err error
+			switch change {
+			case "verification":
+				_, err = s.Store.DB.Exec("UPDATE sessions SET verified_at=verified_at-60 WHERE token_hash=?", actor.TokenHash)
+			case "expiry":
+				_, err = s.Store.DB.Exec("UPDATE sessions SET expires_at=expires_at-60 WHERE token_hash=?", actor.TokenHash)
+			case "epoch":
+				actor.Epoch++
+			case "capabilities":
+				_, err = s.Store.DB.Exec(`UPDATE devices SET capabilities='["files"]' WHERE id=?`, actor.Device.ID)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.Pair(context.Background(), actor, "phone", []string{"files"}); !errors.Is(err, ErrDenied) {
+				t.Fatal("changed authority accepted", err)
+			}
+			var count int
+			if err := s.Store.DB.QueryRow("SELECT count(*) FROM invitations").Scan(&count); err != nil || count != 0 {
+				t.Fatal("denied mutation persisted invitation", count, err)
+			}
+		})
+	}
+}
