@@ -662,3 +662,8 @@ Development is on macOS; none of these hardware or external review gates may be 
 
 - Production guest inference now requires both an approved stop/length finish reason and a subsequent DONE marker. Previously any non-null finish reason caused immediate success before checking stream completion. Additional data events after finish are refused. Truncated streams, tool/unknown finish reasons and marker-only completion cannot become successful task results.
 - Regression streams cover approved stop/length, missing marker, missing finish, tool/unknown finish and content after completion. Existing pinned-server initial assistant/null event compatibility remains intact. Guest race tests and the complete Go suite passed locally; actual booted pinned model compatibility for this revision remains pending CI. This does not yet implement full strict output-event shape validation or action-bound approvals.
+
+## Refuse nontext model deltas
+
+- Production inference now admits only content and the pinned runtime's exact initial assistant-role/null-content event once before text/completion. Tool/function/other delta fields, foreign/repeated/late roles, roleless null content and null deltas fail generation instead of being silently ignored. Empty terminal delta remains compatible with approved finish events. No tool execution authority is added.
+- Added tool-delta, foreign-role, roleless-null and null-delta refusal streams alongside existing initial-event and complete-stream regressions. Guest race tests and the full Go suite passed locally; actual pinned-runtime VM compatibility remains pending. Duplicate JSON keys and full outer-event validation still need separate review; these checks are not a complete model-output trust boundary audit.

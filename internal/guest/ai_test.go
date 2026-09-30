@@ -82,6 +82,10 @@ func TestGenerationRequiresApprovedFinishAndDoneMarker(t *testing.T) {
 		{"tool finish", content + finish("tool_calls") + "data: [DONE]\n\n", false},
 		{"unknown finish", content + finish("unexpected") + "data: [DONE]\n\n", false},
 		{"content after finish", content + finish("stop") + content + "data: [DONE]\n\n", false},
+		{"tool delta", `data: {"choices":[{"delta":{"tool_calls":[]},"finish_reason":null}]}` + "\n\n" + content + finish("stop") + "data: [DONE]\n\n", false},
+		{"foreign role", `data: {"choices":[{"delta":{"role":"tool","content":null},"finish_reason":null}]}` + "\n\n" + content + finish("stop") + "data: [DONE]\n\n", false},
+		{"roleless null", `data: {"choices":[{"delta":{"content":null},"finish_reason":null}]}` + "\n\n" + content + finish("stop") + "data: [DONE]\n\n", false},
+		{"null delta", `data: {"choices":[{"delta":null,"finish_reason":null}]}` + "\n\n" + content + finish("stop") + "data: [DONE]\n\n", false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			a, err := New(privateDataDir(t), "ai", 1<<30)

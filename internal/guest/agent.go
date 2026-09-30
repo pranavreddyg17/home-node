@@ -538,6 +538,7 @@ func (a *Agent) generate(ctx context.Context, r guestproto.Request) (string, err
 	scan.Buffer(make([]byte, 4096), 64<<10)
 	text := ""
 	stopped := false
+	roleStarted := false
 	done := false
 	for scan.Scan() {
 		line := scan.Text()
@@ -554,10 +555,8 @@ func (a *Agent) generate(ctx context.Context, r guestproto.Request) (string, err
 		}
 		var token struct {
 			Choices []struct {
-				Delta struct {
-					Content string `json:"content"`
-				} `json:"delta"`
-				FinishReason *string `json:"finish_reason"`
+				Delta        map[string]json.RawMessage `json:"delta"`
+				FinishReason *string                    `json:"finish_reason"`
 			} `json:"choices"`
 		}
 		if json.Unmarshal([]byte(value), &token) != nil || len(token.Choices) > 1 {
@@ -566,7 +565,29 @@ func (a *Agent) generate(ctx context.Context, r guestproto.Request) (string, err
 		if len(token.Choices) == 0 {
 			continue
 		}
-		content := token.Choices[0].Delta.Content
+		delta := token.Choices[0].Delta
+		if delta == nil {
+			return "", errors.New("invalid model delta")
+		}
+		for key := range delta {
+			if key != "content" && key != "role" {
+				return "", errors.New("unsupported model delta")
+			}
+		}
+		content := ""
+		role, hasRole := delta["role"]
+		raw, hasContent := delta["content"]
+		if hasRole {
+			var name string
+			if json.Unmarshal(role, &name) != nil || name != "assistant" || roleStarted || text != "" || token.Choices[0].FinishReason != nil || !hasContent || string(raw) != "null" {
+				return "", errors.New("invalid initial model role")
+			}
+			roleStarted = true
+		} else if hasContent {
+			if string(raw) == "null" || json.Unmarshal(raw, &content) != nil {
+				return "", errors.New("invalid model content")
+			}
+		}
 		if token.Choices[0].FinishReason != nil {
 			if reason := *token.Choices[0].FinishReason; reason != "stop" && reason != "length" {
 				return "", errors.New("invalid model finish reason")
