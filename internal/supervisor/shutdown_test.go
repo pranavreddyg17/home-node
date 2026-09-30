@@ -3,6 +3,7 @@ package supervisor
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -74,5 +75,54 @@ func TestShutdownDeadlineWhileGuestIgnoresPoweroff(t *testing.T) {
 	err := awaitShutdown(ctx, state.Random(), func(context.Context, string) (bool, error) { return true, nil }, func(context.Context, string) error { requests++; return nil }, time.Millisecond)
 	if !errors.Is(err, context.DeadlineExceeded) || requests > 1 {
 		t.Fatal("ignored poweroff did not honor deadline", requests, err)
+	}
+}
+
+func TestShutdownAuditDeadlineAndEmergencyEnforcement(t *testing.T) {
+	for _, scenario := range []string{"waiting", "expired", "missing", "host-failure", "isolation-failure", "recovery"} {
+		t.Run(scenario, func(t *testing.T) {
+			m, b := newManager(t)
+			ctx := context.Background()
+			id := state.Random()
+			if _, err := m.Apply(ctx, Request{Version: 1, OperationID: state.Random(), Action: "start", Workload: "files", InstanceID: id, PolicyGeneration: 1, Revision: 1}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := m.Store.DB.Exec("UPDATE runtime_instances SET state='shutting-down',desired='stopped' WHERE id=?", id); err != nil {
+				t.Fatal(err)
+			}
+			deadline := time.Now().Unix() + 60
+			if scenario == "expired" {
+				deadline = time.Now().Unix() - 1
+			}
+			if scenario != "missing" {
+				if _, err := m.Store.DB.Exec("INSERT INTO settings VALUES(?,?)", shutdownDeadlineKey(id), strconv.FormatInt(deadline, 10)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if scenario == "host-failure" {
+				b.hostErr = errors.New("fixture host policy failure")
+			}
+			if scenario == "isolation-failure" {
+				b.verifyErr = errors.New("fixture isolation failure")
+			}
+			if scenario == "recovery" {
+				if err := m.Reconcile(ctx); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := m.Audit(ctx); err != nil {
+				t.Fatal(err)
+			}
+			instance, err := m.Inspect(ctx, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if scenario == "waiting" {
+				if b.stops != 0 || instance.State != "shutting-down" {
+					t.Fatal("audit interrupted valid shutdown wait", b.stops, instance)
+				}
+			} else if b.stops != 1 || instance.State != "interrupted" {
+				t.Fatal("audit missed emergency shutdown enforcement", b.stops, instance)
+			}
+		})
 	}
 }

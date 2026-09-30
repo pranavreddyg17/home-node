@@ -213,11 +213,11 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 		if existingErr != nil && !errors.Is(existingErr, sql.ErrNoRows) {
 			return existingErr
 		}
-		if restarting && (r.Workload == "video" || existingWorkload != r.Workload || existingDigest != image.SHA256 || existingState == "running" || existingState == "preparing" || existingState == "stopping") {
+		if restarting && (r.Workload == "video" || existingWorkload != r.Workload || existingDigest != image.SHA256 || existingState == "running" || existingState == "preparing" || existingState == "stopping" || existingState == "shutting-down") {
 			return ErrPolicy
 		}
 		var count, memory, cpus int
-		if e = tx.QueryRow("SELECT count(*),coalesce(sum(memory_mib+512),0),coalesce(sum(vcpus),0) FROM runtime_instances WHERE state IN('preparing','running','stopping')").Scan(&count, &memory, &cpus); e != nil {
+		if e = tx.QueryRow("SELECT count(*),coalesce(sum(memory_mib+512),0),coalesce(sum(vcpus),0) FROM runtime_instances WHERE state IN('preparing','running','stopping','shutting-down')").Scan(&count, &memory, &cpus); e != nil {
 			return e
 		}
 		if count >= m.Policy.MaxInstances || memory+image.MemoryMiB+512 > m.Policy.MemoryMiB || cpus+image.VCPUs > m.Policy.VCPUs {
@@ -367,7 +367,7 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 }
 
 func (m *Manager) Reconcile(ctx context.Context) error {
-	rows, err := m.Store.DB.QueryContext(ctx, "SELECT id FROM runtime_instances WHERE state IN('preparing','running','stopping')")
+	rows, err := m.Store.DB.QueryContext(ctx, "SELECT id FROM runtime_instances WHERE state IN('preparing','running','stopping','shutting-down')")
 	if err != nil {
 		return err
 	}
@@ -424,7 +424,7 @@ func (m *Manager) Channel(ctx context.Context, id string) (string, error) {
 // Audit enforces expiration, the finite-job wall clock and confinement even
 // when the controller or guest adapter is unavailable or dishonest.
 func (m *Manager) Audit(ctx context.Context) error {
-	rows, err := m.Store.DB.QueryContext(ctx, "SELECT id FROM runtime_instances WHERE state IN('running','stopping')")
+	rows, err := m.Store.DB.QueryContext(ctx, "SELECT id FROM runtime_instances WHERE state IN('running','stopping','shutting-down')")
 	if err != nil {
 		return err
 	}
@@ -450,6 +450,20 @@ func (m *Manager) Audit(ctx context.Context) error {
 		}
 		image, imageErr := m.Manifest.Image(i.Workload)
 		stop := hostErr != nil || imageErr != nil || !m.Manifest.Expires.After(time.Now()) || i.State == "stopping" || i.Workload == "video" && time.Now().Unix()-i.CreatedAt >= 1800
+		if i.State == "shutting-down" && !stop {
+			var value string
+			deadlineErr := m.Store.DB.QueryRowContext(ctx, "SELECT value FROM settings WHERE key=?", shutdownDeadlineKey(id)).Scan(&value)
+			deadline, parseErr := strconv.ParseInt(value, 10, 64)
+			stop = deadlineErr != nil || parseErr != nil || deadline <= time.Now().Unix() || deadline > time.Now().Unix()+90
+			if !stop {
+				running, probeErr := m.Backend.Running(ctx, id)
+				if probeErr != nil {
+					stop = true
+				} else if !running {
+					continue
+				}
+			}
+		}
 		if !stop {
 			d := Domain{ID: id, Image: image, DiskReserveBytes: m.Policy.DiskReserveBytes, SystemPath: filepath.Join(m.Images, image.SHA256+".raw"), DataPath: filepath.Join(m.Volumes, id+".raw"), ChannelPath: filepath.Join(m.Channels, id, "adapter.sock")}
 			stop = m.Backend.Verify(ctx, d) != nil
@@ -474,7 +488,7 @@ func (m *Manager) purge(ctx context.Context, r Request) (Instance, error) {
 	if err != nil {
 		return Instance{}, err
 	}
-	if instance.Workload != "video" || instance.Desired != "stopped" || instance.State == "running" || instance.State == "preparing" || instance.State == "stopping" {
+	if instance.Workload != "video" || instance.Desired != "stopped" || instance.State == "running" || instance.State == "preparing" || instance.State == "stopping" || instance.State == "shutting-down" {
 		return Instance{}, ErrPolicy
 	}
 	running, err := m.Backend.Running(ctx, r.InstanceID)

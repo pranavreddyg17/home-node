@@ -63,3 +63,5 @@ func awaitShutdown(ctx context.Context, id string, running func(context.Context,
 		}
 	}
 }
+
+func shutdownDeadlineKey(id string) string { return "runtime.shutdown-deadline." + id }
