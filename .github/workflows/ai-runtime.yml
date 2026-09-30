@@ -5,6 +5,7 @@ on:
     paths:
       - 'packaging/guest/build_ai_runtime.py'
       - 'packaging/guest/build_ai_runtime_test.py'
+      - 'packaging/guest/download_ai_model*.py'
       - '.github/workflows/ai-runtime.yml'
   workflow_dispatch:
 permissions:
@@ -15,11 +16,13 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - name: Verify compiler configuration admission
-        run: python3 -B -W error::ResourceWarning -m unittest discover -s packaging/guest -p build_ai_runtime_test.py
+        run: |
+          python3 -B -W error::ResourceWarning -m unittest discover -s packaging/guest -p build_ai_runtime_test.py
+          python3 -B -W error::ResourceWarning -m unittest discover -s packaging/guest -p download_ai_model_test.py
       - name: Install disposable compiler dependencies
         run: sudo apt-get update && sudo apt-get install -y cmake g++ make binutils
       - name: Fetch pinned inference source
@@ -37,5 +40,16 @@ jobs:
         with:
           name: homenode-development-ai-runtime
           path: ${{ runner.temp }}/ai-runtime/artifacts/
+          retention-days: 7
+          if-no-files-found: error
+      - name: Fetch integrity-pinned development model
+        env:
+          HOMENODE_AI_MODEL_BUILD: '1'
+        run: python3 -B -u packaging/guest/download_ai_model.py "$RUNNER_TEMP/ai-model"
+      - name: Retain unqualified model candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: homenode-development-ai-model
+          path: ${{ runner.temp }}/ai-model/
           retention-days: 7
           if-no-files-found: error
