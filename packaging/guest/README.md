@@ -124,3 +124,8 @@ Reads are restricted to the four fixed account/NSS paths; unexpected paths and
 intermediate symlinks are rejected. Run admission against assembler-controlled
 staging with no concurrent writers. Descriptor pinning and permissions do not
 make a mutable staging tree an immutable release artifact.
+
+The sysusers source explicitly declares the private group as well as the user.
+An explicit numeric primary GID requires an existing group; requesting both
+numbers in the user line alone does not create that prerequisite. The native
+fixture must pass for the pinned assembler systemd version before image release.
