@@ -19,7 +19,7 @@ func main() {
 	quota := flag.Int64("quota-bytes", 16<<30, "guest volume budget")
 	channel := flag.String("channel", "/dev/virtio-ports/org.homenode.adapter", "virtio serial device")
 	flag.Parse()
-	if *data != "/data/objects" || guestmount.Check() != nil {
+	if *data != "/data/objects" || guestmount.Check() != nil || guestmount.CheckRuntime() != nil {
 		fmt.Fprintln(os.Stderr, "guest data mount admission failed")
 		os.Exit(1)
 	}

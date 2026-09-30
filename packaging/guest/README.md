@@ -198,3 +198,24 @@ load and aggregate VM memory measurements still need image qualification.
 Guest-local logs disappear at reboot; authoritative owner audit history remains
 in the host controller. No native journal daemon or guest boot is exercised by
 the directory fixture.
+
+## Runtime admission of OS temporary filesystems
+
+Before opening its workload store, the production adapter also admits the opened
+`/tmp` and `/var` filesystem views. Pinned directory descriptors must report root
+ownership and exact modes (1777 and 0755), separate tmpfs devices, nodev/nosuid/
+noexec flags, positive byte limits no greater than 64 MiB and positive inode
+limits no greater than 8192. Kernel mount IDs must resolve to the expected paths
+and filesystem type in bounded mountinfo. `/var` must expose the filesystem root;
+`/tmp` may expose the adapter's PrivateTmp subdirectory of its bounded tmpfs.
+The adapter's `/tmp` must be writable; `/var` may be read-only under its existing
+ProtectSystem sandbox. This check changes no mounts or permissions and does not
+prove the underlying system disk signature or a complete VM memory envelope.
+
+The opt-in native CI fixture creates an independent private mount namespace,
+mounts the two reviewed source definitions there, and executes the real checker.
+It then tests unsafe modes, excessive byte/inode limits, missing protective flags
+and read-only temporary storage, followed by private-temp/read-only-var views.
+All mounts disappear when that child namespace exits. It does not boot a guest or
+execute the production adapter systemd unit; actual boot and source-unit startup
+qualification remain mandatory.
