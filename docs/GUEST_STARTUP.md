@@ -145,7 +145,7 @@ physical disk integrity. Those remain separate boot admission requirements.
 The production guest entrypoint now admits only `/data/objects`. Before opening
 the agent it checks the named data path is a block device, kernel serial is
 `homenode-data`, kernel read-only flag is zero and the current mount namespace
-contains exactly one `/data` mount of the same major/minor device. The mount
+contains the `/data` mount actually opened by the process, of the same major/minor device. The mount
 must expose the whole ext4 filesystem with rw,nodev,nosuid,noexec and writable
 superblock options. Kernel mountinfo/attribute reads are bounded; non-Linux
 startup fails admission. The service still denies raw block-device access: the
@@ -156,3 +156,12 @@ wrong filesystem, absent confinement flags, readonly superblocks and malformed
 or oversized evidence. Linux cross compilation passed. Real kernel/udev mount
 identity, safe formatting and post-crash filesystem behavior remain unverified
 until booted-image acceptance. This check does not initialize or repair storage.
+
+Mount admission pins `/data` with a no-follow directory descriptor, checks its
+actual filesystem device and selects mountinfo by the kernel `mnt_id` in bounded
+`/proc/self/fdinfo`. Stacked entries from service namespace protections can
+share a path; hidden mount entries cannot establish admission for the visible
+mount. A missing/duplicate selected ID or unsafe visible overmount fails. Parser
+tests cover a valid visible mount above a hidden entry and an unsafe visible
+mount above a valid hidden entry. Real systemd namespace/boot acceptance remains
+required; these parser tests do not prove that runtime behavior.

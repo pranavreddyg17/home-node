@@ -7,8 +7,19 @@ import (
 
 func TestDataMountRequiresNamedDeviceAndConfinement(t *testing.T) {
 	valid := "31 22 253:16 / /data rw,nosuid,nodev,noexec,relatime - ext4 /dev/vdb rw\n"
-	if err := admit(valid, "253:16"); err != nil {
+	if err := admit(valid, "253:16", "31"); err != nil {
 		t.Fatal(err)
+	}
+	hidden := strings.Replace(valid, "31 22", "30 22", 1)
+	if err := admit(hidden+valid, "253:16", "31"); err != nil {
+		t.Fatal("hidden mount blocked valid visible mount", err)
+	}
+	unsafe := strings.Replace(valid, "nodev,", "", 1)
+	if err := admit(hidden+unsafe, "253:16", "31"); err == nil {
+		t.Fatal("unsafe visible overmount accepted")
+	}
+	if err := admit(valid, "253:16", "32"); err == nil {
+		t.Fatal("missing visible mount accepted")
 	}
 	for _, data := range []string{
 		"", valid + valid,
@@ -24,7 +35,7 @@ func TestDataMountRequiresNamedDeviceAndConfinement(t *testing.T) {
 		valid + "malformed\n",
 		valid + strings.Repeat(" ", 1<<20),
 	} {
-		if err := admit(data, "253:16"); err == nil {
+		if err := admit(data, "253:16", "31"); err == nil {
 			t.Fatal("unsafe mount admitted")
 		}
 	}

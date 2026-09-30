@@ -8,7 +8,7 @@ import (
 
 var ErrMount = errors.New("guest data mount admission failed")
 
-func admit(data string, device string) error {
+func admit(data string, device string, mountID string) error {
 	if len(data) > 1<<20 {
 		return ErrMount
 	}
@@ -21,10 +21,10 @@ func admit(data string, device string) error {
 		if len(fields) < 10 {
 			return ErrMount
 		}
-		if fields[4] != "/data" {
+		if fields[0] != mountID {
 			continue
 		}
-		if found {
+		if fields[4] != "/data" || found {
 			return ErrMount
 		}
 		found = true
