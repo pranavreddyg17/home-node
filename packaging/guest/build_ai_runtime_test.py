@@ -84,5 +84,37 @@ class RuntimeDependencyTests(unittest.TestCase):
                 runtime.dependencies(dynamic, program)
 
 
+class SourceNoticeTests(unittest.TestCase):
+    def test_notices_preserve_source_bytes_and_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source, artifacts = Path(directory) / "source", Path(directory) / "artifacts"
+            source.mkdir()
+            artifacts.mkdir()
+            expected = []
+            for name in runtime.NOTICE_FILES:
+                path = source / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                data = ("notice fixture " + name + "\n").encode()
+                path.write_bytes(data)
+                expected.append({"sourcePath": name, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()})
+            self.assertEqual(runtime.stage_notices(source, artifacts), expected)
+            for name in runtime.NOTICE_FILES:
+                self.assertEqual((artifacts / "notices" / name).read_bytes(), (source / name).read_bytes())
+            with self.assertRaises(FileExistsError):
+                runtime.stage_notices(source, artifacts)
+
+    def test_missing_or_symlinked_notice_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source, artifacts = Path(directory) / "source", Path(directory) / "artifacts"
+            source.mkdir()
+            artifacts.mkdir()
+            with self.assertRaises(FileNotFoundError):
+                runtime.stage_notices(source, artifacts)
+            (artifacts / "notices").rmdir()
+            (source / "LICENSE").symlink_to("/dev/null")
+            with self.assertRaises(OSError):
+                runtime.stage_notices(source, artifacts)
+
+
 if __name__ == "__main__":
     unittest.main()

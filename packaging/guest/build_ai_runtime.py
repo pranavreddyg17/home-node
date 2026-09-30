@@ -27,6 +27,29 @@ OPTIONS = {
 }
 SYSTEM_LIBRARIES = {"libstdc++.so.6", "libm.so.6", "libgomp.so.1", "libgcc_s.so.1", "libc.so.6", "ld-linux-x86-64.so.2"}
 INTERPRETER = "/lib64/ld-linux-x86-64.so.2"
+NOTICE_FILES = ("LICENSE", "licenses/LICENSE-jsonhpp", "vendor/cpp-httplib/LICENSE",
+                "vendor/hash/xxhash/LICENSE", "vendor/hash/sha256/LICENSE", "vendor/hash/rotate-bits/LICENSE.md")
+
+
+def stage_notices(source, artifacts):
+    destination = artifacts / "notices"
+    destination.mkdir(mode=0o700)
+    records = []
+    for name in NOTICE_FILES:
+        fd = os.open(source / name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, "rb") as file:
+            info = os.fstat(file.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_nlink != 1 or info.st_mode & 0o022 or not 0 < info.st_size <= 1 << 20:
+                raise ValueError("unexpected source notice")
+            data = file.read((1 << 20) + 1)
+        if len(data) != info.st_size:
+            raise ValueError("source notice changed")
+        target = destination / name
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with target.open("xb") as file:
+            file.write(data)
+        records.append({"sourcePath": name, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()})
+    return records
 
 
 def dependencies(dynamic, program):
@@ -129,9 +152,11 @@ def build(source, output):
     shutil.copyfile(binary, artifacts / "llama-server")
     (artifacts / "llama-server").chmod(0o755)
     shutil.copyfile(source / "LICENSE", artifacts / "llama.cpp-LICENSE")
+    notices = stage_notices(source, artifacts)
     record = {"schema": 1, "sourceRevision": REVISION, "cmakeOptions": OPTIONS,
               "cmakeCacheSHA256": cache_digest,
               "dynamicLibraries": libraries, "interpreter": INTERPRETER,
+              "sourceNotices": notices, "licenseReviewComplete": False,
               "binarySHA256": checksum, "binaryBytes": info.st_size,
               "releaseQualified": False, "modelIncluded": False}
     with (artifacts / "development-runtime.json").open("x") as file:
