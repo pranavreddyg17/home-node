@@ -293,3 +293,22 @@ Rejected signatures, rollback versions and malformed recorded floors leave the
 trust record unchanged. This prevents overlapping startup admissions from
 regressing the highest successfully committed catalog version. It does not
 implement release download, TUF metadata or update/boot rollback orchestration.
+
+### Committed installation inspection
+
+`Engine.CheckInstallation` / `homenode install-check` verifies the production
+host installation without changing application state or starting services. It
+holds the installer lock, requires unchanged fully installed configuration and
+complete image publication, derives canonical network/policy/trust values from
+owned files, checks account-to-policy bindings and rehashes each image. Native
+admission also checks current OS account markers and memberships and protected
+TLS file access before running the existing local Tailscale/certificate checks.
+No request-supplied network values, publisher identity or capacity can replace
+the committed values in this inspection.
+
+The artifact inspection helper deliberately does not claim actual account,
+TLS or peer-policy verification in synthetic fixtures. Native successful output
+records current artifact/account/HTTPS verification, certificate expiry and
+explicit remaining enforcement, tailnet policy, activation and phone gates.
+Missing, incomplete, changed and expired state fails closed. Inspection makes
+no journal progress, no enrollment codes and no saved activation attestation.

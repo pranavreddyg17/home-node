@@ -63,3 +63,24 @@ verified image bytes and free space still needed, while preserving measured
 capacity. Preparation uses that catalog-derived storage admission instead of
 doctor's provisional free-space floor; remaining host prerequisite checks are
 mandatory. Other host processes can still consume space between observations.
+
+After provisioning protected HTTPS files, run:
+
+```sh
+sudo homenode install-check
+```
+
+The command takes the installation lock and reads committed settings, trust
+floor, accounts and image state from the existing journal. It rehashes all three
+images and requires completed publication; a lost image acknowledgement must be
+reconciled with `install-prepare` first. It rechecks actual account ownership
+markers/membership and the running local Tailscale/HTTPS identity. The certificate
+must be root-owned mode 0644, and the private key root:homenode mode 0640; the
+shared runtime group cannot read the key. It does not start services or advance
+journals. A custom journal path can be selected with `--journal-dir`.
+
+Successful JSON separates artifact, live-account and HTTPS identity verification
+and reports certificate expiry. It still lists enforcement/VM-overhead,
+allowed/denied tailnet policy, activation and phone-enrollment/sample-job gates.
+A local Tailscale certificate is not evidence of peer access policy. Results
+are current observations rather than saved authorization to skip later checks.
