@@ -100,7 +100,7 @@ def fixture(artifacts, models, output):
 
 
 def run(binary_fd, model_fd, output, record):
-    command = ["/usr/bin/prlimit", "--as=1073741824", "--cpu=90", "--nproc=128", "--nofile=128", "--core=0",
+    command = ["/usr/bin/prlimit", "--as=1073741824", "--cpu=90", "--nproc=128", "--nofile=128", "--core=0", "--fsize=65536",
                "/proc/self/fd/" + str(binary_fd), "--model", "/proc/self/fd/" + str(model_fd),
                "--offline", "--host", "127.0.0.1", "--port", "8080", "--parallel", "1",
                "--ctx-size", "512", "--predict", "16", "--threads", "2", "--threads-batch", "2",
@@ -108,9 +108,13 @@ def run(binary_fd, model_fd, output, record):
                "--no-cache-idle-slots", "--no-jinja", "--chat-template", "chatml", "--no-webui", "--no-slots",
                "--no-webui-mcp-proxy", "--log-disable", "--device", "none", "--gpu-layers", "0",
                "--threads-http", "2", "--timeout", "30"]
-    process = subprocess.Popen(command, pass_fds=(binary_fd, model_fd), stdin=subprocess.DEVNULL,
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                               env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"})
+    # Only generated test input is used. Kernel file-size limits bound retained
+    # startup diagnostics even if this admitted development server is noisy.
+    fd = os.open(output / "runtime-diagnostic.log", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "wb") as diagnostic:
+        process = subprocess.Popen(command, pass_fds=(binary_fd, model_fd), stdin=subprocess.DEVNULL,
+                                   stdout=subprocess.DEVNULL, stderr=diagnostic,
+                                   env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"})
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         deadline = time.monotonic() + 60
@@ -151,4 +155,5 @@ if __name__ == "__main__":
     try:
         fixture(Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]))
     except (OSError, ValueError, KeyError, TypeError, IndexError, subprocess.SubprocessError) as error:
-        sys.exit("Development inference fixture failed: " + type(error).__name__)
+        reason = str(error)[:240] if type(error) is ValueError else type(error).__name__
+        sys.exit("Development inference fixture failed: " + reason)

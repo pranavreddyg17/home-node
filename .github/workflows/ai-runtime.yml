@@ -7,6 +7,9 @@ on:
       - 'packaging/guest/build_ai_runtime_test.py'
       - 'packaging/guest/download_ai_model*.py'
       - 'packaging/guest/ai_runtime_fixture*.py'
+      - 'packaging/guest/stage_ai_payload*.py'
+      - 'packaging/guest/homenode-model.service'
+      - 'packaging/guest/homenode-ai-model.conf'
       - '.github/workflows/ai-runtime.yml'
   workflow_dispatch:
 permissions:
@@ -25,6 +28,7 @@ jobs:
           python3 -B -W error::ResourceWarning -m unittest discover -s packaging/guest -p build_ai_runtime_test.py
           python3 -B -W error::ResourceWarning -m unittest discover -s packaging/guest -p download_ai_model_test.py
           python3 -B -W error::ResourceWarning -m unittest discover -s packaging/guest -p ai_runtime_fixture_test.py
+          python3 -B -W error::ResourceWarning -m unittest discover -s packaging/guest -p stage_ai_payload_test.py
       - name: Install disposable compiler dependencies
         run: sudo apt-get update && sudo apt-get install -y cmake g++ make binutils util-linux iproute2
       - name: Fetch pinned inference source
@@ -68,9 +72,26 @@ jobs:
             ' fixture "$(id -u)" "$(id -g)" "$PWD/packaging/guest/ai_runtime_fixture.py" \
               "$RUNNER_TEMP/ai-runtime/artifacts" "$RUNNER_TEMP/ai-model" "$RUNNER_TEMP/ai-inference"
       - name: Retain bounded inference evidence
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: homenode-development-ai-inference
-          path: ${{ runner.temp }}/ai-inference/inference-evidence.json
+          path: |
+            ${{ runner.temp }}/ai-inference/inference-evidence.json
+            ${{ runner.temp }}/ai-inference/runtime-diagnostic.log
+          retention-days: 7
+          if-no-files-found: warn
+      - name: Assemble admitted guest AI payload
+        run: |
+          sudo install -d -m 0700 "$RUNNER_TEMP/ai-assembly"
+          sudo env HOMENODE_GUEST_IMAGE_BUILD=1 python3 -B packaging/guest/stage_ai_payload.py \
+            "$RUNNER_TEMP/ai-runtime/artifacts/llama-server" "$RUNNER_TEMP/ai-model/model.gguf" \
+            "$RUNNER_TEMP/ai-assembly/payload"
+          sudo chmod 0755 "$RUNNER_TEMP/ai-assembly" "$RUNNER_TEMP/ai-assembly/payload"
+      - name: Retain unqualified AI guest assembly input
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: homenode-development-ai-payload
+          path: ${{ runner.temp }}/ai-assembly/payload/
           retention-days: 7
           if-no-files-found: error
