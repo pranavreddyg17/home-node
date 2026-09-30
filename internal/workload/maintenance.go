@@ -118,3 +118,52 @@ func (s *Service) MaintenanceStop(ctx context.Context, token, device, name strin
 	}
 	return op, nil
 }
+
+// MaintenanceRestart restores only an app successfully stopped by this barrier
+// for this device. The coordinator must first finish disk copying and release
+// supervisor maintenance. It retains management admission until restarts are
+// observed; the normal worker rechecks current authority and catalog policy.
+func (s *Service) MaintenanceRestart(ctx context.Context, token, device, name string) (Operation, error) {
+	var op Operation
+	err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := state.RequireMaintenanceOwner(tx, token); err != nil {
+			return err
+		}
+		var authorized int
+		if err := tx.QueryRow(`SELECT count(*) FROM devices WHERE id=? AND revoked_at IS NULL AND EXISTS(SELECT 1 FROM json_each(capabilities) WHERE value='admin')`, device).Scan(&authorized); err != nil {
+			return err
+		}
+		if authorized != 1 {
+			return ErrConflict
+		}
+		stopKey := sum([]byte("maintenance-stop\x00" + token + "\x00" + name))
+		var stopID string
+		if err := tx.QueryRow("SELECT id FROM operations WHERE device_id=? AND idempotency_key=? AND kind='app.stop' AND state='succeeded'", device, stopKey).Scan(&stopID); err != nil {
+			return err
+		}
+		key := sum([]byte("maintenance-restart\x00" + token + "\x00" + name))
+		var err error
+		op, err = s.appActionInTransaction(tx, device, key, name, "start", func(tx *sql.Tx) error {
+			var owned int
+			if err := tx.QueryRow("SELECT count(*) FROM apps WHERE workload=? AND operation_id=? AND state='stopped'", name, stopID).Scan(&owned); err != nil {
+				return err
+			}
+			if owned != 1 {
+				return ErrConflict
+			}
+			var activities int
+			if err := tx.QueryRow("SELECT count(*) FROM settings WHERE key GLOB 'host.activity.*'").Scan(&activities); err != nil {
+				return err
+			}
+			if activities != 0 {
+				return state.ErrMaintenance
+			}
+			return nil
+		})
+		return err
+	})
+	if err != nil {
+		return Operation{}, err
+	}
+	return op, nil
+}
