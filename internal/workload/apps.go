@@ -168,7 +168,10 @@ func (s *Service) processAppKind(ctx context.Context, selectedKind string) error
 	if err != nil {
 		return err
 	}
-	if authorized != 1 || time.Now().Unix()-created > 300 {
+	now := time.Now().Unix()
+	// Reject impossible timestamps before subtraction. A clock rollback must
+	// not extend queued authority, and malformed extreme values must not wrap.
+	if authorized != 1 || !appAuthorityCurrent(created, now) {
 		return s.failApp(ctx, opID, device, intent, "pending", "AUTHORIZATION_EXPIRED")
 	}
 	result, err := s.Store.DB.ExecContext(ctx, "UPDATE operations SET state='executing',updated_at=? WHERE id=? AND state='pending'", time.Now().Unix(), opID)
@@ -238,6 +241,10 @@ func (s *Service) processAppKind(ctx context.Context, selectedKind string) error
 		}
 		return state.Event(tx, device, "operation.succeeded", opID, instance)
 	})
+}
+
+func appAuthorityCurrent(created, now int64) bool {
+	return created > 0 && created <= now && now-created <= 300
 }
 func (s *Service) Reconcile(ctx context.Context) error {
 	if _, err := s.Store.DB.ExecContext(ctx, "INSERT OR IGNORE INTO settings(key,value) SELECT 'job.cleanup.'||id,json_object('state','pending','lastAttempt',0) FROM jobs WHERE start_requested=1"); err != nil {
