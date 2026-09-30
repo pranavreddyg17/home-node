@@ -258,7 +258,7 @@ Failures retain staging. It does not install host services or write physical
 disks, and the normal owner installer never builds these images.
 
 The recipe requests Ubuntu noble x86-64 packages with repository signature
-checks, BIOS/EFI GRUB, a distribution kernel/initramfs, a 256 MiB ESP, 1 MiB BIOS
+checks, BIOS/EFI GRUB, a distribution kernel/initramfs, a 512 MiB ESP, 1 MiB BIOS
 partition and 2–4 GiB ext4 root with the read-only partition flag and `ro` kernel
 argument. Root login is locked and autologin disabled. The finalization hook
 checks merged adapter bytes/identity and enables its mounts and selected unit.
@@ -317,3 +317,10 @@ the video image. The profile conflict gate refused that image before publication
 Only root finalization enables the selected instance. The recipe uses mkosi's
 conventional `mkosi.finalize` and `mkosi.repart` discovery rather than listing
 them a second time, avoiding duplicated finalize invocations and definitions.
+
+Actual video assembly reached EFI population after the explicit-profile fix,
+but `mcopy` reported disk full with the original 256 MiB ESP. The recipe now
+uses the pinned upstream default's 512 MiB ESP size. This remains within the
+system-image size admission limit. Successful formatting, BIOS installation
+and boot must still be demonstrated; a larger partition alone is not evidence
+of a complete image or sufficient space for every future kernel closure.

@@ -514,3 +514,9 @@ Development is on macOS; none of these hardware or external review gates may be 
 - Logs also showed duplicate conventional finalize invocations/partition definition paths. Removed their redundant explicit recipe entries so mkosi's named-file discovery supplies them once.
 - Local overlay/finalization/protocol tests passed. Complete disk/boot results after these corrections remain pending; package support/provenance/licenses, AI runtime/model assembly, production VM lifecycle and physical qualification remain unfinished.
 - Pinned mkosi source also requires host `grub-mkimage`/`grub-bios-setup` for BIOS assembly. Declared `grub-pc-bin` explicitly in runner dependencies rather than relying on incidental hosted-image tools; this is source-derived prerequisite coverage, not a newly observed GRUB failure.
+
+## EFI partition capacity correction
+
+- Video job `109941532816` of `36731363492` passed the selected-profile/root/initramfs stages and reached vfat population with `mcopy` available, then failed with `Disk full` at the original 256 MiB ESP. No boot or published disk is established.
+- Changed the development ESP to 512 MiB, matching the inspected pinned upstream default partition definition. The overall candidate still stays within the existing 8 GiB system-image bound; package/kernel size closure remains a release qualification gate.
+- Local overlay/finalization/protocol tests passed and partition-source whitespace checks passed. Actual formatting/BIOS installation, booted transfer, production confinement/lifecycle, AI runtime/model and physical acceptance remain unfinished.
