@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/pranavreddyg17/home-node/internal/guestproto"
 	"github.com/pranavreddyg17/home-node/internal/state"
 )
 
@@ -62,11 +63,50 @@ func requireRuntimeAdmission(tx *sql.Tx) error {
 // clean unmount, pin disk descriptors or freeze other root processes. It must not be used
 // alone to authorize a backup copy. No public controller route exposes it.
 func (m *Manager) BeginRuntimeMaintenance(ctx context.Context) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
 	unlock, err := m.lockRuntime(ctx, true)
 	if err != nil {
 		return "", err
 	}
 	defer unlock()
+	// Close rows before external probes: backends must never run while holding
+	// the management database's sole connection. The exclusive live-manager
+	// guard prevents its runtime calls from racing these observations.
+	rows, err := m.Store.DB.QueryContext(ctx, "SELECT id FROM runtime_instances ORDER BY id LIMIT 4097")
+	if err != nil {
+		return "", err
+	}
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return "", err
+		}
+		if !guestproto.ValidID(id) || len(ids) == 4096 {
+			rows.Close()
+			return "", ErrPolicy
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return "", err
+	}
+	for _, id := range ids {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		running, err := m.Backend.Running(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		if running {
+			return "", ErrPolicy
+		}
+	}
 	token := state.Random()
 	err = m.Store.Transaction(ctx, func(tx *sql.Tx) error {
 		if err := requireRuntimeAdmission(tx); err != nil {
