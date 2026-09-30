@@ -82,7 +82,7 @@ func (s *Service) CancelTransfer(ctx context.Context, device, id string) (Transf
 // expireTrash retains a minimal tombstone because job history and completed
 // transfers reference file IDs. Bytes remain charged until durable deletion.
 // Negative trash_until denotes an irreversible purge, never a restorable file.
-func (s *Service) expireTrash(ctx context.Context) error {
+func (s *Service) expireTrash(ctx context.Context) (resultErr error) {
 	var id string
 	err := s.Store.DB.QueryRowContext(ctx, `SELECT id FROM files WHERE trash_until>=0 AND trash_until<=?
 AND NOT EXISTS(SELECT 1 FROM jobs WHERE input_id=files.id AND state IN('queued','preparing','running','finalizing','cancelling'))
@@ -93,6 +93,18 @@ ORDER BY trash_until LIMIT 1`, time.Now().Unix()).Scan(&id)
 	if err != nil {
 		return err
 	}
+	token, err := s.Store.BeginActivity(ctx, "trash-expiry")
+	if errors.Is(err, state.ErrMaintenance) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		resultErr = errors.Join(resultErr, s.Store.EndActivity(cleanup, token))
+	}()
 	unlock := s.lock(id)
 	defer unlock()
 	var expiration sql.NullInt64

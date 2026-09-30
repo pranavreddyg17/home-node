@@ -117,6 +117,7 @@ func ValidateRecoverySnapshot(ctx context.Context, file *os.File) ([]RecoveryApp
 		"SELECT count(*) FROM devices WHERE revoked_at IS NULL OR capabilities!='[]'",
 		"SELECT count(*) FROM settings WHERE key='origin'",
 		"SELECT count(*) FROM settings WHERE key='host.maintenance'",
+		"SELECT count(*) FROM settings WHERE key GLOB 'host.activity.*'",
 		"SELECT count(*) FROM settings WHERE key GLOB 'job.cleanup.*'",
 		"SELECT count(*) FROM jobs WHERE start_requested!=0",
 		"SELECT count(*) FROM apps WHERE state!='stopped' OR operation_id IS NOT NULL OR revision<0",

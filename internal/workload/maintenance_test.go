@@ -114,3 +114,52 @@ func TestMaintenancePreservesFilesAndRejectsNewDeletionIntent(t *testing.T) {
 		t.Fatal("release did not allow file change", err)
 	}
 }
+
+func TestMaintenancePausesTrashExpiryUntilRelease(t *testing.T) {
+	s, _, device := service(t)
+	startFiles(t, s, device)
+	ctx := context.Background()
+	data := []byte("retained during maintenance")
+	transfer, err := s.CreateTransfer(ctx, device, "expired.txt", int64(len(data)), sum(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Upload(ctx, device, transfer.ID, 0, data, sum(data)); err != nil {
+		t.Fatal(err)
+	}
+	file, err := s.Finalize(ctx, device, transfer.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Store.DB.Exec("UPDATE files SET trash_until=1 WHERE id=?", file.ID); err != nil {
+		t.Fatal(err)
+	}
+	token, err := s.Store.BeginMaintenance(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.expireTrash(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var size int64
+	if err = s.Store.DB.QueryRow("SELECT size FROM files WHERE id=?", file.ID).Scan(&size); err != nil || size != int64(len(data)) {
+		t.Fatal("maintenance reclaimed bytes", size, err)
+	}
+	ready, err := s.Store.MaintenanceActivitiesDrained(ctx, token)
+	if err != nil || !ready {
+		t.Fatal("paused worker leaked activity", ready, err)
+	}
+	if err = s.Store.EndMaintenance(ctx, token); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.expireTrash(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Store.DB.QueryRow("SELECT size FROM files WHERE id=?", file.ID).Scan(&size); err != nil || size != 0 {
+		t.Fatal("released cleanup did not reclaim", size, err)
+	}
+	var count int
+	if err = s.Store.DB.QueryRow("SELECT count(*) FROM settings WHERE key GLOB 'host.activity.*'").Scan(&count); err != nil || count != 0 {
+		t.Fatal("completed worker leaked activity", count, err)
+	}
+}

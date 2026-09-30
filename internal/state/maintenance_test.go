@@ -106,3 +106,58 @@ func TestMaintenanceAcquisitionSerializesWithAdmission(t *testing.T) {
 		t.Fatal("pre-barrier intent lost", value, err)
 	}
 }
+
+func TestMaintenanceWaitsForRegisteredActivityAcrossRestart(t *testing.T) {
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "state")
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	activity, err := s.BeginActivity(ctx, "trash-expiry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := s.BeginMaintenance(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready, err := s.MaintenanceActivitiesDrained(ctx, token)
+	if err != nil || ready {
+		t.Fatal("active cleanup misreported drained", ready, err)
+	}
+	if err = s.EndMaintenance(ctx, token); !errors.Is(err, ErrMaintenance) {
+		t.Fatal("active cleanup allowed barrier release", err)
+	}
+	if _, err = s.BeginActivity(ctx, "trash-expiry"); !errors.Is(err, ErrMaintenance) {
+		t.Fatal("barrier admitted cleanup", err)
+	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ready, err = s.MaintenanceActivitiesDrained(ctx, token)
+	if err != nil || ready {
+		t.Fatal("restart lost activity", ready, err)
+	}
+	if err = s.EndActivity(ctx, Random()); !errors.Is(err, ErrMaintenanceOwner) {
+		t.Fatal(err)
+	}
+	if err = s.EndActivity(ctx, activity); err != nil {
+		t.Fatal(err)
+	}
+	ready, err = s.MaintenanceActivitiesDrained(ctx, token)
+	if err != nil || !ready {
+		t.Fatal("completed cleanup did not drain", ready, err)
+	}
+	if _, err = s.MaintenanceActivitiesDrained(ctx, Random()); !errors.Is(err, ErrMaintenanceOwner) {
+		t.Fatal("foreign maintenance observer accepted", err)
+	}
+	if err = s.EndMaintenance(ctx, token); err != nil {
+		t.Fatal(err)
+	}
+}
