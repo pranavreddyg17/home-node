@@ -11,6 +11,23 @@ var ErrMaintenanceOwner = errors.New("maintenance token does not own the barrier
 
 const maintenanceKey = "host.maintenance"
 
+// RequireMaintenanceOwner checks ownership inside the transaction that records
+// a coordinator action. A separate read would race barrier release/replacement.
+func RequireMaintenanceOwner(tx *sql.Tx, token string) error {
+	var owner string
+	err := tx.QueryRow("SELECT value FROM settings WHERE key=?", maintenanceKey).Scan(&owner)
+	if errors.Is(err, sql.ErrNoRows) || token == "" {
+		return ErrMaintenanceOwner
+	}
+	if err != nil {
+		return err
+	}
+	if owner != token {
+		return ErrMaintenanceOwner
+	}
+	return nil
+}
+
 // BeginMaintenance closes transactional workload admission before draining work.
 // There is intentionally no timeout: a crash must not reopen admission while
 // disks may still be stopped or undergoing backup/restore. This barrier alone

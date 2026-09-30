@@ -61,6 +61,10 @@ func (s *Service) AppAction(ctx context.Context, device, key, name, action strin
 // AppActionInTransaction persists intent only. Approval consumption can share
 // this transaction; runtime effects happen later through the operation worker.
 func (s *Service) AppActionInTransaction(tx *sql.Tx, device, key, name, action string) (Operation, error) {
+	return s.appActionInTransaction(tx, device, key, name, action, state.RequireAdmission)
+}
+
+func (s *Service) appActionInTransaction(tx *sql.Tx, device, key, name, action string, admission func(*sql.Tx) error) (Operation, error) {
 	if name != "files" && name != "ai" || action != "start" && action != "stop" {
 		return Operation{}, ErrInvalid
 	}
@@ -84,7 +88,7 @@ func (s *Service) AppActionInTransaction(tx *sql.Tx, device, key, name, action s
 	if err != nil || replay {
 		return op, err
 	}
-	if err := state.RequireAdmission(tx); err != nil {
+	if err := admission(tx); err != nil {
 		return Operation{}, errors.Join(ErrConflict, err)
 	}
 	if phase == "stopping" || action == "start" && (phase == "running" || phase == "starting") {
