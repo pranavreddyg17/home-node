@@ -28,7 +28,7 @@ func (b *testBackend) Apply(_ context.Context, r supervisor.Request) (supervisor
 		b.starts++
 		b.running = true
 	}
-	if r.Action == "stop" {
+	if r.Action == "stop" || r.Action == "shutdown" {
 		b.running = false
 	}
 	phase := "stopped"

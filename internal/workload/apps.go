@@ -24,10 +24,11 @@ type App struct {
 	UpdatedAt  int64  `json:"updatedAt"`
 }
 type appIntent struct {
-	Revision   int64  `json:"revision"`
-	Workload   string `json:"workload"`
-	Action     string `json:"action"`
-	InstanceID string `json:"instanceId"`
+	CooperativeStop bool   `json:"cooperativeStop,omitempty"`
+	Revision        int64  `json:"revision"`
+	Workload        string `json:"workload"`
+	Action          string `json:"action"`
+	InstanceID      string `json:"instanceId"`
 }
 
 func (s *Service) Apps(ctx context.Context) ([]App, error) {
@@ -89,7 +90,7 @@ func (s *Service) AppActionInTransaction(tx *sql.Tx, device, key, name, action s
 	if phase == "stopping" || action == "start" && (phase == "running" || phase == "starting") {
 		return Operation{}, ErrConflict
 	}
-	intent, _ := json.Marshal(appIntent{Workload: name, Action: action, InstanceID: instance, Revision: revision + 1})
+	intent, _ := json.Marshal(appIntent{Workload: name, Action: action, InstanceID: instance, Revision: revision + 1, CooperativeStop: action == "stop" && phase == "running"})
 	if _, err = tx.Exec("UPDATE operations SET result=? WHERE id=?", string(intent), op.ID); err != nil {
 		return op, err
 	}
@@ -178,7 +179,17 @@ func (s *Service) processAppKind(ctx context.Context, selectedKind string) error
 	if err != nil || n != 1 {
 		return err
 	}
-	instance, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: opID, InstanceID: intent.InstanceID, Workload: intent.Workload, Action: intent.Action, Revision: intent.Revision, PolicyGeneration: s.PolicyGeneration})
+	runtimeAction := intent.Action
+	if intent.CooperativeStop {
+		if intent.Action != "stop" {
+			return ErrConflict
+		}
+		runtimeAction = "shutdown"
+	}
+	instance, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: opID, InstanceID: intent.InstanceID, Workload: intent.Workload, Action: runtimeAction, Revision: intent.Revision, PolicyGeneration: s.PolicyGeneration})
+	if err == nil && runtimeAction == "shutdown" && instance.State != "stopped" {
+		err = ErrConflict
+	}
 	if err == nil && intent.Action == "start" && instance.State == "running" {
 		err = s.waitApp(ctx, intent.Workload, intent.InstanceID, opID)
 		if err != nil {

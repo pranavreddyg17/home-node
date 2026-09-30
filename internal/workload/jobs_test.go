@@ -27,7 +27,7 @@ func (b *jobBackend) Apply(_ context.Context, r supervisor.Request) (supervisor.
 		b.videoID = r.InstanceID
 	}
 	phase := "running"
-	if r.Action == "stop" {
+	if r.Action == "stop" || r.Action == "shutdown" {
 		b.stops++
 		phase = "stopped"
 	}
