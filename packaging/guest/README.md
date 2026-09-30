@@ -333,11 +333,37 @@ and video SHA256
 to TCG health/object round trips. This establishes that narrow boot/startup/data
 workflow for these development images, not their release qualification.
 
-The next video fixture additionally uploads a generated one-frame 1080p source,
+Run `36735256003` additionally uploaded a generated one-frame 1080p source,
 executes both fixed presets inside the booted adapter, waits for durable success,
 retrieves/chunk-hashes the bounded outputs and checks H.264 codec and expected
 720p/1080p dimensions. Only the disposable unprivileged CI child probes those
 test outputs, with address-space/CPU/core limits; production host services never
-run FFmpeg/ffprobe on guest video bytes. This fixture does not cover audio,
-arbitrary codecs, cancellation/reboot recovery, quality/performance or a full
-controller/supervisor/UI lifecycle. Actual new conversion evidence is pending.
+run FFmpeg/ffprobe on guest video bytes. Both presets passed. The current fixture
+uses 30 generated frames, adds immediate cancellation/deletion followed by
+conversion, and checks a multi-chunk object transfer with acknowledged replay.
+Those extensions await Linux results. Audio, arbitrary codecs, already-running
+subprocess cancellation, reboot recovery, quality/performance and the complete
+controller/supervisor/UI lifecycle remain separate gates.
+
+## Development CPU inference runtime
+
+`build_ai_runtime.py` requires explicit `HOMENODE_AI_RUNTIME_BUILD=1` on an
+unprivileged disposable Linux x86-64 builder. It admits clean source revision
+`7fe450e19305b828c199d602c23a8337aaa1f03b` (the peeled v0.5.0 tag), configures
+and builds only the server target with two compiler workers, then records the
+ELF binary digest, size and build options. Its dedicated workflow retains an
+unsigned candidate and upstream LICENSE for seven days. No host service is
+installed and no model is fetched or included.
+
+The candidate disables host-native/AVX tuning, GPU/RPC backends, dynamic ggml
+backend loading, server subprocess support, OpenSSL and automatic prebuilt UI
+downloads. Static project libraries do not make the entire executable statically
+linked; distribution runtime dependencies still need inventory and guest-image
+integration. These build options do not remove every server endpoint or provide
+network isolation. The eventual guest must enforce loopback binding, no NIC,
+restricted local adapter access and reviewed runtime arguments.
+
+Actual Linux compile results, model source/digest/license admission, complete
+third-party notices/SBOM, vulnerability maintenance, model-server source unit,
+booted inference/cancellation and measured memory/context/CPU profiles remain
+unfinished. No model SKU is selected as the production default by this build.
