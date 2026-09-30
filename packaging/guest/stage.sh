@@ -20,6 +20,7 @@ mkdir -p "$root/usr/lib/homenode/guest" "$root/usr/lib/systemd/system" "$root/us
 GOENV=off GOFLAGS= GOWORK=off GOEXPERIMENT= GOTOOLCHAIN=local GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=true -o "$root/usr/lib/homenode/guest/homenode-guest" ./cmd/homenode-guest
 GOENV=off GOFLAGS= GOWORK=off GOEXPERIMENT= GOTOOLCHAIN=local GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=true -o "$root/usr/lib/homenode/guest/homenode-guest-init" ./cmd/homenode-guest-init
 cp packaging/guest/homenode-data-init.service "$root/usr/lib/systemd/system/"
+cp packaging/guest/tmp.mount packaging/guest/var.mount "$root/usr/lib/systemd/system/"
 cp packaging/guest/data.mount "$root/usr/lib/systemd/system/"
 cp packaging/guest/homenode-guest@.service "$root/usr/lib/systemd/system/"
 cp packaging/guest/60-homenode-adapter.rules "$root/usr/lib/udev/rules.d/"

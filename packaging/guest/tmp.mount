@@ -1,0 +1,14 @@
+# Guest image only. Never install this unit on the owner's host.
+[Unit]
+Description=HomeNode ephemeral guest /tmp
+Before=local-fs.target
+
+[Mount]
+What=tmpfs
+Where=/tmp
+Type=tmpfs
+Options=rw,nodev,nosuid,noexec,size=64M,nr_inodes=8192,mode=1777,uid=0,gid=0
+TimeoutSec=15
+
+[Install]
+WantedBy=local-fs.target

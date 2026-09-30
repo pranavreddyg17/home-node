@@ -143,3 +143,23 @@ incomplete roots are refused, never repaired. The unit and binary are included
 in overlay manifests/imports, with ELF checks on both executables. This does not
 format data disks; durable incomplete-creation recovery and boot qualification
 remain pending. No initializer is installed by ordinary host packaging.
+
+## Ephemeral operating-system writes
+
+The overlay supplies guest-only `tmp.mount` and `var.mount`. Each uses tmpfs with
+an explicit 64 MiB byte limit and 8192 inode limit, root ownership and
+`nodev,nosuid,noexec`; `/tmp` is mode 1777 and `/var` mode 0755. The adapter
+requires both mount units before starting. These files never enter host packaging.
+The [kernel tmpfs contract](https://www.kernel.org/doc/html/latest/filesystems/tmpfs.html)
+defines independent byte/inode ceilings and volatile contents. This is a 128 MiB
+combined ceiling, not reserved memory or proof of a complete guest memory budget.
+
+The unfinished builder must provide mountpoint directories in the immutable
+root, enable these units before local filesystem initialization, and populate
+required ephemeral `/var` subdirectories using the pinned distribution's tmpfiles
+rules. Persistent workload bytes belong only on `/data`; persistent journals,
+swap and services depending on durable `/var` are excluded from the appliance
+profile. Existing distribution fstab/generator settings must be reconciled so
+no competing mount changes these limits. CI verifies source syntax and overlay
+integrity; real boot ordering, journal behavior, exhaustion, memory pressure and
+shutdown still require assembled-image qualification.
