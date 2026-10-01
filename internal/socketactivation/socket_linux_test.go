@@ -28,7 +28,13 @@ func TestNativeInheritedPrivateListener(t *testing.T) {
 			connection.Close()
 			t.Fatal("controller unexpectedly has backup socket access")
 		}
-		os.Setenv("LISTEN_PID", strconv.Itoa(os.Getpid()))
+		if os.Getenv("HOMENODE_ACTIVATION_SYSTEMD") == "1" {
+			if os.Getenv("LISTEN_PID") != strconv.Itoa(os.Getpid()) {
+				t.Fatal("systemd activation PID missing")
+			}
+		} else {
+			os.Setenv("LISTEN_PID", strconv.Itoa(os.Getpid()))
+		}
 		listener, err := TakePrivateListener("homenode-app-maintenance", path, 1003)
 		if err != nil {
 			t.Fatal(err)
