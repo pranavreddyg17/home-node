@@ -88,3 +88,51 @@ func (s *Store) RecordBackupWorkerCompleted(ctx context.Context, token, id strin
 		return nil
 	})
 }
+
+// BackupObservation reads publication and completion evidence in one snapshot.
+// It exposes no maintenance tokens and does not attest repository/restore health.
+type BackupObservation struct {
+	Current          *BackupOutcome `json:"current"`
+	LastPublished    *BackupOutcome `json:"lastPublished"`
+	WorkerCompletion string         `json:"workerCompletion"`
+}
+
+func (s *Store) InspectBackupObservation(ctx context.Context) (observation BackupObservation, resultErr error) {
+	observation.WorkerCompletion = "none"
+	resultErr = s.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := readBackupOutcomes(tx, &observation.Current, &observation.LastPublished); err != nil {
+			return err
+		}
+		var raw string
+		err := tx.QueryRow("SELECT value FROM settings WHERE key=?", backupDispatchKey).Scan(&raw)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		job, err := readMaintenanceJob(tx)
+		if err != nil {
+			return err
+		}
+		switch raw {
+		case "uncertain:" + job.ID:
+			if job.RootToken == "" || (job.Phase != "staging" && job.Phase != "publishing" && job.Phase != "requires-action") {
+				return ErrMaintenance
+			}
+			observation.WorkerCompletion = "uncertain"
+		case "complete:" + job.ID:
+			if observation.Current == nil || observation.Current.JobID != job.ID || observation.Current.Status != "published" || (job.Phase != "publishing" && job.Phase != "restoring" && job.Phase != "requires-action") {
+				return ErrMaintenance
+			}
+			observation.WorkerCompletion = "complete"
+		default:
+			return ErrMaintenance
+		}
+		return nil
+	})
+	if resultErr != nil {
+		return BackupObservation{}, resultErr
+	}
+	return
+}

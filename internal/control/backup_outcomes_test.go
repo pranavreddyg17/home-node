@@ -27,7 +27,7 @@ func TestBackupOutcomesRequireAdministratorAndPreserveMissingEvidence(t *testing
 		}
 		if want == 200 {
 			var body map[string]any
-			if json.Unmarshal(response.Body.Bytes(), &body) != nil || body["schema"] != float64(1) || body["current"] != nil || body["lastPublished"] != nil || len(body) != 3 {
+			if json.Unmarshal(response.Body.Bytes(), &body) != nil || body["schema"] != float64(1) || body["current"] != nil || body["lastPublished"] != nil || body["workerCompletion"] != "none" || len(body) != 4 {
 				t.Fatal("missing publication reported incorrectly", response.Body.String())
 			}
 			if response.Header().Get("Cache-Control") != "no-store" {

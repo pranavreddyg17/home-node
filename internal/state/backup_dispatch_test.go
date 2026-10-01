@@ -38,6 +38,9 @@ func TestBackupDispatchIntentSurvivesRestartAndBlocksCleanup(t *testing.T) {
 	if err = store.RequireBackupWorkerStopped(ctx, token, job.ID); err == nil {
 		t.Fatal("restart forgot uncertain dispatch")
 	}
+	if observation, observeErr := store.InspectBackupObservation(ctx); observeErr != nil || observation.WorkerCompletion != "uncertain" || observation.Current != nil {
+		t.Fatal("restart uncertainty not observable", observation, observeErr)
+	}
 	if err = store.AdvanceMaintenanceJob(ctx, token, job.ID, "staging", "restoring"); err == nil {
 		t.Fatal("uncertain dispatch allowed restoration")
 	}
@@ -50,11 +53,17 @@ func TestBackupDispatchIntentSurvivesRestartAndBlocksCleanup(t *testing.T) {
 	if err = store.RecordBackupPublished(ctx, token, job.ID, device, Hash("fixture snapshot")); err != nil {
 		t.Fatal(err)
 	}
+	if observation, observeErr := store.InspectBackupObservation(ctx); observeErr != nil || observation.WorkerCompletion != "uncertain" || observation.Current == nil || observation.Current.Status != "published" {
+		t.Fatal("publication obscured completion uncertainty", observation, observeErr)
+	}
 	if err = store.RequireBackupWorkerStopped(ctx, token, job.ID); err == nil {
 		t.Fatal("publication substituted for completion")
 	}
 	if err = store.RecordBackupWorkerCompleted(ctx, token, job.ID); err != nil {
 		t.Fatal(err)
+	}
+	if observation, observeErr := store.InspectBackupObservation(ctx); observeErr != nil || observation.WorkerCompletion != "complete" {
+		t.Fatal("completed worker not observable", observation, observeErr)
 	}
 	if err = store.RequireBackupWorkerStopped(ctx, token, job.ID); err != nil {
 		t.Fatal(err)
@@ -106,6 +115,9 @@ func TestOrphanDispatchRefusesGeneralAdmissionAndLegacyRelease(t *testing.T) {
 			}
 			if _, _, err = store.BeginMaintenanceJob(ctx, device); err == nil {
 				t.Fatal("orphan checkpoint admitted another coordinator")
+			}
+			if observation, observeErr := store.InspectBackupObservation(ctx); observeErr == nil || observation.Current != nil || observation.WorkerCompletion != "" {
+				t.Fatal("orphan checkpoint reported healthy status", observation, observeErr)
 			}
 		})
 	}

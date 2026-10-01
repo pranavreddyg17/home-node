@@ -37,6 +37,13 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await expect(page.getByRole('status')).toContainText('latest backup outcome is uncertain')
   await expect(page.getByText('Last acknowledged publication:', { exact: false })).toBeVisible()
   await page.unroute('**/api/v1/backups/outcomes')
+  await page.route('**/api/v1/backups/outcomes', route => route.fulfill({ json: {
+    schema: 1, current: { status: 'published', publishedAt: 10 }, lastPublished: { status: 'published', publishedAt: 10 }, workerCompletion: 'uncertain',
+  } }))
+  await page.getByRole('button', { name: 'Refresh backup status' }).click()
+  await expect(page.getByRole('status')).toContainText('Backup worker completion is uncertain')
+  await expect(page.getByText('Last acknowledged publication:', { exact: false })).toBeVisible()
+  await page.unroute('**/api/v1/backups/outcomes')
   await page.route('**/api/v1/backups/outcomes', route => route.fulfill({ status: 503, json: { error: 'unavailable' } }))
   await page.getByRole('button', { name: 'Refresh backup status' }).click()
   await expect(page.getByRole('alert')).toContainText('Backup status is unavailable')

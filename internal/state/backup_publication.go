@@ -176,34 +176,36 @@ func (s *Store) RecordBackupPublished(ctx context.Context, token, id, device, sn
 // InspectBackupOutcomes returns bounded internal records without tokens, paths,
 // keys, or repository credentials. Missing records return nil; malformed stored
 // records fail closed. Public callers must separately enforce owner access.
-func (s *Store) InspectBackupOutcomes(ctx context.Context) (current, lastSuccess *BackupOutcome, resultErr error) {
-	resultErr = s.Transaction(ctx, func(tx *sql.Tx) error {
-		for key, target := range map[string]**BackupOutcome{backupOutcomeKey: &current, backupLastSuccessKey: &lastSuccess} {
-			outcome, err := readBackupOutcome(tx, key)
-			if errors.Is(err, sql.ErrNoRows) {
-				continue
-			}
-			if err != nil {
-				return err
-			}
-			if key == backupLastSuccessKey && outcome.Status != "published" {
-				return ErrBackupPublication
-			}
-			*target = &outcome
-		}
-		var claim string
-		err := tx.QueryRow("SELECT value FROM settings WHERE key=?", backupPublicationKey).Scan(&claim)
+func readBackupOutcomes(tx *sql.Tx, current, lastSuccess **BackupOutcome) error {
+	for key, target := range map[string]**BackupOutcome{backupOutcomeKey: current, backupLastSuccessKey: lastSuccess} {
+		outcome, err := readBackupOutcome(tx, key)
 		if errors.Is(err, sql.ErrNoRows) {
-			if current != nil {
-				return ErrBackupPublication
-			}
-		} else if err != nil {
+			continue
+		}
+		if err != nil {
 			return err
-		} else if current == nil || !recoveryInstanceID.MatchString(claim) || current.JobID != claim {
+		}
+		if key == backupLastSuccessKey && outcome.Status != "published" {
 			return ErrBackupPublication
 		}
-		return nil
-	})
+		*target = &outcome
+	}
+	var claim string
+	err := tx.QueryRow("SELECT value FROM settings WHERE key=?", backupPublicationKey).Scan(&claim)
+	if errors.Is(err, sql.ErrNoRows) {
+		if *current != nil {
+			return ErrBackupPublication
+		}
+	} else if err != nil {
+		return err
+	} else if *current == nil || !recoveryInstanceID.MatchString(claim) || (*current).JobID != claim {
+		return ErrBackupPublication
+	}
+	return nil
+}
+
+func (s *Store) InspectBackupOutcomes(ctx context.Context) (current, lastSuccess *BackupOutcome, resultErr error) {
+	resultErr = s.Transaction(ctx, func(tx *sql.Tx) error { return readBackupOutcomes(tx, &current, &lastSuccess) })
 	if resultErr != nil {
 		return nil, nil, resultErr
 	}
