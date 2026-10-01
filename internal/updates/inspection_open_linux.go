@@ -19,9 +19,29 @@ import (
 type InspectionStage struct {
 	Package   *os.File
 	directory *os.File
+	identity  InspectionIdentity
 }
 
 func (s *InspectionStage) Close() error { return errors.Join(s.Package.Close(), s.directory.Close()) }
+
+// VerifyResult checks bounded worker output against retained operation identity
+// and rehashes the pinned package after worker completion. The caller must first
+// authenticate successful isolated execution; this method grants no installation
+// authority and does not treat a JSON response as execution evidence.
+func (s *InspectionStage) VerifyResult(ctx context.Context, output []byte) (InspectionResult, error) {
+	if s == nil || s.Package == nil || s.directory == nil {
+		return InspectionResult{}, ErrInspectionResult
+	}
+	result, err := ValidateInspectionResult(output, s.identity)
+	if err != nil {
+		return InspectionResult{}, err
+	}
+	digest, length, err := PackageIdentity(ctx, s.Package)
+	if err != nil || digest != s.identity.PackageSHA256 || length != s.identity.PackageLength {
+		return InspectionResult{}, errors.Join(ErrInspectionResult, err)
+	}
+	return result, nil
+}
 
 // OpenInspectionStage verifies ready publication against independently retained
 // operation identity. It does not infer identity from untrusted disk records.
@@ -95,7 +115,7 @@ func openInspectionStageOwned(ctx context.Context, root *os.Root, expected Inspe
 		return nil, errors.Join(ErrInspectionResult, err, file.Close())
 	}
 	keep = true
-	return &InspectionStage{Package: file, directory: directory}, nil
+	return &InspectionStage{Package: file, directory: directory, identity: expected}, nil
 }
 
 func openInspectionFile(root *os.Root, name string, mode uint32) (*os.File, error) {

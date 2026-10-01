@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -81,9 +82,35 @@ func TestInspectionStagingPublishesOwnedIdentityWithoutReplacingState(t *testing
 			if err != nil {
 				t.Fatal("ready stage refused", err)
 			}
+			output, err := json.Marshal(InspectionResult{Schema: 1, OperationID: identity.OperationID, Release: identity.Release, PackageSHA256: identity.PackageSHA256, PackageLength: identity.PackageLength, ContentValid: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := stage.VerifyResult(ctx, output); err != nil {
+				t.Fatal("matching output refused", err)
+			}
+			if _, err := stage.VerifyResult(ctx, []byte(`{"schema":1}`)); err == nil {
+				t.Fatal("incomplete output accepted")
+			}
 			if other, err := openInspectionStageOwned(ctx, root, identity); err == nil {
 				other.Close()
 				t.Fatal("concurrent worker admitted")
+			}
+			packagePath := filepath.Join(directory, "package.deb")
+			if err := os.Chmod(packagePath, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(packagePath, []byte("changed after worker completion"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := stage.VerifyResult(ctx, output); err == nil {
+				t.Fatal("changed pinned package accepted with old result")
+			}
+			if err := os.WriteFile(packagePath, data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(packagePath, 0400); err != nil {
+				t.Fatal(err)
 			}
 			if err := stage.Close(); err != nil {
 				t.Fatal(err)
