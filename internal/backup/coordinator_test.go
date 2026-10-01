@@ -28,12 +28,16 @@ type coordinatorRoot struct {
 	lost       bool
 	acquires   int
 	releaseErr error
+	acquireErr error
 }
 
 func (r *coordinatorRoot) BeginRuntimeMaintenanceForJob(context.Context, string) (string, error) {
 	r.acquires++
 	if r.token == "" {
 		r.token = state.Random()
+	}
+	if r.acquireErr != nil {
+		return "", r.acquireErr
 	}
 	if r.lost {
 		r.lost = false

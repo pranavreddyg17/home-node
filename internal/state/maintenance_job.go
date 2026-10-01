@@ -24,12 +24,15 @@ func readMaintenanceJob(tx *sql.Tx) (MaintenanceJob, error) {
 			return MaintenanceJob{}, ErrMaintenance
 		}
 	}
-	if version != "1" || !recoveryInstanceID.MatchString(job.ID) || !recoveryInstanceID.MatchString(job.Device) || job.RootToken != "" && !recoveryInstanceID.MatchString(job.RootToken) {
+	if (version != "1" && version != "2") || !recoveryInstanceID.MatchString(job.ID) || !recoveryInstanceID.MatchString(job.Device) || job.RootToken != "" && !recoveryInstanceID.MatchString(job.RootToken) {
 		return MaintenanceJob{}, ErrMaintenance
 	}
 	switch job.Phase {
 	case "draining", "freezing", "staging", "publishing", "restoring", "requires-action":
 	default:
+		return MaintenanceJob{}, ErrMaintenance
+	}
+	if version == "1" && job.Phase == "requires-action" && job.RootToken == "" {
 		return MaintenanceJob{}, ErrMaintenance
 	}
 	if (job.Phase == "draining" || job.Phase == "freezing") && job.RootToken != "" || (job.Phase == "staging" || job.Phase == "publishing") && job.RootToken == "" {
@@ -68,7 +71,7 @@ func (s *Store) BeginMaintenanceJob(ctx context.Context, device string) (string,
 		if _, err := tx.Exec("INSERT INTO settings(key,value) VALUES(?,?)", maintenanceKey, token); err != nil {
 			return err
 		}
-		for key, value := range map[string]string{"version": "1", "id": job.ID, "device": device, "phase": job.Phase, "root-token": ""} {
+		for key, value := range map[string]string{"version": "2", "id": job.ID, "device": device, "phase": job.Phase, "root-token": ""} {
 			if _, err := tx.Exec("INSERT INTO settings(key,value) VALUES(?,?)", maintenanceJobPrefix+key, value); err != nil {
 				return err
 			}
@@ -109,9 +112,17 @@ func (s *Store) AdvanceMaintenanceJob(ctx context.Context, token, id, from, to s
 		if err := maintenanceDevice(tx, job.Device); err != nil {
 			return err
 		}
+		// Only an acknowledged attachment may leave freezing. Otherwise the
+		// coordinator would lose evidence of a potentially acquired root barrier.
+		if from == "freezing" {
+			return ErrMaintenance
+		}
 		allowed := to == "requires-action" && from != "requires-action" || to == "restoring" && from != "restoring" || from == "draining" && to == "freezing" || from == "staging" && to == "publishing"
 		if !allowed {
 			return ErrMaintenance
+		}
+		if _, err = tx.Exec("UPDATE settings SET value='2' WHERE key=?", maintenanceJobPrefix+"version"); err != nil {
+			return err
 		}
 		_, err = tx.Exec("UPDATE settings SET value=? WHERE key=?", to, maintenanceJobPrefix+"phase")
 		return err
@@ -134,6 +145,9 @@ func (s *Store) AttachMaintenanceRoot(ctx context.Context, token, id, rootToken 
 			return ErrMaintenanceOwner
 		}
 		if err := maintenanceDevice(tx, job.Device); err != nil {
+			return err
+		}
+		if _, err = tx.Exec("UPDATE settings SET value='2' WHERE key=?", maintenanceJobPrefix+"version"); err != nil {
 			return err
 		}
 		if _, err = tx.Exec("UPDATE settings SET value=? WHERE key=?", rootToken, maintenanceJobPrefix+"root-token"); err != nil {
@@ -188,6 +202,9 @@ func (s *Store) ReleaseMaintenanceRoot(ctx context.Context, token, id string, re
 			return ErrMaintenanceOwner
 		}
 		if err := maintenanceDevice(tx, current.Device); err != nil {
+			return err
+		}
+		if _, err = tx.Exec("UPDATE settings SET value='2' WHERE key=?", maintenanceJobPrefix+"version"); err != nil {
 			return err
 		}
 		_, err = tx.Exec("UPDATE settings SET value='' WHERE key=?", maintenanceJobPrefix+"root-token")

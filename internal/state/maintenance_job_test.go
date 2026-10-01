@@ -187,3 +187,25 @@ func TestMaintenanceJobCompletionWaitsForRootRelease(t *testing.T) {
 		t.Fatal("old owner reused", err)
 	}
 }
+
+func TestLegacyAmbiguousMaintenanceRepairRecordFailsClosed(t *testing.T) {
+	s, device, _ := maintenanceJobFixture(t)
+	defer s.Close()
+	ctx := context.Background()
+	token, _, err := s.BeginMaintenanceJob(ctx, device)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.DB.Exec("UPDATE settings SET value='1' WHERE key='host.maintenance-job.version'"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.DB.Exec("UPDATE settings SET value='requires-action' WHERE key='host.maintenance-job.phase'"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.InspectMaintenanceJob(ctx, token); !errors.Is(err, ErrMaintenance) {
+		t.Fatal("legacy lost acquisition intent accepted", err)
+	}
+	if err = s.Transaction(ctx, RequireAdmission); !errors.Is(err, ErrMaintenance) {
+		t.Fatal("ambiguous record reopened admission", err)
+	}
+}

@@ -36,7 +36,7 @@ func RunMaintenance(ctx context.Context, store *state.Store, device string, apps
 		defer cancel()
 		err := finishMaintenance(cleanup, store, token, job.ID, device, apps, root)
 		if err != nil {
-			if current, inspectErr := store.InspectMaintenanceJob(cleanup, token); inspectErr == nil && current.Phase != "requires-action" {
+			if current, inspectErr := store.InspectMaintenanceJob(cleanup, token); inspectErr == nil && current.Phase != "requires-action" && current.Phase != "freezing" {
 				err = errors.Join(err, store.AdvanceMaintenanceJob(cleanup, token, job.ID, current.Phase, "requires-action"))
 			}
 		}
@@ -98,4 +98,29 @@ func finishMaintenance(ctx context.Context, store *state.Store, token, id, devic
 		return err
 	}
 	return store.CompleteMaintenanceJob(ctx, token, id)
+}
+
+// RecoverMaintenance reconciles cleanup after the prior runner has stopped.
+// It never repeats uncertain staging/publication. The trusted caller must
+// ensure exclusive runner ownership; production restart claiming is not wired.
+func RecoverMaintenance(ctx context.Context, store *state.Store, token, id string, apps MaintenanceApps, root MaintenanceRoot) error {
+	if store == nil || apps == nil || root == nil {
+		return ErrManifest
+	}
+	job, err := store.InspectMaintenanceJob(ctx, token)
+	if err != nil {
+		return err
+	}
+	if job.ID != id {
+		return state.ErrMaintenanceOwner
+	}
+	deadline, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+	err = finishMaintenance(deadline, store, token, id, job.Device, apps, root)
+	if err != nil {
+		if current, inspectErr := store.InspectMaintenanceJob(deadline, token); inspectErr == nil && current.Phase != "requires-action" && current.Phase != "freezing" {
+			err = errors.Join(err, store.AdvanceMaintenanceJob(deadline, token, id, current.Phase, "requires-action"))
+		}
+	}
+	return err
 }
