@@ -31,6 +31,9 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 	if _, err := server.Store.DB.Exec("INSERT INTO devices(id,name,capabilities,created_at) VALUES(?,'owner','[\"admin\"]',1)", device); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := server.Store.DB.Exec("UPDATE identity SET owner_id=?,claimed=1,epoch=1 WHERE singleton=1", state.Random()); err != nil {
+		t.Fatal(err)
+	}
 	token, job, err := server.Store.BeginMaintenanceJob(ctx, device)
 	if err != nil {
 		t.Fatal(err)
@@ -95,6 +98,27 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 	}
 	if err = server.Store.AttachMaintenanceRoot(ctx, token, job.ID, state.Random()); err != nil {
 		t.Fatal(err)
+	}
+	snapshotDirectory := t.TempDir()
+	if err = os.Chmod(snapshotDirectory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	staging, err := os.OpenRoot(snapshotDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer staging.Close()
+	if err = bridge.StageManagementSnapshot(ctx, token, device, staging); err != nil {
+		t.Fatal("private snapshot receive", err)
+	}
+	snapshot, err := staging.Open("snapshot.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, validateErr := state.ValidateRecoverySnapshot(ctx, snapshot)
+	snapshot.Close()
+	if validateErr != nil {
+		t.Fatal("private snapshot authority", validateErr)
 	}
 	if err = server.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "staging", "restoring"); err != nil {
 		t.Fatal(err)

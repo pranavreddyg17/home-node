@@ -1291,3 +1291,9 @@ The controller maintenance handler now supports a snapshot-only operation for th
 Validation: controller race tests and final Linux compilation passed. A snapshot test validates the streamed database, absence of temporary backup directories, and retained management admission. Production snapshot client/staging integration and a fully frozen configuration/byte-writer boundary remain required.
 
 CI run 36833296588 failed its systemd fixture because systemd could not resolve the nonexistent numeric socket group 1003. The fixture now creates a dedicated named group only after checking both name/GID vacancy and removes that owned group after unit cleanup. The production socket already uses the separately provisioned homenode-backup group. Actual systemd success remains pending rerun.
+
+### Backup-side management snapshot receiver
+
+MaintenanceAppsClient now receives the owned sanitized snapshot through its authenticated private controller transport. It requires the fixed media type and exact positive length up to 256 MiB, creates snapshot.db exclusively in a private staging root, checks exact stream completion, validates the recovery database, and syncs file/directory before success. Failure cleanup removes only the inode created by the call and preserves a pre-existing staging file. Caller staging ownership remains required.
+
+Tests cover invalid database bytes, truncation, excess bytes, incorrect media type, absent/oversized length, and existing-file preservation. The Linux kernel-peer controller fixture now exercises positive snapshot transfer and validation in the owned staging phase. Local affected race tests and Linux controller compilation passed; positive native execution awaits CI. Recovery-set staging still needs to use this receiver instead of direct management database access in the backup process.
