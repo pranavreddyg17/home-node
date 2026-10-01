@@ -90,6 +90,23 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	if err != nil || string(published) != string(data) {
 		t.Fatal("staged package differs", err)
 	}
+	stage, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000001")
+	if err != nil {
+		t.Fatal("owned inspection admission failed", err)
+	}
+	if err := stage.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if other, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000002"); err == nil {
+		other.Close()
+		t.Fatal("wrong inspection operation admitted")
+	}
+	release.Metadata.Sequence = 4
+	if other, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000001"); err == nil {
+		other.Close()
+		t.Fatal("staged release below floor admitted")
+	}
+	release.Metadata.Sequence = 5
 	if err := engine.stageUpdateInspectionOwned(ctx, release, "inspection-fixture-000002"); err == nil {
 		t.Fatal("occupied inspection operation replaced")
 	}
@@ -99,6 +116,10 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	}
 	if _, err = engine.readUpdateRepositoryOwned(ctx); err == nil {
 		t.Fatal("modified repository policy accepted")
+	}
+	if other, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000001"); err == nil {
+		other.Close()
+		t.Fatal("changed owned configuration admitted inspection")
 	}
 	if err = os.WriteFile(repositoryPath, repository, 0400); err != nil {
 		t.Fatal(err)

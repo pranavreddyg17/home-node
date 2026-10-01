@@ -1707,3 +1707,7 @@ OpenInspectionStage now retains an exclusive directory lock and a read-only pack
 ### Inspection admission refusal coverage
 
 Added Linux execution fixtures for missing ready state, unexpected entries, symlink/hardlink/FIFO records, public record or directory permissions, writable or changed package bytes, oversized ready records and canceled admission. Each refusal must release the directory lock and retain durable evidence instead of deleting or repairing it. The FIFO case exercises nonblocking file opening before regular-file validation. Linux compilation, portable update race tests and diff checks passed; native execution awaits publication after CI 36932221459 finishes.
+
+### Installer-owned inspection execution admission
+
+Engine.OpenUpdateInspection now joins the completed installer journal and current owned repository configuration to protected stage admission. It requires the independently retained acquired release, platform and sequence/catalog floors and the caller operation; only the journal-recorded private staging path can be opened. The returned descriptor retains the execution lock while the temporary root handle is closed. Expanded disposable Linux root assertions cover correct admission, wrong operation, below-floor release and changed owned repository configuration. Portable installer/update race tests, Linux installer compilation and diff validation passed; native execution remains pending. CI 36932221459 is still running and is not restarted or canceled.

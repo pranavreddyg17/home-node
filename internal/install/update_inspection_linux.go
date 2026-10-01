@@ -31,9 +31,18 @@ func (e *Engine) stageUpdateInspectionOwned(ctx context.Context, release *update
 	if release == nil || release.Metadata.Platform != "ubuntu-24.04-amd64" || release.Metadata.Sequence < configuration.MinimumSequence || release.Metadata.CatalogVersion < configuration.MinimumCatalogVersion {
 		return ErrConflict
 	}
-	j, err := e.load()
+	staging, err := e.openInspectionDirectoryLocked()
 	if err != nil {
 		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, staging.Close()) }()
+	return updates.StageInspectionPackage(ctx, staging, release, operation)
+}
+
+func (e *Engine) openInspectionDirectoryLocked() (*os.Root, error) {
+	j, err := e.load()
+	if err != nil {
+		return nil, err
 	}
 	found := false
 	for _, item := range j.Items {
@@ -41,17 +50,48 @@ func (e *Engine) stageUpdateInspectionOwned(ctx context.Context, release *update
 			continue
 		}
 		if found || !item.Directory || item.Mode != 0700 || item.UID != e.owner || item.GID != 0 || item.State != "created" && item.State != "existing" {
-			return ErrConflict
+			return nil, ErrConflict
 		}
 		found = true
 	}
 	if !found {
-		return ErrConflict
+		return nil, ErrConflict
 	}
-	staging, err := e.host.OpenRoot("var/lib/homenode-update/inspection")
+	return e.host.OpenRoot("var/lib/homenode-update/inspection")
+}
+
+// OpenUpdateInspection admits only installer-owned publication matching the
+// caller's retained signed release and operation. The returned stage holds its
+// execution lock until the caller closes it after worker/result verification.
+func (e *Engine) OpenUpdateInspection(ctx context.Context, release *updates.AcquiredRelease, operation string) (*updates.InspectionStage, error) {
+	if os.Geteuid() != 0 || e.host.Name() != "/" {
+		return nil, ErrConflict
+	}
+	return e.openUpdateInspectionOwned(ctx, release, operation)
+}
+
+func (e *Engine) openUpdateInspectionOwned(ctx context.Context, release *updates.AcquiredRelease, operation string) (*updates.InspectionStage, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	configuration, err := e.readUpdateRepositoryLocked(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer func() { resultErr = errors.Join(resultErr, staging.Close()) }()
-	return updates.StageInspectionPackage(ctx, staging, release, operation)
+	if release == nil || release.Metadata.Platform != "ubuntu-24.04-amd64" || release.Metadata.Sequence < configuration.MinimumSequence || release.Metadata.CatalogVersion < configuration.MinimumCatalogVersion {
+		return nil, ErrConflict
+	}
+	staging, err := e.openInspectionDirectoryLocked()
+	if err != nil {
+		return nil, err
+	}
+	identity := updates.InspectionIdentity{OperationID: operation, Release: release.Metadata.Release, PackageSHA256: release.PackageSHA256, PackageLength: release.PackageLength}
+	stage, err := updates.OpenInspectionStage(ctx, staging, identity)
+	closeErr := staging.Close()
+	if err != nil || closeErr != nil {
+		if stage != nil {
+			err = errors.Join(err, stage.Close())
+		}
+		return nil, errors.Join(err, closeErr)
+	}
+	return stage, nil
 }
