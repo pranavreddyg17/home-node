@@ -29,6 +29,7 @@ type Capacity struct {
 	FreeDiskBytes uint64
 }
 type Configuration struct {
+	Maintenance           *MaintenanceAccount
 	Network               networkcheck.Config
 	Accounts              Accounts
 	Policy                supervisor.Policy
@@ -38,6 +39,7 @@ type Configuration struct {
 	Capacity              Capacity
 }
 type ConfigurationPreview struct {
+	Maintenance           *MaintenanceAccount `json:"maintenance,omitempty"`
 	Network               networkcheck.Config `json:"network"`
 	RuntimePolicy         supervisor.Policy   `json:"runtimePolicy"`
 	Accounts              Accounts            `json:"accounts"`
@@ -79,6 +81,12 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 			return result, ErrPlan
 		}
 		seen[gid] = true
+	}
+	if c.Maintenance != nil {
+		b := *c.Maintenance
+		if b.UID < 100 || b.UID >= 1000 || b.UID == a.ControllerUID || b.UID == a.TransferUID || b.GID < 100 || b.GID >= 1000 || seen[b.GID] {
+			return result, ErrPlan
+		}
 	}
 	if len(c.Publisher) != ed25519.PublicKeySize || c.MinimumCatalogVersion < 1 {
 		return result, ErrPlan
@@ -153,6 +161,12 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 		if err != nil {
 			return result, err
 		}
+		if name == "homenode-supervisor.service" && c.Maintenance != nil {
+			data, err = maintenanceUnit(data, *c.Maintenance)
+			if err != nil {
+				return result, err
+			}
+		}
 		addFile("etc/systemd/system/"+name, 0644, data)
 	}
 	slice := fmt.Sprintf("[Unit]\nDescription=HomeNode workload resource boundary\n\n[Slice]\nMemoryMax=%d\nCPUQuota=%d%%\nTasksMax=512\n", int64(c.Policy.MemoryMiB)*(1<<20), c.Policy.VCPUs*100)
@@ -160,6 +174,6 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 	if _, _, err = planRecords(plan, 0); err != nil {
 		return result, err
 	}
-	result = ConfigurationPreview{Network: c.Network, RuntimePolicy: c.Policy, Accounts: c.Accounts, ProvidedCapacity: c.Capacity, Plan: plan, CatalogVersion: m.Version, PublisherKeyID: catalog.KeyID(c.Publisher), RequiredDiskBytes: required, VerifiedImageBytes: imageCredit, RequiredFreeDiskBytes: required - imageCredit, Pending: []string{"verify actual service account memberships", "verify supported host enforcement and measured VM overhead", "place and verify immutable guest images", "verify live Tailscale and protected HTTPS identity", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
+	result = ConfigurationPreview{Maintenance: c.Maintenance, Network: c.Network, RuntimePolicy: c.Policy, Accounts: c.Accounts, ProvidedCapacity: c.Capacity, Plan: plan, CatalogVersion: m.Version, PublisherKeyID: catalog.KeyID(c.Publisher), RequiredDiskBytes: required, VerifiedImageBytes: imageCredit, RequiredFreeDiskBytes: required - imageCredit, Pending: []string{"verify actual service account memberships", "verify supported host enforcement and measured VM overhead", "place and verify immutable guest images", "verify live Tailscale and protected HTTPS identity", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
 	return result, nil
 }

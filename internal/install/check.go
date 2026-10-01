@@ -18,9 +18,11 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/catalog"
 	"github.com/pranavreddyg17/home-node/internal/networkcheck"
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
+	servicetemplates "github.com/pranavreddyg17/home-node/packaging/systemd"
 )
 
 type InstallationCheck struct {
+	Maintenance           *MaintenanceAccount `json:"maintenance,omitempty"`
 	ConfigurationID       string              `json:"configurationId"`
 	Network               networkcheck.Config `json:"network"`
 	Accounts              Accounts            `json:"accounts"`
@@ -70,6 +72,12 @@ func (e *Engine) CheckInstallation(ctx context.Context) (InstallationCheck, erro
 	if actual != result.Accounts {
 		return empty, ErrAccounts
 	}
+	if result.Maintenance != nil {
+		observed, err := e.observeMaintenanceAccount(ctx, j)
+		if err != nil || observed == nil || *observed != *result.Maintenance {
+			return empty, ErrAccounts
+		}
+	}
 	result.AccountsVerified = true
 	if err = ctx.Err(); err != nil {
 		return empty, err
@@ -112,6 +120,27 @@ func (e *Engine) checkPrepared(ctx context.Context, now time.Time) (Installation
 	}
 	if !a.Ready {
 		return result, ErrAccounts
+	}
+	var maintenance *MaintenanceAccount
+	unit, err := e.readConfiguration(config, "etc/systemd/system/homenode-supervisor.service")
+	if err != nil {
+		return result, err
+	}
+	standard, err := servicetemplates.Unit("homenode-supervisor.service")
+	if err != nil {
+		return result, err
+	}
+	if !bytes.Equal(unit, standard) {
+		backup, err := e.loadMaintenanceAccountJournal(a)
+		if err != nil || !backup.Ready {
+			return result, ErrAccounts
+		}
+		expected, err := maintenanceUnit(standard, backup.Plan.Identity)
+		if err != nil || !bytes.Equal(unit, expected) {
+			return result, ErrPlan
+		}
+		identity := backup.Plan.Identity
+		maintenance = &identity
 	}
 	policyBytes, err := e.readConfiguration(config, "etc/homenode/runtime-policy.json")
 	if err != nil {
@@ -184,7 +213,7 @@ func (e *Engine) checkPrepared(ctx context.Context, now time.Time) (Installation
 			return result, err
 		}
 	}
-	return InstallationCheck{ConfigurationID: config.ID, Network: network, Accounts: a.Accounts, RuntimePolicy: policy, PublisherKeyID: catalog.KeyID(pub), CatalogFloor: floor, CatalogVersion: manifest.Version, ArtifactsVerified: true, Pending: []string{"verify supported host enforcement and measured VM overhead", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}, nil
+	return InstallationCheck{Maintenance: maintenance, ConfigurationID: config.ID, Network: network, Accounts: a.Accounts, RuntimePolicy: policy, PublisherKeyID: catalog.KeyID(pub), CatalogFloor: floor, CatalogVersion: manifest.Version, ArtifactsVerified: true, Pending: []string{"verify supported host enforcement and measured VM overhead", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}, nil
 }
 
 func (e *Engine) checkTLSAccess(a Accounts) error {
