@@ -98,3 +98,54 @@ func TestDispatchReceiverKernelIdentityAndPacketAdmission(t *testing.T) {
 		t.Fatal("cancelled receive remained blocked")
 	}
 }
+
+func TestDispatchSenderAuthenticatesBeforeSendingJob(t *testing.T) {
+	uid := uint32(os.Geteuid())
+	if uid == 0 {
+		t.Skip("backup peer must be unprivileged")
+	}
+	dispatch := Dispatch{Version: 1, JobID: state.Random(), DeviceID: state.Random(), ManagementToken: state.Random(), RuntimeToken: state.Random(), Release: "0.1.0", CatalogVersion: 1}
+	for _, scenario := range []string{"valid", "foreign-peer", "root-peer", "invalid-job", "cancelled"} {
+		t.Run(scenario, func(t *testing.T) {
+			sender, receiver := dispatchPair(t)
+			expected := uid
+			message := dispatch
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			switch scenario {
+			case "foreign-peer":
+				expected = uid + 1
+			case "root-peer":
+				expected = 0
+			case "invalid-job":
+				message.JobID = "short"
+			case "cancelled":
+				cancel()
+			}
+			err := SendDispatch(ctx, sender, expected, message)
+			if scenario == "valid" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				received, err := ReceiveDispatch(ctx, receiver, uid)
+				if err != nil || received != dispatch {
+					t.Fatal("authenticated dispatch lost", err)
+				}
+			} else {
+				if err == nil {
+					t.Fatal("invalid sender admitted")
+				}
+				if scenario == "cancelled" && !errors.Is(err, context.Canceled) {
+					t.Fatal("cancellation lost", err)
+				}
+				if err = receiver.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
+					t.Fatal(err)
+				}
+				data := make([]byte, MaxDispatchBytes)
+				if n, _, _, _, err := receiver.ReadMsgUnix(data, nil); n != 0 || err == nil {
+					t.Fatal("refused sender exposed job packet")
+				}
+			}
+		})
+	}
+}

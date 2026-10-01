@@ -37,3 +37,30 @@ func ReceiveDispatch(ctx context.Context, connection *net.UnixConn, controllerUI
 	}
 	return DecodeDispatch(raw)
 }
+
+// SendDispatch sends one job packet to an authenticated non-root backup peer.
+// Success means only that the packet was sent, never that the worker admitted,
+// published, or cleaned up the job. Durable controller outcome records provide
+// publication evidence. Caller retains exclusive connection ownership/closure.
+func SendDispatch(ctx context.Context, connection *net.UnixConn, backupUID uint32, dispatch Dispatch) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	raw, err := EncodeDispatch(dispatch)
+	if err != nil {
+		return err
+	}
+	if connection == nil || backupUID == 0 || connection.LocalAddr().Network() != "unixpacket" {
+		return ErrManifest
+	}
+	peer, err := supervisor.PeerUID(connection)
+	if err != nil || peer != backupUID {
+		return ErrManifest
+	}
+	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err = disktransport.SendPacket(bounded, connection, raw); err != nil {
+		return errors.Join(ErrManifest, bounded.Err())
+	}
+	return bounded.Err()
+}
