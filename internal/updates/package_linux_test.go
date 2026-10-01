@@ -6,12 +6,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/theupdateframework/go-tuf/v2/metadata"
 )
@@ -100,5 +102,69 @@ func TestVerifiedPackageStreamAdmission(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPackageDownloadCancellationRetainsNoVerifiedAuthority(t *testing.T) {
+	payload := []byte("expected package")
+	sum := sha256.Sum256(payload)
+	digest := hex.EncodeToString(sum[:])
+	target := &metadata.TargetFiles{Path: "homenode.deb", Length: int64(len(payload)), Hashes: metadata.Hashes{"sha256": sum[:]}}
+	started := make(chan struct{})
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.(http.Flusher).Flush()
+		close(started)
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fetcher, err := newMetadataFetcher(ctx, server.URL+"/targets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fetcher.client.Transport = server.Client().Transport
+	directory := t.TempDir()
+	if err = os.Chmod(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	done := make(chan error, 1)
+	go func() {
+		file, err := acquireVerifiedPackage(ctx, fetcher, target, true, root)
+		if file != nil {
+			file.Close()
+			done <- errors.New("canceled download returned a descriptor")
+			return
+		}
+		done <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("download did not start")
+	}
+	cancel()
+	select {
+	case err = <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled package download remained active")
+	}
+	if _, err = os.Lstat(filepath.Join(directory, digest+".deb")); !os.IsNotExist(err) {
+		t.Fatal("canceled package published", err)
+	}
+	if file, err := acquireVerifiedPackage(ctx, fetcher, target, true, root); !errors.Is(err, context.Canceled) || file != nil {
+		if file != nil {
+			file.Close()
+		}
+		t.Fatal("canceled operation reused", err)
 	}
 }
