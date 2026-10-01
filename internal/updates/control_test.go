@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func controlFixture(t *testing.T, control, extra string) []byte {
+func controlFixture(t testing.TB, control, extra string) []byte {
 	t.Helper()
 	var buffer bytes.Buffer
 	writer := tar.NewWriter(&buffer)
