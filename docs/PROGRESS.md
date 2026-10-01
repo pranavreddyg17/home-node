@@ -1283,3 +1283,11 @@ CI run 36832665192 failed in the new root prepared-maintenance fixture because i
 CI run 36832958587 passed the root prepared-maintenance configuration tests after the journal-name correction, then failed while starting the new systemd socket fixture. Its captured exception did not retain systemd's startup diagnostics. The fixture now uses Type=simple to match the controller and prints unit/journal diagnostics before cleanup on failure. Actual systemd success remains unproven until rerun.
 
 Additional maintenance app-client tests verify that foreign device ownership, invalid job identity, and failed inspection never send a controller request. Reply cases require exactly version 1 and reject duplicate/extra/null/wrong-version/trailing/oversized/non-UTF-8 acknowledgements. The runtimeclient race suite passed locally.
+
+### Private sanitized management snapshot stream
+
+The controller maintenance handler now supports a snapshot-only operation for the exact owned staging job with attached root authority. It builds a sanitized SQLite backup under a private controller-owned temporary directory, validates recovery authority/inventory, then streams a bounded 256 MiB snapshot with an exact content length and fixed media type. No peer-selected host path or live database file is exposed. Temporary plaintext storage is removed on completion/error, and the existing maintenance barrier remains in place. Pre-stream failures return refusal; partial streams require client integrity validation.
+
+Validation: controller race tests and final Linux compilation passed. A snapshot test validates the streamed database, absence of temporary backup directories, and retained management admission. Production snapshot client/staging integration and a fully frozen configuration/byte-writer boundary remain required.
+
+CI run 36833296588 failed its systemd fixture because systemd could not resolve the nonexistent numeric socket group 1003. The fixture now creates a dedicated named group only after checking both name/GID vacancy and removes that owned group after unit cleanup. The production socket already uses the separately provisioned homenode-backup group. Actual systemd success remains pending rerun.

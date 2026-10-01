@@ -1,5 +1,6 @@
 """Disposable Linux CI fixture; never run on an owner's installation."""
 import os
+import grp
 import pathlib
 import socket
 import struct
@@ -24,7 +25,17 @@ def command(*arguments):
     return subprocess.run(arguments, check=True, capture_output=True, text=True, timeout=30)
 
 
+group_name = "homenode-activation-fixture"
+for lookup, value in ((grp.getgrnam, group_name), (grp.getgrgid, 1003)):
+    try:
+        lookup(value)
+    except KeyError:
+        continue
+    raise SystemExit("fixture group vacancy invalid")
+group_created = False
 try:
+    command("/usr/sbin/groupadd", "--gid", "1003", group_name)
+    group_created = True
     paths[0].write_text(f"""[Unit]
 Description=Disposable HomeNode inherited listener test
 Requires={socket_unit}
@@ -51,7 +62,7 @@ Description=Disposable HomeNode root-created listener
 ListenStream={socket_path}
 FileDescriptorName=homenode-app-maintenance
 SocketUser=root
-SocketGroup=1003
+SocketGroup={group_name}
 SocketMode=0660
 DirectoryMode=0755
 Service={service}
@@ -102,3 +113,5 @@ finally:
     subprocess.run(["systemctl", "reset-failed", service, socket_unit], check=False, capture_output=True, timeout=30)
     if runtime_root.exists():
         runtime_root.rmdir()
+    if group_created:
+        command("/usr/sbin/groupdel", group_name)

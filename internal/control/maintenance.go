@@ -71,7 +71,7 @@ func (s *Server) MaintenanceHandler(controllerUID, backupUID uint32) http.Handle
 			http.Error(w, "peer denied", 403)
 			return
 		}
-		if r.Method != "POST" || r.URL.RawQuery != "" || (r.URL.Path != "/v1/maintenance/drain" && r.URL.Path != "/v1/maintenance/restore") {
+		if r.Method != "POST" || r.URL.RawQuery != "" || (r.URL.Path != "/v1/maintenance/drain" && r.URL.Path != "/v1/maintenance/restore" && r.URL.Path != "/v1/maintenance/snapshot") {
 			http.NotFound(w, r)
 			return
 		}
@@ -90,6 +90,19 @@ func (s *Server) MaintenanceHandler(controllerUID, backupUID uint32) http.Handle
 		job, err := s.Store.InspectMaintenanceJob(ctx, request.Token)
 		if err != nil || job.ID != request.JobID || job.Device != request.DeviceID {
 			http.Error(w, "maintenance blocked", 409)
+			return
+		}
+		if r.URL.Path == "/v1/maintenance/snapshot" {
+			if job.Phase != "staging" || job.RootToken == "" {
+				http.Error(w, "maintenance blocked", 409)
+				return
+			}
+			stream := &snapshotResponse{ResponseWriter: w}
+			if err = s.writeMaintenanceSnapshot(ctx, request.Token, stream); err != nil && !stream.started {
+				w.Header().Del("Content-Length")
+				http.Error(w, "maintenance snapshot blocked", 409)
+			}
+
 			return
 		}
 		if r.URL.Path == "/v1/maintenance/drain" {
