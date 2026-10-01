@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"hash"
 	"io"
@@ -27,11 +28,22 @@ const packageDiskReserve uint64 = 2 << 30
 
 var packagePath = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,191}\.deb$`)
 
-// AcquirePackage returns a read-only verified package descriptor, never install
+// AcquiredRelease holds verified bytes for later policy review and installation.
+// Its evidence has not yet passed vulnerability or build-identity review.
+type AcquiredRelease struct {
+	Package    *os.File        `json:"-"`
+	Metadata   ReleaseMetadata `json:"-"`
+	SBOM       json.RawMessage `json:"-"`
+	Provenance json.RawMessage `json:"-"`
+}
+
+func (release *AcquiredRelease) Close() error { return release.Package.Close() }
+
+// AcquirePackage returns a read-only verified package and evidence bytes, never install
 // authority. targetsURL and staging are trusted service configuration. The
 // session's exclusive lock must remain held throughout acquisition. Partial
 // files remain explicit failed intent and are never used as verified packages.
-func (session *verificationSession) AcquirePackage(name, targetsURL string, staging *os.Root, policy ReleasePolicy) (*os.File, error) {
+func (session *verificationSession) AcquirePackage(name, targetsURL string, staging *os.Root, policy ReleasePolicy) (*AcquiredRelease, error) {
 	target, err := session.TargetInfo(name)
 	if err != nil {
 		return nil, err
@@ -39,15 +51,6 @@ func (session *verificationSession) AcquirePackage(name, targetsURL string, stag
 	release, err := parseReleaseMetadata(target, policy)
 	if err != nil {
 		return nil, err
-	}
-	for _, evidenceName := range []string{release.SBOMTarget, release.ProvenanceTarget} {
-		evidence, err := session.TargetInfo(evidenceName)
-		if err != nil {
-			return nil, err
-		}
-		if evidence.Length < 1 || evidence.Length > 8<<20 || len(evidence.Hashes["sha256"]) != sha256.Size {
-			return nil, errReleasePolicy
-		}
 	}
 	fetcher, err := newMetadataFetcher(session.ctx, targetsURL)
 	if err != nil {
@@ -59,7 +62,23 @@ func (session *verificationSession) AcquirePackage(name, targetsURL string, stag
 	}
 	fetcher.client.Timeout = 10 * time.Minute
 	consistent := session.updater.GetTrustedMetadataSet().Root.Signed.ConsistentSnapshot
-	return acquireVerifiedPackage(session.ctx, fetcher, target, consistent, staging)
+	evidence := make([]json.RawMessage, 0, 2)
+	for _, name := range []string{release.SBOMTarget, release.ProvenanceTarget} {
+		descriptor, err := session.TargetInfo(name)
+		if err != nil {
+			return nil, err
+		}
+		data, err := downloadReleaseEvidence(fetcher, descriptor, consistent)
+		if err != nil {
+			return nil, err
+		}
+		evidence = append(evidence, data)
+	}
+	file, err := acquireVerifiedPackage(session.ctx, fetcher, target, consistent, staging)
+	if err != nil {
+		return nil, err
+	}
+	return &AcquiredRelease{Package: file, Metadata: release, SBOM: evidence[0], Provenance: evidence[1]}, nil
 }
 
 func acquireVerifiedPackage(ctx context.Context, fetcher *metadataFetcher, target *metadata.TargetFiles, consistent bool, staging *os.Root) (*os.File, error) {
