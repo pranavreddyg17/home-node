@@ -74,6 +74,7 @@ func main() {
 	maintenanceUID := flag.Int("maintenance-uid", -1, "distinct backup service UID; disabled when omitted")
 	maintenanceGID := flag.Int("maintenance-gid", -1, "distinct backup socket access group")
 	maintenanceSocket := flag.String("maintenance-socket", "/run/homenode/maintenance.sock", "backup-only local maintenance socket")
+	maintenanceDiskSocket := flag.String("maintenance-disk-socket", "/run/homenode/maintenance-disk.sock", "backup-only sequenced-packet disk socket")
 	flag.Parse()
 	if runtime.GOOS != "linux" || os.Geteuid() != 0 || *accessGID < 1 || *transferGID < 1 {
 		fatal(fmt.Errorf("requires Linux, root service identity, and explicit service groups"))
@@ -99,6 +100,9 @@ func main() {
 	}
 	if *maintenanceUID != -1 && (!filepath.IsAbs(*maintenanceSocket) || filepath.Clean(*maintenanceSocket) != *maintenanceSocket || *maintenanceSocket == *socket) {
 		fatal(errors.New("invalid maintenance socket"))
+	}
+	if *maintenanceUID != -1 && (!filepath.IsAbs(*maintenanceDiskSocket) || filepath.Clean(*maintenanceDiskSocket) != *maintenanceDiskSocket || *maintenanceDiskSocket == *socket || *maintenanceDiskSocket == *maintenanceSocket) {
+		fatal(errors.New("invalid maintenance disk socket"))
 	}
 	keyBytes, err := readProtected(*publisher, 256)
 	if err != nil {
@@ -205,6 +209,28 @@ func main() {
 			stop()
 		}()
 	}
+	diskDone := make(chan error, 1)
+	if *maintenanceUID != -1 {
+		diskListener, listenErr := net.ListenUnix("unixpacket", &net.UnixAddr{Net: "unixpacket", Name: *maintenanceDiskSocket})
+		if listenErr != nil {
+			fatal(listenErr)
+		}
+		defer diskListener.Close()
+		if err = os.Chown(*maintenanceDiskSocket, 0, *maintenanceGID); err != nil {
+			fatal(err)
+		}
+		if err = os.Chmod(*maintenanceDiskSocket, 0660); err != nil {
+			fatal(err)
+		}
+		go func() {
+			serveErr := manager.ServeMaintenanceDisks(ctx, diskListener, uint32(*maintenanceUID))
+			if errors.Is(serveErr, context.Canceled) {
+				serveErr = nil
+			}
+			diskDone <- serveErr
+			stop()
+		}()
+	}
 	shutdownDone := make(chan error, 1)
 	go func() {
 		<-ctx.Done()
@@ -253,6 +279,9 @@ func main() {
 	}
 	if maintenanceServer != nil {
 		err = errors.Join(err, <-maintenanceDone)
+	}
+	if *maintenanceUID != -1 {
+		err = errors.Join(err, <-diskDone)
 	}
 	if err = errors.Join(err, <-shutdownDone); err != nil {
 		fatal(err)
