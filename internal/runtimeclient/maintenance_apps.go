@@ -110,3 +110,10 @@ func (c *MaintenanceAppsClient) Close() {
 func (c *MaintenanceAppsClient) ConfirmStaging(ctx context.Context, token, device string) error {
 	return c.call(ctx, "/v1/maintenance/verify-stage", token, device)
 }
+
+func (c *MaintenanceAppsClient) BeginPublishing(ctx context.Context, token, device string) error {
+	return c.call(ctx, "/v1/maintenance/begin-publish", token, device)
+}
+func (c *MaintenanceAppsClient) ConfirmPublishing(ctx context.Context, token, device string) error {
+	return c.call(ctx, "/v1/maintenance/verify-publish", token, device)
+}

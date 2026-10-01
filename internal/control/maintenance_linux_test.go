@@ -131,7 +131,17 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 	if validateErr != nil {
 		t.Fatal("private snapshot authority", validateErr)
 	}
-	if err = server.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "staging", "restoring"); err != nil {
+	if err = bridge.BeginPublishing(ctx, token, device); err != nil {
+		t.Fatal("publish transition", err)
+	}
+	if err = bridge.BeginPublishing(ctx, token, device); err != nil {
+		t.Fatal("lost transition acknowledgement replay", err)
+	}
+	if err = bridge.ConfirmPublishing(ctx, token, device); err != nil {
+		t.Fatal("publish confirmation", err)
+	}
+	call("/v1/maintenance/verify-stage", request, 409)
+	if err = server.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "publishing", "restoring"); err != nil {
 		t.Fatal(err)
 	}
 	call("/v1/maintenance/drain", request, 409)

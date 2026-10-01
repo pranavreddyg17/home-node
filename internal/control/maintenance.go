@@ -72,7 +72,7 @@ func (s *Server) MaintenanceHandler(controllerUID, backupUID uint32) http.Handle
 			http.Error(w, "peer denied", 403)
 			return
 		}
-		if r.Method != "POST" || r.URL.RawQuery != "" || (r.URL.Path != "/v1/maintenance/drain" && r.URL.Path != "/v1/maintenance/restore" && r.URL.Path != "/v1/maintenance/snapshot" && r.URL.Path != "/v1/maintenance/verify-stage") {
+		if r.Method != "POST" || r.URL.RawQuery != "" || (r.URL.Path != "/v1/maintenance/drain" && r.URL.Path != "/v1/maintenance/restore" && r.URL.Path != "/v1/maintenance/snapshot" && r.URL.Path != "/v1/maintenance/verify-stage" && r.URL.Path != "/v1/maintenance/begin-publish" && r.URL.Path != "/v1/maintenance/verify-publish") {
 			http.NotFound(w, r)
 			return
 		}
@@ -91,6 +91,26 @@ func (s *Server) MaintenanceHandler(controllerUID, backupUID uint32) http.Handle
 		job, err := s.Store.InspectMaintenanceJob(ctx, request.Token)
 		if err != nil || job.ID != request.JobID || job.Device != request.DeviceID {
 			http.Error(w, "maintenance blocked", 409)
+			return
+		}
+		if r.URL.Path == "/v1/maintenance/begin-publish" || r.URL.Path == "/v1/maintenance/verify-publish" {
+			inventory, inspectErr := s.Store.InspectMaintenance(ctx, request.Token)
+			if inspectErr != nil || job.RootToken == "" || inventory != (state.MaintenanceInventory{}) {
+				http.Error(w, "maintenance blocked", 409)
+				return
+			}
+			if r.URL.Path == "/v1/maintenance/begin-publish" && job.Phase == "staging" {
+				err = s.Store.AdvanceMaintenanceJob(ctx, request.Token, request.JobID, "staging", "publishing")
+			} else if job.Phase != "publishing" {
+				err = state.ErrMaintenance
+			}
+			if err != nil {
+				http.Error(w, "maintenance blocked", 409)
+				return
+			}
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]int{"version": 1})
 			return
 		}
 		if r.URL.Path == "/v1/maintenance/verify-stage" {
