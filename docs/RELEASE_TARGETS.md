@@ -91,3 +91,14 @@ See [Debian binary package format](https://manpages.debian.org/bookworm/dpkg-dev
 The parser does not yet decompress or verify the outer `.deb`, inspect the data
 payload, or run in the eventual constrained package-inspection worker; it is not
 currently an installation admission gate. Those integrations remain required.
+
+`updates.InspectDebianArchive` reads the already-open package using bounded
+sections without changing its descriptor offset. HomeNode's supported outer
+layout is exactly `debian-binary` with `2.0`, then `control.tar` and `data.tar`,
+optionally compressed using gzip, xz, or zstd. The structural check refuses
+unsupported members/order, length overruns, bad ar padding/headers, extra trailing
+members, packages above 512 MiB, and compressed control above 1 MiB. Returned
+sections still contain potentially compressed bytes. They must undergo bounded,
+constrained decompression and content validation before installation. The
+acquisition path does not yet invoke this inspection gate; production activation
+remains blocked on its full integration and real package qualification.
