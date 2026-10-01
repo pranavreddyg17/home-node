@@ -26,6 +26,11 @@ func RunMaintenance(ctx context.Context, store *state.Store, device string, apps
 	if store == nil || apps == nil || root == nil || stage == nil || publish == nil {
 		return "", ErrManifest
 	}
+	runner, err := claimMaintenanceRunner(ctx, store)
+	if err != nil {
+		return "", err
+	}
+	defer func() { resultErr = errors.Join(resultErr, runner.Close()) }()
 	token, job, err := store.BeginMaintenanceJob(ctx, device)
 	if err != nil {
 		return "", err
@@ -101,12 +106,17 @@ func finishMaintenance(ctx context.Context, store *state.Store, token, id, devic
 }
 
 // RecoverMaintenance reconciles cleanup after the prior runner has stopped.
-// It never repeats uncertain staging/publication. The trusted caller must
-// ensure exclusive runner ownership; production restart claiming is not wired.
+// It never repeats uncertain staging/publication. A kernel-held runner claim
+// excludes execution/recovery overlap and is released when the process exits.
 func RecoverMaintenance(ctx context.Context, store *state.Store, token, id string, apps MaintenanceApps, root MaintenanceRoot) error {
 	if store == nil || apps == nil || root == nil {
 		return ErrManifest
 	}
+	runner, err := claimMaintenanceRunner(ctx, store)
+	if err != nil {
+		return err
+	}
+	defer runner.Close()
 	job, err := store.InspectMaintenanceJob(ctx, token)
 	if err != nil {
 		return err

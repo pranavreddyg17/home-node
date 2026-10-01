@@ -97,3 +97,50 @@ func TestMaintenanceRecoveryRetriesCleanupWithoutRepeatingPublication(t *testing
 		t.Fatal(err)
 	}
 }
+
+func TestMaintenanceRunnerExcludesRecoveryWhileStaging(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), "management")
+	store, err := state.Open(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	second, err := state.Open(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	device := state.Random()
+	if _, err = store.DB.Exec("INSERT INTO devices(id,name,capabilities,created_at) VALUES(?,'owner','[\"admin\"]',1)", device); err != nil {
+		t.Fatal(err)
+	}
+	apps := &coordinatorApps{}
+	root := &coordinatorRoot{}
+	stage := func(ctx context.Context, token, rootToken string) error {
+		job, err := second.InspectMaintenanceJob(ctx, token)
+		if err != nil {
+			return err
+		}
+		if err = RecoverMaintenance(ctx, second, token, job.ID, apps, root); !errors.Is(err, ErrMaintenanceRunner) {
+			t.Fatalf("recovery entered live staging: %v", err)
+		}
+		work := func(context.Context, string, string) error { return nil }
+		if _, err = RunMaintenance(ctx, second, device, apps, root, work, work); !errors.Is(err, ErrMaintenanceRunner) {
+			t.Fatalf("second runner entered live staging: %v", err)
+		}
+		if apps.restored || root.released {
+			t.Fatal("competing runner performed cleanup")
+		}
+		current, err := second.InspectMaintenanceJob(ctx, token)
+		if err != nil || current.Phase != "staging" {
+			t.Fatal("competing runner mutated journal", current, err)
+		}
+		return nil
+	}
+	if _, err = RunMaintenance(context.Background(), store, device, apps, root, stage, func(context.Context, string, string) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if !apps.restored || !root.released {
+		t.Fatal("owner did not finish cleanup")
+	}
+}
