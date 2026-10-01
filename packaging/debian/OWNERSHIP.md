@@ -6,6 +6,12 @@ The package owns `/usr/bin/homenode`, `/usr/lib/homenode`,
 are root-owned and writable only by root. The guest executable is a build input
 for immutable guest images; it must not be launched on the host.
 
+The payload includes the private `homenode-backup` worker and depends on the
+host `restic` executable used for encrypted local repositories. Packaging the
+worker does not activate it: protected packet socket activation, a separate
+service identity, trusted installed configuration, registered external media,
+and controller admission still require provisioning.
+
 This package does not automatically create users, start services, edit network
 policy, enroll Tailscale, provision TLS, create disks, or install publisher keys.
 It has no installation/removal hooks. Installation and ordinary removal leave
