@@ -53,3 +53,11 @@ install a package or establish vulnerability, provenance-identity, migration,
 or owner-approval qualification. Protected repository policy loading, updating
 persistent release floors after successful installation, and approved service
 activation remain required before enabling product updates.
+
+`install.Engine.ReadUpdateRepository` provides the privileged policy-loading
+boundary on the real Linux host. It requires a completed ownership journal with
+pinned bootstrap and private updater directories, verifies all journaled items,
+and admits only the created root-owned mode `0400` repository policy entry with
+matching content digest. Parsing is bounded to 8 KiB and rejects missing,
+unknown, duplicated, case-aliased fields, trailing JSON, and incompatible values.
+This loader does not activate an updater or authorize installing a release.

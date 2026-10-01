@@ -1,8 +1,11 @@
 package updates
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 )
 
 // RepositoryConfiguration is immutable installer-owned acquisition policy.
@@ -44,4 +47,48 @@ func (configuration RepositoryConfiguration) Policy(currentSchema int) (ReleaseP
 		return ReleasePolicy{}, errors.New("invalid observed state schema")
 	}
 	return ReleasePolicy{MinimumSequence: configuration.MinimumSequence, MinimumCatalogVersion: configuration.MinimumCatalogVersion, CurrentStateSchema: currentSchema}, nil
+}
+
+// ParseRepositoryConfiguration validates bounded, unambiguous configuration
+// bytes. It does not establish file ownership: the privileged caller must read
+// these bytes from its verified installer journal entry.
+func ParseRepositoryConfiguration(data []byte) (RepositoryConfiguration, error) {
+	var result RepositoryConfiguration
+	if len(data) == 0 || len(data) > 8192 {
+		return result, errReleasePolicy
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	token, err := decoder.Token()
+	if err != nil || token != json.Delim('{') {
+		return result, errReleasePolicy
+	}
+	allowed := map[string]bool{"schema": true, "metadataUrl": true, "targetsUrl": true, "minimumSequence": true, "minimumCatalogVersion": true}
+	seen := map[string]bool{}
+	for decoder.More() {
+		token, err = decoder.Token()
+		name, ok := token.(string)
+		if err != nil || !ok || !allowed[name] || seen[name] {
+			return result, errReleasePolicy
+		}
+		seen[name] = true
+		var value json.RawMessage
+		if decoder.Decode(&value) != nil {
+			return result, errReleasePolicy
+		}
+	}
+	if token, err = decoder.Token(); err != nil || token != json.Delim('}') || len(seen) != len(allowed) {
+		return result, errReleasePolicy
+	}
+	if decoder.Decode(new(any)) != io.EOF {
+		return result, errReleasePolicy
+	}
+	decoder = json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&result) != nil {
+		return RepositoryConfiguration{}, errReleasePolicy
+	}
+	if err := result.Validate(); err != nil {
+		return RepositoryConfiguration{}, err
+	}
+	return result, nil
 }

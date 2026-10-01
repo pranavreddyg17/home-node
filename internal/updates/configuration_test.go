@@ -1,6 +1,9 @@
 package updates
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestRepositoryConfigurationScopesAndObservedSchema(t *testing.T) {
 	valid := RepositoryConfiguration{Schema: 1, MetadataURL: "https://updates.example/metadata/", TargetsURL: "https://updates.example/targets/", MinimumSequence: 5, MinimumCatalogVersion: 3}
@@ -39,6 +42,29 @@ func TestRepositoryConfigurationScopesAndObservedSchema(t *testing.T) {
 	for _, schema := range []int{0, 1025} {
 		if _, err := valid.Policy(schema); err == nil {
 			t.Fatal("invalid observed schema accepted")
+		}
+	}
+}
+
+func TestRepositoryConfigurationParsingRejectsAmbiguousAuthority(t *testing.T) {
+	valid := `{"schema":1,"metadataUrl":"https://updates.example/metadata/","targetsUrl":"https://updates.example/targets/","minimumSequence":5,"minimumCatalogVersion":3}`
+	parsed, err := ParseRepositoryConfiguration([]byte(valid))
+	if err != nil || parsed.MinimumSequence != 5 {
+		t.Fatal(parsed, err)
+	}
+	for _, data := range []string{
+		"", `{}`, `null`, `[]`, valid + `{}`,
+		strings.Replace(valid, `"schema":1`, `"schema":1,"schema":1`, 1),
+		strings.Replace(valid, `"schema":1`, `"schema":1,"sc\u0068ema":1`, 1),
+		strings.Replace(valid, `"schema":1`, `"Schema":1`, 1),
+		strings.Replace(valid, `"schema":1`, `"schema":null`, 1),
+		strings.Replace(valid, `"schema":1`, `"schema":1,"extra":false`, 1),
+		strings.Replace(valid, `"minimumSequence":5`, `"minimumSequence":5.0`, 1),
+		strings.Replace(valid, `"minimumSequence":5`, `"minimumSequence":9223372036854775808`, 1),
+		strings.Repeat(" ", 8193) + valid,
+	} {
+		if _, err := ParseRepositoryConfiguration([]byte(data)); err == nil {
+			t.Fatal("ambiguous policy accepted", data)
 		}
 	}
 }
