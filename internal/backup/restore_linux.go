@@ -68,12 +68,10 @@ func (r *Repository) Restore(ctx context.Context, snapshot string, stage *os.Fil
 	if err != nil || manifest.Validate(policy, time.Now()) != nil {
 		return Manifest{}, ErrManifest
 	}
-	created := []string{}
+	created := map[string]os.FileInfo{}
 	defer func() {
 		if resultErr != nil {
-			for _, name := range created {
-				resultErr = errors.Join(resultErr, root.Remove(name))
-			}
+			resultErr = errors.Join(resultErr, removeOwnedStaging(root, created))
 			resultErr = errors.Join(resultErr, stage.Sync())
 		}
 	}()
@@ -82,7 +80,11 @@ func (r *Repository) Restore(ctx context.Context, snapshot string, stage *os.Fil
 		if err != nil {
 			return Manifest{}, ErrManifest
 		}
-		created = append(created, entry.Name)
+		info, statErr := file.Stat()
+		if statErr != nil {
+			return Manifest{}, errors.Join(statErr, file.Close())
+		}
+		created[entry.Name] = info
 		hash := sha256.New()
 		writer := &restoreWriter{destination: io.MultiWriter(file, hash), remaining: entry.Bytes}
 		err = r.dump(deadline, snapshot, entry.Name, writer)
@@ -98,7 +100,11 @@ func (r *Repository) Restore(ctx context.Context, snapshot string, stage *os.Fil
 	if err != nil {
 		return Manifest{}, ErrManifest
 	}
-	created = append(created, "manifest.json")
+	info, statErr := file.Stat()
+	if statErr != nil {
+		return Manifest{}, errors.Join(statErr, file.Close())
+	}
+	created["manifest.json"] = info
 	_, err = file.Write(output.data)
 	err = errors.Join(err, file.Sync(), file.Close())
 	if err != nil {
