@@ -56,6 +56,9 @@ func (s *InspectionStage) publishEnvironmentOwned(ctx context.Context, parent *o
 	if childErr != nil || stageErr != nil || closeErr != nil || !os.SameFile(childInfo, stageInfo) {
 		return errors.Join(ErrInspectionResult, childErr, stageErr, closeErr)
 	}
+	if err := s.verifyServicePackagePath(parent); err != nil {
+		return err
+	}
 	digest, length, err := PackageIdentity(ctx, s.packageFile)
 	if err != nil || digest != s.identity.PackageSHA256 || length != s.identity.PackageLength {
 		return errors.Join(ErrInspectionResult, err)
@@ -137,9 +140,28 @@ func (s *InspectionStage) verifyEnvironmentOwned(ctx context.Context, parent *os
 	if err != nil || readErr != nil || closeErr != nil || !bytes.Equal(data, expected) {
 		return errors.Join(ErrInspectionResult, err, readErr, closeErr)
 	}
+	if err := s.verifyServicePackagePath(parent); err != nil {
+		return err
+	}
 	digest, length, err := PackageIdentity(ctx, s.packageFile)
 	if err != nil || digest != s.identity.PackageSHA256 || length != s.identity.PackageLength {
 		return errors.Join(ErrInspectionResult, err)
 	}
 	return ctx.Err()
+}
+
+// Called with the stage mutex held. systemd opens a fixed package path, so a
+// still-readable retained descriptor is insufficient if that path was replaced.
+func (s *InspectionStage) verifyServicePackagePath(parent *os.Root) (resultErr error) {
+	file, err := openInspectionFile(parent, "inspection/package.deb", 0400)
+	if err != nil {
+		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, file.Close()) }()
+	liveInfo, liveErr := file.Stat()
+	pinnedInfo, pinnedErr := s.packageFile.Stat()
+	if liveErr != nil || pinnedErr != nil || !os.SameFile(liveInfo, pinnedInfo) {
+		return errors.Join(ErrInspectionResult, liveErr, pinnedErr)
+	}
+	return nil
 }

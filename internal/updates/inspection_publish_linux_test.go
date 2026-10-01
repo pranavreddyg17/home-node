@@ -111,6 +111,28 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	if err := stage.verifyEnvironmentOwned(ctx, parent); err != nil {
 		t.Fatal("published configuration refused", err)
 	}
+	packagePath := filepath.Join(parentPath, "inspection/package.deb")
+	retainedPath := filepath.Join(parentPath, "inspection/package.retained")
+	if err := os.Rename(packagePath, retainedPath); err != nil {
+		t.Fatal(err)
+	}
+	// Even identical bytes in a replacement inode must not be substituted for
+	// the descriptor admitted under the operation's execution lock.
+	if err := os.WriteFile(packagePath, data, 0400); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.verifyEnvironmentOwned(ctx, parent); err == nil {
+		t.Fatal("replacement service package inode accepted")
+	}
+	if err := os.Remove(packagePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(retainedPath, packagePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.verifyEnvironmentOwned(ctx, parent); err != nil {
+		t.Fatal("restored pinned service path refused", err)
+	}
 	if err := stage.verifyEnvironmentOwned(ctx, unrelated); err == nil {
 		t.Fatal("unrelated launch configuration accepted")
 	}
