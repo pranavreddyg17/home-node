@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"strconv"
 
 	"golang.org/x/sys/unix"
 )
@@ -13,7 +14,25 @@ import (
 // CreateRepositoryPassword creates an anonymous immutable credential descriptor.
 // Trusted handoff must authenticate its recipient; no dispatch message carries
 // this credential. Caller owns descriptor closure and clearing its input bytes.
-func CreateRepositoryPassword(password []byte) (*os.File, error) { return passwordDescriptor(password) }
+func CreateRepositoryPassword(password []byte) (*os.File, error) {
+	original, err := passwordDescriptor(password)
+	if err != nil {
+		return nil, err
+	}
+	defer original.Close()
+	fd, err := unix.Open("/proc/self/fd/"+strconv.Itoa(int(original.Fd())), unix.O_RDONLY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, ErrRepository
+	}
+	readonly := os.NewFile(uintptr(fd), "repository-credential")
+	source, sourceErr := original.Stat()
+	duplicate, duplicateErr := readonly.Stat()
+	if sourceErr != nil || duplicateErr != nil || !os.SameFile(source, duplicate) {
+		readonly.Close()
+		return nil, ErrRepository
+	}
+	return readonly, nil
+}
 
 // ReadRepositoryPassword accepts only an anonymous, sealed, close-on-exec
 // regular descriptor with a bounded immutable payload. It does not seek or
