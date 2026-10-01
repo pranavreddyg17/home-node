@@ -1575,3 +1575,9 @@ Final state/control race tests, production frontend build and identity browser w
 The disposable root credential fixture now uses SendActivatedCredentialDispatchAndWait under controller UID 1001 after ordinary non-root sender refusal. Worker UID 1003 consumes named inherited activation, authenticates the controller, validates and closes its sealed credential, then emits the production job completion packet. Matching completion succeeds with sender credential ownership retained. A second explicit fixture changes the response job ID and requires ErrManifest; CI runs both variants.
 
 Final Linux backup test compilation, focused local credential/dispatch race tests and diff validation passed. Actual privileged matching/mismatched completion execution awaits subsequent Linux CI. This covers completion transport across kernel identities, not full repository/guest coordination or owner recovery. Current 5acbd19 CI remains live in prerequisite installation.
+
+### Completed worker checkpoint restart boundary
+
+The state dispatch fixture now closes and reopens SQLite after persisting verified worker completion, then requires the completion observation, cleanup admission, root release, atomic checkpoint removal and later job admission to remain valid. The same fixture already restarts with uncertain intent and refuses cleanup/publication-only release. This exercises both sides of the crash boundary without treating publication as worker termination.
+
+Final state race suite and diff validation passed. Native 8980109 CI remains in prerequisite installation. Complete physical worker/repository termination reconciliation and owner launch/recovery flows remain unfinished.

@@ -62,8 +62,15 @@ func TestBackupDispatchIntentSurvivesRestartAndBlocksCleanup(t *testing.T) {
 	if err = store.RecordBackupWorkerCompleted(ctx, token, job.ID); err != nil {
 		t.Fatal(err)
 	}
+	if err = store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = Open(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if observation, observeErr := store.InspectBackupObservation(ctx); observeErr != nil || observation.WorkerCompletion != "complete" {
-		t.Fatal("completed worker not observable", observation, observeErr)
+		t.Fatal("restart lost completed worker evidence", observation, observeErr)
 	}
 	if err = store.RequireBackupWorkerStopped(ctx, token, job.ID); err != nil {
 		t.Fatal(err)
