@@ -37,8 +37,7 @@ type InspectionResult struct {
 // Content validity grants no installation or release-promotion authority.
 func ValidateInspectionResult(data []byte, expected InspectionIdentity) (InspectionResult, error) {
 	var zero InspectionResult
-	hash, err := hex.DecodeString(expected.PackageSHA256)
-	if !inspectionOperation.MatchString(expected.OperationID) || err != nil || len(hash) != 32 || hex.EncodeToString(hash) != expected.PackageSHA256 || expected.PackageLength < 1 || expected.PackageLength > 512<<20 || !releaseName.MatchString(expected.Release) || len(data) == 0 || len(data) > 2048 {
+	if !validInspectionIdentity(expected) || len(data) == 0 || len(data) > 2048 {
 		return zero, ErrInspectionResult
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -73,4 +72,9 @@ func ValidateInspectionResult(data []byte, expected InspectionIdentity) (Inspect
 		return zero, ErrInspectionResult
 	}
 	return result, nil
+}
+
+func validInspectionIdentity(expected InspectionIdentity) bool {
+	hash, err := hex.DecodeString(expected.PackageSHA256)
+	return inspectionOperation.MatchString(expected.OperationID) && err == nil && len(hash) == 32 && hex.EncodeToString(hash) == expected.PackageSHA256 && expected.PackageLength >= 1 && expected.PackageLength <= 512<<20 && releaseName.MatchString(expected.Release)
 }

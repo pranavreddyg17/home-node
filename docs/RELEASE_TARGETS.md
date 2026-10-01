@@ -269,3 +269,15 @@ bounded to 64 entries to accommodate the growing fixed allowlist; unknown paths
 and duplicate records remain refused. Package publication/resume, trusted launch
 configuration, exclusive root operation and completion/result journaling are
 still required to connect acquisition to the inactive inspection service.
+
+The Linux `StageInspectionPackage` primitive requires root and an independently
+owned private staging root. It holds an exclusive directory lock, refuses all
+existing state, validates a read-only private acquisition descriptor against
+its retained signed digest/length, checks observed free space plus a 2 GiB
+reserve, and durably records operation intent before copying. The copy is
+stream-hashed, synced, made mode `0400`, published without replacement, and
+followed by a synced ready marker bound to the same intent. Interrupted state
+is retained for explicit recovery, with no automatic adoption/resume yet.
+Linux tests compile for success, mismatched identity, existing intent, public
+staging and cancellation; native execution awaits CI. This primitive remains
+unconnected to installer-owned staging, service launch and completion journals.
