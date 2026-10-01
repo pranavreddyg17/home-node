@@ -120,7 +120,13 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 	}
 	policy := backup.RestorePolicy{MinimumCatalogVersion: 1}
 	publisher := &maintenancePublicationFixture{store: server.Store, token: token, jobID: job.ID, rootToken: owned.RootToken}
-	published, err := backup.RunPrivateBackup(ctx, bridge, runtimeclient.NewDiskClient("/tmp/unused-empty-inventory.sock"), publisher, device, token, owned.RootToken, staging, "0.1.0", 1, policy)
+	dispatch := backup.Dispatch{Version: 1, JobID: job.ID, DeviceID: device, ManagementToken: token, RuntimeToken: owned.RootToken, Release: "0.1.0", CatalogVersion: 1}
+	workerConfig := runtimeclient.BackupWorkerConfig{ManagementSocket: listener.Addr().String(), DiskSocket: "/tmp/unused-empty-inventory.sock", ControllerListenerUID: uid, Release: "0.1.0", CatalogVersion: 1, Policy: policy}
+	workerResult, err := runtimeclient.RunDispatchedBackup(ctx, dispatch, workerConfig, staging, publisher)
+	published := workerResult.SnapshotID
+	if workerResult.JobID != job.ID {
+		t.Fatal("worker lost dispatched job identity")
+	}
 	if err != nil || published != state.Hash("fixture repository acknowledgement") || publisher.calls != 1 {
 		t.Fatal("private combined backup", published, err, publisher.calls)
 	}

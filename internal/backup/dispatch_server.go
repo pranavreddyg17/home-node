@@ -75,6 +75,9 @@ func ServeDispatch(ctx context.Context, listener net.Listener, controllerUID uin
 			}
 			operation, end := context.WithTimeout(serving, 2*time.Hour)
 			defer end()
+			if operation.Err() != nil {
+				return
+			}
 			err = work(operation, dispatch)
 			if err != nil && serving.Err() == nil {
 				failure <- err
