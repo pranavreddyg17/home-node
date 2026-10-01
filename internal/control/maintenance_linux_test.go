@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pranavreddyg17/home-node/internal/backup"
 	"github.com/pranavreddyg17/home-node/internal/runtimeclient"
 	"github.com/pranavreddyg17/home-node/internal/state"
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
@@ -93,6 +94,7 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 		t.Fatal("owned client drain", err)
 	}
 	call("/v1/maintenance/restore", request, 409)
+	call("/v1/maintenance/verify-stage", request, 409)
 	if err = server.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "draining", "freezing"); err != nil {
 		t.Fatal(err)
 	}
@@ -108,8 +110,17 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer staging.Close()
-	if err = bridge.StageManagementSnapshot(ctx, token, device, staging); err != nil {
-		t.Fatal("private snapshot receive", err)
+	owned, err := server.Store.InspectMaintenanceJob(ctx, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := backup.RestorePolicy{MinimumCatalogVersion: 1}
+	manifest, err := backup.StagePrivateRecoverySet(ctx, bridge, runtimeclient.NewDiskClient("/tmp/unused-empty-inventory.sock"), device, token, owned.RootToken, staging, "0.1.0", 1, policy)
+	if err != nil || len(manifest.Files) != 1 {
+		t.Fatal("private recovery staging", manifest, err)
+	}
+	if err = backup.ValidateRecoverySet(ctx, staging, manifest, policy); err != nil {
+		t.Fatal("private staged recovery set", err)
 	}
 	snapshot, err := staging.Open("snapshot.db")
 	if err != nil {

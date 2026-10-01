@@ -104,3 +104,9 @@ func (c *MaintenanceAppsClient) Close() {
 		c.client.CloseIdleConnections()
 	}
 }
+
+// ConfirmStaging verifies the existing owned staging job and drained inventory;
+// it neither acquires nor releases any maintenance authority.
+func (c *MaintenanceAppsClient) ConfirmStaging(ctx context.Context, token, device string) error {
+	return c.call(ctx, "/v1/maintenance/verify-stage", token, device)
+}

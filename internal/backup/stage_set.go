@@ -22,7 +22,27 @@ type MaintenanceDisks interface {
 // guest filesystems, freeze other writers and retain exclusive staging ownership.
 // This builder does not enroll a drive, encrypt/publish a backup or restart apps.
 func StageRecoverySet(ctx context.Context, store *state.Store, disks MaintenanceDisks, managementToken, runtimeToken string, root *os.Root, release string, catalogVersion int64, policy RestorePolicy) (result Manifest, resultErr error) {
-	if store == nil || disks == nil || root == nil || managementToken == "" || runtimeToken == "" {
+	if store == nil {
+		return result, ErrManifest
+	}
+	return stageRecoverySet(ctx, disks, managementToken, runtimeToken, root, release, catalogVersion, policy,
+		func(ctx context.Context, root *os.Root) error {
+			_, err := store.MaintenanceRecoverySnapshot(ctx, managementToken, root.Name())
+			return err
+		},
+		func(ctx context.Context) error {
+			inventory, err := store.InspectMaintenance(ctx, managementToken)
+			if err != nil {
+				return err
+			}
+			if inventory != (state.MaintenanceInventory{}) {
+				return state.ErrMaintenance
+			}
+			return nil
+		})
+}
+func stageRecoverySet(ctx context.Context, disks MaintenanceDisks, managementToken, runtimeToken string, root *os.Root, release string, catalogVersion int64, policy RestorePolicy, capture func(context.Context, *os.Root) error, confirm func(context.Context) error) (result Manifest, resultErr error) {
+	if capture == nil || confirm == nil || disks == nil || root == nil || managementToken == "" || runtimeToken == "" {
 		return result, ErrManifest
 	}
 	manifest := Manifest{Version: 1, CreatedAt: time.Now().UTC(), Release: release, Platform: "ubuntu-24.04-amd64", ManagementSchema: 4, CatalogVersion: catalogVersion, Files: []BackupFile{{Workload: "management", Name: "snapshot.db", Bytes: 1, SHA256: hex.EncodeToString(make([]byte, 32)), DataSchema: 4}}}
@@ -55,7 +75,7 @@ func StageRecoverySet(ctx context.Context, store *state.Store, disks Maintenance
 			result = Manifest{}
 		}
 	}()
-	if _, err = store.MaintenanceRecoverySnapshot(ctx, managementToken, root.Name()); err != nil {
+	if err = capture(ctx, root); err != nil {
 		return result, err
 	}
 	snapshot, err := root.Open("snapshot.db")
@@ -110,12 +130,8 @@ func StageRecoverySet(ctx context.Context, store *state.Store, disks Maintenance
 			return result, err
 		}
 	}
-	inventory, err := store.InspectMaintenance(ctx, managementToken)
-	if err != nil {
+	if err = confirm(ctx); err != nil {
 		return result, err
-	}
-	if inventory != (state.MaintenanceInventory{}) {
-		return result, state.ErrMaintenance
 	}
 	if err = ValidateRecoverySet(ctx, root, manifest, policy); err != nil {
 		return result, err
