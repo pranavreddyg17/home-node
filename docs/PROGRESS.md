@@ -1581,3 +1581,9 @@ Final Linux backup test compilation, focused local credential/dispatch race test
 The state dispatch fixture now closes and reopens SQLite after persisting verified worker completion, then requires the completion observation, cleanup admission, root release, atomic checkpoint removal and later job admission to remain valid. The same fixture already restarts with uncertain intent and refuses cleanup/publication-only release. This exercises both sides of the crash boundary without treating publication as worker termination.
 
 Final state race suite and diff validation passed. Native 8980109 CI remains in prerequisite installation. Complete physical worker/repository termination reconciliation and owner launch/recovery flows remain unfinished.
+
+### Approval transaction maintenance admission
+
+BeginMaintenanceJobTx now allows fresh approval consumption, controller admission closure and durable maintenance job identity to share one SQLite transaction. The existing standalone entry delegates to the same implementation. The transaction caller must roll back failures and wait for commit before using returned authority; no root or worker effects occur during admission.
+
+The backup.create approval integration test injects an admission write failure, verifies the grant remains reusable and admission stays open, retries successfully, verifies the exact persisted owner/job and closed admission, then rejects grant replay. State, identity and backup package tests passed locally. Full Linux CI for b320931 completed successfully. This transaction primitive does not yet expose backup launch: registered target configuration, coordinator resumption and the owner route still need implementation.

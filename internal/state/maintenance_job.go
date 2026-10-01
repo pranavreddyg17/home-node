@@ -56,30 +56,42 @@ func maintenanceDevice(tx *sql.Tx, device string) error {
 // identity before draining. Root authority is attached only after acquisition.
 // These internal records are excluded from recovery exports and public payloads.
 func (s *Store) BeginMaintenanceJob(ctx context.Context, device string) (string, MaintenanceJob, error) {
-	if !recoveryInstanceID.MatchString(device) {
-		return "", MaintenanceJob{}, ErrMaintenanceOwner
-	}
-	token := Random()
-	job := MaintenanceJob{ID: Random(), Device: device, Phase: "draining"}
+	var token string
+	var job MaintenanceJob
 	err := s.Transaction(ctx, func(tx *sql.Tx) error {
-		if err := RequireAdmission(tx); err != nil {
-			return err
-		}
-		if err := maintenanceDevice(tx, device); err != nil {
-			return err
-		}
-		if _, err := tx.Exec("INSERT INTO settings(key,value) VALUES(?,?)", maintenanceKey, token); err != nil {
-			return err
-		}
-		for key, value := range map[string]string{"version": "2", "id": job.ID, "device": device, "phase": job.Phase, "root-token": ""} {
-			if _, err := tx.Exec("INSERT INTO settings(key,value) VALUES(?,?)", maintenanceJobPrefix+key, value); err != nil {
-				return err
-			}
-		}
-		return nil
+		var err error
+		token, job, err = BeginMaintenanceJobTx(tx, device)
+		return err
 	})
 	if err != nil {
 		return "", MaintenanceJob{}, err
+	}
+	return token, job, nil
+}
+
+// BeginMaintenanceJobTx records admission and job intent in the caller's
+// transaction, allowing approval consumption to commit with admission. The
+// caller must roll back on error and must not use returned authority until
+// commit succeeds. It performs no external effects.
+func BeginMaintenanceJobTx(tx *sql.Tx, device string) (string, MaintenanceJob, error) {
+	if tx == nil || !recoveryInstanceID.MatchString(device) {
+		return "", MaintenanceJob{}, ErrMaintenanceOwner
+	}
+	if err := RequireAdmission(tx); err != nil {
+		return "", MaintenanceJob{}, err
+	}
+	if err := maintenanceDevice(tx, device); err != nil {
+		return "", MaintenanceJob{}, err
+	}
+	token := Random()
+	job := MaintenanceJob{ID: Random(), Device: device, Phase: "draining"}
+	if _, err := tx.Exec("INSERT INTO settings(key,value) VALUES(?,?)", maintenanceKey, token); err != nil {
+		return "", MaintenanceJob{}, err
+	}
+	for key, value := range map[string]string{"version": "2", "id": job.ID, "device": device, "phase": job.Phase, "root-token": ""} {
+		if _, err := tx.Exec("INSERT INTO settings(key,value) VALUES(?,?)", maintenanceJobPrefix+key, value); err != nil {
+			return "", MaintenanceJob{}, err
+		}
 	}
 	return token, job, nil
 }

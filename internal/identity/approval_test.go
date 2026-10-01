@@ -403,3 +403,60 @@ func TestAppApprovalActionIsStrictAndPresetOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestBackupApprovalAndMaintenanceAdmissionCommitTogether(t *testing.T) {
+	s := testService(t)
+	actor, _ := testDevice(t, s, AllCapabilities)
+	ctx := context.Background()
+	body := []byte(`{"repository":"registered"}`)
+	resources := []string{"registered"}
+	binding, err := newApprovalBinding(actor, "backup.create", resources, body, 1, time.Now().Unix())
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant := state.Random()
+	payload, _ := json.Marshal(challenge{Binding: &binding, Issuer: actor.Device.ID})
+	if _, err = s.Store.DB.Exec("INSERT INTO challenges(token_hash,kind,payload,epoch,expires_at) VALUES(?,'approval-grant',?,?,?)", state.Hash(grant), string(payload), actor.Epoch, binding.ExpiresAt); err != nil {
+		t.Fatal(err)
+	}
+	var token string
+	var job state.MaintenanceJob
+	admit := func(tx *sql.Tx) error {
+		var err error
+		token, job, err = state.BeginMaintenanceJobTx(tx, actor.Device.ID)
+		return err
+	}
+	consume := func() error { return s.ConsumeApproval(ctx, actor, grant, "backup.create", resources, body, 1, admit) }
+	if _, err = s.Store.DB.Exec("CREATE TRIGGER fixture_backup_admission BEFORE INSERT ON settings WHEN NEW.key='host.maintenance-job.phase' BEGIN SELECT RAISE(ABORT,'admission failure'); END"); err != nil {
+		t.Fatal(err)
+	}
+	if err = consume(); err == nil {
+		t.Fatal("failed admission consumed approval")
+	}
+	var count int
+	if err = s.Store.DB.QueryRow("SELECT count(*) FROM challenges WHERE token_hash=?", state.Hash(grant)).Scan(&count); err != nil || count != 1 {
+		t.Fatal("approval lost on rollback", count, err)
+	}
+	if err = s.Store.Transaction(ctx, state.RequireAdmission); err != nil {
+		t.Fatal("failed admission left a barrier", err)
+	}
+	if _, err = s.Store.DB.Exec("DROP TRIGGER fixture_backup_admission"); err != nil {
+		t.Fatal(err)
+	}
+	if err = consume(); err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := s.Store.InspectMaintenanceJob(ctx, token)
+	if err != nil || persisted != job || job.Device != actor.Device.ID || job.Phase != "draining" {
+		t.Fatal(persisted, job, err)
+	}
+	if err = s.Store.Transaction(ctx, state.RequireAdmission); !errors.Is(err, state.ErrMaintenance) {
+		t.Fatal("approved admission did not close new work", err)
+	}
+	if err = consume(); !errors.Is(err, ErrDenied) {
+		t.Fatal("backup approval replay accepted", err)
+	}
+	if err = s.Store.DB.QueryRow("SELECT count(*) FROM challenges WHERE token_hash=?", state.Hash(grant)).Scan(&count); err != nil || count != 0 {
+		t.Fatal("committed approval retained", count, err)
+	}
+}
