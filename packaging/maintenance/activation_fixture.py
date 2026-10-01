@@ -30,7 +30,7 @@ Description=Disposable HomeNode inherited listener test
 Requires={socket_unit}
 After={socket_unit}
 [Service]
-Type=oneshot
+Type=simple
 User=1001
 Group=1001
 Sockets={socket_unit}
@@ -89,6 +89,11 @@ RemoveOnStop=yes
     if phase != "inactive" or result != "0":
         raise RuntimeError("activated service failed")
     print("Root-created named socket activated UID 1001; filesystem access denied; inherited accept succeeded.")
+except Exception:
+    for arguments in (("systemctl", "status", service, socket_unit, "--no-pager", "--full"), ("journalctl", "-u", service, "-u", socket_unit, "--no-pager", "-n", "80")):
+        result = subprocess.run(arguments, check=False, capture_output=True, text=True, timeout=30)
+        print(result.stdout, result.stderr, flush=True)
+    raise
 finally:
     subprocess.run(["systemctl", "stop", service, socket_unit], check=False, capture_output=True, timeout=30)
     for path in paths:

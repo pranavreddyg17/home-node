@@ -1279,3 +1279,7 @@ A new explicitly enabled disposable Linux root fixture creates temporary systemd
 Validation: Python syntax inspection, local activation tests, and final Linux test compilation passed. Actual systemd execution is pending the next CI run. This fixture qualifies the socket/service inheritance mechanism, not the complete installed controller or backup workflow.
 
 CI run 36832665192 failed in the new root prepared-maintenance fixture because it passed maintenance-accounts.json to saveJournalBytes, which accepts the canonical journal name maintenance-accounts and appends the extension itself. The fixture now uses the existing canonical API; production validation is unchanged. Native root success remains unproven until the rerun.
+
+CI run 36832958587 passed the root prepared-maintenance configuration tests after the journal-name correction, then failed while starting the new systemd socket fixture. Its captured exception did not retain systemd's startup diagnostics. The fixture now uses Type=simple to match the controller and prints unit/journal diagnostics before cleanup on failure. Actual systemd success remains unproven until rerun.
+
+Additional maintenance app-client tests verify that foreign device ownership, invalid job identity, and failed inspection never send a controller request. Reply cases require exactly version 1 and reject duplicate/extra/null/wrong-version/trailing/oversized/non-UTF-8 acknowledgements. The runtimeclient race suite passed locally.
