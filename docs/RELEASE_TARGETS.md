@@ -133,3 +133,11 @@ The inventory proves internal consistency only, not authenticity or executable
 qualification. Tests currently use small synthetic payloads; compressed payload
 integration, real build inspection, process resource enforcement and release
 qualification remain required before activating updates.
+
+`updates.ValidateCompressedPayload` streams gzip, zstd or uncompressed data to
+the payload validator, bounds compressed input to 512 MiB and preserves its
+2 GiB output limit. Zstd uses one decoder worker, at most a 32 MiB window and
+64 MiB decoder memory. Complete-stream/checksum errors reject the result.
+Tests cover valid compressed inventory, corruption, truncation, duplicate tar
+entries, trailing bytes and cancellation. Xz, isolated process enforcement,
+real distribution-package inspection and installation admission remain pending.

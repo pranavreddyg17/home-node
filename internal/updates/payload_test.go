@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -16,6 +17,9 @@ func payloadFixture(t *testing.T, scenario string) []byte {
 	writer := tar.NewWriter(&buffer)
 	var inventory strings.Builder
 	files := []string{"usr/bin/homenode", "usr/lib/homenode/homenode-supervisor", "usr/lib/homenode/homenode-transfer", "usr/lib/homenode/homenode-backup", "usr/lib/homenode/guest/homenode-guest", "usr/share/homenode/web/index.html"}
+	if scenario == "duplicate-entry" {
+		files = append(files, files[0])
+	}
 	if scenario == "outside" {
 		files = append(files, "etc/passwd")
 	}
@@ -70,12 +74,26 @@ func payloadFixture(t *testing.T, scenario string) []byte {
 }
 
 func TestPayloadInventoryAndInstallationPaths(t *testing.T) {
-	for _, scenario := range []string{"valid", "outside", "missing", "writable", "foreign-owner", "link", "corrupt-inventory", "duplicate-inventory"} {
+	for _, scenario := range []string{"valid", "outside", "missing", "writable", "foreign-owner", "link", "corrupt-inventory", "duplicate-inventory", "duplicate-entry"} {
 		t.Run(scenario, func(t *testing.T) {
 			err := ValidatePayloadArchive(context.Background(), bytes.NewReader(payloadFixture(t, scenario)))
 			if (scenario == "valid") != (err == nil) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestPayloadRejectsTruncatedTrailingAndCanceledInput(t *testing.T) {
+	valid := payloadFixture(t, "valid")
+	for _, data := range [][]byte{valid[:300], valid[:600], append(append([]byte(nil), valid...), 'x')} {
+		if err := ValidatePayloadArchive(context.Background(), bytes.NewReader(data)); err == nil {
+			t.Fatal("truncated or trailing payload accepted")
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := ValidatePayloadArchive(ctx, bytes.NewReader(valid)); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancellation lost", err)
 	}
 }
