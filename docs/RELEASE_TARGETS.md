@@ -102,3 +102,15 @@ sections still contain potentially compressed bytes. They must undergo bounded,
 constrained decompression and content validation before installation. The
 acquisition path does not yet invoke this inspection gate; production activation
 remains blocked on its full integration and real package qualification.
+
+`updates.ValidateCompressedControl` currently supports bounded uncompressed,
+gzip, and zstd control sections, verifies the complete compressed stream before
+parsing, and rejects more than 1 MiB of compressed or decompressed control.
+The zstd decoder uses one decoder worker with a 16 MiB window/memory limit;
+the implementation is pinned to `github.com/klauspost/compress v1.20.1`
+([upstream](https://github.com/klauspost/compress)). Context checks surround
+input and output reads. These cooperative checks do not replace process CPU
+limits. xz control decoding is still refused by this API: the evaluated Go xz
+reader dictionary option is not a hard maximum, so xz support requires the
+planned constrained inspection worker. The existing development package uses
+xz and therefore is not yet qualified by this compression/content chain.

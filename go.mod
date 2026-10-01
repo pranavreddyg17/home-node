@@ -6,6 +6,7 @@ toolchain go1.26.8
 
 require (
 	github.com/go-webauthn/webauthn v0.18.2
+	github.com/klauspost/compress v1.20.1
 	modernc.org/sqlite v1.60.0
 )
 
@@ -16,7 +17,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/secure-systems-lab/go-securesystemslib v0.11.0 // indirect
 	github.com/sigstore/protobuf-specs v0.5.0 // indirect
-	github.com/sigstore/sigstore v1.10.6 // indirect
+	github.com/sigstore/sigstore v1.10.6
 	github.com/theupdateframework/go-tuf/v2 v2.4.2
 	golang.org/x/term v0.46.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250825161204-c5933d9347a5 // indirect
