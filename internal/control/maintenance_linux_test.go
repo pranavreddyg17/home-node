@@ -73,7 +73,7 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 		}
 	}
 	request := maintenanceRequest{Version: 1, Token: token, JobID: job.ID, DeviceID: device}
-	bridge := runtimeclient.NewMaintenanceApps(listener.Addr().String(), uid, server.Store.InspectMaintenanceJob)
+	bridge := runtimeclient.NewOwnedMaintenanceApps(listener.Addr().String(), uid, token, job.ID, device)
 	defer bridge.Close()
 	foreignPeer := runtimeclient.NewMaintenanceApps(listener.Addr().String(), uid+2, server.Store.InspectMaintenanceJob)
 	defer foreignPeer.Close()

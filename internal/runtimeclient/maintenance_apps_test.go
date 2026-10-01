@@ -83,3 +83,36 @@ func TestPublicationAcknowledgementValidatesBeforeTransport(t *testing.T) {
 		t.Fatal("valid acknowledgement failed", err)
 	}
 }
+
+func TestOwnedMaintenanceClientBindsDispatchedIdentity(t *testing.T) {
+	token, jobID, device := state.Random(), state.Random(), state.Random()
+	client := NewOwnedMaintenanceApps("/tmp/owned-maintenance-fixture.sock", 1001, token, jobID, device)
+	defer client.Close()
+	calls := 0
+	client.client.Transport = maintenanceRoundTrip(func(request *http.Request) (*http.Response, error) {
+		calls++
+		raw, err := io.ReadAll(request.Body)
+		if err != nil || !strings.Contains(string(raw), `"jobId":"`+jobID+`"`) {
+			t.Fatal("dispatch job binding lost", err)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"version":1}`))}, nil
+	})
+	if err := client.ConfirmStaging(context.Background(), state.Random(), device); err == nil || calls != 0 {
+		t.Fatal("foreign token reached controller")
+	}
+	if err := client.ConfirmStaging(context.Background(), token, state.Random()); err == nil || calls != 0 {
+		t.Fatal("foreign device reached controller")
+	}
+	if err := client.ConfirmStaging(context.Background(), token, device); err != nil || calls != 1 {
+		t.Fatal("bound request refused", err)
+	}
+	for _, invalid := range []*MaintenanceAppsClient{
+		NewOwnedMaintenanceApps("/tmp/owned-maintenance-fixture.sock", 0, token, jobID, device),
+		NewActivatedOwnedMaintenanceApps("/tmp/owned-maintenance-fixture.sock", "short", jobID, device),
+		NewActivatedOwnedMaintenanceApps("relative.sock", token, jobID, device),
+	} {
+		if invalid.client != nil {
+			t.Fatal("invalid owned transport admitted")
+		}
+	}
+}

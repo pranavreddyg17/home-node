@@ -138,3 +138,34 @@ func (c *MaintenanceAppsClient) RecordPublication(ctx context.Context, token, de
 	}
 	return c.callPayload(ctx, "/v1/maintenance/ack-publish", token, device, snapshot)
 }
+
+// NewOwnedMaintenanceApps binds a client to one job received through trusted
+// coordinator dispatch. Binding is not authorization: the controller checks
+// current token/job/device/phase and kernel peer identity on every request.
+// No local management database or inspector callback is needed.
+func NewOwnedMaintenanceApps(socket string, controllerUID uint32, token, jobID, device string) *MaintenanceAppsClient {
+	if controllerUID == 0 {
+		return &MaintenanceAppsClient{}
+	}
+	return newOwnedMaintenanceApps(socket, controllerUID, token, jobID, device)
+}
+
+// NewActivatedOwnedMaintenanceApps uses the installed root-created systemd
+// listener and binds the exact dispatched job. Never use it for arbitrary sockets.
+func NewActivatedOwnedMaintenanceApps(socket, token, jobID, device string) *MaintenanceAppsClient {
+	return newOwnedMaintenanceApps(socket, 0, token, jobID, device)
+}
+func newOwnedMaintenanceApps(socket string, listenerUID uint32, token, jobID, device string) *MaintenanceAppsClient {
+	if !maintenanceID.MatchString(token) || !maintenanceID.MatchString(jobID) || !maintenanceID.MatchString(device) {
+		return &MaintenanceAppsClient{}
+	}
+	return newMaintenanceApps(socket, listenerUID, func(ctx context.Context, supplied string) (state.MaintenanceJob, error) {
+		if err := ctx.Err(); err != nil {
+			return state.MaintenanceJob{}, err
+		}
+		if supplied != token {
+			return state.MaintenanceJob{}, ErrMaintenance
+		}
+		return state.MaintenanceJob{ID: jobID, Device: device}, nil
+	})
+}
