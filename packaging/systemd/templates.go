@@ -4,7 +4,7 @@ package servicetemplates
 
 import "embed"
 
-//go:embed *.service
+//go:embed *.service *.socket
 var units embed.FS
 
 func Unit(name string) ([]byte, error) { return units.ReadFile(name) }

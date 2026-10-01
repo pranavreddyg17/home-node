@@ -1,0 +1,35 @@
+[Unit]
+Description=HomeNode isolated encrypted backup worker
+Requires=homenode-control.service homenode-backup-credential.socket
+After=homenode-control.service homenode-backup-credential.socket
+ConditionPathExists=/etc/homenode/backup.env
+
+[Service]
+Type=simple
+User=homenode-backup
+Group=homenode-backup
+Sockets=homenode-backup-credential.socket
+EnvironmentFile=/etc/homenode/backup.env
+ExecStart=/usr/lib/homenode/homenode-backup --controller-uid ${CONTROLLER_UID} --controller-gid ${CONTROLLER_GID} --repository-mount /mnt/homenode-backup --repository-uuid ${BACKUP_UUID} --repository-id ${BACKUP_REPOSITORY_ID} --release ${INSTALLED_RELEASE} --catalog-version ${CATALOG_VERSION} --minimum-catalog-version ${MINIMUM_CATALOG_VERSION}
+UMask=0077
+Restart=no
+TimeoutStopSec=60
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+DevicePolicy=closed
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/var/lib/homenode-backup/staging /mnt/homenode-backup
+InaccessiblePaths=-/var/lib/homenode/control -/var/lib/homenode/volumes -/var/lib/homenode/images -/var/lib/homenode/supervisor -/etc/homenode/tls -/run/homenode/supervisor.sock -/run/homenode-transfer
+MemoryMax=1G
+TasksMax=64

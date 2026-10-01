@@ -90,7 +90,7 @@ jobs:
           dpkg-deb --field "$GITHUB_WORKSPACE/artifacts/homenode_0.1.0~ci_amd64.deb" Depends | rg '\brestic\b'
           test -f usr/share/homenode/web/index.html
           sudo apt-get install -y "$GITHUB_WORKSPACE/artifacts/homenode_0.1.0~ci_amd64.deb"
-          systemd-analyze verify "$GITHUB_WORKSPACE"/packaging/systemd/*.service "$GITHUB_WORKSPACE"/packaging/systemd/*.slice
+          systemd-analyze verify "$GITHUB_WORKSPACE"/packaging/systemd/*.service "$GITHUB_WORKSPACE"/packaging/systemd/*.socket "$GITHUB_WORKSPACE"/packaging/systemd/*.slice
       - name: Build verified guest adapter overlays
         run: |
           python3 packaging/guest/overlay_test.py

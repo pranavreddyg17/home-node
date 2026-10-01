@@ -50,3 +50,28 @@ that trust by itself: startup uses the greater of the protected floor and its
 highest previously accepted version, rejecting malformed/missing values.
 Existing development installations need a reviewed configuration migration for
 this new required file; do not remove ownership journals to force adoption.
+
+The inactive backup templates add a root-created controller-group packet socket
+and a separate `homenode-backup` worker. Unlike the management stream listener,
+`credential.sock` is group `homenode`; the backup worker receives its descriptor
+through activation and must not belong to the controller group. The service has
+no automatic restart because publication failures require reconciliation before
+another job. It has no default target, password, or release identity.
+
+These templates require a root-owned, root-writable-only
+`/etc/homenode/backup.env`, generated from verified installed metadata and an
+approved external repository registration. It supplies `CONTROLLER_UID`,
+`CONTROLLER_GID`, `BACKUP_UUID`, `BACKUP_REPOSITORY_ID`, `INSTALLED_RELEASE`,
+`CATALOG_VERSION`, and `MINIMUM_CATALOG_VERSION`. Passwords must never enter this
+file. The template fixes the external mount at `/mnt/homenode-backup`; setup must
+verify it is the registered mounted filesystem, provision repository permissions,
+and reserve staging space before activation. Missing/mismatched drives must fail,
+never fall back to an ordinary host directory.
+
+`DevicePolicy=closed` prevents block-device I/O while retaining metadata visibility
+for `/dev/disk/by-uuid` admission. `PrivateDevices=yes` would hide that identity
+and is deliberately absent. No capabilities or network sockets are granted.
+The 1 GiB memory ceiling is a development ceiling requiring measured host reserve
+qualification, not a supported-device performance claim. The installer does not
+yet emit backup.env, promote these templates, enable the socket, or coordinate
+approved owner jobs; actual worker startup and confinement remain release gates.
