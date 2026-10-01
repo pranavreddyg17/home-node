@@ -73,6 +73,10 @@ func (e *Engine) OpenUpdateInspection(ctx context.Context, release *updates.Acqu
 func (e *Engine) openUpdateInspectionOwned(ctx context.Context, release *updates.AcquiredRelease, operation string) (*updates.InspectionStage, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.openUpdateInspectionLocked(ctx, release, operation)
+}
+
+func (e *Engine) openUpdateInspectionLocked(ctx context.Context, release *updates.AcquiredRelease, operation string) (*updates.InspectionStage, error) {
 	configuration, err := e.readUpdateRepositoryLocked(ctx)
 	if err != nil {
 		return nil, err
@@ -92,6 +96,36 @@ func (e *Engine) openUpdateInspectionOwned(ctx context.Context, release *updates
 			err = errors.Join(err, stage.Close())
 		}
 		return nil, errors.Join(err, closeErr)
+	}
+	return stage, nil
+}
+
+// PrepareUpdateInspectionLaunch admits the owned package and durably publishes
+// fixed service inputs while retaining the exclusive execution lock. It does
+// not activate a service or authorize installation. Existing launch state must
+// be reconciled explicitly instead of being overwritten on retry.
+func (e *Engine) PrepareUpdateInspectionLaunch(ctx context.Context, release *updates.AcquiredRelease, operation string) (*updates.InspectionStage, error) {
+	if os.Geteuid() != 0 || e.host.Name() != "/" {
+		return nil, ErrConflict
+	}
+	return e.prepareUpdateInspectionLaunchOwned(ctx, release, operation)
+}
+
+func (e *Engine) prepareUpdateInspectionLaunchOwned(ctx context.Context, release *updates.AcquiredRelease, operation string) (*updates.InspectionStage, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	stage, err := e.openUpdateInspectionLocked(ctx, release, operation)
+	if err != nil {
+		return nil, err
+	}
+	parent, err := e.host.OpenRoot("var/lib/homenode-update")
+	if err != nil {
+		return nil, errors.Join(err, stage.Close())
+	}
+	publishErr := stage.PublishEnvironment(ctx, parent)
+	closeErr := parent.Close()
+	if publishErr != nil || closeErr != nil {
+		return nil, errors.Join(publishErr, closeErr, stage.Close())
 	}
 	return stage, nil
 }

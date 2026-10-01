@@ -97,6 +97,37 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	if err := stage.Close(); err != nil {
 		t.Fatal(err)
 	}
+	launch, err := engine.prepareUpdateInspectionLaunchOwned(ctx, release, "inspection-fixture-000001")
+	if err != nil {
+		t.Fatal("owned launch preparation failed", err)
+	}
+	expectedEnvironment, err := launch.Environment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	publishedEnvironment, err := os.ReadFile(filepath.Join(host, "var/lib/homenode-update/inspection.env"))
+	if err != nil || string(publishedEnvironment) != string(expectedEnvironment) {
+		t.Fatal("owned launch configuration differs", err)
+	}
+	if other, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000001"); err == nil {
+		other.Close()
+		t.Fatal("prepared launch lost execution lock")
+	}
+	if err := launch.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if other, err := engine.prepareUpdateInspectionLaunchOwned(ctx, release, "inspection-fixture-000001"); err == nil {
+		other.Close()
+		t.Fatal("existing launch silently replaced")
+	}
+	// Failed repeat preparation must release admission for explicit recovery.
+	reopened, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000001")
+	if err != nil {
+		t.Fatal("failed preparation leaked lock", err)
+	}
+	if err := reopened.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if other, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000002"); err == nil {
 		other.Close()
 		t.Fatal("wrong inspection operation admitted")
