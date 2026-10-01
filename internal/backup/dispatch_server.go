@@ -23,7 +23,7 @@ func ServeDispatch(ctx context.Context, listener net.Listener, controllerUID uin
 	return serveDispatch(ctx, listener, controllerUID, func(ctx context.Context, connection *net.UnixConn, uid uint32) (Dispatch, *os.File, error) {
 		dispatch, err := ReceiveDispatch(ctx, connection, uid)
 		return dispatch, nil, err
-	}, operation)
+	}, operation, nil)
 }
 
 // ServeCredentialDispatch belongs on the separate private credential channel.
@@ -32,10 +32,17 @@ func ServeDispatch(ctx context.Context, listener net.Listener, controllerUID uin
 // A callback may consume/close its credential earlier; no descriptor is retained
 // after its return. Delivery and callback completion are not publication proof.
 func ServeCredentialDispatch(ctx context.Context, listener net.Listener, controllerUID uint32, work func(context.Context, Dispatch, *os.File) error) error {
-	return serveDispatch(ctx, listener, controllerUID, ReceiveCredentialDispatch, work)
+	return serveDispatch(ctx, listener, controllerUID, ReceiveCredentialDispatch, work, nil)
 }
 
-func serveDispatch(ctx context.Context, listener net.Listener, controllerUID uint32, receive func(context.Context, *net.UnixConn, uint32) (Dispatch, *os.File, error), work func(context.Context, Dispatch, *os.File) error) (resultErr error) {
+// ServeAcknowledgedCredentialDispatch acknowledges only successful callback
+// return after received credential closure. Publication still requires durable
+// outcome inspection; lost acknowledgements must never trigger job replay.
+func ServeAcknowledgedCredentialDispatch(ctx context.Context, listener net.Listener, controllerUID uint32, work func(context.Context, Dispatch, *os.File) error) error {
+	return serveDispatch(ctx, listener, controllerUID, ReceiveCredentialDispatch, work, sendWorkerCompletion)
+}
+
+func serveDispatch(ctx context.Context, listener net.Listener, controllerUID uint32, receive func(context.Context, *net.UnixConn, uint32) (Dispatch, *os.File, error), work func(context.Context, Dispatch, *os.File) error, complete func(context.Context, *net.UnixConn, Dispatch) error) (resultErr error) {
 	if listener == nil {
 		return ErrManifest
 	}
@@ -103,6 +110,17 @@ func serveDispatch(ctx context.Context, listener net.Listener, controllerUID uin
 				return
 			}
 			err = work(operation, dispatch, credential)
+			if complete != nil && err == nil {
+				if credential != nil {
+					closeErr := credential.Close()
+					if closeErr != nil && !errors.Is(closeErr, os.ErrClosed) {
+						err = closeErr
+					}
+				}
+				if err == nil {
+					err = complete(operation, packet, dispatch)
+				}
+			}
 			if err != nil && serving.Err() == nil {
 				failure <- err
 				cancel()

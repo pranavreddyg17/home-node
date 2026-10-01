@@ -3,6 +3,7 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pranavreddyg17/home-node/internal/disktransport"
 	"github.com/pranavreddyg17/home-node/internal/state"
 )
 
@@ -118,5 +120,58 @@ func TestCredentialServerJoinsWorkAndClosesReceivedDescriptor(t *testing.T) {
 				t.Fatal("credential server shutdown stuck")
 			}
 		})
+	}
+}
+
+func TestAcknowledgedCredentialServerClosesCredentialBeforeCompletion(t *testing.T) {
+	uid := uint32(os.Geteuid())
+	if uid == 0 {
+		t.Skip("unprivileged controller peer required")
+	}
+	address := &net.UnixAddr{Net: "unixpacket", Name: filepath.Join(t.TempDir(), "complete.sock")}
+	listener, err := net.ListenUnix("unixpacket", address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	received := make(chan *os.File, 1)
+	done := make(chan error, 1)
+	go func() {
+		done <- ServeAcknowledgedCredentialDispatch(ctx, listener, uid, func(_ context.Context, _ Dispatch, file *os.File) error { received <- file; return nil })
+	}()
+	sender, err := net.DialUnix("unixpacket", nil, address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sender.Close()
+	source, err := CreateRepositoryPassword([]byte("fixture-secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Close()
+	job := Dispatch{Version: 1, JobID: state.Random(), DeviceID: state.Random(), ManagementToken: state.Random(), RuntimeToken: state.Random(), Release: "0.1.0", CatalogVersion: 1}
+	if err = SendCredentialDispatch(ctx, sender, uid, job, source); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := disktransport.ReceivePacket(ctx, sender)
+	if err != nil || !bytes.Equal(raw, completionPacket(job)) {
+		t.Fatal("completion not job-bound", string(raw), err)
+	}
+	file := <-received
+	if _, err = file.Stat(); err == nil {
+		t.Fatal("completion preceded received credential closure")
+	}
+	if _, err = source.Stat(); err != nil {
+		t.Fatal("sender credential ownership lost", err)
+	}
+	cancel()
+	select {
+	case err = <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("server shutdown did not join")
 	}
 }

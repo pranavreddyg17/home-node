@@ -125,7 +125,7 @@ func RunCredentialedDispatchedBackup(ctx context.Context, dispatch backup.Dispat
 // trusted installed configuration and an exclusively owned protected listener.
 // Durable controller outcomes, not socket closure, establish publication.
 func ServeRegisteredBackupWorker(ctx context.Context, listener net.Listener, controllerUID uint32, config BackupWorkerConfig) error {
-	return backup.ServeCredentialDispatch(ctx, listener, controllerUID, func(operation context.Context, dispatch backup.Dispatch, credential *os.File) error {
+	return backup.ServeAcknowledgedCredentialDispatch(ctx, listener, controllerUID, func(operation context.Context, dispatch backup.Dispatch, credential *os.File) error {
 		_, err := RunCredentialedDispatchedBackup(operation, dispatch, config, credential)
 		return err
 	})

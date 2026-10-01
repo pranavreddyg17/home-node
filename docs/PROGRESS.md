@@ -1525,3 +1525,11 @@ State and control race suites passed, including orphan, legacy and mismatch case
 ### Linux CI allowance for observed prerequisite latency
 
 CI 36885051090 completed prerequisite installation successfully from 15:32:33 to 15:51:51 UTC, consuming over 19 minutes before the native suite. The existing 20-minute whole-job ceiling cannot accommodate that observed provisioning latency plus required qualification. Subsequent Linux checks use a bounded 45-minute ceiling, retaining every test and package/browser gate. This changes observation capacity, not implementation or qualification success. The current run remains active and its result must still be inspected.
+
+### Credential worker completion handoff
+
+ServeAcknowledgedCredentialDispatch adds a distinct successful-callback completion response bound to the exact job ID. It closes the received credential before emitting the descriptor-free response; callback or response failure stops the service through the existing joined failure path. Ordinary credential dispatch server behavior remains separate. The registered backup worker now uses this acknowledged mode, so repository/staging/temporary-password cleanup inside its callback precedes the completion response.
+
+SendActivatedCredentialDispatchAndWait authenticates the trusted root-created activated listener through the existing sender, sends once, and waits within the caller deadline capped at two hours for the exact completion packet. It never retries and rejects mismatched packets or unexpected descriptors through the shared transport. Completion does not prove durable publication, repository health, or successful restoration. Delivery/response failure requires owned-job reconciliation before barrier release/replay.
+
+Local backup/runtimeclient/command race suites passed, final Linux backup test compilation and diff checks passed. A Linux fixture checks job-bound completion after received descriptor closure, sender-handle retention, and joined shutdown; native execution awaits CI. Controller coordinator integration and crash/lost-response reconciliation remain unfinished, along with owner launch/drive/password and complete replacement-host recovery.
