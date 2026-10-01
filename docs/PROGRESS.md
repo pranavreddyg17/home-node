@@ -1265,3 +1265,9 @@ Validation: installer race tests passed before the final explicit association/or
 The disposable root installer fixture now builds a maintenance-enabled configuration and complete modeled ownership journals before checking the prepared installation. Its success case verifies the returned backup identity while preserving the distinction from live account verification. Refusal cases cover a changed controller unit, changed socket permissions/configuration, a missing socket unit, and an unfinished backup-account journal. Existing image/configuration fixtures retain their standard behavior through an optional maintenance fixture parameter. No accounts or services are changed by this fixture.
 
 Validation: local installer race tests and Linux compilation passed; the root-specific prepared-maintenance cases are skipped on the owner Mac and await native CI. Current CI run 36832293129 for the installer implementation remains active.
+
+### Private controller request cancellation on listener failure
+
+The private maintenance server now uses its own cancellable context for every request, cancelling it on listener failure as well as owner shutdown. Admission is synchronized with cancellation; admitted handlers are joined after HTTP shutdown so management state cannot close while trusted maintenance callbacks remain active. A private injected-handler fixture exercises cancellation and listener error with an already admitted blocked request, verifying its context is cancelled and its handler exits before service return.
+
+Validation: controller race tests and Linux compilation passed. CI run 36832293129 completed successfully at 86586e9d1e58ff3092263264571a2f479c8097b4, validating the installer socket configuration implementation. The new root prepared-maintenance fixture and active-request cancellation additions await the upcoming native run. Actual systemd activation and production backup daemon/public workflows remain required.
