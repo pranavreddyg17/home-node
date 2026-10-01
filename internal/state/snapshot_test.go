@@ -29,6 +29,8 @@ func TestRecoverySnapshotIncludesCommittedWALAndExcludesTrust(t *testing.T) {
 		{`INSERT INTO settings VALUES('origin','https://old-host.example')`, nil},
 		{`INSERT INTO settings VALUES('host.maintenance','active-source-barrier')`, nil},
 		{`INSERT INTO settings VALUES('host.backup-publication','source-publication-intent')`, nil},
+		{`INSERT INTO settings VALUES('host.backup-outcome.current','source-outcome')`, nil},
+		{`INSERT INTO settings VALUES('host.backup-outcome.last-success','source-success')`, nil},
 		{`INSERT INTO settings VALUES('host.maintenance-job.root-token','source-root-token')`, nil},
 		{`INSERT INTO settings VALUES('host.activity.fixture','trash-expiry')`, nil},
 		{`INSERT INTO settings VALUES('retained-config','committed-WAL-value')`, nil},
