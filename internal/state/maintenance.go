@@ -184,7 +184,18 @@ func (s *Store) InspectMaintenance(ctx context.Context, token string) (Maintenan
 		if token == "" || owner != token {
 			return ErrMaintenanceOwner
 		}
-		return tx.QueryRow(`SELECT
+		inventory, err = readMaintenanceInventory(tx)
+		return err
+	})
+	if err != nil {
+		return MaintenanceInventory{}, err
+	}
+	return inventory, nil
+}
+
+func readMaintenanceInventory(tx *sql.Tx) (MaintenanceInventory, error) {
+	var inventory MaintenanceInventory
+	err := tx.QueryRow(`SELECT
    (SELECT count(*) FROM settings WHERE key GLOB 'host.activity.*'),
    (SELECT count(*) FROM transfers WHERE state NOT IN('ready','cancelled','expired')),
    (SELECT count(*) FROM jobs WHERE state NOT IN('succeeded','failed','cancelled','interrupted')),
@@ -195,9 +206,5 @@ func (s *Store) InspectMaintenance(ctx context.Context, token string) (Maintenan
      CASE WHEN json_valid(value) THEN COALESCE(json_extract(value,'$.state'),'') ELSE '' END<>'done'),
    (SELECT count(*) FROM orphan_objects)
   `).Scan(&inventory.Activities, &inventory.Transfers, &inventory.Jobs, &inventory.Generations, &inventory.Operations, &inventory.Apps, &inventory.Cleanup, &inventory.Orphans)
-	})
-	if err != nil {
-		return MaintenanceInventory{}, err
-	}
-	return inventory, nil
+	return inventory, err
 }

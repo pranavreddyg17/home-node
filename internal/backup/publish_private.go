@@ -10,6 +10,7 @@ import (
 type ManagementPublication interface {
 	BeginPublishing(context.Context, string, string) error
 	ConfirmPublishing(context.Context, string, string) error
+	ClaimPublication(context.Context, string, string) error
 }
 
 // PublishPrivateRecoverySet writes an already staged recovery set while the
@@ -32,6 +33,9 @@ func PublishPrivateRecoverySet(ctx context.Context, management ManagementPublica
 		return "", err
 	}
 	if err = management.ConfirmPublishing(ctx, token, device); err != nil {
+		return "", err
+	}
+	if err = management.ClaimPublication(ctx, token, device); err != nil {
 		return "", err
 	}
 	snapshotID, err = repository.Snapshot(ctx, directory, manifest, policy)

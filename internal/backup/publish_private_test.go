@@ -54,3 +54,7 @@ func TestPrivatePublicationPreservesSnapshotAfterConfirmationFailure(t *testing.
 		}
 	}
 }
+
+func (m *publicationManagementFixture) ClaimPublication(context.Context, string, string) error {
+	return nil
+}

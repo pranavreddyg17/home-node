@@ -72,7 +72,7 @@ func (s *Server) MaintenanceHandler(controllerUID, backupUID uint32) http.Handle
 			http.Error(w, "peer denied", 403)
 			return
 		}
-		if r.Method != "POST" || r.URL.RawQuery != "" || (r.URL.Path != "/v1/maintenance/drain" && r.URL.Path != "/v1/maintenance/restore" && r.URL.Path != "/v1/maintenance/snapshot" && r.URL.Path != "/v1/maintenance/verify-stage" && r.URL.Path != "/v1/maintenance/begin-publish" && r.URL.Path != "/v1/maintenance/verify-publish") {
+		if r.Method != "POST" || r.URL.RawQuery != "" || (r.URL.Path != "/v1/maintenance/drain" && r.URL.Path != "/v1/maintenance/restore" && r.URL.Path != "/v1/maintenance/snapshot" && r.URL.Path != "/v1/maintenance/verify-stage" && r.URL.Path != "/v1/maintenance/begin-publish" && r.URL.Path != "/v1/maintenance/verify-publish" && r.URL.Path != "/v1/maintenance/claim-publish") {
 			http.NotFound(w, r)
 			return
 		}
@@ -93,7 +93,7 @@ func (s *Server) MaintenanceHandler(controllerUID, backupUID uint32) http.Handle
 			http.Error(w, "maintenance blocked", 409)
 			return
 		}
-		if r.URL.Path == "/v1/maintenance/begin-publish" || r.URL.Path == "/v1/maintenance/verify-publish" {
+		if r.URL.Path == "/v1/maintenance/begin-publish" || r.URL.Path == "/v1/maintenance/verify-publish" || r.URL.Path == "/v1/maintenance/claim-publish" {
 			inventory, inspectErr := s.Store.InspectMaintenance(ctx, request.Token)
 			if inspectErr != nil || job.RootToken == "" || inventory != (state.MaintenanceInventory{}) {
 				http.Error(w, "maintenance blocked", 409)
@@ -103,6 +103,9 @@ func (s *Server) MaintenanceHandler(controllerUID, backupUID uint32) http.Handle
 				err = s.Store.AdvanceMaintenanceJob(ctx, request.Token, request.JobID, "staging", "publishing")
 			} else if job.Phase != "publishing" {
 				err = state.ErrMaintenance
+			}
+			if err == nil && r.URL.Path == "/v1/maintenance/claim-publish" {
+				err = s.Store.ClaimBackupPublication(ctx, request.Token, request.JobID, request.DeviceID)
 			}
 			if err != nil {
 				http.Error(w, "maintenance blocked", 409)

@@ -117,3 +117,7 @@ func (c *MaintenanceAppsClient) BeginPublishing(ctx context.Context, token, devi
 func (c *MaintenanceAppsClient) ConfirmPublishing(ctx context.Context, token, device string) error {
 	return c.call(ctx, "/v1/maintenance/verify-publish", token, device)
 }
+
+func (c *MaintenanceAppsClient) ClaimPublication(ctx context.Context, token, device string) error {
+	return c.call(ctx, "/v1/maintenance/claim-publish", token, device)
+}
