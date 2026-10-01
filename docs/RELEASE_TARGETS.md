@@ -122,3 +122,14 @@ joined fixture validates a gzip control section within an ar container, rejects
 version mismatch, hooks and truncation, and explicitly uses an unqualified data
 payload: passing this control check says nothing about payload contents. Real
 build output inspection and constrained xz support still require qualification.
+
+`updates.ValidatePayloadArchive` inspects an uncompressed data tar without
+extracting files. It bounds input/regular data to 2 GiB, each regular file to
+256 MiB, entry count to 4096 and paths to 240 bytes. It requires root ownership,
+normal directory/file modes, the five packaged executables and web index, refuses
+links/special files and files outside HomeNode distribution paths, and hashes
+all regular files against a complete, duplicate-free `SHA256SUMS` inventory.
+The inventory proves internal consistency only, not authenticity or executable
+qualification. Tests currently use small synthetic payloads; compressed payload
+integration, real build inspection, process resource enforcement and release
+qualification remain required before activating updates.
