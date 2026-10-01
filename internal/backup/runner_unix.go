@@ -20,6 +20,13 @@ func lockMaintenanceRunner(ctx context.Context, directory string) (*os.File, err
 		return nil, err
 	}
 	defer root.Close()
+	return lockPrivateRunnerRoot(ctx, root)
+}
+
+func lockPrivateRunnerRoot(ctx context.Context, root *os.Root) (*os.File, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	parent, err := root.Open(".")
 	if err != nil {
 		return nil, err
