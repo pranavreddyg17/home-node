@@ -32,6 +32,10 @@ func newVerificationSession(ctx context.Context, provisioned *os.Root, repositor
 	if err != nil {
 		return nil, err
 	}
+	return newVerificationSessionWithFetcher(ctx, provisioned, fetcher)
+}
+
+func newVerificationSessionWithFetcher(ctx context.Context, provisioned *os.Root, fetcher *metadataFetcher) (*verificationSession, error) {
 	cache, err := lockMetadataCache(ctx, provisioned)
 	if err != nil {
 		fetcher.client.CloseIdleConnections()
