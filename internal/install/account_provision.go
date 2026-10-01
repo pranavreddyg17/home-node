@@ -100,6 +100,7 @@ func (e *Engine) provisionAccounts(ctx context.Context, b accountProvisionBacken
 	j, err := e.loadAccountJournal()
 	if os.IsNotExist(err) {
 		snapshot, err := b.Snapshot(ctx)
+		defer clear(snapshot.shadow)
 		if err != nil {
 			return empty, err
 		}
@@ -125,6 +126,7 @@ func (e *Engine) provisionAccounts(ctx context.Context, b accountProvisionBacken
 			return empty, err
 		}
 		snapshot, err := b.Snapshot(ctx)
+		defer clear(snapshot.shadow)
 		if err != nil {
 			return empty, err
 		}
@@ -153,6 +155,7 @@ func (e *Engine) provisionAccounts(ctx context.Context, b accountProvisionBacken
 				return empty, err
 			}
 			snapshot, err = b.Snapshot(ctx)
+			defer clear(snapshot.shadow)
 			if err != nil {
 				return empty, err
 			}

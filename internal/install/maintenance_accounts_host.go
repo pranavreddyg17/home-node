@@ -32,6 +32,7 @@ func InspectMaintenanceAccount(ctx context.Context) (MaintenanceAccount, error) 
 	if err != nil {
 		return empty, err
 	}
+	defer clear(shadow)
 	identity, err := ValidateMaintenanceAccount(passwd, groups, shadow)
 	if err != nil {
 		return empty, err

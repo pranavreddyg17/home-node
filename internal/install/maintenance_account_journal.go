@@ -35,6 +35,7 @@ func (e *Engine) prepareMaintenanceAccount(ctx context.Context, b accountProvisi
 		return empty, ErrConflict
 	}
 	snapshot, err := b.Snapshot(ctx)
+	defer clear(snapshot.shadow)
 	if err != nil {
 		return empty, err
 	}

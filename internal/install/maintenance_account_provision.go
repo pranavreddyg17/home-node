@@ -85,6 +85,7 @@ func (e *Engine) provisionMaintenanceAccount(ctx context.Context, b maintenanceP
 			return empty, err
 		}
 		snapshot, err := b.Snapshot(ctx)
+		defer clear(snapshot.shadow)
 		if err != nil {
 			return empty, err
 		}
@@ -123,6 +124,7 @@ func (e *Engine) provisionMaintenanceAccount(ctx context.Context, b maintenanceP
 				return empty, err
 			}
 			snapshot, err = b.Snapshot(ctx)
+			defer clear(snapshot.shadow)
 			if err != nil {
 				return empty, err
 			}

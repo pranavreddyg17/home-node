@@ -16,7 +16,9 @@ type fakeAccountProvisioner struct {
 func newAccountFixture() *fakeAccountProvisioner {
 	return &fakeAccountProvisioner{s: accountSnapshot{passwd: []byte("root:x:0:0:root:/root:/bin/bash\n"), groups: []byte("root:x:0:\nlibvirt-qemu:x:64055:libvirt-qemu\n"), shadow: []byte("root:!:1:0:99999:7:::\n"), nss: []byte("passwd: files\ngroup: files\nshadow: files\n")}}
 }
-func (b *fakeAccountProvisioner) Snapshot(context.Context) (accountSnapshot, error) { return b.s, nil }
+func (b *fakeAccountProvisioner) Snapshot(context.Context) (accountSnapshot, error) {
+	return accountSnapshot{passwd: append([]byte(nil), b.s.passwd...), groups: append([]byte(nil), b.s.groups...), shadow: append([]byte(nil), b.s.shadow...), nss: append([]byte(nil), b.s.nss...)}, nil
+}
 func (b *fakeAccountProvisioner) Lookup(_ context.Context, db, key string) (bool, error) {
 	if b.collide {
 		return true, nil
