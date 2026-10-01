@@ -59,8 +59,18 @@ func runBackup(ctx context.Context, store *state.Store, device string, apps Main
 			if job.Phase != "publishing" || job.RootToken != runtimeToken {
 				return state.ErrMaintenanceOwner
 			}
+			if err = store.ClaimBackupPublication(ctx, managementToken, job.ID, device); err != nil {
+				return err
+			}
 			result.SnapshotID, err = repository.Snapshot(ctx, directory, manifest, policy)
-			return err
+			if err != nil {
+				return err
+			}
+			if !repositoryPattern.MatchString(result.SnapshotID) {
+				result.SnapshotID = ""
+				return ErrRepository
+			}
+			return store.RecordBackupPublished(ctx, managementToken, job.ID, device, result.SnapshotID)
 		})
 	return result, resultErr
 }

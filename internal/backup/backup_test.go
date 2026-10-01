@@ -33,6 +33,10 @@ func (p *fixtureRecoveryPublisher) Snapshot(ctx context.Context, directory *os.F
 	if job.Phase != "publishing" || job.RootToken != p.root.token {
 		return "", state.ErrMaintenanceOwner
 	}
+	outcome, _, err := p.store.InspectBackupOutcomes(ctx)
+	if err != nil || outcome == nil || outcome.JobID != job.ID || outcome.Status != "unknown" {
+		return "", errors.New("repository write without durable claim")
+	}
 	// The publisher receives the pinned staging directory with the complete,
 	// validated management database and both disk payloads.
 	if len(manifest.Files) != 3 {
@@ -104,6 +108,24 @@ func TestBackupOrchestrationStagesBeforePublicationAndRetainsCleanupFailure(t *t
 			if scenario == "publication-failure" || scenario == "stage-failure" {
 				if result.SnapshotID != "" {
 					t.Fatal("failed backup claimed snapshot")
+				}
+			}
+			outcome, lastSuccess, inspectErr := store.InspectBackupOutcomes(ctx)
+			if inspectErr != nil {
+				t.Fatal(inspectErr)
+			}
+			switch scenario {
+			case "stage-failure":
+				if outcome != nil || lastSuccess != nil {
+					t.Fatal("stage failure created publication outcome")
+				}
+			case "publication-failure":
+				if outcome == nil || outcome.JobID != result.JobID || outcome.Status != "unknown" || lastSuccess != nil {
+					t.Fatal("uncertain publication lost")
+				}
+			default:
+				if outcome == nil || lastSuccess == nil || outcome.Status != "published" || outcome.SnapshotID != result.SnapshotID || *outcome != *lastSuccess {
+					t.Fatal("durable successful outcome missing")
 				}
 			}
 			if scenario == "cleanup-failure" {
