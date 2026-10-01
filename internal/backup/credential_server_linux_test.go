@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -33,8 +34,10 @@ func TestCredentialServerJoinsWorkAndClosesReceivedDescriptor(t *testing.T) {
 			release := make(chan struct{})
 			failure := errors.New("credential worker failure")
 			done := make(chan error, 1)
+			var calls atomic.Int32
 			go func() {
 				done <- ServeCredentialDispatch(ctx, listener, uid, func(operation context.Context, job Dispatch, credential *os.File) error {
+					calls.Add(1)
 					defer close(exited)
 					entered <- credential
 					if scenario == "worker-failure" {
@@ -64,6 +67,28 @@ func TestCredentialServerJoinsWorkAndClosesReceivedDescriptor(t *testing.T) {
 			case received = <-entered:
 			case <-time.After(time.Second):
 				t.Fatal("credential worker not entered")
+			}
+			overflow, err := net.DialUnix("unixpacket", nil, address)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer overflow.Close()
+			// Admission may close before send; either write outcome must leave
+			// this connection closed and the source credential retained.
+			_ = SendCredentialDispatch(ctx, overflow, uid, job, source)
+			if err = overflow.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			data := make([]byte, 1)
+			n, readErr := overflow.Read(data)
+			if n > 0 || readErr == nil {
+				t.Fatal("overflow credential connection returned data")
+			}
+			if timeout, ok := readErr.(net.Error); ok && timeout.Timeout() {
+				t.Fatal("overflow credential connection retained")
+			}
+			if calls.Load() != 1 {
+				t.Fatal("overflow credential entered worker")
 			}
 			switch scenario {
 			case "cancel":
