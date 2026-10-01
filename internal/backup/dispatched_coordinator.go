@@ -15,6 +15,21 @@ import (
 // Once delivery is attempted, any uncertain result retains barriers for explicit
 // reconciliation. The caller retains ownership of the sealed credential.
 func RunDispatchedMaintenance(ctx context.Context, store *state.Store, device, release string, catalogVersion int64, credential *os.File, apps MaintenanceApps, root MaintenanceRoot, deliver func(context.Context, Dispatch, *os.File) error) (jobID, snapshotID string, resultErr error) {
+	return runDispatchedMaintenance(ctx, store, device, "", "", release, catalogVersion, credential, apps, root, deliver)
+}
+
+// RunAdmittedDispatchedMaintenance takes over the draining intent committed
+// with owner approval. It requires the exact admission token, job and device;
+// advanced or uncertain jobs must use explicit recovery, never redispatch.
+// Invalid ownership leaves the existing job and barriers untouched.
+func RunAdmittedDispatchedMaintenance(ctx context.Context, store *state.Store, device, token, jobID, release string, catalogVersion int64, credential *os.File, apps MaintenanceApps, root MaintenanceRoot, deliver func(context.Context, Dispatch, *os.File) error) (string, string, error) {
+	if token == "" || jobID == "" {
+		return "", "", state.ErrMaintenanceOwner
+	}
+	return runDispatchedMaintenance(ctx, store, device, token, jobID, release, catalogVersion, credential, apps, root, deliver)
+}
+
+func runDispatchedMaintenance(ctx context.Context, store *state.Store, device, token, admittedJobID, release string, catalogVersion int64, credential *os.File, apps MaintenanceApps, root MaintenanceRoot, deliver func(context.Context, Dispatch, *os.File) error) (jobID, snapshotID string, resultErr error) {
 	if store == nil || apps == nil || root == nil || deliver == nil || credential == nil || !releasePattern.MatchString(release) || catalogVersion < 1 {
 		return "", "", ErrManifest
 	}
@@ -28,7 +43,15 @@ func RunDispatchedMaintenance(ctx context.Context, store *state.Store, device, r
 		return "", "", err
 	}
 	defer func() { resultErr = errors.Join(resultErr, runner.Close()) }()
-	token, job, err := store.BeginMaintenanceJob(ctx, device)
+	var job state.MaintenanceJob
+	if admittedJobID == "" {
+		token, job, err = store.BeginMaintenanceJob(ctx, device)
+	} else {
+		job, err = store.InspectMaintenanceJob(ctx, token)
+		if err == nil && (job.ID != admittedJobID || job.Device != device || job.Phase != "draining" || job.RootToken != "") {
+			err = state.ErrMaintenanceOwner
+		}
+	}
 	if err != nil {
 		return "", "", err
 	}

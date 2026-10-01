@@ -7,14 +7,17 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pranavreddyg17/home-node/internal/state"
 )
 
 func TestDispatchedCoordinatorRequiresCompletionAndPublicationBeforeRelease(t *testing.T) {
-	for _, scenario := range []string{"published", "delivery-failed", "missing-publication", "lost-completion"} {
+	for _, scenario := range []string{"published", "delivery-failed", "missing-publication", "lost-completion", "admitted-published", "admitted-delivery-failed", "admitted-missing-publication", "admitted-lost-completion"} {
 		t.Run(scenario, func(t *testing.T) {
+			admitted := strings.HasPrefix(scenario, "admitted-")
+			scenario = strings.TrimPrefix(scenario, "admitted-")
 			ctx := context.Background()
 			store, err := state.Open(filepath.Join(t.TempDir(), "management"))
 			if err != nil {
@@ -62,7 +65,46 @@ func TestDispatchedCoordinatorRequiresCompletionAndPublicationBeforeRelease(t *t
 				}
 				return nil
 			}
-			jobID, snapshot, err := RunDispatchedMaintenance(ctx, store, device, "0.1.0", 1, credential, apps, root, deliver)
+			var jobID, snapshot string
+			if admitted {
+				token, job, admissionErr := store.BeginMaintenanceJob(ctx, device)
+				if admissionErr != nil {
+					t.Fatal(admissionErr)
+				}
+				for _, wrong := range []string{"token", "job", "device", "phase"} {
+					owner, id, d := token, job.ID, device
+					switch wrong {
+					case "token":
+						owner = state.Random()
+					case "job":
+						id = state.Random()
+					case "device":
+						d = state.Random()
+					case "phase":
+						if err = store.AdvanceMaintenanceJob(ctx, token, job.ID, "draining", "freezing"); err != nil {
+							t.Fatal(err)
+						}
+					}
+					if _, _, denied := RunAdmittedDispatchedMaintenance(ctx, store, d, owner, id, "0.1.0", 1, credential, apps, root, deliver); denied == nil {
+						t.Fatal("invalid admitted ownership accepted", wrong)
+					}
+					if delivered.JobID != "" || root.released || apps.restored {
+						t.Fatal("invalid takeover changed barriers", wrong)
+					}
+					if wrong == "phase" {
+						// Fixture repair only: production must reconcile an advanced job.
+						if _, err = store.DB.Exec("UPDATE settings SET value='draining' WHERE key='host.maintenance-job.phase'"); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+				jobID, snapshot, err = RunAdmittedDispatchedMaintenance(ctx, store, device, token, job.ID, "0.1.0", 1, credential, apps, root, deliver)
+				if jobID != job.ID {
+					t.Fatal("admitted job replaced", jobID, job.ID)
+				}
+			} else {
+				jobID, snapshot, err = RunDispatchedMaintenance(ctx, store, device, "0.1.0", 1, credential, apps, root, deliver)
+			}
 			if jobID == "" || delivered.JobID != jobID {
 				t.Fatal("missing job binding")
 			}
