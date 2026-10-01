@@ -71,6 +71,9 @@ func main() {
 	socket := flag.String("socket", "/run/homenode/supervisor.sock", "local runtime socket")
 	accessGID := flag.Int("access-gid", -1, "controller/transfer shared runtime group")
 	transferGID := flag.Int("transfer-gid", -1, "transfer-only group")
+	maintenanceUID := flag.Int("maintenance-uid", -1, "distinct backup service UID; disabled when omitted")
+	maintenanceGID := flag.Int("maintenance-gid", -1, "distinct backup socket access group")
+	maintenanceSocket := flag.String("maintenance-socket", "/run/homenode/maintenance.sock", "backup-only local maintenance socket")
 	flag.Parse()
 	if runtime.GOOS != "linux" || os.Geteuid() != 0 || *accessGID < 1 || *transferGID < 1 {
 		fatal(fmt.Errorf("requires Linux, root service identity, and explicit service groups"))
@@ -90,6 +93,12 @@ func main() {
 	}
 	if err = policy.Validate(); err != nil {
 		fatal(err)
+	}
+	if err = validateMaintenancePeer(*maintenanceUID, *maintenanceGID, *accessGID, *transferGID, policy); err != nil {
+		fatal(err)
+	}
+	if *maintenanceUID != -1 && (!filepath.IsAbs(*maintenanceSocket) || filepath.Clean(*maintenanceSocket) != *maintenanceSocket || *maintenanceSocket == *socket) {
+		fatal(errors.New("invalid maintenance socket"))
 	}
 	keyBytes, err := readProtected(*publisher, 256)
 	if err != nil {
@@ -172,11 +181,46 @@ func main() {
 		fatal(err)
 	}
 	server := &http.Server{Handler: manager.Handler(), ConnContext: supervisor.PeerContext, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 95 * time.Second, IdleTimeout: 10 * time.Second, MaxHeaderBytes: 8192}
+	var maintenanceServer *http.Server
+	maintenanceDone := make(chan error, 1)
+	if *maintenanceUID != -1 {
+		maintenanceListener, listenErr := net.Listen("unix", *maintenanceSocket)
+		if listenErr != nil {
+			fatal(listenErr)
+		}
+		defer maintenanceListener.Close()
+		if err = os.Chown(*maintenanceSocket, 0, *maintenanceGID); err != nil {
+			fatal(err)
+		}
+		if err = os.Chmod(*maintenanceSocket, 0660); err != nil {
+			fatal(err)
+		}
+		maintenanceServer = &http.Server{Handler: manager.MaintenanceHandler(uint32(*maintenanceUID)), ConnContext: supervisor.PeerContext, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 95 * time.Second, IdleTimeout: 10 * time.Second, MaxHeaderBytes: 8192}
+		go func() {
+			serveErr := maintenanceServer.Serve(maintenanceListener)
+			if errors.Is(serveErr, http.ErrServerClosed) {
+				serveErr = nil
+			}
+			maintenanceDone <- serveErr
+			stop()
+		}()
+	}
 	shutdownDone := make(chan error, 1)
 	go func() {
 		<-ctx.Done()
 		deadline, cancel := context.WithTimeout(context.Background(), 100*time.Second)
+		maintenanceShutdown := make(chan error, 1)
+		if maintenanceServer != nil {
+			go func() { maintenanceShutdown <- maintenanceServer.Shutdown(deadline) }()
+		}
 		shutdownErr := server.Shutdown(deadline)
+		if maintenanceServer != nil {
+			maintenanceErr := <-maintenanceShutdown
+			if maintenanceErr != nil {
+				_ = maintenanceServer.Close()
+			}
+			shutdownErr = errors.Join(shutdownErr, maintenanceErr)
+		}
 		cancel()
 		if shutdownErr != nil {
 			_ = server.Close()
@@ -207,6 +251,9 @@ func main() {
 	if errors.Is(err, http.ErrServerClosed) {
 		err = nil
 	}
+	if maintenanceServer != nil {
+		err = errors.Join(err, <-maintenanceDone)
+	}
 	if err = errors.Join(err, <-shutdownDone); err != nil {
 		fatal(err)
 	}
@@ -224,4 +271,14 @@ func raiseCatalogFloor(configured int64, stored string) (int64, error) {
 		return accepted, nil
 	}
 	return configured, nil
+}
+
+func validateMaintenancePeer(uid, gid, accessGID, transferGID int, policy supervisor.Policy) error {
+	if uid == -1 && gid == -1 {
+		return nil
+	}
+	if uid < 1 || uint64(uid) > uint64(^uint32(0)) || gid < 1 || uint64(gid) > uint64(^uint32(0)) || uint32(uid) == policy.ControllerUID || uint32(uid) == policy.TransferUID || gid == accessGID || gid == transferGID {
+		return errors.New("maintenance requires distinct non-root backup UID and socket group")
+	}
+	return nil
 }
