@@ -87,8 +87,13 @@ func PlanMaintenanceAccountCreation(owner string, passwd, groups, shadow, nss []
 	if uid == 0 || gid == 0 {
 		return empty, ErrAccounts
 	}
-	return MaintenanceAccountPlan{OwnerID: owner, Identity: MaintenanceAccount{UID: uint32(uid), GID: gid}, Commands: []AccountCommand{
-		{Program: "/usr/sbin/groupadd", Arguments: []string{"--system", "--gid", strconv.Itoa(gid), "homenode-backup"}},
-		{Program: "/usr/sbin/useradd", Arguments: []string{"--system", "--uid", strconv.Itoa(uid), "--gid", "homenode-backup", "--no-create-home", "--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin", "--comment", "HomeNode install " + owner, "homenode-backup"}},
-	}}, nil
+	identity := MaintenanceAccount{UID: uint32(uid), GID: gid}
+	return MaintenanceAccountPlan{OwnerID: owner, Identity: identity, Commands: maintenanceCreationCommands(owner, identity)}, nil
+}
+
+func maintenanceCreationCommands(owner string, identity MaintenanceAccount) []AccountCommand {
+	return []AccountCommand{
+		{Program: "/usr/sbin/groupadd", Arguments: []string{"--system", "--gid", strconv.Itoa(identity.GID), "homenode-backup"}},
+		{Program: "/usr/sbin/useradd", Arguments: []string{"--system", "--uid", strconv.FormatUint(uint64(identity.UID), 10), "--gid", "homenode-backup", "--no-create-home", "--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin", "--comment", "HomeNode install " + owner, "homenode-backup"}},
+	}
 }
