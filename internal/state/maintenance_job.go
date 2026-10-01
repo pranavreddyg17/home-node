@@ -65,13 +65,6 @@ func (s *Store) BeginMaintenanceJob(ctx context.Context, device string) (string,
 		if err := RequireAdmission(tx); err != nil {
 			return err
 		}
-		var dispatches int
-		if err := tx.QueryRow("SELECT count(*) FROM settings WHERE key=?", backupDispatchKey).Scan(&dispatches); err != nil {
-			return err
-		}
-		if dispatches != 0 {
-			return ErrMaintenance
-		}
 		if err := maintenanceDevice(tx, device); err != nil {
 			return err
 		}
