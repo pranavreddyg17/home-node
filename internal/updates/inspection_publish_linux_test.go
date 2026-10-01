@@ -74,6 +74,25 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(parentPath, "inspection.env")); !os.IsNotExist(err) {
 		t.Fatal("rejected publication changed state", err)
 	}
+	pendingPath := filepath.Join(parentPath, "inspection.env.pending")
+	if err := os.WriteFile(pendingPath, []byte("interrupted launch"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.publishEnvironmentOwned(ctx, parent); err == nil {
+		t.Fatal("interrupted launch replaced")
+	}
+	retained, err := os.ReadFile(pendingPath)
+	if err != nil || string(retained) != "interrupted launch" {
+		t.Fatal("pending evidence changed", err)
+	}
+	if _, err := os.Lstat(filepath.Join(parentPath, "inspection.env")); !os.IsNotExist(err) {
+		t.Fatal("interrupted launch published", err)
+	}
+	// Only this disposable fixture explicitly removes interrupted state before
+	// exercising a new successful publication.
+	if err := os.Remove(pendingPath); err != nil {
+		t.Fatal(err)
+	}
 	if err := stage.publishEnvironmentOwned(ctx, parent); err != nil {
 		t.Fatal(err)
 	}
@@ -91,5 +110,8 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	}
 	if err := stage.publishEnvironmentOwned(ctx, parent); err == nil {
 		t.Fatal("existing launch configuration replaced")
+	}
+	if _, err := os.Lstat(pendingPath); !os.IsNotExist(err) {
+		t.Fatal("occupied publication created pending state", err)
 	}
 }

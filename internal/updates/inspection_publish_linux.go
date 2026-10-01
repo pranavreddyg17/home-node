@@ -65,5 +65,19 @@ func (s *InspectionStage) publishEnvironmentOwned(ctx context.Context, parent *o
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return errors.Join(writeInitializationFile(parent, "inspection.env", data), ctx.Err())
+	if _, err := parent.Lstat("inspection.env"); !errors.Is(err, os.ErrNotExist) {
+		return errors.Join(ErrInspectionResult, err)
+	}
+	// Publish only a synchronized complete record. A crash or cancellation before
+	// rename retains pending state and never exposes partial service inputs.
+	if err := writeInitializationFile(parent, "inspection.env.pending", data); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := unix.Renameat2(int(directory.Fd()), "inspection.env.pending", int(directory.Fd()), "inspection.env", unix.RENAME_NOREPLACE); err != nil {
+		return err
+	}
+	return errors.Join(directory.Sync(), ctx.Err())
 }
