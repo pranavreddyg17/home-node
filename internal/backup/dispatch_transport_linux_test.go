@@ -142,8 +142,10 @@ func TestDispatchSenderAuthenticatesBeforeSendingJob(t *testing.T) {
 					t.Fatal(err)
 				}
 				data := make([]byte, MaxDispatchBytes)
-				if n, _, _, _, err := receiver.ReadMsgUnix(data, nil); n != 0 || err == nil {
-					t.Fatal("refused sender exposed job packet")
+				n, _, _, _, readErr := receiver.ReadMsgUnix(data, nil)
+				timeout, ok := readErr.(net.Error)
+				if n > 0 || !ok || !timeout.Timeout() {
+					t.Fatal("refused sender exposed packet or failed to observe empty socket", n, readErr)
 				}
 			}
 		})
