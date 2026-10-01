@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { IdentityBoundary, Devices, Settings } from './Identity'
+import { BackupStatus } from './BackupStatus'
 import { api, type Session } from './api'
 import { Apps, Files, Jobs, AI } from './Workloads'
 
@@ -105,6 +106,7 @@ function Workspace({ session, logout, verify }: { session: Session; logout: () =
               <p className="timestamp">Checked {new Date(report.generatedAt).toLocaleString()} · This report measures prerequisites, not a complete security certification.</p>
             </>
           )}
+          {selected === 'Overview' && session.device.capabilities.includes('admin') && <BackupStatus />}
         </main>
       </div>
     </div>

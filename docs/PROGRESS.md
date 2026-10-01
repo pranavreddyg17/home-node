@@ -1509,3 +1509,9 @@ Final Linux test-binary compilation, local command race tests and diff validatio
 Maintenance-aware configuration preparation now installs the embedded backup service and credential socket through the existing ownership journal. The path allowlist admits those exact unit names. Prepared checks require their unchanged embedded content in addition to staging/account bindings and the existing controller management listener. Configuration preview and prepared reports explicitly retain external repository qualification and trusted backup launch configuration/activation as pending work; no socket is enabled and no password/configuration is invented.
 
 Final installer race tests and diff validation passed. Native ownership/resume and unit syntax validation awaits subsequent Linux CI. Old maintenance configurations require an explicit migration rather than journal deletion or unowned unit adoption. Root launch configuration generation, registered media workflow, fresh owner approval/credential dispatch, publication reconciliation and replacement-host recovery remain unfinished.
+
+### Overview backup attention
+
+Administrator Overview now includes the same publication-status panel as Settings, independently of the host report result. Missing external publication evidence and an uncertain current outcome are visible on the landing screen, with manual refresh and last-observed time. Non-administrator Overview omits backup details. Publication still does not attest repository integrity or restoration, and backup launch/recovery controls remain unavailable.
+
+Production frontend build and the final identity browser workflow passed. Coverage checks the real empty publication state on owner Overview, non-admin Overview omission, and the existing Settings unknown/error/access cases. Native Linux packaging/staging CI remains live in prerequisite installation; subsequent deployment changes await their own CI. The complete goal remains unfinished.

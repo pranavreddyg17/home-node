@@ -26,6 +26,8 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.getByRole('button', { name: 'I saved my recovery codes' }).click()
   await expect(page.getByRole('heading', { name: 'Your home server' })).toBeVisible()
   await expect(page.locator('.check-row')).toHaveCount(8)
+  await expect(page.getByRole('heading', { name: 'External backup', exact: true })).toBeVisible()
+  await expect(page.getByText('No acknowledged external backup is recorded.')).toBeVisible()
   await page.locator('nav').getByRole('button', { name: 'Settings', exact: false }).click()
   await expect(page.getByText('No acknowledged external backup is recorded.')).toBeVisible()
   await page.route('**/api/v1/backups/outcomes', route => route.fulfill({ json: {
@@ -85,6 +87,7 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await phone.getByLabel('Enrollment code').fill(invitation!)
   await phone.getByRole('button', { name: 'Create a passkey', exact: true }).click()
   await expect(phone.getByRole('heading', { name: 'Your home server' })).toBeVisible()
+  await expect(phone.getByRole('heading', { name: 'External backup', exact: true })).toHaveCount(0)
   const denial = await phone.evaluate(async () => (await fetch('/api/v1/devices')).status)
   expect(denial).toBe(403)
   await phone.locator('nav').getByRole('button', { name: 'Settings', exact: false }).click()
