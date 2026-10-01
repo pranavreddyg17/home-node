@@ -150,3 +150,10 @@ release mismatch. This API is not yet executed by the acquisition/installation
 path or a constrained worker. Xz support and actual distribution-package
 qualification remain required; success does not establish provenance identity,
 vulnerability clearance or owner approval.
+
+Required executable files additionally undergo streaming ELF header sanity:
+64-bit little-endian AMD64, executable or shared-object type, current ELF
+version, expected header sizes and a nonempty program-header table contained in
+the declared file length. Header bytes remain included in the inventory hash.
+Tests reject scripts and a different architecture. This is format compatibility,
+not proof of executable behavior, linkage, build identity or runtime safety.

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"strings"
@@ -34,6 +35,24 @@ func payloadFixture(t *testing.T, scenario string) []byte {
 	}
 	for _, name := range files {
 		data := []byte("fixture:" + name)
+		if packageExecutables[name] {
+			data = make([]byte, 120)
+			copy(data, "\x7fELF")
+			data[4], data[5], data[6] = 2, 1, 1
+			binary.LittleEndian.PutUint16(data[16:18], 2)
+			binary.LittleEndian.PutUint16(data[18:20], 62)
+			binary.LittleEndian.PutUint32(data[20:24], 1)
+			binary.LittleEndian.PutUint64(data[32:40], 64)
+			binary.LittleEndian.PutUint16(data[52:54], 64)
+			binary.LittleEndian.PutUint16(data[54:56], 56)
+			binary.LittleEndian.PutUint16(data[56:58], 1)
+			if scenario == "wrong-architecture" {
+				binary.LittleEndian.PutUint16(data[18:20], 183)
+			}
+			if scenario == "script-executable" {
+				copy(data, "#!/bin/sh")
+			}
+		}
 		mode := int64(0644)
 		if packageExecutables[name] {
 			mode = 0755
@@ -80,7 +99,7 @@ func payloadFixture(t *testing.T, scenario string) []byte {
 }
 
 func TestPayloadInventoryAndInstallationPaths(t *testing.T) {
-	for _, scenario := range []string{"valid", "outside", "missing", "writable", "foreign-owner", "link", "corrupt-inventory", "duplicate-inventory", "duplicate-entry", "ancestor-file", "ancestor-first"} {
+	for _, scenario := range []string{"valid", "outside", "missing", "writable", "foreign-owner", "link", "corrupt-inventory", "duplicate-inventory", "duplicate-entry", "ancestor-file", "ancestor-first", "wrong-architecture", "script-executable"} {
 		t.Run(scenario, func(t *testing.T) {
 			err := ValidatePayloadArchive(context.Background(), bytes.NewReader(payloadFixture(t, scenario)))
 			if (scenario == "valid") != (err == nil) {

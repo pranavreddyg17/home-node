@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -113,10 +114,22 @@ func ValidatePayloadArchive(ctx context.Context, reader io.Reader) error {
 			inventory, err = io.ReadAll(archive)
 		} else {
 			hash := sha256.New()
+			var prefixLength int64
+			if packageExecutables[name] {
+				var prefix [64]byte
+				if _, err = io.ReadFull(contextualReader{ctx, archive}, prefix[:]); err != nil {
+					return errors.Join(ErrPackagePayload, err)
+				}
+				if !validAMD64ExecutableHeader(prefix[:], header.Size) {
+					return ErrPackagePayload
+				}
+				_, _ = hash.Write(prefix[:])
+				prefixLength = 64
+			}
 			var count int64
 			count, err = io.Copy(hash, contextualReader{ctx, archive})
-			if count != header.Size {
-				return ErrPackagePayload
+			if count+prefixLength != header.Size {
+				return errors.Join(ErrPackagePayload, err)
 			}
 			hashes[name] = hex.EncodeToString(hash.Sum(nil))
 		}
@@ -169,4 +182,19 @@ func ValidatePayloadArchive(ctx context.Context, reader io.Reader) error {
 		return ErrPackagePayload
 	}
 	return ctx.Err()
+}
+
+// Header sanity binds executable layout to the supported platform. It does
+// not establish executable safety or replace build provenance qualification.
+func validAMD64ExecutableHeader(header []byte, size int64) bool {
+	if len(header) != 64 || string(header[:4]) != "\x7fELF" || header[4] != 2 || header[5] != 1 || header[6] != 1 {
+		return false
+	}
+	kind := binary.LittleEndian.Uint16(header[16:18])
+	if kind != 2 && kind != 3 || binary.LittleEndian.Uint16(header[18:20]) != 62 || binary.LittleEndian.Uint32(header[20:24]) != 1 || binary.LittleEndian.Uint16(header[52:54]) != 64 || binary.LittleEndian.Uint16(header[54:56]) != 56 {
+		return false
+	}
+	programs := uint64(binary.LittleEndian.Uint16(header[56:58]))
+	offset := binary.LittleEndian.Uint64(header[32:40])
+	return size >= 64 && programs > 0 && programs < 65535 && offset >= 64 && offset <= uint64(size) && programs*56 <= uint64(size)-offset
 }
