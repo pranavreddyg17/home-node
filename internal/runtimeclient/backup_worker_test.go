@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/pranavreddyg17/home-node/internal/backup"
@@ -65,6 +66,40 @@ func TestBackupWorkerRejectsUninstalledDispatchBeforeEffects(t *testing.T) {
 			files.Close()
 			if readErr != nil || len(names) != 0 {
 				t.Fatal("refused worker wrote staging", readErr, names)
+			}
+		})
+	}
+}
+
+func TestRegisteredWorkerRefusesDestinationBeforeCreatingStaging(t *testing.T) {
+	parent := t.TempDir()
+	dispatch := backup.Dispatch{Version: 1, JobID: state.Random(), DeviceID: state.Random(), ManagementToken: state.Random(), RuntimeToken: state.Random(), Release: "0.1.0", CatalogVersion: 1}
+	config := BackupWorkerConfig{ManagementSocket: "/tmp/unused-management.sock", DiskSocket: "/tmp/unused-disk.sock", StagingParent: parent, Release: "0.1.0", CatalogVersion: 1, Policy: backup.RestorePolicy{MinimumCatalogVersion: 1}, RepositoryTarget: backup.Target{MountPath: "relative-drive", UUID: "drive-fixture", RepositoryID: state.Hash("repository")}}
+	for _, scenario := range []string{"target", "missing-drive", "release", "staging-parent", "cancelled"} {
+		t.Run(scenario, func(t *testing.T) {
+			configured, message := config, dispatch
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			switch scenario {
+			case "missing-drive":
+				configured.RepositoryTarget.MountPath = filepath.Join(parent, "missing-drive")
+			case "release":
+				message.Release = "0.2.0"
+			case "staging-parent":
+				configured.StagingParent = "relative"
+			case "cancelled":
+				cancel()
+			}
+			result, err := RunRegisteredDispatchedBackup(ctx, message, configured, []byte("fixture-only-password"))
+			if err == nil || result != (backup.BackupResult{}) {
+				t.Fatal("invalid registered worker admitted", result, err)
+			}
+			if scenario == "cancelled" && !errors.Is(err, context.Canceled) {
+				t.Fatal("cancellation lost", err)
+			}
+			files, err := os.ReadDir(parent)
+			if err != nil || len(files) != 0 {
+				t.Fatal("refused destination created staging", err)
 			}
 		})
 	}

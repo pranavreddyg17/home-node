@@ -15,6 +15,7 @@ import (
 type BackupWorkerConfig struct {
 	ManagementSocket, DiskSocket, Release string
 	StagingParent                         string
+	RepositoryTarget                      backup.Target
 	ControllerListenerUID                 uint32
 	CatalogVersion                        int64
 	Policy                                backup.RestorePolicy
@@ -67,4 +68,27 @@ func RunLeasedDispatchedBackup(ctx context.Context, dispatch backup.Dispatch, co
 	}
 	defer func() { resultErr = errors.Join(resultErr, lease.Close()) }()
 	return RunDispatchedBackup(ctx, dispatch, config, lease.Root(), repository)
+}
+
+// RunRegisteredDispatchedBackup opens only the configured registered external
+// destination, authenticates the encrypted repository, and retains its kernel
+// lease/credential handle through leased staging and publication. The password
+// must come from trusted local credential handoff, never dispatch or command
+// arguments. Caller owns clearing its password bytes after return.
+func RunRegisteredDispatchedBackup(ctx context.Context, dispatch backup.Dispatch, config BackupWorkerConfig, password []byte) (result backup.BackupResult, resultErr error) {
+	if err := validateBackupWorker(ctx, dispatch, config); err != nil {
+		return result, err
+	}
+	if !filepath.IsAbs(config.StagingParent) || filepath.Clean(config.StagingParent) != config.StagingParent {
+		return result, backup.ErrManifest
+	}
+	if err := config.RepositoryTarget.Validate(); err != nil {
+		return result, err
+	}
+	repository, err := backup.OpenRepository(ctx, config.RepositoryTarget, password)
+	if err != nil {
+		return result, err
+	}
+	defer func() { resultErr = errors.Join(resultErr, repository.Close()) }()
+	return RunLeasedDispatchedBackup(ctx, dispatch, config, repository)
 }
