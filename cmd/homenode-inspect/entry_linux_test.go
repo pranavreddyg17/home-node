@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +17,13 @@ import (
 
 func TestNativeInspectionDescriptor(t *testing.T) {
 	if os.Getenv("HOMENODE_INSPECT_ENTRY_CHILD") == "1" {
+		if port := os.Getenv("HOMENODE_INSPECT_DENIED_PORT"); port != "" {
+			connection, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", port), time.Second)
+			if err == nil {
+				connection.Close()
+				t.Fatal("inspection reached host listener")
+			}
+		}
 		var output bytes.Buffer
 		if err := run(context.Background(), []string{"--release", "0.1.0~ci"}, &output); err != nil {
 			t.Fatal("worker inspection", err)

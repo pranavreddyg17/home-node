@@ -216,3 +216,13 @@ No launch environment, private staging slot or service activation is generated
 by the installer yet. Source-template and development build checks do not prove
 runtime isolation; a native service fixture, trusted operation/result handoff
 and privileged installation integration remain required.
+
+The opt-in `packaging/inspection/systemd_fixture.py` copies all reviewed service
+restrictions into a transient disposable Linux unit. It substitutes only the
+test executable, expected release environment and an exclusively created private
+package slot, preserving systemd `OpenFile` descriptor handoff to a dynamic UID.
+The child checks worker startup/content validation and inability to reach a
+confirmed listening host TCP endpoint. Source completeness, Python syntax and
+Linux test compilation pass locally; native service execution awaits CI. This
+fixture does not yet activate the product updater or qualify its root result
+binding and staging lifecycle.

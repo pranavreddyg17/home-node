@@ -97,6 +97,12 @@ jobs:
           test -f usr/share/homenode/web/index.html
           sudo apt-get install -y "$GITHUB_WORKSPACE/artifacts/homenode_0.1.0~ci_amd64.deb"
           systemd-analyze verify "$GITHUB_WORKSPACE"/packaging/systemd/*.service "$GITHUB_WORKSPACE"/packaging/systemd/*.socket "$GITHUB_WORKSPACE"/packaging/systemd/*.slice
+      - name: Test package inspection with source service protections
+        run: |
+          go test -c -o "$RUNNER_TEMP/inspect.test" ./cmd/homenode-inspect
+          sudo install -d -m 0755 /usr/lib/homenode-fixtures
+          sudo install -m 0755 "$RUNNER_TEMP/inspect.test" /usr/lib/homenode-fixtures/inspect.test
+          sudo env HOMENODE_INSPECT_SYSTEMD_INTEGRATION=1 HOMENODE_PACKAGE_CONTENT_FIXTURE="$GITHUB_WORKSPACE/artifacts/homenode_0.1.0~ci_amd64.deb" python3 packaging/inspection/systemd_fixture.py
       - name: Build verified guest adapter overlays
         run: |
           python3 packaging/guest/overlay_test.py
