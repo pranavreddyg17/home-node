@@ -56,6 +56,10 @@ func updateBootstrapRecord(j journal, owner int) (record, error) {
 func (e *Engine) initializeUpdateCacheOwned(ctx context.Context) (resultErr error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.initializeUpdateCacheLocked(ctx)
+}
+
+func (e *Engine) initializeUpdateCacheLocked(ctx context.Context) (resultErr error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

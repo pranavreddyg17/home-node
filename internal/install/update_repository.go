@@ -21,9 +21,13 @@ func (e *Engine) ReadUpdateRepository(ctx context.Context) (updates.RepositoryCo
 }
 
 func (e *Engine) readUpdateRepositoryOwned(ctx context.Context) (updates.RepositoryConfiguration, error) {
-	var zero updates.RepositoryConfiguration
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.readUpdateRepositoryLocked(ctx)
+}
+
+func (e *Engine) readUpdateRepositoryLocked(ctx context.Context) (updates.RepositoryConfiguration, error) {
+	var zero updates.RepositoryConfiguration
 	if err := ctx.Err(); err != nil {
 		return zero, err
 	}

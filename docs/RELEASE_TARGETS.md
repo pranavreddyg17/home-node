@@ -61,3 +61,12 @@ and admits only the created root-owned mode `0400` repository policy entry with
 matching content digest. Parsing is bounded to 8 KiB and rejects missing,
 unknown, duplicated, case-aliased fields, trailing JSON, and incompatible values.
 This loader does not activate an updater or authorize installing a release.
+
+The Linux `install.Engine.AcquireUpdateRelease` method keeps installer ownership
+locked while loading repository policy, checking the observed schema,
+initializing or resuming the protected cache, and acquiring the release through
+its owned download directory. It accepts neither repository URL nor bootstrap
+bytes from its caller. Returned bytes still have no install authority; this
+method is not yet connected to a maintenance command or owner-approved updater
+service. The actual signed repository acquisition fixture tests the underlying
+TUF/download chain; the complete installer-to-network chain remains to qualify.

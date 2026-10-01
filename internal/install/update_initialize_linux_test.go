@@ -30,6 +30,12 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 		engine.Close()
 		t.Fatal(err)
 	}
+	if release, err := engine.acquireUpdateReleaseOwned(ctx, "releases/home.deb", 0); err == nil || release != nil {
+		t.Fatal("invalid observed schema acquired release")
+	}
+	if _, err := os.Lstat(filepath.Join(host, "var/lib/homenode-update/bootstrap")); !os.IsNotExist(err) {
+		t.Fatal("invalid schema initialized trust", err)
+	}
 	if err := engine.initializeUpdateCacheOwned(ctx); err != nil {
 		engine.Close()
 		t.Fatal(err)
