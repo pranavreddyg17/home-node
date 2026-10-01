@@ -57,3 +57,29 @@ func TestAppMaintenanceClientRequiresExactBoundedAcknowledgement(t *testing.T) {
 		})
 	}
 }
+
+func TestPublicationAcknowledgementValidatesBeforeTransport(t *testing.T) {
+	token, device, id := state.Random(), state.Random(), state.Random()
+	calls := 0
+	client := &MaintenanceAppsClient{client: &http.Client{Transport: maintenanceRoundTrip(func(request *http.Request) (*http.Response, error) {
+		calls++
+		if request.URL.Path != "/v1/maintenance/ack-publish" {
+			t.Fatal("wrong publication endpoint")
+		}
+		data, err := io.ReadAll(request.Body)
+		if err != nil || !strings.Contains(string(data), `"snapshotId":"`+state.Hash("snapshot")+`"`) {
+			t.Fatal("missing bound snapshot", err)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"version":1}`))}, nil
+	})}, inspect: func(context.Context, string) (state.MaintenanceJob, error) {
+		return state.MaintenanceJob{ID: id, Device: device}, nil
+	}}
+	for _, invalid := range []string{"", "short", strings.Repeat("A", 64)} {
+		if err := client.RecordPublication(context.Background(), token, device, invalid); err == nil || calls != 0 {
+			t.Fatal("invalid snapshot reached transport")
+		}
+	}
+	if err := client.RecordPublication(context.Background(), token, device, state.Hash("snapshot")); err != nil || calls != 1 {
+		t.Fatal("valid acknowledgement failed", err)
+	}
+}

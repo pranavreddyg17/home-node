@@ -11,6 +11,7 @@ type ManagementPublication interface {
 	BeginPublishing(context.Context, string, string) error
 	ConfirmPublishing(context.Context, string, string) error
 	ClaimPublication(context.Context, string, string) error
+	RecordPublication(context.Context, string, string, string) error
 }
 
 // PublishPrivateRecoverySet writes an already staged recovery set while the
@@ -44,6 +45,9 @@ func PublishPrivateRecoverySet(ctx context.Context, management ManagementPublica
 	}
 	if !repositoryPattern.MatchString(snapshotID) {
 		return "", ErrRepository
+	}
+	if err = management.RecordPublication(ctx, token, device, snapshotID); err != nil {
+		return snapshotID, err
 	}
 	return snapshotID, management.ConfirmPublishing(ctx, token, device)
 }

@@ -150,6 +150,20 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 	if err = bridge.ClaimPublication(ctx, token, device); err == nil {
 		t.Fatal("repeated publication claim accepted")
 	}
+	published := state.Hash("fixture repository acknowledgement")
+	if err = bridge.RecordPublication(ctx, token, device, published); err != nil {
+		t.Fatal("durable acknowledgement", err)
+	}
+	if err = bridge.RecordPublication(ctx, token, device, published); err != nil {
+		t.Fatal("lost acknowledgement replay", err)
+	}
+	if err = bridge.RecordPublication(ctx, token, device, state.Hash("changed snapshot")); err == nil {
+		t.Fatal("changed acknowledgement accepted")
+	}
+	currentOutcome, lastSuccess, err := server.Store.InspectBackupOutcomes(ctx)
+	if err != nil || currentOutcome == nil || lastSuccess == nil || currentOutcome.SnapshotID != published || *lastSuccess != *currentOutcome {
+		t.Fatal("private acknowledgement not persisted", err)
+	}
 	if err = server.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "publishing", "restoring"); err != nil {
 		t.Fatal(err)
 	}

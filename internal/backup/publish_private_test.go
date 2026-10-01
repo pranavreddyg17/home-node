@@ -10,10 +10,12 @@ import (
 )
 
 type publicationManagementFixture struct {
-	confirms     int
-	claims       int
-	claimFailure error
-	failure      error
+	confirms      int
+	claims        int
+	records       int
+	recordFailure error
+	claimFailure  error
+	failure       error
 }
 
 func (m *publicationManagementFixture) BeginPublishing(context.Context, string, string) error {
@@ -74,5 +76,25 @@ func TestPrivatePublicationRefusedClaimPreventsRepositoryWrite(t *testing.T) {
 	snapshot, err := PublishPrivateRecoverySet(context.Background(), management, repository, state.Random(), token, root, manifest, policy)
 	if !errors.Is(err, failure) || snapshot != "" || repository.calls != 0 || management.claims != 1 || management.confirms != 1 {
 		t.Fatal("refused claim reached repository or lost refusal", snapshot, err, repository.calls, management.claims, management.confirms)
+	}
+}
+
+func (m *publicationManagementFixture) RecordPublication(context.Context, string, string, string) error {
+	m.records++
+	return m.recordFailure
+}
+
+func TestPrivatePublicationPreservesSnapshotOnDurableAcknowledgementFailure(t *testing.T) {
+	store, disks, root, token, policy := recoveryStageFixture(t)
+	manifest, err := StageRecoverySet(context.Background(), store, disks, token, disks.token, root, "0.1.0", 1, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failure := errors.New("durable acknowledgement unavailable")
+	management := &publicationManagementFixture{recordFailure: failure}
+	repository := &publicationRepositoryFixture{}
+	snapshot, err := PublishPrivateRecoverySet(context.Background(), management, repository, state.Random(), token, root, manifest, policy)
+	if !errors.Is(err, failure) || snapshot != state.Hash("private published snapshot") || repository.calls != 1 || management.records != 1 || management.confirms != 1 {
+		t.Fatal("durable acknowledgement failure lost repository outcome", snapshot, err)
 	}
 }

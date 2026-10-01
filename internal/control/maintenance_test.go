@@ -54,3 +54,27 @@ func TestMaintenanceHandlerCannotUseHTTPPeerClaims(t *testing.T) {
 		t.Fatal("refused request acquired maintenance", count, err)
 	}
 }
+
+func TestPublicationAcknowledgementStrictPayload(t *testing.T) {
+	id := strings.Repeat("a", 24)
+	snapshot := strings.Repeat("b", 64)
+	valid := `{"version":1,"token":"` + id + `","jobId":"` + id + `","deviceId":"` + id + `","snapshotId":"` + snapshot + `"}`
+	if _, ok := decodeMaintenancePayload([]byte(valid), true); !ok {
+		t.Fatal("valid acknowledgement refused")
+	}
+	if _, ok := decodeMaintenanceRequest([]byte(valid)); ok {
+		t.Fatal("snapshot admitted on other routes")
+	}
+	for _, raw := range []string{
+		strings.Replace(valid, `,"snapshotId":"`+snapshot+`"`, "", 1),
+		strings.Replace(valid, `"snapshotId":"`+snapshot+`"`, `"snapshotId":null`, 1),
+		strings.Replace(valid, snapshot, "short", 1),
+		strings.Replace(valid, snapshot, strings.Repeat("B", 64), 1),
+		strings.Replace(valid, `"snapshotId":`, `"snapshotId":"`+snapshot+`","snapshot\u0049d":`, 1),
+		valid + `{}`,
+	} {
+		if _, ok := decodeMaintenancePayload([]byte(raw), true); ok {
+			t.Fatal("invalid acknowledgement accepted", raw)
+		}
+	}
+}

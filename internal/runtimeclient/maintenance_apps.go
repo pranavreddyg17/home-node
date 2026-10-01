@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"time"
 	"unicode/utf8"
 
@@ -16,7 +17,7 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
 )
 
-// MaintenanceAppsClient has only drain/restore authority. Inspect must resolve
+// MaintenanceAppsClient uses only fixed private maintenance endpoints. Inspect must resolve
 // the existing coordinator-owned job; it cannot create a new admission barrier.
 type MaintenanceAppsClient struct {
 	client  *http.Client
@@ -67,6 +68,9 @@ func (c *MaintenanceAppsClient) RestoreMaintenanceApps(ctx context.Context, toke
 	return c.call(ctx, "/v1/maintenance/restore", token, device)
 }
 func (c *MaintenanceAppsClient) call(ctx context.Context, path, token, device string) error {
+	return c.callPayload(ctx, path, token, device, "")
+}
+func (c *MaintenanceAppsClient) callPayload(ctx context.Context, path, token, device, snapshot string) error {
 	if c == nil || c.client == nil || c.inspect == nil || !maintenanceID.MatchString(token) || !maintenanceID.MatchString(device) {
 		return ErrMaintenance
 	}
@@ -74,7 +78,11 @@ func (c *MaintenanceAppsClient) call(ctx context.Context, path, token, device st
 	if err != nil || job.Device != device || !maintenanceID.MatchString(job.ID) {
 		return ErrMaintenance
 	}
-	data, err := json.Marshal(map[string]any{"version": 1, "token": token, "jobId": job.ID, "deviceId": device})
+	payload := map[string]any{"version": 1, "token": token, "jobId": job.ID, "deviceId": device}
+	if snapshot != "" {
+		payload["snapshotId"] = snapshot
+	}
+	data, err := json.Marshal(payload)
 	if err != nil {
 		return ErrMaintenance
 	}
@@ -120,4 +128,13 @@ func (c *MaintenanceAppsClient) ConfirmPublishing(ctx context.Context, token, de
 
 func (c *MaintenanceAppsClient) ClaimPublication(ctx context.Context, token, device string) error {
 	return c.call(ctx, "/v1/maintenance/claim-publish", token, device)
+}
+
+var publicationSnapshotID = regexp.MustCompile(`^[a-f0-9]{64}$`)
+
+func (c *MaintenanceAppsClient) RecordPublication(ctx context.Context, token, device, snapshot string) error {
+	if !publicationSnapshotID.MatchString(snapshot) {
+		return ErrMaintenance
+	}
+	return c.callPayload(ctx, "/v1/maintenance/ack-publish", token, device, snapshot)
 }
