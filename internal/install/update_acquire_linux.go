@@ -20,19 +20,9 @@ func (e *Engine) AcquireUpdateRelease(ctx context.Context, target string, store 
 	if os.Geteuid() != 0 || e.host.Name() != "/" {
 		return nil, ErrConflict
 	}
-	currentSchema, err := store.ObserveSchemaVersion(ctx)
-	if err != nil {
-		return nil, err
-	}
-	release, err := e.acquireUpdateReleaseOwned(ctx, target, currentSchema)
-	if err != nil {
-		return nil, err
-	}
-	observed, observationErr := store.ObserveSchemaVersion(ctx)
-	if observationErr != nil || observed != currentSchema {
-		return nil, errors.Join(ErrConflict, observationErr, release.Close())
-	}
-	return release, nil
+	return acquireWithObservedSchema(ctx, store, func(schema int) (*updates.AcquiredRelease, error) {
+		return e.acquireUpdateReleaseOwned(ctx, target, schema)
+	})
 }
 
 func (e *Engine) acquireUpdateReleaseOwned(ctx context.Context, target string, currentSchema int) (result *updates.AcquiredRelease, resultErr error) {

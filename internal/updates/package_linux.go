@@ -28,17 +28,6 @@ const packageDiskReserve uint64 = 2 << 30
 
 var packagePath = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,191}\.deb$`)
 
-// AcquiredRelease holds verified bytes for later policy review and installation.
-// Its evidence has not yet passed vulnerability or build-identity review.
-type AcquiredRelease struct {
-	Package    *os.File        `json:"-"`
-	Metadata   ReleaseMetadata `json:"-"`
-	SBOM       json.RawMessage `json:"-"`
-	Provenance json.RawMessage `json:"-"`
-}
-
-func (release *AcquiredRelease) Close() error { return release.Package.Close() }
-
 // AcquirePackage returns a read-only verified package and evidence bytes, never install
 // authority. targetsURL and staging are trusted service configuration. The
 // session's exclusive lock must remain held throughout acquisition. Partial
