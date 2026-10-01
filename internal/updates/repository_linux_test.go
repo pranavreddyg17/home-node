@@ -141,6 +141,75 @@ func TestSignedRepositoryRefreshRotationAndRestartRollback(t *testing.T) {
 	if fellBack {
 		t.Fatal("restart fell back to bootstrap root")
 	}
+	// Replacement roots must satisfy both the old and new root roles.
+	replacement, err := metadata.Root().FromBytes(rotated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := metadata.KeyFromPublicKey(public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement.Signed.Version = 3
+	replacement.Signed.Roles[metadata.ROOT].KeyIDs = nil
+	if err = replacement.Signed.AddKey(key, metadata.ROOT); err != nil {
+		t.Fatal(err)
+	}
+	replacementSigner, err := signature.LoadSigner(private, crypto.Hash(0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unauthorized := signedFixture(t, replacement, replacementSigner)
+	mutex.Lock()
+	files["/metadata/3.root.json"] = unauthorized
+	mutex.Unlock()
+	deniedRotation, rotationErr := open()
+	if deniedRotation != nil {
+		deniedRotation.Close()
+	}
+	if rotationErr == nil {
+		t.Fatal("replacement key authorized itself without old root")
+	}
+	current, err = os.ReadFile(rootName)
+	if err != nil || string(current) != string(rotated) {
+		t.Fatal("unapproved replacement root persisted", err)
+	}
+	replacement.ClearSignatures()
+	if _, err = replacement.Sign(signers[metadata.ROOT]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = replacement.Sign(replacementSigner); err != nil {
+		t.Fatal(err)
+	}
+	authorized, err := replacement.ToBytes(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutex.Lock()
+	files["/metadata/3.root.json"] = authorized
+	mutex.Unlock()
+	rotatedSession, err := open()
+	if err != nil {
+		t.Fatal("authorized root key replacement rejected", err)
+	}
+	if err = rotatedSession.Close(); err != nil {
+		t.Fatal(err)
+	}
+	current, err = os.ReadFile(rootName)
+	if err != nil || string(current) != string(authorized) {
+		t.Fatal("replacement root not retained", err)
+	}
+	afterReplacement, err := open()
+	if err != nil {
+		t.Fatal("replacement root not usable after restart", err)
+	}
+	if err = afterReplacement.Close(); err != nil {
+		t.Fatal(err)
+	}
 	timestamp.Signed.Version = 1
 	replay := signedFixture(t, timestamp, signers[metadata.TIMESTAMP])
 	mutex.Lock()
