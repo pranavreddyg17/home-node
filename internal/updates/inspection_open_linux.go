@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"sync"
 
 	"golang.org/x/sys/unix"
 )
@@ -17,16 +18,59 @@ import (
 // descriptor until the protected caller finishes worker execution and result
 // verification. Closing it leaves durable state intact for explicit recovery.
 type InspectionStage struct {
-	Package   *os.File
-	directory *os.File
-	identity  InspectionIdentity
+	packageFile *os.File
+	mu          sync.Mutex
+	closed      bool
+	directory   *os.File
+	identity    InspectionIdentity
 }
 
-func (s *InspectionStage) Close() error { return errors.Join(s.Package.Close(), s.directory.Close()) }
+func (s *InspectionStage) Close() error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	var packageErr, directoryErr error
+	if s.packageFile != nil {
+		packageErr = s.packageFile.Close()
+	}
+	if s.directory != nil {
+		directoryErr = s.directory.Close()
+	}
+	return errors.Join(packageErr, directoryErr)
+}
+
+// DuplicatePackage supplies an independently closable read-only descriptor for
+// worker inheritance. It cannot release the stage's retained execution lock.
+func (s *InspectionStage) DuplicatePackage() (*os.File, error) {
+	if s == nil {
+		return nil, ErrInspectionResult
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed || s.packageFile == nil {
+		return nil, ErrInspectionResult
+	}
+	fd, err := unix.FcntlInt(s.packageFile.Fd(), unix.F_DUPFD_CLOEXEC, 0)
+	if err != nil {
+		return nil, err
+	}
+	return os.NewFile(uintptr(fd), "verified-inspection-package"), nil
+}
 
 // Environment binds service inputs to the identity admitted under this lock.
 func (s *InspectionStage) Environment() ([]byte, error) {
-	if s == nil || s.Package == nil || s.directory == nil {
+	if s == nil {
+		return nil, ErrInspectionResult
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed || s.packageFile == nil || s.directory == nil {
 		return nil, ErrInspectionResult
 	}
 	return InspectionEnvironment(s.identity)
@@ -37,14 +81,19 @@ func (s *InspectionStage) Environment() ([]byte, error) {
 // authenticate successful isolated execution; this method grants no installation
 // authority and does not treat a JSON response as execution evidence.
 func (s *InspectionStage) VerifyResult(ctx context.Context, output []byte) (InspectionResult, error) {
-	if s == nil || s.Package == nil || s.directory == nil {
+	if s == nil {
+		return InspectionResult{}, ErrInspectionResult
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed || s.packageFile == nil || s.directory == nil {
 		return InspectionResult{}, ErrInspectionResult
 	}
 	result, err := ValidateInspectionResult(output, s.identity)
 	if err != nil {
 		return InspectionResult{}, err
 	}
-	digest, length, err := PackageIdentity(ctx, s.Package)
+	digest, length, err := PackageIdentity(ctx, s.packageFile)
 	if err != nil || digest != s.identity.PackageSHA256 || length != s.identity.PackageLength {
 		return InspectionResult{}, errors.Join(ErrInspectionResult, err)
 	}
@@ -123,7 +172,7 @@ func openInspectionStageOwned(ctx context.Context, root *os.Root, expected Inspe
 		return nil, errors.Join(ErrInspectionResult, err, file.Close())
 	}
 	keep = true
-	return &InspectionStage{Package: file, directory: directory, identity: expected}, nil
+	return &InspectionStage{packageFile: file, directory: directory, identity: expected}, nil
 }
 
 func openInspectionFile(root *os.Root, name string, mode uint32) (*os.File, error) {

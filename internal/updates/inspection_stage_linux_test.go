@@ -82,6 +82,16 @@ func TestInspectionStagingPublishesOwnedIdentityWithoutReplacingState(t *testing
 			if err != nil {
 				t.Fatal("ready stage refused", err)
 			}
+			duplicate, err := stage.DuplicatePackage()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if digest, length, err := PackageIdentity(ctx, duplicate); err != nil || digest != identity.PackageSHA256 || length != identity.PackageLength {
+				t.Fatal("worker descriptor differs", err)
+			}
+			if err := duplicate.Close(); err != nil {
+				t.Fatal(err)
+			}
 			output, err := json.Marshal(InspectionResult{Schema: 1, OperationID: identity.OperationID, Release: identity.Release, PackageSHA256: identity.PackageSHA256, PackageLength: identity.PackageLength, ContentValid: true})
 			if err != nil {
 				t.Fatal(err)
@@ -114,6 +124,19 @@ func TestInspectionStagingPublishesOwnedIdentityWithoutReplacingState(t *testing
 			}
 			if err := stage.Close(); err != nil {
 				t.Fatal(err)
+			}
+			if err := stage.Close(); err != nil {
+				t.Fatal("repeated close failed", err)
+			}
+			if _, err := stage.Environment(); err == nil {
+				t.Fatal("closed stage produced launch inputs")
+			}
+			if _, err := stage.VerifyResult(ctx, output); err == nil {
+				t.Fatal("closed stage verified output")
+			}
+			if descriptor, err := stage.DuplicatePackage(); err == nil {
+				descriptor.Close()
+				t.Fatal("closed stage produced worker descriptor")
 			}
 			wrong := identity
 			wrong.OperationID = "inspection-fixture-000002"
