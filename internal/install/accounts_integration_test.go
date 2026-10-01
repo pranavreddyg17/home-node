@@ -18,7 +18,7 @@ func TestInstalledAccountInspection(t *testing.T) {
 		t.Fatal("integration requires Linux root")
 	}
 	ctx := context.Background()
-	for _, name := range []string{"homenode", "homenode-transfer"} {
+	for _, name := range []string{"homenode", "homenode-transfer", "homenode-backup"} {
 		_, exists, err := lookupAccount(ctx, "passwd", name)
 		if err != nil {
 			t.Fatal("fixture cannot establish account vacancy", err)
@@ -27,7 +27,7 @@ func TestInstalledAccountInspection(t *testing.T) {
 			t.Fatal("fixture refuses existing account", name)
 		}
 	}
-	for _, name := range []string{"homenode", "homenode-transfer", "homenode-runtime"} {
+	for _, name := range []string{"homenode", "homenode-transfer", "homenode-runtime", "homenode-backup"} {
 		_, exists, err := lookupAccount(ctx, "group", name)
 		if err != nil {
 			t.Fatal("fixture cannot establish group vacancy", err)
@@ -80,8 +80,8 @@ func TestInstalledAccountInspection(t *testing.T) {
 	defer engine.Close()
 	// Initial vacancy was established above. The fixture cleanup runs only for
 	// these known names; production account removal remains a separate phase.
-	createdGroups = []string{"homenode", "homenode-transfer", "homenode-runtime"}
-	createdUsers = []string{"homenode", "homenode-transfer"}
+	createdGroups = []string{"homenode", "homenode-transfer", "homenode-runtime", "homenode-backup"}
+	createdUsers = []string{"homenode", "homenode-transfer", "homenode-backup"}
 	provisioned, err := engine.ProvisionAccounts(ctx)
 	if err != nil {
 		t.Fatal("journaled native account creation failed", err)
@@ -106,6 +106,44 @@ func TestInstalledAccountInspection(t *testing.T) {
 	}
 	if err = json.Unmarshal(output, &result); err != nil || !result.Valid || result.Activated || result.Accounts != accounts {
 		t.Fatal("CLI identity result incorrect", err)
+	}
+	plan, err := engine.PrepareMaintenanceAccount(ctx)
+	if err != nil {
+		t.Fatal("native maintenance preparation", err)
+	}
+	maintenance, err := engine.ProvisionMaintenanceAccount(ctx)
+	if err != nil || maintenance != plan.Identity {
+		t.Fatal("native maintenance provisioning", maintenance, err)
+	}
+	if replay, err := engine.ProvisionMaintenanceAccount(ctx); err != nil || replay != maintenance {
+		t.Fatal("native maintenance replay", replay, err)
+	}
+	output, err = accountCommand(ctx, "/usr/bin/homenode", "maintenance-accounts-check")
+	if err != nil {
+		t.Fatal("installed CLI backup inspection", err)
+	}
+	var backupResult struct {
+		Valid     bool               `json:"maintenanceAccountValid"`
+		Identity  MaintenanceAccount `json:"identity"`
+		Activated bool               `json:"servicesActivated"`
+	}
+	if err = json.Unmarshal(output, &backupResult); err != nil || !backupResult.Valid || backupResult.Activated || backupResult.Identity != maintenance {
+		t.Fatal("CLI backup identity result", backupResult, err)
+	}
+	if _, err = accountCommand(ctx, "/usr/sbin/usermod", "--append", "--groups", "root", "homenode-backup"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = InspectMaintenanceAccount(ctx); err == nil {
+		t.Fatal("privileged backup supplementary membership accepted")
+	}
+	if _, err = engine.ProvisionMaintenanceAccount(ctx); err == nil {
+		t.Fatal("unsafe backup readiness replay accepted")
+	}
+	if _, err = accountCommand(ctx, "/usr/sbin/usermod", "--groups", "", "homenode-backup"); err != nil {
+		t.Fatal(err)
+	}
+	if inspected, err := InspectMaintenanceAccount(ctx); err != nil || inspected != maintenance {
+		t.Fatal("repaired backup identity", inspected, err)
 	}
 	// A real privileged supplementary membership must be denied. The fixture's
 	// nologin identity has no password or home, and is removed by cleanup.
