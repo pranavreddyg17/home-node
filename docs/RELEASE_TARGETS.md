@@ -176,3 +176,13 @@ complete decoder exit status is required. The real-package CI fixture now uses
 this API. Dedicated worker UID, network/filesystem restrictions, cgroup limits,
 privileged descriptor handoff and activation remain mandatory and unimplemented;
 the API is not connected to root acquisition or installation.
+
+`cmd/homenode-inspect` is the initial Linux inspection worker executable. It
+accepts only expected release identity, consumes descriptor 3, requires
+non-root UID/GID without supplementary authority and `NoNewPrivileges`, and
+requires an inherited private root-owned mode `0400` regular package with one
+link. Successful output reports content validity and explicitly no installation
+authority. It currently is not packaged or launched by the updater. Dedicated
+service identity, full capability/network/filesystem/cgroup enforcement,
+trusted descriptor/result handoff and native cross-identity execution tests
+remain required before production activation.

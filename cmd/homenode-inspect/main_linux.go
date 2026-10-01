@@ -1,0 +1,78 @@
+//go:build linux
+
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/pranavreddyg17/home-node/internal/updates"
+	"golang.org/x/sys/unix"
+)
+
+func run(ctx context.Context, args []string, output io.Writer) error {
+	flags := flag.NewFlagSet("homenode-inspect", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	release := flags.String("release", "", "expected signed release identity supplied by maintenance launcher")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() != 0 || *release == "" {
+		return errors.New("expected release is required")
+	}
+	if os.Geteuid() == 0 || os.Getegid() == 0 {
+		return errors.New("inspection requires an unprivileged worker identity")
+	}
+	groups, err := os.Getgroups()
+	if err != nil {
+		return err
+	}
+	for _, group := range groups {
+		if group != os.Getegid() {
+			return errors.New("inspection refuses supplementary authority")
+		}
+	}
+	privileges, err := unix.PrctlRetInt(unix.PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0)
+	if err != nil || privileges != 1 {
+		return errors.New("inspection requires NoNewPrivileges")
+	}
+	file := os.NewFile(3, "verified-package")
+	if file == nil {
+		return errors.New("inherited package descriptor missing")
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	native, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || native.Uid != 0 || native.Nlink != 1 || !info.Mode().IsRegular() || info.Mode().Perm() != 0400 {
+		return errors.New("inherited package must be private root-owned verified bytes")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	if err = updates.ValidateDistributionPackage(ctx, file, updates.ReleaseMetadata{Release: *release, Platform: "ubuntu-24.04-amd64"}); err != nil {
+		return err
+	}
+	return json.NewEncoder(output).Encode(struct {
+		ContentValid      bool `json:"contentValid"`
+		InstallAuthorized bool `json:"installAuthorized"`
+	}{ContentValid: true})
+}
+
+func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	if err := run(ctx, os.Args[1:], os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
