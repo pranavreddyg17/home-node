@@ -1185,3 +1185,11 @@ Validation: Linux runtimeclient test compilation passed. Native execution is pen
 The backup package now provides QualifyExt4Disk for a pinned regular read-only disk held under an exclusive stopped-runtime lease. It refuses an invalid ext4 magic, any state other than clean, or the journal-recovery incompatibility bit before invoking the fixed /usr/sbin/e2fsck -f -n command through an inherited descriptor. The command has a 30-minute maximum, a fixed environment, discarded guest-controlled diagnostics, and no repair mode. Success also rechecks inode, size, modification time, and header. Unsupported platforms refuse. Sources: https://www.kernel.org/doc/html/v6.6/filesystems/ext4/super.html and https://man7.org/linux/man-pages/man8/e2fsck.8.html.
 
 Validation: pure header tests passed for clean admission and dirty/error/orphan-recovery/journal-recovery/magic/truncation refusal; Linux backup test compilation passed. Native e2fsck fixture execution and integration into the production staging bridge remain required. This primitive alone does not prove application consistency, clean guest shutdown, or exclusion of other writers.
+
+### Filesystem qualification fixture and lease adapter
+
+QualifiedMaintenanceDisks wraps a trusted descriptor source and holds its existing stopped-runtime lease across QualifyExt4Disk and the copy callback. Non-stopped/mismatched inventory and failed filesystem checks prevent copying. It remains a production integration component rather than a public backup endpoint.
+
+A native opt-in Linux fixture formats a real 16 MiB ext4 source and verifies clean admission, unchanged full-image hashes, writable-descriptor refusal, cancellation, pinned descriptor behavior after source path replacement, and dirty-state refusal without repair. It also exercises the adapter's retained source lease and proves a dirty disk never invokes copying. CI enables the fixture in its Linux race suite. Local backup tests and final Linux test compilation passed; this new fixture's native execution is pending.
+
+CI run 36811625576 at 1f5044b09c5f49fcf45f16dc4d11b26346e7561d completed successfully, including the explicit root-to-backup UID disk client fixture. This establishes that descriptor/client boundary on the disposable runner; the full manager lifecycle and physical guest consistency remain separate requirements.
