@@ -166,3 +166,13 @@ is refused as root and bounded by a two-minute command context. This qualifies
 build-output compatibility only; it does not implement the production inspection
 sandbox or change the production xz refusal. CI must execute this new fixture
 before real build compatibility can be claimed.
+
+The Linux `updates.ValidateDistributionPackage` API centralizes distribution
+xz decoding and complete content validation on a read-only descriptor. It
+refuses root and writable descriptors, uses fixed `/usr/bin/dpkg-deb` and fixed
+arguments/environment, and bounds the entire inspection to two minutes.
+Cancellation terminates the decoder process group, including descendants;
+complete decoder exit status is required. The real-package CI fixture now uses
+this API. Dedicated worker UID, network/filesystem restrictions, cgroup limits,
+privileged descriptor handoff and activation remain mandatory and unimplemented;
+the API is not connected to root acquisition or installation.
