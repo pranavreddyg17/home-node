@@ -1545,3 +1545,9 @@ Local backup race suite passed and the final Linux test binary compiled. New Lin
 ### Native package checker dependency correction
 
 CI 36887914531 at cc8a761 failed because the runner did not provide rg for the new package assertions. Debian creation and all payload checksums passed, including the worker and unit templates; package installation/unit verification and browser checks were not reached. The native Go/installer/activation fixtures passed. The two package assertions now use grep available on the base runner, retaining ELF architecture and declared restic dependency checks. New dispatcher work below awaits its own native run.
+
+### Controller activated credential socket dispatcher
+
+ActivatedBackupDispatcher now implements the coordinator delivery binding using installed socket/controller-group configuration. It rejects invalid paths/groups, invalid jobs and cancellation before dialing, requires a root-owned 0660 controller-group socket under a root-owned parent without unprivileged write access, dials with a three-second connection limit, and performs explicit root-creator credential dispatch plus exact worker completion waiting. It never retries or adopts a public/request-selected target. Non-Linux socket admission fails closed; credential ownership stays with the caller.
+
+Local runtimeclient race tests passed for invalid configuration/cancellation and retained credential handles; final Linux test compilation and diff validation passed. A new explicit disposable-root socket admission fixture checks protected acceptance and rejection of public permissions, foreign ownership/group, writable parent and symlink alias. CI invokes it separately. Native fixture execution, actual cross-UID acknowledged coordinator delivery and public fresh approval/drive/password workflows remain unfinished.
