@@ -32,3 +32,22 @@ The current code acquires both evidence documents, verifies their exact TUF leng
 Preparation journals an immutable root-owned 0400 `/etc/homenode/update-root.json` and root-owned 0700 update, metadata and download directories under `/var/lib/homenode-update`. It does not journal `metadata/root.json` as immutable configuration, initialize a current cache root, download packages, or activate updates. The current cache bootstrap/rotation ownership lifecycle and trusted release-policy configuration still require implementation.
 
 After preparation has completed with update bootstrap configuration, run `sudo homenode update-trust-initialize` locally. This command requires Linux/root and an existing completed ownership journal. It accepts only an optional canonical `--journal-dir`; root bytes and pins come from journaled configuration, never from this command's request. It verifies all owned configuration before initializing current trust with recorded resumable intent. It does not activate updates, acquire a release, or install a package. A changed bootstrap or missing previously initialized cache root is refused for explicit recovery.
+
+Installer repository policy can additionally be supplied through
+`install.Configuration.UpdateRepository`. It requires a pinned bootstrap and
+writes `etc/homenode/update-repository.json` as root-owned mode `0400` within the
+configuration ownership journal. Schema one fixes HTTPS metadata and target
+repository scopes on the same host, plus positive release-sequence and catalog
+floors. Its catalog floor cannot be below the installation's catalog floor.
+The current database schema is measured for each acquisition, rather than saved
+as an immutable installation-time value. This configuration is not yet exposed
+by the installer CLI or activated as an updater service.
+
+On Linux, `updates.AcquireRelease` joins metadata refresh, signed compatibility
+checks, evidence downloads, and the verified read-only package under one cache
+lock. It rejects invalid repository configuration before changing the cache and
+closes the package if final session cleanup or cancellation fails. It does not
+install a package or establish vulnerability, provenance-identity, migration,
+or owner-approval qualification. Protected repository policy loading, updating
+persistent release floors after successful installation, and approved service
+activation remain required before enabling product updates.

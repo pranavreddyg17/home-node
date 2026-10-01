@@ -30,6 +30,7 @@ type Capacity struct {
 	FreeDiskBytes uint64
 }
 type Configuration struct {
+	UpdateRepository      *updates.RepositoryConfiguration
 	UpdateBootstrap       *updates.BootstrapRoot
 	Maintenance           *MaintenanceAccount
 	Network               networkcheck.Config
@@ -67,6 +68,14 @@ func ConfigurationPlan(c Configuration, now time.Time) (ConfigurationPreview, er
 func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (ConfigurationPreview, error) {
 	var result ConfigurationPreview
 	var updateRootVersion int64
+	if c.UpdateRepository != nil {
+		if c.UpdateBootstrap == nil || c.UpdateRepository.MinimumCatalogVersion < c.MinimumCatalogVersion {
+			return result, ErrPlan
+		}
+		if err := c.UpdateRepository.Validate(); err != nil {
+			return result, err
+		}
+	}
 	if c.UpdateBootstrap != nil {
 		var err error
 		updateRootVersion, err = c.UpdateBootstrap.Validate()
@@ -163,6 +172,13 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 		addDir("var/lib/homenode-update/metadata", 0700, 0, 0)
 		addDir("var/lib/homenode-update/downloads", 0700, 0, 0)
 		addFile("etc/homenode/update-root.json", 0400, c.UpdateBootstrap.Data)
+		if c.UpdateRepository != nil {
+			data, err := json.MarshalIndent(c.UpdateRepository, "", "  ")
+			if err != nil {
+				return result, err
+			}
+			addFile("etc/homenode/update-repository.json", 0400, append(data, '\n'))
+		}
 	}
 	if c.Maintenance != nil {
 		addDir("var/lib/homenode-backup", 0755, 0, 0)

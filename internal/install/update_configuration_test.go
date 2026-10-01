@@ -106,3 +106,27 @@ func TestConfigurationRejectsUnpinnedAndSingleKeyUpdateRoots(t *testing.T) {
 		})
 	}
 }
+
+func TestConfigurationOwnsRepositoryPolicyAndRequiresBootstrap(t *testing.T) {
+	c, _, _, now := configurationFixture(t)
+	c.UpdateBootstrap = updateBootstrapFixture(t, 2)
+	c.Maintenance = &MaintenanceAccount{UID: 803, GID: 803}
+	c.UpdateRepository = &updates.RepositoryConfiguration{Schema: 1, MetadataURL: "https://updates.example/metadata/", TargetsURL: "https://updates.example/targets/", MinimumSequence: 1, MinimumCatalogVersion: c.MinimumCatalogVersion}
+	preview, err := ConfigurationPlan(c, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := findConfiguration(t, preview.Plan, "etc/homenode/update-repository.json")
+	if item.Mode != 0400 || item.UID != 0 || item.GID != 0 || item.Directory {
+		t.Fatal("repository policy ownership", item)
+	}
+	c.UpdateBootstrap = nil
+	if _, err = ConfigurationPlan(c, now); err == nil {
+		t.Fatal("repository without bootstrap accepted")
+	}
+	c.UpdateBootstrap = updateBootstrapFixture(t, 2)
+	c.UpdateRepository.MinimumCatalogVersion = 0
+	if _, err = ConfigurationPlan(c, now); err == nil {
+		t.Fatal("invalid repository floor accepted")
+	}
+}
