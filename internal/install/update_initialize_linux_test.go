@@ -4,6 +4,10 @@ package install
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+
+	"github.com/pranavreddyg17/home-node/internal/updates"
 	"os"
 	"path/filepath"
 	"testing"
@@ -23,6 +27,7 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 		{Path: "var/lib/homenode-update", Directory: true, Mode: 0700, UID: 0, GID: 0},
 		{Path: "var/lib/homenode-update/metadata", Directory: true, Mode: 0700, UID: 0, GID: 0},
 		{Path: "var/lib/homenode-update/downloads", Directory: true, Mode: 0700, UID: 0, GID: 0},
+		{Path: "var/lib/homenode-update/inspection", Directory: true, Mode: 0700, UID: 0, GID: 0},
 	}}
 	engine := openEngine(t, host, journal)
 	ctx := context.Background()
@@ -56,6 +61,37 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	policy, err := engine.readUpdateRepositoryOwned(ctx)
 	if err != nil || policy.MinimumSequence != 5 || policy.MinimumCatalogVersion != 3 {
 		t.Fatal("owned policy unavailable after restart", policy, err)
+	}
+	data := []byte("signed acquisition staging fixture")
+	packagePath := filepath.Join(t.TempDir(), "acquired.deb")
+	if err := os.WriteFile(packagePath, data, 0400); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Open(packagePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	sum := sha256.Sum256(data)
+	release := &updates.AcquiredRelease{Package: file, PackageSHA256: hex.EncodeToString(sum[:]), PackageLength: int64(len(data)), Metadata: updates.ReleaseMetadata{Release: "0.1.0", Platform: "ubuntu-24.04-amd64", Sequence: 4, CatalogVersion: 3}}
+	if err := engine.stageUpdateInspectionOwned(ctx, release, "inspection-fixture-000001"); err == nil {
+		t.Fatal("release below repository floor staged")
+	}
+	stagePath := filepath.Join(host, "var/lib/homenode-update/inspection")
+	entries, err := os.ReadDir(stagePath)
+	if err != nil || len(entries) != 0 {
+		t.Fatal("rejected release mutated staging", err)
+	}
+	release.Metadata.Sequence = 5
+	if err := engine.stageUpdateInspectionOwned(ctx, release, "inspection-fixture-000001"); err != nil {
+		t.Fatal("owned inspection staging failed", err)
+	}
+	published, err := os.ReadFile(filepath.Join(stagePath, "package.deb"))
+	if err != nil || string(published) != string(data) {
+		t.Fatal("staged package differs", err)
+	}
+	if err := engine.stageUpdateInspectionOwned(ctx, release, "inspection-fixture-000002"); err == nil {
+		t.Fatal("occupied inspection operation replaced")
 	}
 	repositoryPath := filepath.Join(host, "etc/homenode/update-repository.json")
 	if err = os.WriteFile(repositoryPath, []byte("changed"), 0400); err != nil {
