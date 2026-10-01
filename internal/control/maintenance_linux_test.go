@@ -119,16 +119,27 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 		t.Fatal(err)
 	}
 	policy := backup.RestorePolicy{MinimumCatalogVersion: 1}
-	publisher := &maintenancePublicationFixture{store: server.Store, token: token, jobID: job.ID, rootToken: owned.RootToken}
+	publisher := &maintenancePublicationFixture{store: server.Store, token: token, jobID: job.ID, rootToken: owned.RootToken, stagingParent: snapshotDirectory}
 	dispatch := backup.Dispatch{Version: 1, JobID: job.ID, DeviceID: device, ManagementToken: token, RuntimeToken: owned.RootToken, Release: "0.1.0", CatalogVersion: 1}
-	workerConfig := runtimeclient.BackupWorkerConfig{ManagementSocket: listener.Addr().String(), DiskSocket: "/tmp/unused-empty-inventory.sock", ControllerListenerUID: uid, Release: "0.1.0", CatalogVersion: 1, Policy: policy}
-	workerResult, err := runtimeclient.RunDispatchedBackup(ctx, dispatch, workerConfig, staging, publisher)
+	workerConfig := runtimeclient.BackupWorkerConfig{ManagementSocket: listener.Addr().String(), DiskSocket: "/tmp/unused-empty-inventory.sock", ControllerListenerUID: uid, StagingParent: snapshotDirectory, Release: "0.1.0", CatalogVersion: 1, Policy: policy}
+	workerResult, err := runtimeclient.RunLeasedDispatchedBackup(ctx, dispatch, workerConfig, publisher)
 	published := workerResult.SnapshotID
 	if workerResult.JobID != job.ID {
 		t.Fatal("worker lost dispatched job identity")
 	}
 	if err != nil || published != state.Hash("fixture repository acknowledgement") || publisher.calls != 1 {
 		t.Fatal("private combined backup", published, err, publisher.calls)
+	}
+	replayed, replayLeaseErr := runtimeclient.RunLeasedDispatchedBackup(ctx, dispatch, workerConfig, publisher)
+	if replayLeaseErr == nil || replayed != (backup.BackupResult{}) || publisher.calls != 1 {
+		t.Fatal("leased same-job staging replay accepted", replayed, replayLeaseErr)
+	}
+	nextLease, err := backup.OpenJobStaging(ctx, snapshotDirectory, state.Random())
+	if err != nil {
+		t.Fatal("completed worker retained staging lease", err)
+	}
+	if err = nextLease.Close(); err != nil {
+		t.Fatal(err)
 	}
 	replayDirectory := t.TempDir()
 	if err = os.Chmod(replayDirectory, 0700); err != nil {
@@ -143,7 +154,12 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 	if replayErr == nil || replayID != "" || publisher.calls != 1 {
 		t.Fatal("publishing job replay reached repository", replayID, replayErr)
 	}
-	snapshot, err := staging.Open("snapshot.db")
+	workerStaging, err := staging.OpenRoot(job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer workerStaging.Close()
+	snapshot, err := workerStaging.Open("snapshot.db")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,11 +219,19 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 type maintenancePublicationFixture struct {
 	store                   *state.Store
 	token, jobID, rootToken string
+	stagingParent           string
 	calls                   int
 }
 
 func (p *maintenancePublicationFixture) Snapshot(ctx context.Context, directory *os.File, manifest backup.Manifest, policy backup.RestorePolicy) (string, error) {
 	p.calls++
+	overlap, leaseErr := backup.OpenJobStaging(ctx, p.stagingParent, state.Random())
+	if overlap != nil {
+		overlap.Close()
+	}
+	if !errors.Is(leaseErr, backup.ErrMaintenanceRunner) || overlap != nil {
+		return "", errors.New("publication without exclusive staging lease")
+	}
 	job, err := p.store.InspectMaintenanceJob(ctx, p.token)
 	if err != nil || job.ID != p.jobID || job.RootToken != p.rootToken || job.Phase != "publishing" {
 		return "", errors.New("repository effects without retained job authority")

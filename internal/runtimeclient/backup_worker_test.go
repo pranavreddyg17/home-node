@@ -23,7 +23,7 @@ func TestBackupWorkerRejectsUninstalledDispatchBeforeEffects(t *testing.T) {
 	}
 	defer root.Close()
 	dispatch := backup.Dispatch{Version: 1, JobID: state.Random(), DeviceID: state.Random(), ManagementToken: state.Random(), RuntimeToken: state.Random(), Release: "0.1.0", CatalogVersion: 2}
-	config := BackupWorkerConfig{ManagementSocket: "/tmp/unused-management.sock", DiskSocket: "/tmp/unused-disk.sock", Release: "0.1.0", CatalogVersion: 2, Policy: backup.RestorePolicy{MinimumCatalogVersion: 1}}
+	config := BackupWorkerConfig{ManagementSocket: "/tmp/unused-management.sock", DiskSocket: "/tmp/unused-disk.sock", Release: "0.1.0", StagingParent: root.Name(), CatalogVersion: 2, Policy: backup.RestorePolicy{MinimumCatalogVersion: 1}}
 	for _, scenario := range []string{"release", "catalog", "floor", "management-path", "disk-path", "invalid-job", "cancelled"} {
 		t.Run(scenario, func(t *testing.T) {
 			configured, message := config, dispatch
@@ -49,6 +49,10 @@ func TestBackupWorkerRejectsUninstalledDispatchBeforeEffects(t *testing.T) {
 			result, err := RunDispatchedBackup(ctx, message, configured, root, repository)
 			if err == nil || result != (backup.BackupResult{}) || repository.calls != 0 {
 				t.Fatal("invalid dispatch reached worker effects", result, err)
+			}
+			leasedResult, leasedErr := RunLeasedDispatchedBackup(ctx, message, configured, repository)
+			if leasedErr == nil || leasedResult != (backup.BackupResult{}) || repository.calls != 0 {
+				t.Fatal("invalid leased dispatch reached effects", leasedResult, leasedErr)
 			}
 			if scenario == "cancelled" && !errors.Is(err, context.Canceled) {
 				t.Fatal("cancellation lost", err)

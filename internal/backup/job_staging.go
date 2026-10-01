@@ -87,6 +87,15 @@ func OpenJobStaging(ctx context.Context, directory, jobID string) (*JobStaging, 
 	if statErr != nil || currentErr != nil || !os.SameFile(original, info) || !os.SameFile(original, current) {
 		return nil, ErrManifest
 	}
+	parentDirectory, err := parent.Open(".")
+	if err != nil {
+		return nil, err
+	}
+	syncErr := parentDirectory.Sync()
+	closeErr := parentDirectory.Close()
+	if err = errors.Join(syncErr, closeErr); err != nil {
+		return nil, err
+	}
 	if err = ctx.Err(); err != nil {
 		return nil, err
 	}
