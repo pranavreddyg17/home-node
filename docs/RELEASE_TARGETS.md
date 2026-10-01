@@ -77,3 +77,17 @@ observation closes the acquired package and returns a conflict. This is a
 consistency check for acquisition, not an admission barrier for installation;
 the eventual approved migration must retain exclusive maintenance admission
 and revalidate compatibility at its execution boundary.
+
+The proposed HomeNode Debian control-content gate,
+`updates.ValidateControlArchive`, accepts only a bounded decompressed control
+tar with one regular root-owned mode `0644` control file (and optional `.`
+directory). It rejects maintainer scripts, triggers, links, unknown archive
+entries, duplicate/unknown control fields, package or architecture mismatch,
+and versions different from signed release metadata. Dependencies must exactly
+match the maintained HomeNode distribution dependency set. This format matches
+the current script-free development packaging contract. It is deliberately a
+HomeNode format constraint rather than acceptance of every legal Debian format.
+See [Debian binary package format](https://manpages.debian.org/bookworm/dpkg-dev/deb.5.en.html).
+The parser does not yet decompress or verify the outer `.deb`, inspect the data
+payload, or run in the eventual constrained package-inspection worker; it is not
+currently an installation admission gate. Those integrations remain required.
