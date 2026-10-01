@@ -1123,3 +1123,7 @@ Validation: installer race suite and targeted preparation tests passed. Tests ve
 Review found and corrected a native preparation wiring gap: the fixed-name getent lookup allowlist did not include `homenode-backup`, so fixture preparation passed while native preparation would refuse its own planned name. The allowlist now admits that exact backup name without permitting arbitrary names. A Linux test checks passwd/group lookup of the fixed name (present or definitely absent) and arbitrary-name refusal.
 
 Validation: available installer race suite passed; Linux test compilation passed. Native execution of the new lookup test remains pending CI; account mutation/rollback and service activation remain unfinished.
+
+Backup account step reconciliation now recognizes the planned group separately from the owner-marked user, enabling later resume after a command acknowledgement is lost. It refuses mismatched numeric IDs, foreign install markers, foreign primary-group users or aliases, supplementary memberships, unlocked credentials, orphan shadow authority, and a user without its planned private group. This helper does not execute or checkpoint commands; the resumable provisioning loop and rollback remain unfinished.
+
+Validation: installer race suite passed for missing/group-only/complete states, lost-result reconciliation, and foreign-marker/UID-alias/GID-alias/extra-group/unlocked refusal. Existing native CI run 36806938356 was confirmed in progress; this new reconciliation fixture has not yet run natively.
