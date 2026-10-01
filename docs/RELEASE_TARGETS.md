@@ -244,3 +244,11 @@ offset. Native entry/service fixtures compare result identity with their actual
 inherited descriptor. AcquiredRelease additionally retains the verified signed
 target digest and length for the future privileged result comparison. Root
 operation/result binding and activation still require integration and testing.
+
+`updates.ValidateInspectionResult` requires every schema-one field exactly once,
+with no unknown/case-aliased fields, nulls or trailing JSON, within 2 KiB. It
+compares release, SHA256 and length against independently retained signed target
+identity and requires content validity with installation authority false. Native
+worker fixtures consume the emitted result through this parser. This parser
+checks result content, not worker identity or successful protected execution;
+its privileged operation binding and service completion evidence remain pending.

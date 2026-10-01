@@ -5,7 +5,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"github.com/pranavreddyg17/home-node/internal/updates"
 	"golang.org/x/sys/unix"
 	"io"
@@ -48,15 +47,8 @@ func TestNativeInspectionDescriptor(t *testing.T) {
 		if err := run(context.Background(), []string{"--release", "0.1.0~ci"}, &output); err != nil {
 			t.Fatal("worker inspection", err)
 		}
-		var result struct {
-			Schema            int    `json:"schema"`
-			Release           string `json:"release"`
-			PackageSHA256     string `json:"packageSha256"`
-			PackageLength     int64  `json:"packageLength"`
-			ContentValid      bool   `json:"contentValid"`
-			InstallAuthorized bool   `json:"installAuthorized"`
-		}
-		if err := json.Unmarshal(output.Bytes(), &result); err != nil || !result.ContentValid || result.InstallAuthorized || result.Schema != 1 || result.Release != "0.1.0~ci" || result.PackageSHA256 != expectedDigest || result.PackageLength != expectedLength {
+		result, err := updates.ValidateInspectionResult(output.Bytes(), updates.InspectionIdentity{Release: "0.1.0~ci", PackageSHA256: expectedDigest, PackageLength: expectedLength})
+		if err != nil || !result.ContentValid || result.InstallAuthorized {
 			t.Fatal("invalid worker result", err)
 		}
 		return
