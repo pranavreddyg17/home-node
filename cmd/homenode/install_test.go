@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/catalog"
+	"github.com/sigstore/sigstore/pkg/signature"
+	"github.com/theupdateframework/go-tuf/v2/metadata"
 )
 
 func preparationFixture(t *testing.T) ([]string, time.Time) {
@@ -56,6 +59,7 @@ func TestPreparationAuthenticatesReleaseBeforeEffects(t *testing.T) {
 		t.Fatal("invalid parsed preparation")
 	}
 	for _, extra := range [][]string{
+		{"--update-root", "missing"}, {"--update-root-sha256", "00"},
 		{"--publisher-key", "00"}, {"--catalog-floor", "5"}, {"--catalog-floor", "0"}, {"--origin", "http://home.example.ts.net:8787"},
 		{"--cpus", "0"}, {"--generation", "0"}, {"--images", filepath.Join(t.TempDir(), "missing")}, {"--controller-uid", "800"}, {"unexpected"},
 	} {
@@ -82,5 +86,58 @@ func TestCatalogReaderRejectsSymlinkAndOversize(t *testing.T) {
 	}
 	if _, err := readReleaseCatalog(link); err == nil {
 		t.Fatal("symlink input admitted")
+	}
+}
+
+func TestPreparationAcceptsIndependentlyPinnedThresholdUpdateRoot(t *testing.T) {
+	args, now := preparationFixture(t)
+	var updateRootSigners []signature.Signer
+	root := metadata.Root(now.Add(time.Hour))
+	root.Signed.Roles[metadata.ROOT].Threshold = 2
+	for _, role := range []string{metadata.ROOT, metadata.TIMESTAMP, metadata.SNAPSHOT, metadata.TARGETS} {
+		count := 1
+		if role == metadata.ROOT {
+			count = 2
+		}
+		for i := 0; i < count; i++ {
+			public, private, err := ed25519.GenerateKey(rand.Reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			key, err := metadata.KeyFromPublicKey(public)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = root.Signed.AddKey(key, role); err != nil {
+				t.Fatal(err)
+			}
+			if role == metadata.ROOT {
+				signer, err := signature.LoadSigner(private, crypto.Hash(0))
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Sign only after every key has been added to the root below.
+				updateRootSigners = append(updateRootSigners, signer)
+			}
+		}
+	}
+	for _, signer := range updateRootSigners {
+		if _, err := root.Sign(signer); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, err := root.ToBytes(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := filepath.Join(t.TempDir(), "root.json")
+	if err = os.WriteFile(name, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(data)
+	pin := hex.EncodeToString(sum[:])
+	p, err := parsePreparation(append(args, "--update-root", name, "--update-root-sha256", pin), now)
+	if err != nil || p.configuration.UpdateBootstrap == nil || p.configuration.UpdateBootstrap.SHA256 != pin || string(p.configuration.UpdateBootstrap.Data) != string(data) {
+		t.Fatal("pinned bootstrap omitted", err)
 	}
 }

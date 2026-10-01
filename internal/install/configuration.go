@@ -11,6 +11,7 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/catalog"
 	"github.com/pranavreddyg17/home-node/internal/networkcheck"
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
+	"github.com/pranavreddyg17/home-node/internal/updates"
 	"github.com/pranavreddyg17/home-node/internal/workload"
 	servicetemplates "github.com/pranavreddyg17/home-node/packaging/systemd"
 )
@@ -29,6 +30,7 @@ type Capacity struct {
 	FreeDiskBytes uint64
 }
 type Configuration struct {
+	UpdateBootstrap       *updates.BootstrapRoot
 	Maintenance           *MaintenanceAccount
 	Network               networkcheck.Config
 	Accounts              Accounts
@@ -39,18 +41,20 @@ type Configuration struct {
 	Capacity              Capacity
 }
 type ConfigurationPreview struct {
-	Maintenance           *MaintenanceAccount `json:"maintenance,omitempty"`
-	Network               networkcheck.Config `json:"network"`
-	RuntimePolicy         supervisor.Policy   `json:"runtimePolicy"`
-	Accounts              Accounts            `json:"accounts"`
-	ProvidedCapacity      Capacity            `json:"providedCapacity"`
-	Plan                  Plan                `json:"plan"`
-	CatalogVersion        int64               `json:"catalogVersion"`
-	PublisherKeyID        string              `json:"publisherKeyId"`
-	RequiredDiskBytes     uint64              `json:"requiredDiskBytes"`
-	VerifiedImageBytes    uint64              `json:"verifiedImageBytes"`
-	RequiredFreeDiskBytes uint64              `json:"requiredFreeDiskBytes"`
-	Pending               []string            `json:"pending"`
+	UpdateBootstrapSHA256  string              `json:"updateBootstrapSha256,omitempty"`
+	UpdateBootstrapVersion int64               `json:"updateBootstrapVersion,omitempty"`
+	Maintenance            *MaintenanceAccount `json:"maintenance,omitempty"`
+	Network                networkcheck.Config `json:"network"`
+	RuntimePolicy          supervisor.Policy   `json:"runtimePolicy"`
+	Accounts               Accounts            `json:"accounts"`
+	ProvidedCapacity       Capacity            `json:"providedCapacity"`
+	Plan                   Plan                `json:"plan"`
+	CatalogVersion         int64               `json:"catalogVersion"`
+	PublisherKeyID         string              `json:"publisherKeyId"`
+	RequiredDiskBytes      uint64              `json:"requiredDiskBytes"`
+	VerifiedImageBytes     uint64              `json:"verifiedImageBytes"`
+	RequiredFreeDiskBytes  uint64              `json:"requiredFreeDiskBytes"`
+	Pending                []string            `json:"pending"`
 }
 
 // ConfigurationPlan is deterministic and has no side effects. The caller must
@@ -62,6 +66,14 @@ func ConfigurationPlan(c Configuration, now time.Time) (ConfigurationPreview, er
 
 func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (ConfigurationPreview, error) {
 	var result ConfigurationPreview
+	var updateRootVersion int64
+	if c.UpdateBootstrap != nil {
+		var err error
+		updateRootVersion, err = c.UpdateBootstrap.Validate()
+		if err != nil {
+			return result, err
+		}
+	}
 	if _, err := networkcheck.ValidateConfiguration(c.Network); err != nil {
 		return result, err
 	}
@@ -146,6 +158,12 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 	addDir("var/lib/homenode/catalog", 0700, 0, 0)
 	addDir("var/lib/homenode/images", 0710, 0, a.QEMUGID)
 	addDir("var/lib/homenode/volumes", 0710, 0, a.QEMUGID)
+	if c.UpdateBootstrap != nil {
+		addDir("var/lib/homenode-update", 0700, 0, 0)
+		addDir("var/lib/homenode-update/metadata", 0700, 0, 0)
+		addDir("var/lib/homenode-update/downloads", 0700, 0, 0)
+		addFile("etc/homenode/update-root.json", 0400, c.UpdateBootstrap.Data)
+	}
 	if c.Maintenance != nil {
 		addDir("var/lib/homenode-backup", 0755, 0, 0)
 		addDir("var/lib/homenode-backup/staging", 0700, int(c.Maintenance.UID), c.Maintenance.GID)
@@ -197,6 +215,11 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 	result = ConfigurationPreview{Maintenance: c.Maintenance, Network: c.Network, RuntimePolicy: c.Policy, Accounts: c.Accounts, ProvidedCapacity: c.Capacity, Plan: plan, CatalogVersion: m.Version, PublisherKeyID: catalog.KeyID(c.Publisher), RequiredDiskBytes: required, VerifiedImageBytes: imageCredit, RequiredFreeDiskBytes: required - imageCredit, Pending: []string{"verify actual service account memberships", "verify supported host enforcement and measured VM overhead", "place and verify immutable guest images", "verify live Tailscale and protected HTTPS identity", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
 	if c.Maintenance != nil {
 		result.Pending = append(result.Pending, "register and qualify an external backup repository", "generate trusted backup launch configuration and qualify worker activation")
+	}
+	if c.UpdateBootstrap != nil {
+		result.UpdateBootstrapSHA256 = c.UpdateBootstrap.SHA256
+		result.UpdateBootstrapVersion = updateRootVersion
+		result.Pending = append(result.Pending, "initialize protected current TUF root from independently trusted bootstrap", "configure release policy and qualify approved update activation")
 	}
 	return result, nil
 }

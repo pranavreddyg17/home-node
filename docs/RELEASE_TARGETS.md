@@ -24,3 +24,9 @@ Platform is currently fixed to the product's initial Ubuntu 24.04 amd64 candidat
 Package paths are relative canonical `.deb` target names. Acquisition requires SHA256, verifies any SHA512 too, rejects unsupported hashes and caps package bytes at 512 MiB. SBOM and provenance paths are distinct relative canonical JSON target names. Both must resolve through verified TUF metadata, declare SHA256 and have lengths from one byte through 8 MiB before package acquisition starts.
 
 The current code acquires both evidence documents, verifies their exact TUF length/hashes and JSON syntax, and returns their bytes with the verified read-only package for later review. It does not establish SBOM completeness, vulnerability status, an authorized build identity or release promotion approval. Semantic evidence review, install journals, migrations, permitted rollback, trusted launch configuration and owner approval remain separate required gates before a release can be installed or claimed qualified.
+
+## Installer trust bootstrap
+
+`install-prepare` accepts optional paired `--update-root <local-root.json>` and `--update-root-sha256 <independently-verified-digest>` flags. The pin must come from independently trusted release setup, not a digest downloaded beside an untrusted root. Input is bounded, must satisfy upstream TUF root signature verification, uses a root role threshold of at least two, and keeps keys distinct across the four top-level roles.
+
+Preparation journals an immutable root-owned 0400 `/etc/homenode/update-root.json` and root-owned 0700 update, metadata and download directories under `/var/lib/homenode-update`. It does not journal `metadata/root.json` as immutable configuration, initialize a current cache root, download packages, or activate updates. The current cache bootstrap/rotation ownership lifecycle and trusted release-policy configuration still require implementation.

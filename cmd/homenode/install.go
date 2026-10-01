@@ -18,6 +18,7 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/hostcheck"
 	"github.com/pranavreddyg17/home-node/internal/install"
 	"github.com/pranavreddyg17/home-node/internal/networkcheck"
+	"github.com/pranavreddyg17/home-node/internal/updates"
 )
 
 type preparation struct {
@@ -30,6 +31,8 @@ func parsePreparation(args []string, now time.Time) (preparation, error) {
 	flags := flag.NewFlagSet("install-prepare", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	key := flags.String("publisher-key", "", "independently verified publisher Ed25519 public key, hex")
+	updateRoot := flags.String("update-root", "", "independently trusted TUF bootstrap root file")
+	updatePin := flags.String("update-root-sha256", "", "independently verified bootstrap root SHA256; required with update-root")
 	file := flags.String("catalog", "", "signed release catalog file")
 	flags.Int64Var(&p.configuration.MinimumCatalogVersion, "catalog-floor", 0, "independently verified minimum catalog version")
 	flags.StringVar(&p.source, "images", "", "local release image directory")
@@ -47,6 +50,20 @@ func parsePreparation(args []string, now time.Time) (preparation, error) {
 	}
 	if flags.NArg() != 0 || p.source == "" || p.journal == "" || *file == "" || p.configuration.MinimumCatalogVersion < 1 {
 		return p, install.ErrPlan
+	}
+	if (*updateRoot == "") != (*updatePin == "") {
+		return p, install.ErrPlan
+	}
+	if *updateRoot != "" {
+		data, err := readReleaseCatalog(*updateRoot)
+		if err != nil {
+			return p, err
+		}
+		bootstrap := &updates.BootstrapRoot{Data: data, SHA256: *updatePin}
+		if _, err = bootstrap.Validate(); err != nil {
+			return p, err
+		}
+		p.configuration.UpdateBootstrap = bootstrap
 	}
 	pub, err := hex.DecodeString(*key)
 	if err != nil || len(pub) != ed25519.PublicKeySize {
