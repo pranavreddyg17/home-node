@@ -76,6 +76,31 @@ func TestInspectionStagingPublishesOwnedIdentityWithoutReplacingState(t *testing
 			if err != nil || string(ready) != string(intent) {
 				t.Fatal("ready identity mismatch", err)
 			}
+			identity := InspectionIdentity{OperationID: "inspection-fixture-000001", Release: release.Metadata.Release, PackageSHA256: release.PackageSHA256, PackageLength: release.PackageLength}
+			stage, err := openInspectionStageOwned(ctx, root, identity)
+			if err != nil {
+				t.Fatal("ready stage refused", err)
+			}
+			if other, err := openInspectionStageOwned(ctx, root, identity); err == nil {
+				other.Close()
+				t.Fatal("concurrent worker admitted")
+			}
+			if err := stage.Close(); err != nil {
+				t.Fatal(err)
+			}
+			wrong := identity
+			wrong.OperationID = "inspection-fixture-000002"
+			if other, err := openInspectionStageOwned(ctx, root, wrong); err == nil {
+				other.Close()
+				t.Fatal("different operation admitted")
+			}
+			if err := os.WriteFile(filepath.Join(directory, "ready"), []byte("tampered"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if other, err := openInspectionStageOwned(ctx, root, identity); err == nil {
+				other.Close()
+				t.Fatal("tampered ready admitted")
+			}
 			if err = stageInspectionPackageOwned(ctx, root, release, "inspection-fixture-000002"); err == nil {
 				t.Fatal("existing operation replaced")
 			}
