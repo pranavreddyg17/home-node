@@ -70,6 +70,9 @@ func RunMaintenance(ctx context.Context, store *state.Store, device string, apps
 }
 
 func finishMaintenance(ctx context.Context, store *state.Store, token, id, device string, apps MaintenanceApps, root MaintenanceRoot) error {
+	if err := store.RequireBackupWorkerStopped(ctx, token, id); err != nil {
+		return err
+	}
 	job, err := store.InspectMaintenanceJob(ctx, token)
 	if err != nil {
 		return err

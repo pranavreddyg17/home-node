@@ -78,6 +78,9 @@ func TestDispatchedCoordinatorRequiresCompletionAndPublicationBeforeRelease(t *t
 				if inspectErr != nil || job.Phase != "requires-action" || job.RootToken != delivered.RuntimeToken {
 					t.Fatal("uncertain ownership not retained", job, inspectErr)
 				}
+				if recoverErr := RecoverMaintenance(ctx, store, delivered.ManagementToken, jobID, apps, root); recoverErr == nil || root.released || apps.restored {
+					t.Fatal("recovery released an uncertain worker", recoverErr)
+				}
 			}
 			if _, err = credential.Stat(); err != nil {
 				t.Fatal("caller credential closed", err)

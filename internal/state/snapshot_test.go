@@ -29,6 +29,7 @@ func TestRecoverySnapshotIncludesCommittedWALAndExcludesTrust(t *testing.T) {
 		{`INSERT INTO settings VALUES('origin','https://old-host.example')`, nil},
 		{`INSERT INTO settings VALUES('host.maintenance','active-source-barrier')`, nil},
 		{`INSERT INTO settings VALUES('host.backup-publication','source-publication-intent')`, nil},
+		{`INSERT INTO settings VALUES('host.backup-dispatch','uncertain:source-dispatch-intent')`, nil},
 		{`INSERT INTO settings VALUES('host.backup-outcome.current','source-outcome')`, nil},
 		{`INSERT INTO settings VALUES('host.backup-outcome.last-success','source-success')`, nil},
 		{`INSERT INTO settings VALUES('host.maintenance-job.root-token','source-root-token')`, nil},
@@ -108,6 +109,12 @@ func TestRecoverySnapshotIncludesCommittedWALAndExcludesTrust(t *testing.T) {
 	}
 	if err = restored.QueryRow("SELECT count(*) FROM settings WHERE key='host.maintenance'").Scan(&count); err != nil || count != 0 {
 		t.Fatal("recovery retained source maintenance barrier", count, err)
+	}
+	if err = restored.QueryRow("SELECT count(*) FROM settings WHERE key='host.backup-dispatch'").Scan(&count); err != nil || count != 0 {
+		t.Fatal("recovery retained source worker dispatch authority", count, err)
+	}
+	if err = s.DB.QueryRow("SELECT value FROM settings WHERE key='host.backup-dispatch'").Scan(&value); err != nil || value != "uncertain:source-dispatch-intent" {
+		t.Fatal("snapshot changed live dispatch intent", value, err)
 	}
 	if err = s.DB.QueryRow("SELECT value FROM settings WHERE key='host.maintenance'").Scan(&value); err != nil || value != "active-source-barrier" {
 		t.Fatal("snapshot released source barrier", value, err)

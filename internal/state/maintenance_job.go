@@ -65,6 +65,13 @@ func (s *Store) BeginMaintenanceJob(ctx context.Context, device string) (string,
 		if err := RequireAdmission(tx); err != nil {
 			return err
 		}
+		var dispatches int
+		if err := tx.QueryRow("SELECT count(*) FROM settings WHERE key=?", backupDispatchKey).Scan(&dispatches); err != nil {
+			return err
+		}
+		if dispatches != 0 {
+			return ErrMaintenance
+		}
 		if err := maintenanceDevice(tx, device); err != nil {
 			return err
 		}
@@ -120,6 +127,11 @@ func (s *Store) AdvanceMaintenanceJob(ctx context.Context, token, id, from, to s
 		allowed := to == "requires-action" && from != "requires-action" || to == "restoring" && from != "restoring" || from == "draining" && to == "freezing" || from == "staging" && to == "publishing"
 		if !allowed {
 			return ErrMaintenance
+		}
+		if to == "restoring" {
+			if err = requireBackupWorkerStopped(tx, id); err != nil {
+				return err
+			}
 		}
 		if _, err = tx.Exec("UPDATE settings SET value='2' WHERE key=?", maintenanceJobPrefix+"version"); err != nil {
 			return err
@@ -183,6 +195,9 @@ func (s *Store) ReleaseMaintenanceRoot(ctx context.Context, token, id string, re
 		if current != job {
 			return ErrMaintenanceOwner
 		}
+		if err = requireBackupWorkerStopped(tx, id); err != nil {
+			return err
+		}
 		return maintenanceDevice(tx, job.Device)
 	}); err != nil {
 		return err
@@ -226,6 +241,9 @@ func (s *Store) CompleteMaintenanceJob(ctx context.Context, token, id string) er
 		if job.ID != id || job.Phase != "restoring" || job.RootToken != "" {
 			return ErrMaintenanceOwner
 		}
+		if err = requireBackupWorkerStopped(tx, id); err != nil {
+			return err
+		}
 		if err := maintenanceDevice(tx, job.Device); err != nil {
 			return err
 		}
@@ -265,6 +283,9 @@ func (s *Store) CompleteMaintenanceJob(ctx context.Context, token, id string) er
 			if restored != 1 {
 				return ErrMaintenance
 			}
+		}
+		if _, err = tx.Exec("DELETE FROM settings WHERE key=? AND value=?", backupDispatchKey, "complete:"+id); err != nil {
+			return err
 		}
 		if _, err = tx.Exec("DELETE FROM settings WHERE key GLOB 'host.maintenance-job.*'"); err != nil {
 			return err

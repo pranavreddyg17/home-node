@@ -70,6 +70,9 @@ func RunDispatchedMaintenance(ctx context.Context, store *state.Store, device, r
 	if _, err = EncodeDispatch(dispatch); err != nil {
 		return jobID, "", err
 	}
+	if err = store.ClaimBackupDispatch(ctx, token, job.ID); err != nil {
+		return jobID, "", err
+	}
 	uncertain = true
 	if err = deliver(ctx, dispatch, credential); err != nil {
 		return jobID, "", err
@@ -83,6 +86,9 @@ func RunDispatchedMaintenance(ctx context.Context, store *state.Store, device, r
 		return jobID, "", errors.Join(ErrBackupPublicationEvidence, err)
 	}
 	snapshotID = current.SnapshotID
+	if err = store.RecordBackupWorkerCompleted(ctx, token, job.ID); err != nil {
+		return jobID, snapshotID, err
+	}
 	uncertain = false
 	return jobID, snapshotID, nil
 }
