@@ -123,6 +123,9 @@ func (e *Engine) prepareUpdateInspectionLaunchOwned(ctx context.Context, release
 		return nil, errors.Join(err, stage.Close())
 	}
 	publishErr := stage.PublishEnvironment(ctx, parent)
+	if publishErr == nil {
+		publishErr = stage.VerifyEnvironment(ctx, parent)
+	}
 	closeErr := parent.Close()
 	if publishErr != nil || closeErr != nil {
 		return nil, errors.Join(publishErr, closeErr, stage.Close())

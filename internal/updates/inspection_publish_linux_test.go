@@ -108,6 +108,30 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	if err != nil || info.Mode().Perm() != 0600 {
 		t.Fatal("launch file permissions", err)
 	}
+	if err := stage.verifyEnvironmentOwned(ctx, parent); err != nil {
+		t.Fatal("published configuration refused", err)
+	}
+	if err := stage.verifyEnvironmentOwned(ctx, unrelated); err == nil {
+		t.Fatal("unrelated launch configuration accepted")
+	}
+	if err := os.WriteFile(filepath.Join(parentPath, "inspection.env"), []byte("INSPECTION_RELEASE=0.2.0\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.verifyEnvironmentOwned(ctx, parent); err == nil {
+		t.Fatal("changed configuration accepted")
+	}
+	if err := os.WriteFile(filepath.Join(parentPath, "inspection.env"), expected, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pendingPath, []byte("interrupted"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.verifyEnvironmentOwned(ctx, parent); err == nil {
+		t.Fatal("conflicting pending launch accepted")
+	}
+	if err := os.Remove(pendingPath); err != nil {
+		t.Fatal(err)
+	}
 	if err := stage.publishEnvironmentOwned(ctx, parent); err == nil {
 		t.Fatal("existing launch configuration replaced")
 	}

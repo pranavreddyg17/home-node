@@ -1739,3 +1739,7 @@ Engine.PrepareUpdateInspectionLaunch now combines verified installer configurati
 ### Atomic service-input publication
 
 Inspection environment publication now writes and synchronizes an exclusive pending record before a no-replace rename and parent-directory synchronization. The service-visible path cannot expose a partially written environment file. Existing final records refuse before pending creation; interrupted pending records refuse replacement and retain evidence for explicit recovery. Expanded Linux assertions exercise retained interrupted bytes, absent final publication and unchanged occupied state. Portable update/installer race suites, Linux update compilation and diff checks passed; native publication tests await their next CI execution. CI 36933201712 is still active.
+
+### Launch configuration verification
+
+InspectionStage.VerifyEnvironment now checks a private owned parent, fixed staging inode, absent conflicting pending state and bounded single-link non-symlink 0600 launch inputs against exact retained identity, then rehashes the pinned package. Installer launch preparation verifies its publication before returning the retained execution handle. Linux assertions cover valid publication, unrelated parent, changed release configuration and conflicting pending state. Portable update/installer race tests, Linux update/installer compilation and diff validation passed. Native execution and authenticated service activation/completion remain pending; CI 36933201712 is still active.
