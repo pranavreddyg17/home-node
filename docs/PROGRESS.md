@@ -1703,3 +1703,7 @@ HomeNode CI 36931102154 at 6eb8b81 passed the operation-correlated inspection wo
 ### Protected inspection stage admission
 
 OpenInspectionStage now retains an exclusive directory lock and a read-only package descriptor for the protected execution caller. It requires exactly the three published staging entries, private owned regular single-link files, byte-exact canonical intent/ready records matching independently retained operation identity, and a fresh package hash/length check. No identity is inferred from disk records and closing admission preserves state for explicit recovery. Linux fixtures exercise concurrent admission refusal, different operation identity and tampered ready records. Linux compilation and portable update race tests passed; actual Linux execution of this addition is pending. Worker activation/result persistence and installation authority are not implemented by this primitive.
+
+### Inspection admission refusal coverage
+
+Added Linux execution fixtures for missing ready state, unexpected entries, symlink/hardlink/FIFO records, public record or directory permissions, writable or changed package bytes, oversized ready records and canceled admission. Each refusal must release the directory lock and retain durable evidence instead of deleting or repairing it. The FIFO case exercises nonblocking file opening before regular-file validation. Linux compilation, portable update race tests and diff checks passed; native execution awaits publication after CI 36932221459 finishes.
