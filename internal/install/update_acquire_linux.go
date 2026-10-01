@@ -7,16 +7,22 @@ import (
 	"errors"
 	"os"
 
+	"github.com/pranavreddyg17/home-node/internal/state"
 	"github.com/pranavreddyg17/home-node/internal/updates"
 )
 
 // AcquireUpdateRelease uses only installer-owned trust, repository scopes and
-// staging directories. currentSchema must be measured from protected host state
-// by the maintenance caller. The result still requires evidence qualification,
+// staging directories. The maintenance caller supplies its protected live state
+// store; schema is observed rather than accepted as an integer argument.
+// The result still requires evidence qualification,
 // fresh owner approval and the journaled installation lifecycle.
-func (e *Engine) AcquireUpdateRelease(ctx context.Context, target string, currentSchema int) (result *updates.AcquiredRelease, resultErr error) {
+func (e *Engine) AcquireUpdateRelease(ctx context.Context, target string, store *state.Store) (result *updates.AcquiredRelease, resultErr error) {
 	if os.Geteuid() != 0 || e.host.Name() != "/" {
 		return nil, ErrConflict
+	}
+	currentSchema, err := store.ObserveSchemaVersion(ctx)
+	if err != nil {
+		return nil, err
 	}
 	return e.acquireUpdateReleaseOwned(ctx, target, currentSchema)
 }
