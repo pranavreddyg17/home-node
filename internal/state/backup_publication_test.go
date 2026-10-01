@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 )
@@ -183,5 +184,27 @@ func TestUncertainPublicationCannotBeReplacedByNewClaim(t *testing.T) {
 		} else if current.JobID != first.ID || current.Status != "unknown" || success != nil {
 			t.Fatal("uncertain outcome replaced")
 		}
+	}
+}
+
+func TestBackupOutcomeInspectionRequiresMatchingPublicationClaim(t *testing.T) {
+	for _, scenario := range []string{"orphan-outcome", "legacy-claim", "mismatched-claim"} {
+		t.Run(scenario, func(t *testing.T) {
+			store, _, _ := maintenanceJobFixture(t)
+			current := BackupOutcome{Version: 1, JobID: "current-job-1234567890", Status: "unknown", ClaimedAt: 1}
+			if scenario != "legacy-claim" {
+				if err := store.Transaction(context.Background(), func(tx *sql.Tx) error { return writeBackupOutcome(tx, backupOutcomeKey, current) }); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if scenario != "orphan-outcome" {
+				if _, err := store.DB.Exec("INSERT INTO settings(key,value) VALUES(?,?)", backupPublicationKey, "different-job-1234567890"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if current, last, err := store.InspectBackupOutcomes(context.Background()); !errors.Is(err, ErrBackupPublication) || current != nil || last != nil {
+				t.Fatal("inconsistent publication represented as valid evidence", current, last, err)
+			}
+		})
 	}
 }

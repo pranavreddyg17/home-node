@@ -191,6 +191,17 @@ func (s *Store) InspectBackupOutcomes(ctx context.Context) (current, lastSuccess
 			}
 			*target = &outcome
 		}
+		var claim string
+		err := tx.QueryRow("SELECT value FROM settings WHERE key=?", backupPublicationKey).Scan(&claim)
+		if errors.Is(err, sql.ErrNoRows) {
+			if current != nil {
+				return ErrBackupPublication
+			}
+		} else if err != nil {
+			return err
+		} else if current == nil || !recoveryInstanceID.MatchString(claim) || current.JobID != claim {
+			return ErrBackupPublication
+		}
 		return nil
 	})
 	if resultErr != nil {

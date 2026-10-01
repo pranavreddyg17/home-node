@@ -1515,3 +1515,9 @@ Final installer race tests and diff validation passed. Native ownership/resume a
 Administrator Overview now includes the same publication-status panel as Settings, independently of the host report result. Missing external publication evidence and an uncertain current outcome are visible on the landing screen, with manual refresh and last-observed time. Non-administrator Overview omits backup details. Publication still does not attest repository integrity or restoration, and backup launch/recovery controls remain unavailable.
 
 Production frontend build and the final identity browser workflow passed. Coverage checks the real empty publication state on owner Overview, non-admin Overview omission, and the existing Settings unknown/error/access cases. Native Linux packaging/staging CI remains live in prerequisite installation; subsequent deployment changes await their own CI. The complete goal remains unfinished.
+
+### Publication observation claim consistency
+
+Outcome inspection now requires the current typed publication record to match its durable claim. A legacy claim without an outcome, an outcome without a claim, or a mismatched claim refuses inspection and returns no partial records. Owner status therefore reports unavailability instead of converting legacy uncertainty into absent evidence. Earlier acknowledged history remains distinct from current publication authority; this change does not reconcile or retry repository effects.
+
+State and control race suites passed, including orphan, legacy and mismatch cases and the updated administrator unknown/earlier-publication fixture with its matching claim. Diff validation passed. Native Linux CI for previously pushed packaging/staging remains active; later queued deployment and owner status changes remain unpushed until it reaches a terminal result. Complete launch/reconciliation/recovery workflows remain unfinished.

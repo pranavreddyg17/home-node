@@ -63,6 +63,9 @@ func TestBackupOutcomesKeepUnknownSeparateFromEarlierPublication(t *testing.T) {
 				return err
 			}
 		}
+		if _, err := tx.Exec("INSERT INTO settings(key,value) VALUES('host.backup-publication','current-job-1234567890')"); err != nil {
+			return err
+		}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
