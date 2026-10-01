@@ -12,8 +12,10 @@ import (
 )
 
 type maintenanceAccountJournal struct {
-	Version int                    `json:"version"`
-	Plan    MaintenanceAccountPlan `json:"plan"`
+	Version   int                    `json:"version"`
+	Completed int                    `json:"completed,omitempty"`
+	Ready     bool                   `json:"ready,omitempty"`
+	Plan      MaintenanceAccountPlan `json:"plan"`
 }
 
 // PrepareMaintenanceAccount commits creation intent without executing commands.
