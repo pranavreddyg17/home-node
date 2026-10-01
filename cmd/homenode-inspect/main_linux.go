@@ -75,13 +75,25 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
+	digest, length, err := updates.PackageIdentity(ctx, file)
+	if err != nil {
+		return err
+	}
 	if err = updates.ValidateDistributionPackage(ctx, file, updates.ReleaseMetadata{Release: *release, Platform: "ubuntu-24.04-amd64"}); err != nil {
 		return err
 	}
+	finalDigest, finalLength, err := updates.PackageIdentity(ctx, file)
+	if err != nil || finalDigest != digest || finalLength != length {
+		return errors.Join(errors.New("package identity changed during inspection"), err)
+	}
 	return json.NewEncoder(output).Encode(struct {
-		ContentValid      bool `json:"contentValid"`
-		InstallAuthorized bool `json:"installAuthorized"`
-	}{ContentValid: true})
+		Schema            int    `json:"schema"`
+		Release           string `json:"release"`
+		PackageSHA256     string `json:"packageSha256"`
+		PackageLength     int64  `json:"packageLength"`
+		ContentValid      bool   `json:"contentValid"`
+		InstallAuthorized bool   `json:"installAuthorized"`
+	}{Schema: 1, Release: *release, PackageSHA256: digest, PackageLength: length, ContentValid: true})
 }
 
 func main() {

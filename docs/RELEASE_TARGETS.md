@@ -235,3 +235,12 @@ await native CI execution. HomeNode CI 36929627382 at fbaf582 completed
 successfully, including centralized distribution decoding of real build output;
 the subsequent cross-identity/service fixture changes are not covered by that
 older run.
+
+The worker's schema-one result now includes inspected release identity, package
+SHA256 and byte length, with content validity and no install authority. It
+hashes the descriptor before and after content inspection and refuses changed
+identity. PackageIdentity is bounded, cancellation-aware and preserves file
+offset. Native entry/service fixtures compare result identity with their actual
+inherited descriptor. AcquiredRelease additionally retains the verified signed
+target digest and length for the future privileged result comparison. Root
+operation/result binding and activation still require integration and testing.

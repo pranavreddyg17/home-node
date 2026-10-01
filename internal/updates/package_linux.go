@@ -71,7 +71,7 @@ func (session *verificationSession) acquirePackageWithFetcher(name string, fetch
 	if err != nil {
 		return nil, err
 	}
-	return &AcquiredRelease{Package: file, Metadata: release, SBOM: evidence[0], Provenance: evidence[1]}, nil
+	return &AcquiredRelease{Package: file, PackageSHA256: hex.EncodeToString(target.Hashes["sha256"]), PackageLength: target.Length, Metadata: release, SBOM: evidence[0], Provenance: evidence[1]}, nil
 }
 
 func acquireVerifiedPackage(ctx context.Context, fetcher *metadataFetcher, target *metadata.TargetFiles, consistent bool, staging *os.Root) (*os.File, error) {

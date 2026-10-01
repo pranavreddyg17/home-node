@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/pranavreddyg17/home-node/internal/updates"
+	"golang.org/x/sys/unix"
 	"io"
 	"net"
 	"os"
@@ -32,15 +34,29 @@ func TestNativeInspectionDescriptor(t *testing.T) {
 		if os.Getenv("HOMENODE_INSPECT_SERVICE_LIMITS") == "1" {
 			verifyInspectionServiceLimits(t)
 		}
+		duplicate, err := unix.Dup(3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		input := os.NewFile(uintptr(duplicate), "expected-package")
+		expectedDigest, expectedLength, err := updates.PackageIdentity(context.Background(), input)
+		closeErr := input.Close()
+		if err != nil || closeErr != nil {
+			t.Fatal(err, closeErr)
+		}
 		var output bytes.Buffer
 		if err := run(context.Background(), []string{"--release", "0.1.0~ci"}, &output); err != nil {
 			t.Fatal("worker inspection", err)
 		}
 		var result struct {
-			ContentValid      bool `json:"contentValid"`
-			InstallAuthorized bool `json:"installAuthorized"`
+			Schema            int    `json:"schema"`
+			Release           string `json:"release"`
+			PackageSHA256     string `json:"packageSha256"`
+			PackageLength     int64  `json:"packageLength"`
+			ContentValid      bool   `json:"contentValid"`
+			InstallAuthorized bool   `json:"installAuthorized"`
 		}
-		if err := json.Unmarshal(output.Bytes(), &result); err != nil || !result.ContentValid || result.InstallAuthorized {
+		if err := json.Unmarshal(output.Bytes(), &result); err != nil || !result.ContentValid || result.InstallAuthorized || result.Schema != 1 || result.Release != "0.1.0~ci" || result.PackageSHA256 != expectedDigest || result.PackageLength != expectedLength {
 			t.Fatal("invalid worker result", err)
 		}
 		return
