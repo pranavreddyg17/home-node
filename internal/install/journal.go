@@ -117,7 +117,7 @@ func (e *Engine) load() (journal, error) {
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&j) != nil || decoder.Decode(new(any)) != io.EOF || j.Version != 1 || len(j.Items) == 0 || len(j.Items) > 32 || len(j.ID) != 32 || len(j.Digest) != 64 {
+	if decoder.Decode(&j) != nil || decoder.Decode(new(any)) != io.EOF || j.Version != 1 || len(j.Items) == 0 || len(j.Items) > maxInstallationItems || len(j.ID) != 32 || len(j.Digest) != 64 {
 		return j, ErrConflict
 	}
 	if _, err = hex.DecodeString(j.ID); err != nil {

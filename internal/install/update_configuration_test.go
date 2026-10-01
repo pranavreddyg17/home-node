@@ -116,6 +116,13 @@ func TestConfigurationOwnsRepositoryPolicyAndRequiresBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	staging := findConfiguration(t, preview.Plan, "var/lib/homenode-update/inspection")
+	if !staging.Directory || staging.Mode != 0700 || staging.UID != 0 || staging.GID != 0 {
+		t.Fatal("unsafe inspection staging", staging)
+	}
+	if validRecord(record{Path: staging.Path, Directory: true, Mode: 0755, UID: 0, GID: 0}, 0) {
+		t.Fatal("public inspection staging accepted")
+	}
 	item := findConfiguration(t, preview.Plan, "etc/homenode/update-repository.json")
 	if item.Mode != 0400 || item.UID != 0 || item.GID != 0 || item.Directory {
 		t.Fatal("repository policy ownership", item)

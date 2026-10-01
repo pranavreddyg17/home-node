@@ -260,3 +260,12 @@ package results from another operation. The inactive service expects trusted
 `INSPECTION_OPERATION_ID` configuration, and native fixtures supply fresh IDs.
 This correlation field is not an approval token or proof of worker completion;
 the durable root operation and authenticated completion integration remain open.
+
+Installer repository provisioning now includes root-owned mode `0700`
+`var/lib/homenode-update/inspection` in the static ownership journal, with public
+permissions refused by record validation. It creates no package slot, launch
+environment or activation. The installation/journal item budget is consistently
+bounded to 64 entries to accommodate the growing fixed allowlist; unknown paths
+and duplicate records remain refused. Package publication/resume, trusted launch
+configuration, exclusive root operation and completion/result journaling are
+still required to connect acquisition to the inactive inspection service.

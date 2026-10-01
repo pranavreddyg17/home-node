@@ -42,8 +42,11 @@ type journal struct {
 	Items   []record `json:"items"`
 }
 
+const maxInstallationItems = 64
+
 var directories = map[string]bool{
-	"var/lib/homenode-update": true, "var/lib/homenode-update/metadata": true, "var/lib/homenode-update/downloads": true,
+	"var/lib/homenode-update/inspection": true,
+	"var/lib/homenode-update":            true, "var/lib/homenode-update/metadata": true, "var/lib/homenode-update/downloads": true,
 	"etc/homenode": true, "etc/homenode/tls": true,
 	"var/lib/homenode": true, "var/lib/homenode/control": true,
 	"var/lib/homenode/supervisor": true, "var/lib/homenode/catalog": true,
@@ -70,7 +73,7 @@ func validRecord(r record, owner int) bool {
 		return false
 	}
 	if r.Directory {
-		if r.Path == "var/lib/homenode-update" || r.Path == "var/lib/homenode-update/metadata" || r.Path == "var/lib/homenode-update/downloads" {
+		if r.Path == "var/lib/homenode-update/inspection" || r.Path == "var/lib/homenode-update" || r.Path == "var/lib/homenode-update/metadata" || r.Path == "var/lib/homenode-update/downloads" {
 			return r.SHA256 == "" && r.UID == owner && r.GID == 0 && r.Mode == 0700
 		}
 		if r.Path == "var/lib/homenode-backup/staging" {
@@ -85,7 +88,7 @@ func validRecord(r record, owner int) bool {
 	return err == nil
 }
 func planRecords(plan Plan, owner int) ([]record, string, error) {
-	if len(plan.Items) == 0 || len(plan.Items) > 32 {
+	if len(plan.Items) == 0 || len(plan.Items) > maxInstallationItems {
 		return nil, "", ErrPlan
 	}
 	records := make([]record, 0, len(plan.Items))

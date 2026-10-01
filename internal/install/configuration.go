@@ -173,6 +173,7 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 		addDir("var/lib/homenode-update/downloads", 0700, 0, 0)
 		addFile("etc/homenode/update-root.json", 0400, c.UpdateBootstrap.Data)
 		if c.UpdateRepository != nil {
+			addDir("var/lib/homenode-update/inspection", 0700, 0, 0)
 			data, err := json.MarshalIndent(c.UpdateRepository, "", "  ")
 			if err != nil {
 				return result, err
