@@ -33,6 +33,8 @@ jobs:
         run: sudo env HOMENODE_ACTIVATION_INTEGRATION=1 "$(command -v go)" test ./internal/socketactivation -run '^TestNativeInheritedPrivate(Packet)?Listener$'
       - name: Test isolated backup executable activation and shutdown
         run: sudo env HOMENODE_BACKUP_ENTRY_INTEGRATION=1 "$(command -v go)" test ./cmd/homenode-backup -run '^TestNativeBackupEntryActivation$'
+      - name: Test controller credential socket admission
+        run: sudo env HOMENODE_BACKUP_DISPATCH_INTEGRATION=1 "$(command -v go)" test ./internal/runtimeclient -run '^TestNativeBackupCredentialSocketAdmission$'
       - name: Test activated credential handoff across kernel identities
         run: sudo env HOMENODE_CREDENTIAL_INTEGRATION=1 "$(command -v go)" test ./internal/backup -run '^TestNativeActivatedCredentialHandoff$'
       - name: Test systemd activation of private backup listener
@@ -88,8 +90,8 @@ jobs:
           sha256sum --check usr/share/doc/homenode/SHA256SUMS
           test -x usr/bin/homenode
           test -x usr/lib/homenode/homenode-backup
-          file usr/lib/homenode/homenode-backup | rg 'ELF 64-bit.*x86-64'
-          dpkg-deb --field "$GITHUB_WORKSPACE/artifacts/homenode_0.1.0~ci_amd64.deb" Depends | rg '\brestic\b'
+          file usr/lib/homenode/homenode-backup | grep -E 'ELF 64-bit.*x86-64'
+          dpkg-deb --field "$GITHUB_WORKSPACE/artifacts/homenode_0.1.0~ci_amd64.deb" Depends | grep -w restic
           test -f usr/share/homenode/web/index.html
           sudo apt-get install -y "$GITHUB_WORKSPACE/artifacts/homenode_0.1.0~ci_amd64.deb"
           systemd-analyze verify "$GITHUB_WORKSPACE"/packaging/systemd/*.service "$GITHUB_WORKSPACE"/packaging/systemd/*.socket "$GITHUB_WORKSPACE"/packaging/systemd/*.slice
