@@ -101,6 +101,7 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/v1/host/report", s.require("", false, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.config.Report()) })))
 	s.mux.Handle("GET /api/v1/events", s.require("", false, http.HandlerFunc(s.events)))
 	s.mux.Handle("GET /api/v1/diagnostics", s.require("admin", false, http.HandlerFunc(s.diagnostics)))
+	s.mux.Handle("GET /api/v1/backups/outcomes", s.require("admin", false, http.HandlerFunc(s.backupOutcomes)))
 	s.mux.HandleFunc("GET /api/v1/healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "alive"}) })
 	s.mux.HandleFunc("GET /", s.static)
 }
