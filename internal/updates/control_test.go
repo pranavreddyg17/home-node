@@ -45,6 +45,7 @@ func TestControlArchiveBindsReleaseIdentityAndRejectsInstallHooks(t *testing.T) 
 		strings.Replace(control, "amd64", "arm64", 1),
 		strings.Replace(control, homeNodeDependencies, "unexpected-package", 1),
 		control + "Package: homenode\n",
+		strings.Replace(control, "Depends: "+homeNodeDependencies+"\n", "", 1) + "\nDepends: " + homeNodeDependencies + "\n",
 		control + "Breaks: other\n",
 		strings.Replace(control, "Package:", "package:", 1),
 		strings.Replace(control, "Maintainer: fixture", "Maintainer: fixture\n illegal continuation", 1),

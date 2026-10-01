@@ -80,11 +80,16 @@ func validateControlFields(data, version string) error {
 	allowed := map[string]bool{"Package": true, "Version": true, "Section": true, "Priority": true, "Architecture": true, "Maintainer": true, "Depends": true, "Description": true, "Installed-Size": true, "Homepage": true}
 	fields := map[string]string{}
 	last := ""
+	ended := false
 	scanner := bufio.NewScanner(strings.NewReader(data))
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" {
+			ended = true
 			continue
+		}
+		if ended {
+			return ErrPackageControl
 		}
 		if line[0] == ' ' || line[0] == '\t' {
 			if last != "Description" {
