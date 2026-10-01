@@ -1,0 +1,45 @@
+[Unit]
+Description=HomeNode isolated package content inspection
+ConditionPathExists=/etc/homenode/inspection.env
+ConditionPathExists=/var/lib/homenode-update/inspection/package.deb
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+SupplementaryGroups=
+EnvironmentFile=/etc/homenode/inspection.env
+OpenFile=/var/lib/homenode-update/inspection/package.deb:verified-package:read-only
+ExecStart=/usr/lib/homenode/homenode-inspect --release ${INSPECTION_RELEASE}
+UMask=0077
+Restart=no
+TimeoutStartSec=150
+TimeoutStopSec=5
+KillMode=control-group
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+SystemCallArchitectures=native
+SystemCallFilter=~@mount @privileged @raw-io @reboot @swap
+InaccessiblePaths=-/etc/homenode -/var/lib/homenode -/var/lib/homenode-update -/var/lib/homenode-backup -/run/homenode -/run/homenode-transfer
+MemoryMax=256M
+MemorySwapMax=0
+CPUQuota=50%
+TasksMax=32
+OOMPolicy=kill

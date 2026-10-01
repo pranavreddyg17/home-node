@@ -18,6 +18,7 @@ var packageExecutables = map[string]bool{
 	"usr/bin/homenode":                      true,
 	"usr/lib/homenode/homenode-supervisor":  true,
 	"usr/lib/homenode/homenode-transfer":    true,
+	"usr/lib/homenode/homenode-inspect":     true,
 	"usr/lib/homenode/homenode-backup":      true,
 	"usr/lib/homenode/guest/homenode-guest": true,
 }

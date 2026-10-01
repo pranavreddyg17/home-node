@@ -203,3 +203,16 @@ passes its read-only descriptor across UID/GID 804 with empty supplementary and
 capability sets plus `NoNewPrivileges`, then requires content success with no
 installation authority. Execution still awaits CI. This fixture does not prove
 the pending filesystem/network/cgroup service sandbox.
+
+The development package now includes `homenode-inspect`, and payload inventory
+requires six executable entries including that worker. The inactive
+`homenode-inspect.service` template uses systemd `OpenFile` to pass a read-only
+private package to a dynamic identity, with no capabilities, private networking,
+restricted address families, hidden HomeNode state/secrets, protected filesystem
+and kernel settings, 256 MiB memory/no swap, 50% CPU, 32 tasks and bounded
+startup/shutdown with cgroup termination. See the
+[systemd 255 OpenFile contract](https://raw.githubusercontent.com/systemd/systemd/v255/man/systemd.service.xml).
+No launch environment, private staging slot or service activation is generated
+by the installer yet. Source-template and development build checks do not prove
+runtime isolation; a native service fixture, trusted operation/result handoff
+and privileged installation integration remain required.

@@ -22,6 +22,7 @@ go build -trimpath -o "$root/usr/bin/homenode" ./cmd/homenode
 go build -trimpath -o "$root/usr/lib/homenode/homenode-supervisor" ./cmd/homenode-supervisor
 go build -trimpath -o "$root/usr/lib/homenode/homenode-transfer" ./cmd/homenode-transfer
 go build -trimpath -o "$root/usr/lib/homenode/homenode-backup" ./cmd/homenode-backup
+go build -trimpath -o "$root/usr/lib/homenode/homenode-inspect" ./cmd/homenode-inspect
 go build -trimpath -o "$root/usr/lib/homenode/guest/homenode-guest" ./cmd/homenode-guest
 cp -R web/dist/. "$root/usr/share/homenode/web/"
 mkdir -p "$root/usr/share/homenode/systemd"
@@ -43,7 +44,7 @@ CONTROL
 # Normalize all installed permissions; package code is never writable by services.
 find "$root" -type d -exec chmod 0755 {} +
 find "$root" -type f -exec chmod 0644 {} +
-chmod 0755 "$root/usr/bin/homenode" "$root/usr/lib/homenode/homenode-supervisor" "$root/usr/lib/homenode/homenode-transfer" "$root/usr/lib/homenode/homenode-backup" "$root/usr/lib/homenode/guest/homenode-guest"
+chmod 0755 "$root/usr/bin/homenode" "$root/usr/lib/homenode/homenode-supervisor" "$root/usr/lib/homenode/homenode-transfer" "$root/usr/lib/homenode/homenode-backup" "$root/usr/lib/homenode/homenode-inspect" "$root/usr/lib/homenode/guest/homenode-guest"
 (cd "$root" && find usr -type f ! -name SHA256SUMS -print | LC_ALL=C sort | xargs sha256sum > usr/share/doc/homenode/SHA256SUMS)
 archive="$output/homenode_${version}_amd64.deb"
 dpkg-deb --root-owner-group --build "$root" "$archive"
