@@ -88,6 +88,9 @@ func newVerificationSessionWithFetcher(ctx context.Context, provisioned *os.Root
 	if err != nil {
 		return nil, err
 	}
+	if err = recordUpdateClock(ctx, provisioned, session.updater.GetTrustedMetadataSet().RefTime); err != nil {
+		return nil, err
+	}
 	refreshErr := session.updater.Refresh()
 	// Rotated roots and newer timestamp evidence must survive failed refreshes
 	// too. Caller cancellation must not skip this bounded persistence attempt.
