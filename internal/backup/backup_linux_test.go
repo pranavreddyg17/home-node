@@ -67,7 +67,11 @@ func TestRealResticMaintenanceBackupRoundTrip(t *testing.T) {
 	if err = repository.Check(ctx); err != nil {
 		t.Fatal("encrypted repository integrity", err)
 	}
-	restored, err := os.OpenRoot(t.TempDir())
+	restorePath := t.TempDir()
+	if err = os.Chmod(restorePath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := os.OpenRoot(restorePath)
 	if err != nil {
 		t.Fatal(err)
 	}
