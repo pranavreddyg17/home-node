@@ -146,6 +146,10 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 	addDir("var/lib/homenode/catalog", 0700, 0, 0)
 	addDir("var/lib/homenode/images", 0710, 0, a.QEMUGID)
 	addDir("var/lib/homenode/volumes", 0710, 0, a.QEMUGID)
+	if c.Maintenance != nil {
+		addDir("var/lib/homenode-backup", 0755, 0, 0)
+		addDir("var/lib/homenode-backup/staging", 0700, int(c.Maintenance.UID), c.Maintenance.GID)
+	}
 	env := fmt.Sprintf("TAILNET_IP=%s\nHTTPS_PORT=%d\nHTTPS_ORIGIN=%s\nPOLICY_GENERATION=%d\nCONTROLLER_UID=%d\nRUNTIME_GID=%d\nTRANSFER_GID=%d\n", c.Network.Bind, c.Network.Port, c.Network.Origin, c.Policy.Generation, a.ControllerUID, a.RuntimeGID, a.TransferGID)
 	policy, err := json.MarshalIndent(c.Policy, "", "  ")
 	if err != nil {

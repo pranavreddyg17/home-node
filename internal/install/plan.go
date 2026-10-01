@@ -47,6 +47,7 @@ var directories = map[string]bool{
 	"var/lib/homenode": true, "var/lib/homenode/control": true,
 	"var/lib/homenode/supervisor": true, "var/lib/homenode/catalog": true,
 	"var/lib/homenode/images": true, "var/lib/homenode/volumes": true,
+	"var/lib/homenode-backup": true, "var/lib/homenode-backup/staging": true,
 }
 var files = map[string]bool{
 	"etc/homenode/services.env": true, "etc/homenode/runtime-policy.json": true,
@@ -64,6 +65,9 @@ func validRecord(r record, owner int) bool {
 		return false
 	}
 	if r.Directory {
+		if r.Path == "var/lib/homenode-backup/staging" {
+			return r.SHA256 == "" && r.Mode == 0700 && r.UID >= 100 && r.UID < 1000 && r.GID >= 100 && r.GID < 1000
+		}
 		return directories[r.Path] && r.SHA256 == "" && r.Mode&0700 == 0700 && (r.UID == owner || r.Path == "var/lib/homenode/control")
 	}
 	if !files[r.Path] || r.UID != owner || r.Mode&0111 != 0 || r.Mode&0400 == 0 || len(r.SHA256) != 64 {

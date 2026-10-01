@@ -16,6 +16,11 @@ func TestMaintenanceConfigurationUsesObservedDistinctIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	parent := findConfiguration(t, preview.Plan, "var/lib/homenode-backup")
+	staging := findConfiguration(t, preview.Plan, "var/lib/homenode-backup/staging")
+	if !parent.Directory || parent.UID != 0 || parent.GID != 0 || parent.Mode != 0755 || !staging.Directory || staging.UID != 803 || staging.GID != 803 || staging.Mode != 0700 {
+		t.Fatal("backup staging ownership is not isolated", parent, staging)
+	}
 	unit := string(findConfiguration(t, preview.Plan, "etc/systemd/system/homenode-supervisor.service").Data)
 	if !strings.Contains(unit, "--maintenance-uid 803 --maintenance-gid 803\n") {
 		t.Fatal("maintenance socket omitted", unit)
@@ -34,6 +39,41 @@ func TestMaintenanceConfigurationUsesObservedDistinctIdentity(t *testing.T) {
 		c.Maintenance = &identity
 		if _, err := ConfigurationPlan(c, now); err == nil {
 			t.Fatal("unsafe identity admitted", identity)
+		}
+	}
+}
+
+func TestBackupStagingPlanAdmissionIsPrivateAndBounded(t *testing.T) {
+	valid := record{Path: "var/lib/homenode-backup/staging", Directory: true, Mode: 0700, UID: 803, GID: 803}
+	if !validRecord(valid, 0) {
+		t.Fatal("private staging refused")
+	}
+	for _, change := range []func(*record){
+		func(r *record) { r.Mode = 0755 },
+		func(r *record) { r.Mode = 0770 },
+		func(r *record) { r.UID = 0 },
+		func(r *record) { r.UID = 1000 },
+		func(r *record) { r.GID = 0 },
+		func(r *record) { r.GID = 1000 },
+		func(r *record) { r.Path += "/child" },
+		func(r *record) { r.SHA256 = strings.Repeat("a", 64) },
+		func(r *record) { r.Directory = false },
+	} {
+		candidate := valid
+		change(&candidate)
+		if validRecord(candidate, 0) {
+			t.Fatal("unsafe staging record admitted", candidate)
+		}
+	}
+	c, _, _, now := configurationFixture(t)
+	c.Maintenance = nil
+	preview, err := ConfigurationPlan(c, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range preview.Plan.Items {
+		if strings.HasPrefix(item.Path, "var/lib/homenode-backup") {
+			t.Fatal("backup paths provisioned without isolated identity", item)
 		}
 	}
 }
@@ -84,7 +124,7 @@ func TestRootPreparedMaintenanceSocketConfiguration(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("disposable root-owned configuration fixture")
 	}
-	for _, scenario := range []string{"valid", "changed-controller", "changed-socket", "missing-socket", "unfinished-account"} {
+	for _, scenario := range []string{"valid", "changed-controller", "changed-socket", "missing-socket", "public-staging", "unfinished-account"} {
 		t.Run(scenario, func(t *testing.T) {
 			identity := MaintenanceAccount{UID: 803, GID: 803}
 			engine, c, host, _, source, now := imagePlacementFixtureWithMaintenance(t, &identity)
@@ -115,6 +155,8 @@ func TestRootPreparedMaintenanceSocketConfiguration(t *testing.T) {
 				err = os.WriteFile(filepath.Join(host, "etc/systemd/system/homenode-app-maintenance.socket"), []byte("[Socket]\nSocketMode=0666\n"), 0644)
 			case "missing-socket":
 				err = os.Remove(filepath.Join(host, "etc/systemd/system/homenode-app-maintenance.socket"))
+			case "public-staging":
+				err = os.Chmod(filepath.Join(host, "var/lib/homenode-backup/staging"), 0755)
 			}
 			if err != nil {
 				t.Fatal(err)
