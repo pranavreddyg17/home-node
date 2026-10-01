@@ -52,6 +52,7 @@ with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, tem
                "--unit=homenode-inspect-fixture-" + uuid.uuid4().hex, *properties,
                "--property=OpenFile=" + str(private) + ":verified-package:read-only",
                "--setenv=HOMENODE_INSPECT_ENTRY_CHILD=1",
+               "--setenv=HOMENODE_INSPECT_OPERATION=" + uuid.uuid4().hex,
                "--setenv=HOMENODE_INSPECT_SERVICE_LIMITS=1",
                "--setenv=HOMENODE_INSPECT_HIDDEN_PATH=" + str(marker),
                "--setenv=HOMENODE_INSPECT_DENIED_PORT=" + str(listener.getsockname()[1]), str(binary),

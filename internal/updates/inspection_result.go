@@ -6,18 +6,24 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"regexp"
 )
+
+const InspectionOperationPattern = `^[a-zA-Z0-9_-]{20,64}$`
+
+var inspectionOperation = regexp.MustCompile(InspectionOperationPattern)
 
 var ErrInspectionResult = errors.New("inspection result does not match trusted package identity")
 
-// InspectionIdentity must come from the signed target retained by maintenance,
-// not from the worker response or a browser request.
+// InspectionIdentity combines the protected maintenance operation with signed
+// target identity, never values copied from the worker response or browser.
 type InspectionIdentity struct {
-	Release, PackageSHA256 string
-	PackageLength          int64
+	OperationID, Release, PackageSHA256 string
+	PackageLength                       int64
 }
 
 type InspectionResult struct {
+	OperationID       string `json:"operationId"`
 	Schema            int    `json:"schema"`
 	Release           string `json:"release"`
 	PackageSHA256     string `json:"packageSha256"`
@@ -32,7 +38,7 @@ type InspectionResult struct {
 func ValidateInspectionResult(data []byte, expected InspectionIdentity) (InspectionResult, error) {
 	var zero InspectionResult
 	hash, err := hex.DecodeString(expected.PackageSHA256)
-	if err != nil || len(hash) != 32 || hex.EncodeToString(hash) != expected.PackageSHA256 || expected.PackageLength < 1 || expected.PackageLength > 512<<20 || !releaseName.MatchString(expected.Release) || len(data) == 0 || len(data) > 2048 {
+	if !inspectionOperation.MatchString(expected.OperationID) || err != nil || len(hash) != 32 || hex.EncodeToString(hash) != expected.PackageSHA256 || expected.PackageLength < 1 || expected.PackageLength > 512<<20 || !releaseName.MatchString(expected.Release) || len(data) == 0 || len(data) > 2048 {
 		return zero, ErrInspectionResult
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -40,7 +46,7 @@ func ValidateInspectionResult(data []byte, expected InspectionIdentity) (Inspect
 	if err != nil || token != json.Delim('{') {
 		return zero, ErrInspectionResult
 	}
-	allowed := map[string]bool{"schema": true, "release": true, "packageSha256": true, "packageLength": true, "contentValid": true, "installAuthorized": true}
+	allowed := map[string]bool{"operationId": true, "schema": true, "release": true, "packageSha256": true, "packageLength": true, "contentValid": true, "installAuthorized": true}
 	seen := map[string]bool{}
 	for decoder.More() {
 		token, err = decoder.Token()
@@ -63,7 +69,7 @@ func ValidateInspectionResult(data []byte, expected InspectionIdentity) (Inspect
 	var result InspectionResult
 	decoder = json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&result) != nil || result.Schema != 1 || result.Release != expected.Release || result.PackageSHA256 != expected.PackageSHA256 || result.PackageLength != expected.PackageLength || !result.ContentValid || result.InstallAuthorized {
+	if decoder.Decode(&result) != nil || result.OperationID != expected.OperationID || result.Schema != 1 || result.Release != expected.Release || result.PackageSHA256 != expected.PackageSHA256 || result.PackageLength != expected.PackageLength || !result.ContentValid || result.InstallAuthorized {
 		return zero, ErrInspectionResult
 	}
 	return result, nil

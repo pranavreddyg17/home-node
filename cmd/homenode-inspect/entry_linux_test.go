@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"github.com/pranavreddyg17/home-node/internal/updates"
 	"golang.org/x/sys/unix"
 	"io"
@@ -44,10 +45,10 @@ func TestNativeInspectionDescriptor(t *testing.T) {
 			t.Fatal(err, closeErr)
 		}
 		var output bytes.Buffer
-		if err := run(context.Background(), []string{"--release", "0.1.0~ci"}, &output); err != nil {
+		if err := run(context.Background(), []string{"--release", "0.1.0~ci", "--operation", os.Getenv("HOMENODE_INSPECT_OPERATION")}, &output); err != nil {
 			t.Fatal("worker inspection", err)
 		}
-		result, err := updates.ValidateInspectionResult(output.Bytes(), updates.InspectionIdentity{Release: "0.1.0~ci", PackageSHA256: expectedDigest, PackageLength: expectedLength})
+		result, err := updates.ValidateInspectionResult(output.Bytes(), updates.InspectionIdentity{OperationID: os.Getenv("HOMENODE_INSPECT_OPERATION"), Release: "0.1.0~ci", PackageSHA256: expectedDigest, PackageLength: expectedLength})
 		if err != nil || !result.ContentValid || result.InstallAuthorized {
 			t.Fatal("invalid worker result", err)
 		}
@@ -115,7 +116,7 @@ func TestNativeInspectionDescriptor(t *testing.T) {
 	defer cancel()
 	command := exec.CommandContext(ctx, "/usr/bin/setpriv", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "--no-new-privs", "--reuid=804", "--regid=804", "--clear-groups", binary, "-test.run=^TestNativeInspectionDescriptor$", "-test.v")
 	command.ExtraFiles = []*os.File{inherited}
-	command.Env = []string{"HOMENODE_INSPECT_ENTRY_CHILD=1", "PATH=/usr/bin:/bin"}
+	command.Env = []string{"HOMENODE_INSPECT_ENTRY_CHILD=1", "HOMENODE_INSPECT_OPERATION=" + rand.Text(), "PATH=/usr/bin:/bin"}
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("cross-identity worker failed: %v\n%s", err, output)

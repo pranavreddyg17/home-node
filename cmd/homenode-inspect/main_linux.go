@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"regexp"
 	"syscall"
 	"time"
 
@@ -21,11 +22,13 @@ import (
 func run(ctx context.Context, args []string, output io.Writer) error {
 	flags := flag.NewFlagSet("homenode-inspect", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
+	operation := flags.String("operation", "", "maintenance operation identity supplied by trusted launcher")
 	release := flags.String("release", "", "expected signed release identity supplied by maintenance launcher")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 || *release == "" {
+	validOperation, _ := regexp.MatchString(updates.InspectionOperationPattern, *operation)
+	if flags.NArg() != 0 || *release == "" || !validOperation {
 		return errors.New("expected release is required")
 	}
 	if os.Geteuid() == 0 || os.Getegid() == 0 || os.Getuid() != os.Geteuid() || os.Getgid() != os.Getegid() {
@@ -86,7 +89,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	if err != nil || finalDigest != digest || finalLength != length {
 		return errors.Join(errors.New("package identity changed during inspection"), err)
 	}
-	return json.NewEncoder(output).Encode(updates.InspectionResult{Schema: 1, Release: *release, PackageSHA256: digest, PackageLength: length, ContentValid: true})
+	return json.NewEncoder(output).Encode(updates.InspectionResult{OperationID: *operation, Schema: 1, Release: *release, PackageSHA256: digest, PackageLength: length, ContentValid: true})
 }
 
 func main() {

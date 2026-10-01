@@ -7,8 +7,8 @@ import (
 )
 
 func TestInspectionResultRequiresExactIdentityAndNoInstallAuthority(t *testing.T) {
-	identity := InspectionIdentity{Release: "0.1.0", PackageSHA256: strings.Repeat("ab", 32), PackageLength: 123}
-	valid := InspectionResult{Schema: 1, Release: identity.Release, PackageSHA256: identity.PackageSHA256, PackageLength: identity.PackageLength, ContentValid: true}
+	identity := InspectionIdentity{OperationID: "inspection-fixture-000001", Release: "0.1.0", PackageSHA256: strings.Repeat("ab", 32), PackageLength: 123}
+	valid := InspectionResult{OperationID: identity.OperationID, Schema: 1, Release: identity.Release, PackageSHA256: identity.PackageSHA256, PackageLength: identity.PackageLength, ContentValid: true}
 	data, err := json.Marshal(valid)
 	if err != nil {
 		t.Fatal(err)
@@ -16,9 +16,11 @@ func TestInspectionResultRequiresExactIdentityAndNoInstallAuthority(t *testing.T
 	if result, err := ValidateInspectionResult(data, identity); err != nil || result != valid {
 		t.Fatal(result, err)
 	}
-	for _, scenario := range []string{"schema", "release", "hash", "length", "failed", "install-authority"} {
+	for _, scenario := range []string{"operation", "schema", "release", "hash", "length", "failed", "install-authority"} {
 		result := valid
 		switch scenario {
+		case "operation":
+			result.OperationID = "inspection-fixture-000002"
 		case "schema":
 			result.Schema = 2
 		case "release":

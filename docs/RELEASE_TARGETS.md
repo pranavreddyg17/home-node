@@ -252,3 +252,11 @@ identity and requires content validity with installation authority false. Native
 worker fixtures consume the emitted result through this parser. This parser
 checks result content, not worker identity or successful protected execution;
 its privileged operation binding and service completion evidence remain pending.
+
+The inspection protocol additionally requires a canonical 20–64 character
+maintenance operation ID. Worker output includes it and result validation must
+match the protected caller's expected operation, refusing otherwise identical
+package results from another operation. The inactive service expects trusted
+`INSPECTION_OPERATION_ID` configuration, and native fixtures supply fresh IDs.
+This correlation field is not an approval token or proof of worker completion;
+the durable root operation and authenticated completion integration remain open.
