@@ -31,10 +31,23 @@ var packagePath = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,191}\.deb$`)
 // authority. targetsURL and staging are trusted service configuration. The
 // session's exclusive lock must remain held throughout acquisition. Partial
 // files remain explicit failed intent and are never used as verified packages.
-func (session *verificationSession) AcquirePackage(name, targetsURL string, staging *os.Root) (*os.File, error) {
+func (session *verificationSession) AcquirePackage(name, targetsURL string, staging *os.Root, policy ReleasePolicy) (*os.File, error) {
 	target, err := session.TargetInfo(name)
 	if err != nil {
 		return nil, err
+	}
+	release, err := parseReleaseMetadata(target, policy)
+	if err != nil {
+		return nil, err
+	}
+	for _, evidenceName := range []string{release.SBOMTarget, release.ProvenanceTarget} {
+		evidence, err := session.TargetInfo(evidenceName)
+		if err != nil {
+			return nil, err
+		}
+		if evidence.Length < 1 || evidence.Length > 8<<20 || len(evidence.Hashes["sha256"]) != sha256.Size {
+			return nil, errReleasePolicy
+		}
 	}
 	fetcher, err := newMetadataFetcher(session.ctx, targetsURL)
 	if err != nil {

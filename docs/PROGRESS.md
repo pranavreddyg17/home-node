@@ -1651,3 +1651,9 @@ Linux TLS fixtures compile for valid content, corruption, streaming overflow, tr
 ### Package cancellation boundary
 
 Added a Linux TLS fixture that stalls after headers, cancels the package operation and requires bounded completion with context.Canceled, no verified descriptor/artifact and refusal to reuse the canceled operation. Final Linux update test compilation and diff validation passed; native execution awaits the next CI run. HomeNode checks 36903805096 at 9e2bfeb completed successfully, including the integrated reference-clock guard and signed TUF fixtures, privileged fixtures, package and browser workflows.
+
+### Signed release compatibility policy
+
+Defined the signed TUF package custom-metadata contract in docs/RELEASE_TARGETS.md. Package acquisition now checks exact Ubuntu 24.04 amd64 platform, independently supplied positive release-sequence/catalog floors and current state-schema compatibility before any package request. Source/result schema declarations cannot authorize a data downgrade. Distinct bounded SHA256 SBOM/provenance targets must resolve from verified TUF metadata. The flat custom object rejects repeated decoded keys/escaped aliases, case aliases, unknown fields, trailing values and oversized data; release/evidence paths reject injection/traversal.
+
+Portable update race tests exercise valid policy, platform/sequence/catalog/schema incompatibility, unsafe/repeated evidence references, release injection and ambiguous JSON. Final update race suite, Linux update test compilation and diff validation passed. Evidence contents/promotion/scans, trusted policy persistence, actual installer integration and qualified hardware remain incomplete. Package acquisition CI 36918945508 at bc3232c remains live in dependency installation, so this policy commit remains local pending its completion.
