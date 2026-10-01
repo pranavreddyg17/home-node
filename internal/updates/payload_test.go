@@ -20,6 +20,12 @@ func payloadFixture(t *testing.T, scenario string) []byte {
 	if scenario == "duplicate-entry" {
 		files = append(files, files[0])
 	}
+	if scenario == "ancestor-first" {
+		files = append([]string{"usr/share/homenode/web"}, files...)
+	}
+	if scenario == "ancestor-file" {
+		files = append(files, "usr/share/homenode/web")
+	}
 	if scenario == "outside" {
 		files = append(files, "etc/passwd")
 	}
@@ -74,7 +80,7 @@ func payloadFixture(t *testing.T, scenario string) []byte {
 }
 
 func TestPayloadInventoryAndInstallationPaths(t *testing.T) {
-	for _, scenario := range []string{"valid", "outside", "missing", "writable", "foreign-owner", "link", "corrupt-inventory", "duplicate-inventory", "duplicate-entry"} {
+	for _, scenario := range []string{"valid", "outside", "missing", "writable", "foreign-owner", "link", "corrupt-inventory", "duplicate-inventory", "duplicate-entry", "ancestor-file", "ancestor-first"} {
 		t.Run(scenario, func(t *testing.T) {
 			err := ValidatePayloadArchive(context.Background(), bytes.NewReader(payloadFixture(t, scenario)))
 			if (scenario == "valid") != (err == nil) {
@@ -95,5 +101,30 @@ func TestPayloadRejectsTruncatedTrailingAndCanceledInput(t *testing.T) {
 	cancel()
 	if err := ValidatePayloadArchive(ctx, bytes.NewReader(valid)); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancellation lost", err)
+	}
+}
+
+func TestPayloadNamesRejectAmbiguousPaths(t *testing.T) {
+	for _, name := range []string{"/usr/bin/homenode", "./usr/bin/../bin/homenode", "usr/share/homenode/web//index.html", "usr/share/homenode/web/line\tname", "usr/share/homenode/web/line\x7fname", "usr/share/homenode/web/../index.html", "usr/lib/homenode-other/file"} {
+		if _, ok := payloadName(name); ok {
+			t.Fatal("ambiguous path accepted", name)
+		}
+	}
+}
+
+func TestPayloadRejectsRegularEntryWithTrailingSlash(t *testing.T) {
+	data := payloadFixture(t, "valid")
+	clear(data[:100])
+	copy(data[:100], "./usr/bin/homenode/")
+	for index := 148; index < 156; index++ {
+		data[index] = ' '
+	}
+	sum := 0
+	for _, character := range data[:512] {
+		sum += int(character)
+	}
+	copy(data[148:156], fmt.Sprintf("%06o\x00 ", sum))
+	if err := ValidatePayloadArchive(context.Background(), bytes.NewReader(data)); err == nil {
+		t.Fatal("regular path with trailing slash accepted")
 	}
 }

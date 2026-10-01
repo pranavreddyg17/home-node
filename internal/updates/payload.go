@@ -27,6 +27,11 @@ func payloadName(raw string) (string, bool) {
 	if raw == "./" || raw == "." {
 		return ".", true
 	}
+	for _, character := range raw {
+		if character < 32 || character == 127 {
+			return "", false
+		}
+	}
 	name := strings.TrimSuffix(strings.TrimPrefix(raw, "./"), "/")
 	if len(name) > 240 || name == "" || path.Clean(name) != name || strings.HasPrefix(name, "/") || strings.Contains(name, "\\") || strings.ContainsAny(name, "\n\r\x00") {
 		return "", false
@@ -50,6 +55,8 @@ func ValidatePayloadArchive(ctx context.Context, reader io.Reader) error {
 	limited := &io.LimitedReader{R: contextualReader{ctx, reader}, N: 2<<30 + 1}
 	archive := tar.NewReader(limited)
 	seen := map[string]bool{}
+	directories := map[string]bool{}
+	requiredDirectories := map[string]bool{}
 	hashes := map[string]string{}
 	var inventory []byte
 	var total int64
@@ -65,12 +72,25 @@ func ValidatePayloadArchive(ctx context.Context, reader io.Reader) error {
 		if !ok || seen[name] || len(seen) >= 4096 || header.Uid != 0 || header.Gid != 0 || header.Linkname != "" || len(header.PAXRecords) != 0 || len(header.Xattrs) != 0 {
 			return ErrPackagePayload
 		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		for parent := path.Dir(name); parent != "."; parent = path.Dir(parent) {
+			if seen[parent] && !directories[parent] {
+				return ErrPackagePayload
+			}
+			requiredDirectories[parent] = true
+		}
 		seen[name] = true
 		if header.Typeflag == tar.TypeDir {
 			if header.Mode != 0755 || header.Size != 0 {
 				return ErrPackagePayload
 			}
+			directories[name] = true
 			continue
+		}
+		if requiredDirectories[name] || strings.HasSuffix(header.Name, "/") {
+			return ErrPackagePayload
 		}
 		if name == "." || name == "usr" || name == "usr/bin" || name == "usr/lib" || name == "usr/share" || name == "usr/share/doc" || name == "usr/lib/homenode" || name == "usr/share/homenode" || name == "usr/share/doc/homenode" {
 			return ErrPackagePayload
