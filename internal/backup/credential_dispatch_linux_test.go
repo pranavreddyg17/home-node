@@ -5,8 +5,10 @@ package backup
 import (
 	"bytes"
 	"context"
+	"net"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/disktransport"
 	"github.com/pranavreddyg17/home-node/internal/state"
@@ -105,5 +107,30 @@ func TestCredentialDispatchReceiverRefusesForeignAndInvalidHandoff(t *testing.T)
 				t.Fatal("receiver invalidated sender handle", err)
 			}
 		})
+	}
+}
+
+func TestActivatedCredentialSenderRefusesUnprivilegedCreator(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("fixture requires unprivileged listener creator")
+	}
+	sender, receiver := dispatchPair(t)
+	job := Dispatch{Version: 1, JobID: state.Random(), DeviceID: state.Random(), ManagementToken: state.Random(), RuntimeToken: state.Random(), Release: "0.1.0", CatalogVersion: 1}
+	credential, err := CreateRepositoryPassword([]byte("fixture-only-secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer credential.Close()
+	if err = SendActivatedCredentialDispatch(context.Background(), sender, job, credential); err == nil {
+		t.Fatal("activated sender trusted unprivileged creator")
+	}
+	if err = receiver.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	data := make([]byte, MaxDispatchBytes)
+	n, _, _, _, err := receiver.ReadMsgUnix(data, nil)
+	timeout, ok := err.(net.Error)
+	if n > 0 || !ok || !timeout.Timeout() {
+		t.Fatal("refused activated sender exposed packet", n, err)
 	}
 }

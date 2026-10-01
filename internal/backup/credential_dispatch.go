@@ -15,7 +15,25 @@ import (
 // channel. It sends one job plus one immutable read-only descriptor. Caller
 // retains ownership of its credential and connection; delivery is not backup
 // completion. Ordinary SendDispatch/ReceiveDispatch still prohibit descriptors.
+
 func SendCredentialDispatch(ctx context.Context, connection *net.UnixConn, backupUID uint32, dispatch Dispatch, credential *os.File) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if backupUID == 0 {
+		return ErrManifest
+	}
+	return sendCredentialDispatch(ctx, connection, backupUID, dispatch, credential)
+}
+
+// SendActivatedCredentialDispatch authenticates the root creator of the known
+// installed systemd credential listener inherited by the unprivileged worker.
+// SO_PEERCRED identifies that creator rather than the accepting process. Use
+// only with the configured protected listener, never as fallback after refusal.
+func SendActivatedCredentialDispatch(ctx context.Context, connection *net.UnixConn, dispatch Dispatch, credential *os.File) error {
+	return sendCredentialDispatch(ctx, connection, 0, dispatch, credential)
+}
+func sendCredentialDispatch(ctx context.Context, connection *net.UnixConn, expectedUID uint32, dispatch Dispatch, credential *os.File) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -23,11 +41,11 @@ func SendCredentialDispatch(ctx context.Context, connection *net.UnixConn, backu
 	if err != nil {
 		return err
 	}
-	if connection == nil || backupUID == 0 || connection.LocalAddr().Network() != "unixpacket" {
+	if connection == nil || connection.LocalAddr().Network() != "unixpacket" {
 		return ErrManifest
 	}
 	peer, err := supervisor.PeerUID(connection)
-	if err != nil || peer != backupUID {
+	if err != nil || peer != expectedUID {
 		return ErrManifest
 	}
 	password, err := ReadRepositoryPassword(ctx, credential)
