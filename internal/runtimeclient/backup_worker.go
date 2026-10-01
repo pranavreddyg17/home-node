@@ -3,6 +3,7 @@ package runtimeclient
 import (
 	"context"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 
@@ -117,4 +118,15 @@ func RunCredentialedDispatchedBackup(ctx context.Context, dispatch backup.Dispat
 	}
 	defer clear(password)
 	return RunRegisteredDispatchedBackup(ctx, dispatch, config, password)
+}
+
+// ServeRegisteredBackupWorker owns the separate credential listener and binds
+// each admitted job to the configured registered worker. The caller must supply
+// trusted installed configuration and an exclusively owned protected listener.
+// Durable controller outcomes, not socket closure, establish publication.
+func ServeRegisteredBackupWorker(ctx context.Context, listener net.Listener, controllerUID uint32, config BackupWorkerConfig) error {
+	return backup.ServeCredentialDispatch(ctx, listener, controllerUID, func(operation context.Context, dispatch backup.Dispatch, credential *os.File) error {
+		_, err := RunCredentialedDispatchedBackup(operation, dispatch, config, credential)
+		return err
+	})
 }

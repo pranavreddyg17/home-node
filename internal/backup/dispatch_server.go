@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 	"sync"
 	"time"
 )
@@ -14,11 +15,31 @@ import (
 // A worker failure stops the service; the coordinator must reconcile its owned
 // job rather than treating socket delivery or process restart as backup success.
 // Work must persist repository outcomes through the authenticated controller.
-func ServeDispatch(ctx context.Context, listener net.Listener, controllerUID uint32, work func(context.Context, Dispatch) error) (resultErr error) {
+func ServeDispatch(ctx context.Context, listener net.Listener, controllerUID uint32, work func(context.Context, Dispatch) error) error {
+	var operation func(context.Context, Dispatch, *os.File) error
+	if work != nil {
+		operation = func(ctx context.Context, dispatch Dispatch, _ *os.File) error { return work(ctx, dispatch) }
+	}
+	return serveDispatch(ctx, listener, controllerUID, func(ctx context.Context, connection *net.UnixConn, uid uint32) (Dispatch, *os.File, error) {
+		dispatch, err := ReceiveDispatch(ctx, connection, uid)
+		return dispatch, nil, err
+	}, operation)
+}
+
+// ServeCredentialDispatch belongs on the separate private credential channel.
+// It uses the same single-job admission and joined shutdown lifecycle. Received
+// credentials are closed on every exit, including cancellation before work.
+// A callback may consume/close its credential earlier; no descriptor is retained
+// after its return. Delivery and callback completion are not publication proof.
+func ServeCredentialDispatch(ctx context.Context, listener net.Listener, controllerUID uint32, work func(context.Context, Dispatch, *os.File) error) error {
+	return serveDispatch(ctx, listener, controllerUID, ReceiveCredentialDispatch, work)
+}
+
+func serveDispatch(ctx context.Context, listener net.Listener, controllerUID uint32, receive func(context.Context, *net.UnixConn, uint32) (Dispatch, *os.File, error), work func(context.Context, Dispatch, *os.File) error) (resultErr error) {
 	if listener == nil {
 		return ErrManifest
 	}
-	if controllerUID == 0 || work == nil || listener.Addr().Network() != "unixpacket" {
+	if controllerUID == 0 || work == nil || receive == nil || listener.Addr().Network() != "unixpacket" {
 		_ = listener.Close()
 		return ErrManifest
 	}
@@ -69,7 +90,10 @@ func ServeDispatch(ctx context.Context, listener net.Listener, controllerUID uin
 			defer workers.Done()
 			defer func() { <-slot }()
 			defer packet.Close()
-			dispatch, err := ReceiveDispatch(serving, packet, controllerUID)
+			dispatch, credential, err := receive(serving, packet, controllerUID)
+			if credential != nil {
+				defer credential.Close()
+			}
 			if err != nil {
 				return
 			}
@@ -78,7 +102,7 @@ func ServeDispatch(ctx context.Context, listener net.Listener, controllerUID uin
 			if operation.Err() != nil {
 				return
 			}
-			err = work(operation, dispatch)
+			err = work(operation, dispatch, credential)
 			if err != nil && serving.Err() == nil {
 				failure <- err
 				cancel()
