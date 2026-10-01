@@ -5,6 +5,7 @@ package backup
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -44,7 +45,7 @@ func TestNativeActivatedCredentialHandoff(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer connection.Close()
-			_, credential, err := ReceiveCredentialDispatch(ctx, connection.(*net.UnixConn), 1001)
+			job, credential, err := ReceiveCredentialDispatch(ctx, connection.(*net.UnixConn), 1001)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -58,7 +59,10 @@ func TestNativeActivatedCredentialHandoff(t *testing.T) {
 			if err = credential.Close(); err != nil {
 				t.Fatal(err)
 			}
-			if _, err = connection.Write([]byte("sealed-credential-accepted")); err != nil {
+			if os.Getenv("HOMENODE_CREDENTIAL_MISMATCH") == "1" {
+				job.JobID = strings.Repeat("b", 24)
+			}
+			if err = sendWorkerCompletion(ctx, connection.(*net.UnixConn), job); err != nil {
 				t.Fatal(err)
 			}
 			return
@@ -81,14 +85,16 @@ func TestNativeActivatedCredentialHandoff(t *testing.T) {
 		if err = SendCredentialDispatch(ctx, connection, 1003, job, credential); err == nil {
 			t.Fatal("ordinary sender trusted root creator")
 		}
-		if err = SendActivatedCredentialDispatch(ctx, connection, job, credential); err != nil {
-			t.Fatal(err)
+		err = SendActivatedCredentialDispatchAndWait(ctx, connection, job, credential)
+		if os.Getenv("HOMENODE_CREDENTIAL_MISMATCH") == "1" {
+			if !errors.Is(err, ErrManifest) {
+				t.Fatal("foreign job completion accepted", err)
+			}
+		} else if err != nil {
+			t.Fatal("completion missing", err)
 		}
-		connection.SetReadDeadline(time.Now().Add(8 * time.Second))
-		reply := make([]byte, 128)
-		n, err := connection.Read(reply)
-		if err != nil || string(reply[:n]) != "sealed-credential-accepted" {
-			t.Fatal("handoff acknowledgement missing", err)
+		if _, err = credential.Stat(); err != nil {
+			t.Fatal("sender credential closed", err)
 		}
 		return
 	}
@@ -143,6 +149,7 @@ func TestNativeActivatedCredentialHandoff(t *testing.T) {
 	defer cancel()
 	worker := exec.CommandContext(ctx, binary, "-test.run=^TestNativeActivatedCredentialHandoff$", "-test.v")
 	worker.Env = []string{"HOMENODE_CREDENTIAL_ROLE=worker", "HOMENODE_CREDENTIAL_PATH=" + path, "LISTEN_FDS=1", "LISTEN_FDNAMES=homenode-backup-credential"}
+	worker.Env = append(worker.Env, "HOMENODE_CREDENTIAL_MISMATCH="+os.Getenv("HOMENODE_CREDENTIAL_MISMATCH"))
 	worker.ExtraFiles = []*os.File{inherited}
 	worker.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 1003, Gid: 1003, Groups: []uint32{}}}
 	var workerOutput bytes.Buffer
@@ -152,6 +159,7 @@ func TestNativeActivatedCredentialHandoff(t *testing.T) {
 	}
 	controller := exec.CommandContext(ctx, binary, "-test.run=^TestNativeActivatedCredentialHandoff$", "-test.v")
 	controller.Env = []string{"HOMENODE_CREDENTIAL_ROLE=controller", "HOMENODE_CREDENTIAL_PATH=" + path}
+	controller.Env = append(controller.Env, "HOMENODE_CREDENTIAL_MISMATCH="+os.Getenv("HOMENODE_CREDENTIAL_MISMATCH"))
 	controller.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 1001, Gid: 1001, Groups: []uint32{}}}
 	var controllerOutput bytes.Buffer
 	controller.Stdout, controller.Stderr = &controllerOutput, &controllerOutput
@@ -163,4 +171,12 @@ func TestNativeActivatedCredentialHandoff(t *testing.T) {
 	if controllerErr != nil || workerErr != nil {
 		t.Fatal("activated credential handoff failed", controllerErr, workerErr, controllerOutput.String(), workerOutput.String())
 	}
+}
+
+func TestNativeActivatedCredentialCompletionMismatch(t *testing.T) {
+	if os.Geteuid() != 0 || os.Getenv("HOMENODE_CREDENTIAL_INTEGRATION") != "1" {
+		t.Skip("opt-in disposable root fixture")
+	}
+	t.Setenv("HOMENODE_CREDENTIAL_MISMATCH", "1")
+	TestNativeActivatedCredentialHandoff(t)
 }

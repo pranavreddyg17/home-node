@@ -36,7 +36,7 @@ jobs:
       - name: Test controller credential socket admission
         run: sudo env HOMENODE_BACKUP_DISPATCH_INTEGRATION=1 "$(command -v go)" test ./internal/runtimeclient -run '^TestNativeBackupCredentialSocketAdmission$'
       - name: Test activated credential handoff across kernel identities
-        run: sudo env HOMENODE_CREDENTIAL_INTEGRATION=1 "$(command -v go)" test ./internal/backup -run '^TestNativeActivatedCredentialHandoff$'
+        run: sudo env HOMENODE_CREDENTIAL_INTEGRATION=1 "$(command -v go)" test ./internal/backup -run '^TestNativeActivatedCredential(Handoff|CompletionMismatch)$'
       - name: Test systemd activation of private backup listener
         run: |
           go test -c -o "$RUNNER_TEMP/activation.test" ./internal/socketactivation
