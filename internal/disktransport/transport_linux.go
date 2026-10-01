@@ -53,7 +53,16 @@ func readonly(file *os.File) bool {
 	return err == nil && flags&unix.O_ACCMODE == unix.O_RDONLY
 }
 func SendFile(ctx context.Context, connection *net.UnixConn, data []byte, file *os.File) error {
-	if !packetConnection(connection) || len(data) == 0 || len(data) > MaxPacket || !utf8.Valid(data) || !readonly(file) {
+	if !readonly(file) {
+		return ErrPacket
+	}
+	return send(ctx, connection, data, unix.UnixRights(int(file.Fd())))
+}
+func SendPacket(ctx context.Context, connection *net.UnixConn, data []byte) error {
+	return send(ctx, connection, data, nil)
+}
+func send(ctx context.Context, connection *net.UnixConn, data, rights []byte) error {
+	if !packetConnection(connection) || len(data) == 0 || len(data) > MaxPacket || !utf8.Valid(data) {
 		return ErrPacket
 	}
 	cleanup, err := deadline(ctx, connection)
@@ -61,7 +70,6 @@ func SendFile(ctx context.Context, connection *net.UnixConn, data []byte, file *
 		return err
 	}
 	defer cleanup()
-	rights := unix.UnixRights(int(file.Fd()))
 	n, control, err := connection.WriteMsgUnix(data, rights, nil)
 	if err != nil {
 		return err
@@ -71,7 +79,15 @@ func SendFile(ctx context.Context, connection *net.UnixConn, data []byte, file *
 	}
 	return nil
 }
+
 func ReceiveFile(ctx context.Context, connection *net.UnixConn) ([]byte, *os.File, error) {
+	return receive(ctx, connection, true)
+}
+func ReceivePacket(ctx context.Context, connection *net.UnixConn) ([]byte, error) {
+	data, _, err := receive(ctx, connection, false)
+	return data, err
+}
+func receive(ctx context.Context, connection *net.UnixConn, expectFile bool) ([]byte, *os.File, error) {
 	if !packetConnection(connection) {
 		return nil, nil, ErrPacket
 	}
@@ -124,8 +140,15 @@ func ReceiveFile(ctx context.Context, connection *net.UnixConn) ([]byte, *os.Fil
 	if receiveErr != nil {
 		return nil, nil, receiveErr
 	}
-	if !valid || flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 || n == 0 || !utf8.Valid(data[:n]) || len(descriptors) != 1 {
+	expectedDescriptors := 0
+	if expectFile {
+		expectedDescriptors = 1
+	}
+	if !valid || flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 || n == 0 || !utf8.Valid(data[:n]) || len(descriptors) != expectedDescriptors {
 		return nil, nil, ErrPacket
+	}
+	if !expectFile {
+		return data[:n], nil, nil
 	}
 	descriptorFlags, err := unix.FcntlInt(uintptr(descriptors[0]), unix.F_GETFD, 0)
 	if err != nil || descriptorFlags&unix.FD_CLOEXEC == 0 {

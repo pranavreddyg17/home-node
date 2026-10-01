@@ -144,3 +144,117 @@ func TestDescriptorReceiveCancellation(t *testing.T) {
 		t.Fatal("receive ignored cancellation")
 	}
 }
+
+func TestControlPacketRefusesDescriptorAuthority(t *testing.T) {
+	sender, receiver := packetPair(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	message := []byte(`{"version":1,"copied":true}`)
+	if err := SendPacket(ctx, sender, message); err != nil {
+		t.Fatal(err)
+	}
+	data, err := ReceivePacket(ctx, receiver)
+	if err != nil || !bytes.Equal(data, message) {
+		t.Fatal("control packet changed", err)
+	}
+	path := filepath.Join(t.TempDir(), "disk")
+	if err = os.WriteFile(path, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	before, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = SendFile(ctx, sender, message, file); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = ReceivePacket(ctx, receiver); !errors.Is(err, ErrPacket) {
+		t.Fatal("control packet accepted descriptor", err)
+	}
+	after, err := os.ReadDir("/proc/self/fd")
+	if err != nil || len(after) != len(before) {
+		t.Fatal("control rejection leaked descriptor", err)
+	}
+}
+
+func TestCopySessionAcknowledgesOnlyAfterDescriptorClose(t *testing.T) {
+	for _, failCopy := range []bool{false, true} {
+		sender, receiver := packetPair(t)
+		path := filepath.Join(t.TempDir(), "disk")
+		if err := os.WriteFile(path, []byte("payload"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer file.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		done := make(chan error, 1)
+		go func() { done <- SendAndWait(ctx, sender, []byte(`{"version":1}`), file) }()
+		failure := errors.New("copy fixture failure")
+		var observed *os.File
+		err = CopySession(ctx, receiver, func(ctx context.Context, metadata []byte, disk *os.File) error {
+			observed = disk
+			if failCopy {
+				return failure
+			}
+			data, err := io.ReadAll(disk)
+			if err != nil || string(data) != "payload" {
+				return ErrPacket
+			}
+			return nil
+		})
+		sourceErr := <-done
+		cancel()
+		if failCopy {
+			if !errors.Is(err, failure) || sourceErr == nil {
+				t.Fatal("failed copy acknowledged", err, sourceErr)
+			}
+		} else if err != nil || sourceErr != nil {
+			t.Fatal(err, sourceErr)
+		}
+		if observed == nil {
+			t.Fatal("copy not invoked")
+		}
+		if _, err = observed.Stat(); err == nil {
+			t.Fatal("received descriptor retained after acknowledgement")
+		}
+		if _, err = file.Stat(); err != nil {
+			t.Fatal("sender descriptor closed by session", err)
+		}
+	}
+}
+
+func TestCopySessionRefusesFalseAcknowledgement(t *testing.T) {
+	sender, receiver := packetPair(t)
+	path := filepath.Join(t.TempDir(), "disk")
+	if err := os.WriteFile(path, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- SendAndWait(ctx, sender, []byte(`{"version":1}`), file) }()
+	_, received, err := ReceiveFile(ctx, receiver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	received.Close()
+	if err = SendPacket(ctx, receiver, []byte(`{"version":1,"copied":false}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err = <-done; !errors.Is(err, ErrPacket) {
+		t.Fatal("false completion accepted", err)
+	}
+}
