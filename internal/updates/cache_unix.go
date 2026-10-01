@@ -19,6 +19,10 @@ var errMetadataCache = errors.New("update metadata cache is unsafe or incomplete
 // pinned, privately owned metadata directory used by the updater. It does not
 // validate signatures or select the trusted bootstrap/current root.
 func syncMetadataCache(ctx context.Context, root *os.Root) error {
+	return syncMetadataCacheState(ctx, root, true)
+}
+
+func syncMetadataCacheState(ctx context.Context, root *os.Root, complete bool) error {
 	if root == nil {
 		return errMetadataCache
 	}
@@ -42,7 +46,12 @@ func syncMetadataCache(ctx context.Context, root *os.Root) error {
 	if len(entries) > 64 {
 		return errMetadataCache
 	}
-	required := map[string]bool{"root.json": false, "timestamp.json": false, "snapshot.json": false, "targets.json": false}
+	required := map[string]bool{"root.json": false}
+	if complete {
+		required["timestamp.json"] = false
+		required["snapshot.json"] = false
+		required["targets.json"] = false
+	}
 	var total int64
 	for _, entry := range entries {
 		if err = ctx.Err(); err != nil {

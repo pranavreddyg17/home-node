@@ -9,6 +9,8 @@ require (
 	modernc.org/sqlite v1.60.0
 )
 
+require github.com/cenkalti/backoff/v5 v5.0.3 // indirect
+
 require (
 	github.com/google/go-containerregistry v0.20.7 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
