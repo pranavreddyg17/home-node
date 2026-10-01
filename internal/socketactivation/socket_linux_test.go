@@ -19,12 +19,17 @@ import (
 )
 
 func TestNativeInheritedPrivateListener(t *testing.T) {
+	network, descriptorName, packetFlag := "unix", "homenode-app-maintenance", "0"
+	packetMode := os.Getenv("HOMENODE_ACTIVATION_PACKET") == "1"
+	if packetMode {
+		network, descriptorName, packetFlag = "unixpacket", "homenode-backup-credential", "1"
+	}
 	if os.Getenv("HOMENODE_ACTIVATION_CHILD") == "1" {
 		if os.Geteuid() != 1001 {
 			t.Fatal("unexpected controller identity")
 		}
 		path := os.Getenv("HOMENODE_ACTIVATION_PATH")
-		if connection, err := net.Dial("unix", path); err == nil {
+		if connection, err := net.Dial(network, path); err == nil {
 			connection.Close()
 			t.Fatal("controller unexpectedly has backup socket access")
 		}
@@ -35,7 +40,13 @@ func TestNativeInheritedPrivateListener(t *testing.T) {
 		} else {
 			os.Setenv("LISTEN_PID", strconv.Itoa(os.Getpid()))
 		}
-		listener, err := TakePrivateListener("homenode-app-maintenance", path, 1003)
+		var listener net.Listener
+		var err error
+		if packetMode {
+			listener, err = TakePrivatePacketListener(descriptorName, path, 1003)
+		} else {
+			listener, err = TakePrivateListener(descriptorName, path, 1003)
+		}
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -85,7 +96,7 @@ func TestNativeInheritedPrivateListener(t *testing.T) {
 		t.Fatal(copyErr, closeErr)
 	}
 	path := filepath.Join(directory, "apps.sock")
-	listener, err := net.ListenUnix("unix", &net.UnixAddr{Net: "unix", Name: path})
+	listener, err := net.ListenUnix(network, &net.UnixAddr{Net: network, Name: path})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,14 +117,14 @@ func TestNativeInheritedPrivateListener(t *testing.T) {
 	command := exec.CommandContext(ctx, binary, "-test.run=^TestNativeInheritedPrivateListener$", "-test.v")
 	command.ExtraFiles = []*os.File{inherited}
 	command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 1001, Gid: 1001, Groups: []uint32{}}}
-	command.Env = []string{"HOMENODE_ACTIVATION_CHILD=1", "HOMENODE_ACTIVATION_PATH=" + path, "LISTEN_FDS=1", "LISTEN_FDNAMES=homenode-app-maintenance"}
+	command.Env = []string{"HOMENODE_ACTIVATION_CHILD=1", "HOMENODE_ACTIVATION_PATH=" + path, "LISTEN_FDS=1", "LISTEN_FDNAMES=" + descriptorName, "HOMENODE_ACTIVATION_PACKET=" + packetFlag}
 	var output bytes.Buffer
 	command.Stdout = &output
 	command.Stderr = &output
 	if err = command.Start(); err != nil {
 		t.Fatal(err)
 	}
-	connection, err := (&net.Dialer{Timeout: time.Second}).DialContext(ctx, "unix", path)
+	connection, err := (&net.Dialer{Timeout: time.Second}).DialContext(ctx, network, path)
 	if err != nil {
 		cancel()
 		command.Wait()
@@ -127,4 +138,12 @@ func TestNativeInheritedPrivateListener(t *testing.T) {
 	if peerErr != nil || uid != 0 || readErr != nil || string(data) != "controller-1001" || waitErr != nil {
 		t.Fatal("inherited listener identity", uid, peerErr, string(data), readErr, waitErr, output.String())
 	}
+}
+
+func TestNativeInheritedPrivatePacketListener(t *testing.T) {
+	if os.Geteuid() != 0 || os.Getenv("HOMENODE_ACTIVATION_INTEGRATION") != "1" {
+		t.Skip("opt-in disposable root fixture")
+	}
+	t.Setenv("HOMENODE_ACTIVATION_PACKET", "1")
+	TestNativeInheritedPrivateListener(t)
 }

@@ -14,7 +14,18 @@ import (
 // It requires a root-owned, backup-group-only filesystem socket and a root-owned
 // parent inaccessible to unprivileged writers. The caller owns the returned
 // listener. This is not an alternative to per-request kernel peer authentication.
+
 func TakePrivateListener(name, path string, backupGID uint32) (net.Listener, error) {
+	return takePrivateListener(name, path, backupGID, unix.SOCK_STREAM, "unix")
+}
+
+// TakePrivatePacketListener consumes a root-created named unixpacket listener.
+// The filesystem group admits only the configured connecting service; the
+// receiving service uses its inherited descriptor without filesystem access.
+func TakePrivatePacketListener(name, path string, peerGID uint32) (net.Listener, error) {
+	return takePrivateListener(name, path, peerGID, unix.SOCK_SEQPACKET, "unixpacket")
+}
+func takePrivateListener(name, path string, backupGID uint32, socketType int, network string) (net.Listener, error) {
 	valid := validEnvironment(os.Getenv, os.Getpid(), name)
 	for _, key := range []string{"LISTEN_PID", "LISTEN_FDS", "LISTEN_FDNAMES", "LISTEN_PIDFDID"} {
 		_ = os.Unsetenv(key)
@@ -30,7 +41,7 @@ func TakePrivateListener(name, path string, backupGID uint32) (net.Listener, err
 		return nil, ErrListener
 	}
 	kind, err := unix.GetsockoptInt(3, unix.SOL_SOCKET, unix.SO_TYPE)
-	if err != nil || kind != unix.SOCK_STREAM {
+	if err != nil || kind != socketType {
 		return nil, ErrListener
 	}
 	accepting, err := unix.GetsockoptInt(3, unix.SOL_SOCKET, unix.SO_ACCEPTCONN)
@@ -55,7 +66,7 @@ func TakePrivateListener(name, path string, backupGID uint32) (net.Listener, err
 	if err != nil {
 		return nil, ErrListener
 	}
-	if _, ok := listener.(*net.UnixListener); !ok {
+	if _, ok := listener.(*net.UnixListener); !ok || listener.Addr().Network() != network {
 		listener.Close()
 		return nil, ErrListener
 	}

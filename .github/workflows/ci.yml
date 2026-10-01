@@ -30,7 +30,7 @@ jobs:
       - name: Test installer ownership with root fixture
         run: sudo "$(command -v go)" test ./internal/install ./cmd/homenode-supervisor
       - name: Test inherited private backup listener
-        run: sudo env HOMENODE_ACTIVATION_INTEGRATION=1 "$(command -v go)" test ./internal/socketactivation -run '^TestNativeInheritedPrivateListener$'
+        run: sudo env HOMENODE_ACTIVATION_INTEGRATION=1 "$(command -v go)" test ./internal/socketactivation -run '^TestNativeInheritedPrivate(Packet)?Listener$'
       - name: Test systemd activation of private backup listener
         run: |
           go test -c -o "$RUNNER_TEMP/activation.test" ./internal/socketactivation
