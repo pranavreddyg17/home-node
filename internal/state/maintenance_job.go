@@ -96,6 +96,41 @@ func BeginMaintenanceJobTx(tx *sql.Tx, device string) (string, MaintenanceJob, e
 	return token, job, nil
 }
 
+// InspectAdmittedMaintenanceJob verifies that an approved intent is still
+// eligible for its first execution. It never adopts a dispatch checkpoint or
+// trusts a revoked owner's previously committed approval.
+func (s *Store) InspectAdmittedMaintenanceJob(ctx context.Context, token, id, device string) (MaintenanceJob, error) {
+	var job MaintenanceJob
+	err := s.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := RequireMaintenanceOwner(tx, token); err != nil {
+			return err
+		}
+		current, err := readMaintenanceJob(tx)
+		if err != nil {
+			return err
+		}
+		if current.ID != id || current.Device != device || current.Phase != "draining" || current.RootToken != "" {
+			return ErrMaintenanceOwner
+		}
+		if err = maintenanceDevice(tx, device); err != nil {
+			return err
+		}
+		var dispatched int
+		if err = tx.QueryRow("SELECT count(*) FROM settings WHERE key=?", backupDispatchKey).Scan(&dispatched); err != nil {
+			return err
+		}
+		if dispatched != 0 {
+			return ErrMaintenanceOwner
+		}
+		job = current
+		return nil
+	})
+	if err != nil {
+		return MaintenanceJob{}, err
+	}
+	return job, nil
+}
+
 func (s *Store) InspectMaintenanceJob(ctx context.Context, token string) (MaintenanceJob, error) {
 	var job MaintenanceJob
 	err := s.Transaction(ctx, func(tx *sql.Tx) error {

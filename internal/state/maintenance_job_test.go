@@ -209,3 +209,43 @@ func TestLegacyAmbiguousMaintenanceRepairRecordFailsClosed(t *testing.T) {
 		t.Fatal("ambiguous record reopened admission", err)
 	}
 }
+
+func TestAdmittedMaintenanceRequiresCurrentOwnerAndNoDispatch(t *testing.T) {
+	for _, scenario := range []string{"valid", "revoked", "capability-removed", "uncertain", "complete", "malformed"} {
+		t.Run(scenario, func(t *testing.T) {
+			store, device, _ := maintenanceJobFixture(t)
+			defer store.Close()
+			ctx := context.Background()
+			token, job, err := store.BeginMaintenanceJob(ctx, device)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch scenario {
+			case "revoked":
+				_, err = store.DB.Exec("UPDATE devices SET revoked_at=1 WHERE id=?", device)
+			case "capability-removed":
+				_, err = store.DB.Exec("UPDATE devices SET capabilities='[]' WHERE id=?", device)
+			case "uncertain", "complete", "malformed":
+				_, err = store.DB.Exec("INSERT INTO settings(key,value) VALUES(?,?)", backupDispatchKey, scenario+":"+job.ID)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			observed, err := store.InspectAdmittedMaintenanceJob(ctx, token, job.ID, device)
+			if scenario == "valid" {
+				if err != nil || observed != job {
+					t.Fatal(observed, err)
+				}
+			} else if !errors.Is(err, ErrMaintenanceOwner) || observed != (MaintenanceJob{}) {
+				t.Fatal("stale admission accepted", observed, err)
+			}
+			retained, err := store.InspectMaintenanceJob(ctx, token)
+			if err != nil || retained != job {
+				t.Fatal("inspection changed retained authority", retained, err)
+			}
+			if err = store.Transaction(ctx, RequireAdmission); !errors.Is(err, ErrMaintenance) {
+				t.Fatal("inspection reopened work", err)
+			}
+		})
+	}
+}

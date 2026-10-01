@@ -47,10 +47,7 @@ func runDispatchedMaintenance(ctx context.Context, store *state.Store, device, t
 	if admittedJobID == "" {
 		token, job, err = store.BeginMaintenanceJob(ctx, device)
 	} else {
-		job, err = store.InspectMaintenanceJob(ctx, token)
-		if err == nil && (job.ID != admittedJobID || job.Device != device || job.Phase != "draining" || job.RootToken != "") {
-			err = state.ErrMaintenanceOwner
-		}
+		job, err = store.InspectAdmittedMaintenanceJob(ctx, token, admittedJobID, device)
 	}
 	if err != nil {
 		return "", "", err

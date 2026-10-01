@@ -1593,3 +1593,9 @@ The backup.create approval integration test injects an admission write failure, 
 RunAdmittedDispatchedMaintenance accepts the exact already-committed draining job instead of creating a second admission. The shared coordinator acquires the exclusive runner, checks token/job/device/phase/root ownership before registering cleanup or producing external effects, and retains existing completion/publication uncertainty behavior. Advanced jobs are refused for explicit recovery rather than repeated dispatch.
 
 The Linux coordinator fixture now exercises admitted jobs across publication success, failed delivery, missing publication and lost completion. Before valid takeover it rejects wrong tokens, jobs, devices and advanced phase without releasing barriers or dispatching; successful takeover preserves the original job ID. Local backup/state/identity tests and Linux test compilation passed; actual admitted-path Linux execution awaits CI. Owner route, trusted target launch configuration and full external-drive/guest qualification remain incomplete.
+
+### Current authority at admitted-job takeover
+
+Admitted coordinator takeover now verifies the current administrator device and absence of any dispatch record in the same transaction as checking token, job and draining phase. Previously committed approval does not authorize a revoked device or a device that lost admin capability. A malformed, uncertain or completed dispatch marker cannot be adopted as a fresh draining job. Refusal does not change retained authority or reopen admission.
+
+Portable state fixtures verify current-owner success, revocation, capability removal and all three marker classes with unchanged journal/barrier evidence. State, backup and identity race suites passed; Linux backup test compilation passed. Current d7d8544 CI is live; this does not establish owner launch or physical backup qualification.
