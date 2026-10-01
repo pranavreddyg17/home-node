@@ -22,9 +22,19 @@ type BackupResult struct {
 // maintenance barriers are held. A snapshot ID can accompany a cleanup error:
 // publication succeeded, but source admission has not safely reopened. This
 // private entry point requires trusted bridges and an exclusively owned empty
-// staging root; filesystem consistency qualification remains their responsibility.
+// staging root. Each app disk must pass read-only ext4 qualification before copying;
+// the bridges must still establish clean guest shutdown and exclude other writers.
 // It leaves staging intact for the caller's protected disposal/recovery policy.
 func RunBackup(ctx context.Context, store *state.Store, device string, apps MaintenanceApps, runtime MaintenanceRoot, disks MaintenanceDisks, staging *os.Root, repository RecoveryPublisher, release string, catalogVersion int64, policy RestorePolicy) (result BackupResult, resultErr error) {
+	if disks == nil {
+		return result, ErrManifest
+	}
+	return runBackup(ctx, store, device, apps, runtime, QualifiedMaintenanceDisks{Source: disks}, staging, repository, release, catalogVersion, policy)
+}
+
+// runBackup separates orchestration from disk admission for focused tests.
+// Production callers use RunBackup, which always qualifies source filesystems.
+func runBackup(ctx context.Context, store *state.Store, device string, apps MaintenanceApps, runtime MaintenanceRoot, disks MaintenanceDisks, staging *os.Root, repository RecoveryPublisher, release string, catalogVersion int64, policy RestorePolicy) (result BackupResult, resultErr error) {
 	if staging == nil || disks == nil || repository == nil {
 		return result, ErrManifest
 	}

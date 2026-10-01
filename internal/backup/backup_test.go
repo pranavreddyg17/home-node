@@ -56,7 +56,7 @@ func (p *fixtureRecoveryPublisher) Snapshot(ctx context.Context, directory *os.F
 	return state.Hash("fixture snapshot"), nil
 }
 
-func TestRunBackupStagesBeforePublicationAndRetainsCleanupFailure(t *testing.T) {
+func TestBackupOrchestrationStagesBeforePublicationAndRetainsCleanupFailure(t *testing.T) {
 	for _, scenario := range []string{"success", "stage-failure", "publication-failure", "cleanup-failure"} {
 		t.Run(scenario, func(t *testing.T) {
 			store, disks, staging, token, policy := recoveryStageFixture(t)
@@ -83,7 +83,7 @@ func TestRunBackupStagesBeforePublicationAndRetainsCleanupFailure(t *testing.T) 
 			case "cleanup-failure":
 				apps.restoreErr = failure
 			}
-			result, err := RunBackup(ctx, store, device, apps, runtime, disks, staging, publisher, "0.1.0", 1, policy)
+			result, err := runBackup(ctx, store, device, apps, runtime, disks, staging, publisher, "0.1.0", 1, policy)
 			if result.JobID == "" {
 				t.Fatal("missing maintenance identity", err)
 			}
@@ -117,5 +117,30 @@ func TestRunBackupStagesBeforePublicationAndRetainsCleanupFailure(t *testing.T) 
 				t.Fatal("cleanup retained admission", err)
 			}
 		})
+	}
+}
+
+func TestRunBackupCannotPublishUnqualifiedDisks(t *testing.T) {
+	store, disks, staging, token, policy := recoveryStageFixture(t)
+	ctx := context.Background()
+	if err := store.EndMaintenance(ctx, token); err != nil {
+		t.Fatal(err)
+	}
+	device := state.Random()
+	if _, err := store.DB.Exec("INSERT INTO devices(id,name,capabilities,created_at) VALUES(?,'owner','[\"admin\"]',1)", device); err != nil {
+		t.Fatal(err)
+	}
+	apps := &coordinatorApps{}
+	runtime := &coordinatorRoot{token: disks.token}
+	publisher := &fixtureRecoveryPublisher{store: store, root: runtime, apps: apps}
+	result, err := RunBackup(ctx, store, device, apps, runtime, disks, staging, publisher, "0.1.0", 1, policy)
+	if err == nil || result.JobID == "" || result.SnapshotID != "" || publisher.calls != 0 {
+		t.Fatal("unqualified disk published", result, err, publisher.calls)
+	}
+	if !apps.restored || !runtime.released {
+		t.Fatal("qualification failure skipped cleanup")
+	}
+	if err = store.Transaction(ctx, state.RequireAdmission); err != nil {
+		t.Fatal("qualification failure retained admission", err)
 	}
 }

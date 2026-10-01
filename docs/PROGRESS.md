@@ -1201,3 +1201,9 @@ The native ext4 fixture now corrupts the root inode using debugfs while explicit
 The existing native maintenance/restic round trip now formats its source as real ext4, reopens it read-only, and stages through QualifiedMaintenanceDisks. After encrypted publication and restore, both restored app disks undergo filesystem qualification in addition to the existing manifest/hash and management inventory validation. App/root authorities and source disk providers remain modeled; no physical VM clean shutdown or replacement-host activation claim follows.
 
 Validation: local backup tests and final Linux compilation passed. Native execution of these expanded cases awaits CI after the current run finishes.
+
+### Mandatory filesystem admission in RunBackup
+
+RunBackup now always wraps the supplied disk source in QualifiedMaintenanceDisks before staging. A caller cannot omit filesystem qualification by passing a raw descriptor source. A focused test verifies that an unqualified fixture disk never reaches publication, reports no snapshot ID, and still completes source release/app restoration and reopens admission. Modeled success/cleanup orchestration tests use an unexported helper; they establish orchestration only. The native restic round trip uses the enforced RunBackup path directly.
+
+Validation: backup race tests passed and the final Linux test binary compiled. The previous native fixture CI run remains active; expanded corruption/round-trip and mandatory-admission execution will be verified in the next run. The production daemon, private controller bridge, approval workflow, and actual guest shutdown qualification remain required.

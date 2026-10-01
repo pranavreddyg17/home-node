@@ -67,7 +67,7 @@ func TestRealResticMaintenanceBackupRoundTrip(t *testing.T) {
 	defer repository.Close()
 	apps := &coordinatorApps{}
 	runtime := &coordinatorRoot{token: disks.token}
-	result, err := RunBackup(ctx, store, device, apps, runtime, QualifiedMaintenanceDisks{Source: disks}, staging, repository, "0.1.0", 1, policy)
+	result, err := RunBackup(ctx, store, device, apps, runtime, disks, staging, repository, "0.1.0", 1, policy)
 	if err != nil || !repositoryPattern.MatchString(result.SnapshotID) || result.JobID == "" {
 		t.Fatal(result, err)
 	}
