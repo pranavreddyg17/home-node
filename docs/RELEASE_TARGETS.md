@@ -70,3 +70,10 @@ bytes from its caller. Returned bytes still have no install authority; this
 method is not yet connected to a maintenance command or owner-approved updater
 service. The actual signed repository acquisition fixture tests the underlying
 TUF/download chain; the complete installer-to-network chain remains to qualify.
+
+Acquisition observes the live management database schema before and after the
+network operation, without migrating it. A changed schema or failed final
+observation closes the acquired package and returns a conflict. This is a
+consistency check for acquisition, not an admission barrier for installation;
+the eventual approved migration must retain exclusive maintenance admission
+and revalidate compatibility at its execution boundary.

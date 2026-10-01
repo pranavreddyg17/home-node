@@ -24,7 +24,15 @@ func (e *Engine) AcquireUpdateRelease(ctx context.Context, target string, store 
 	if err != nil {
 		return nil, err
 	}
-	return e.acquireUpdateReleaseOwned(ctx, target, currentSchema)
+	release, err := e.acquireUpdateReleaseOwned(ctx, target, currentSchema)
+	if err != nil {
+		return nil, err
+	}
+	observed, observationErr := store.ObserveSchemaVersion(ctx)
+	if observationErr != nil || observed != currentSchema {
+		return nil, errors.Join(ErrConflict, observationErr, release.Close())
+	}
+	return release, nil
 }
 
 func (e *Engine) acquireUpdateReleaseOwned(ctx context.Context, target string, currentSchema int) (result *updates.AcquiredRelease, resultErr error) {
