@@ -141,3 +141,12 @@ the payload validator, bounds compressed input to 512 MiB and preserves its
 Tests cover valid compressed inventory, corruption, truncation, duplicate tar
 entries, trailing bytes and cancellation. Xz, isolated process enforcement,
 real distribution-package inspection and installation admission remain pending.
+
+`updates.ValidateDebianContent` joins archive structure, release-bound control
+and complete payload inventory validation on one opened descriptor. Synthetic
+whole-package tests cover uncompressed, gzip and zstd sections, rejecting
+corrupt payload inventory even when control is valid, installation hooks and
+release mismatch. This API is not yet executed by the acquisition/installation
+path or a constrained worker. Xz support and actual distribution-package
+qualification remain required; success does not establish provenance identity,
+vulnerability clearance or owner approval.
