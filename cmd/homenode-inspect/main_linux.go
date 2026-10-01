@@ -28,8 +28,13 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	if flags.NArg() != 0 || *release == "" {
 		return errors.New("expected release is required")
 	}
-	if os.Geteuid() == 0 || os.Getegid() == 0 {
+	if os.Geteuid() == 0 || os.Getegid() == 0 || os.Getuid() != os.Geteuid() || os.Getgid() != os.Getegid() {
 		return errors.New("inspection requires an unprivileged worker identity")
+	}
+	ruid, euid, suid := unix.Getresuid()
+	rgid, egid, sgid := unix.Getresgid()
+	if ruid != euid || suid != euid || rgid != egid || sgid != egid {
+		return errors.New("inspection refuses saved identity authority")
 	}
 	groups, err := os.Getgroups()
 	if err != nil {
@@ -43,6 +48,17 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	privileges, err := unix.PrctlRetInt(unix.PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0)
 	if err != nil || privileges != 1 {
 		return errors.New("inspection requires NoNewPrivileges")
+	}
+	status, err := os.Open("/proc/self/status")
+	if err != nil {
+		return err
+	}
+	data, readErr := io.ReadAll(io.LimitReader(status, 32769))
+	if err = errors.Join(readErr, status.Close()); err != nil {
+		return err
+	}
+	if len(data) > 32768 || !emptyInspectionCapabilities(data) {
+		return errors.New("inspection requires empty Linux capability sets")
 	}
 	file := os.NewFile(3, "verified-package")
 	if file == nil {

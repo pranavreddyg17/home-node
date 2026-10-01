@@ -186,3 +186,10 @@ authority. It currently is not packaged or launched by the updater. Dedicated
 service identity, full capability/network/filesystem/cgroup enforcement,
 trusted descriptor/result handoff and native cross-identity execution tests
 remain required before production activation.
+
+Worker startup additionally requires matching real/effective/saved UID and GID
+and empty effective, permitted, inheritable, bounding and ambient Linux
+capability sets. Missing, malformed or duplicate capability fields fail closed.
+These startup checks still do not establish the pending filesystem, network or
+cgroup sandbox. Actual build-content CI at d47a61a (run 36928911181) completed
+successfully; the centralized decoder and worker changes await their own CI.
