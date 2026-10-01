@@ -10,8 +10,10 @@ import (
 )
 
 type publicationManagementFixture struct {
-	confirms int
-	failure  error
+	confirms     int
+	claims       int
+	claimFailure error
+	failure      error
 }
 
 func (m *publicationManagementFixture) BeginPublishing(context.Context, string, string) error {
@@ -56,5 +58,21 @@ func TestPrivatePublicationPreservesSnapshotAfterConfirmationFailure(t *testing.
 }
 
 func (m *publicationManagementFixture) ClaimPublication(context.Context, string, string) error {
-	return nil
+	m.claims++
+	return m.claimFailure
+}
+
+func TestPrivatePublicationRefusedClaimPreventsRepositoryWrite(t *testing.T) {
+	store, disks, root, token, policy := recoveryStageFixture(t)
+	manifest, err := StageRecoverySet(context.Background(), store, disks, token, disks.token, root, "0.1.0", 1, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failure := errors.New("publication already claimed")
+	management := &publicationManagementFixture{claimFailure: failure}
+	repository := &publicationRepositoryFixture{}
+	snapshot, err := PublishPrivateRecoverySet(context.Background(), management, repository, state.Random(), token, root, manifest, policy)
+	if !errors.Is(err, failure) || snapshot != "" || repository.calls != 0 || management.claims != 1 || management.confirms != 1 {
+		t.Fatal("refused claim reached repository or lost refusal", snapshot, err, repository.calls, management.claims, management.confirms)
+	}
 }

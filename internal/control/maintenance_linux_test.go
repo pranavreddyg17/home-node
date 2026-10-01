@@ -95,11 +95,8 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 	}
 	call("/v1/maintenance/restore", request, 409)
 	call("/v1/maintenance/verify-stage", request, 409)
-	if err = bridge.ClaimPublication(ctx, token, device); err != nil {
-		t.Fatal("publication claim", err)
-	}
 	if err = bridge.ClaimPublication(ctx, token, device); err == nil {
-		t.Fatal("repeated publication claim accepted")
+		t.Fatal("draining publication claim accepted")
 	}
 	if err = server.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "draining", "freezing"); err != nil {
 		t.Fatal(err)
