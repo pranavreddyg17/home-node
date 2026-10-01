@@ -1219,3 +1219,9 @@ Validation: controller race tests and Linux compilation passed. Strict schema te
 A Linux-only integration test serves the actual controller handler over a Unix socket with kernel PeerContext. An unprivileged peer exercises owned empty-inventory drain and restoration. The test rejects foreign tokens/job IDs/device IDs, refuses general runtime routes, requires the draining/restoring phases, and blocks restore until root authority has been released. It verifies that successful restoration leaves the owned job and management admission barrier intact for the coordinator to complete. Root execution skips this unprivileged-peer fixture.
 
 Validation: Linux controller test compilation passed; native execution awaits the next CI run. This test uses a real socket and SQLite job state but no app workers or actual root runtime; those boundaries require their existing and future integration suites.
+
+### Backup client for controller maintenance
+
+MaintenanceAppsClient implements the coordinator's drain/restore bridge. It resolves the existing owned job through an injected inspector and verifies device and job IDs before sending a fixed typed request. Its local transport authenticates the configured non-root controller kernel UID on every new connection, refuses redirects, limits connections, bounds operation duration, and accepts only bounded UTF-8 exact version-1 acknowledgements. It has no general app or runtime mutation methods and can close retained idle connections.
+
+The Linux controller fixture now exercises this client for owned drain/restoration and tests mismatched controller-UID refusal. Local affected race suites and Linux controller test compilation passed; positive native execution awaits CI. The inspector callback and controller socket startup still require production daemon integration; this does not grant the backup account access to the management database.

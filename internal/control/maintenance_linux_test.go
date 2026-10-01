@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pranavreddyg17/home-node/internal/runtimeclient"
 	"github.com/pranavreddyg17/home-node/internal/state"
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
 )
@@ -68,6 +69,13 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 		}
 	}
 	request := maintenanceRequest{Version: 1, Token: token, JobID: job.ID, DeviceID: device}
+	bridge := runtimeclient.NewMaintenanceApps(listener.Addr().String(), uid, server.Store.InspectMaintenanceJob)
+	defer bridge.Close()
+	foreignPeer := runtimeclient.NewMaintenanceApps(listener.Addr().String(), uid+2, server.Store.InspectMaintenanceJob)
+	defer foreignPeer.Close()
+	if err = foreignPeer.DrainMaintenance(ctx, token, device); err == nil {
+		t.Fatal("client trusted foreign controller UID")
+	}
 	foreign := request
 	foreign.JobID = state.Random()
 	call("/v1/maintenance/drain", foreign, 409)
@@ -78,7 +86,9 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 	foreign.Token = state.Random()
 	call("/v1/maintenance/drain", foreign, 409)
 	call("/v1/runtime/apply", request, 404)
-	call("/v1/maintenance/drain", request, 200)
+	if err = bridge.DrainMaintenance(ctx, token, device); err != nil {
+		t.Fatal("owned client drain", err)
+	}
 	call("/v1/maintenance/restore", request, 409)
 	if err = server.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "draining", "freezing"); err != nil {
 		t.Fatal(err)
@@ -94,7 +104,9 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 	if err = server.Store.ReleaseMaintenanceRoot(ctx, token, job.ID, func(context.Context, string) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
-	call("/v1/maintenance/restore", request, 200)
+	if err = bridge.RestoreMaintenanceApps(ctx, token, device); err != nil {
+		t.Fatal("owned client restore", err)
+	}
 	current, err := server.Store.InspectMaintenanceJob(ctx, token)
 	if err != nil || current.ID != job.ID || current.Phase != "restoring" || current.RootToken != "" {
 		t.Fatal("handler altered job authority", current, err)
