@@ -93,6 +93,13 @@ func TestRealResticRepositoryAuthentication(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repository.Close()
+	overlap, overlapErr := openRepository(context.Background(), directory, target, password)
+	if overlap != nil {
+		overlap.Close()
+	}
+	if overlapErr == nil || overlap != nil {
+		t.Fatal("second authenticated repository handle admitted")
+	}
 	if err = os.Rename(filepath.Join(directory.Name(), "homenode-backup"), filepath.Join(directory.Name(), "original")); err != nil {
 		t.Fatal(err)
 	}

@@ -95,6 +95,9 @@ func resticConfig(ctx context.Context, directory *os.File, password []byte, init
 		return nil, err
 	}
 	defer repository.Close()
+	if err = leaseRepositoryDirectory(ctx, repository); err != nil {
+		return nil, err
+	}
 	operation := "config"
 	if initialize {
 		operation = "init"
@@ -261,6 +264,9 @@ func openRepository(ctx context.Context, directory *os.File, target Target, pass
 			_ = pinned.Close()
 		}
 	}()
+	if err = leaseRepositoryDirectory(ctx, pinned); err != nil {
+		return nil, err
+	}
 	data, err := runRestic(ctx, pinned, secret, "config")
 	if err != nil {
 		return nil, err
@@ -301,4 +307,25 @@ func (r *Repository) Close() error {
 	err := errors.Join(r.directory.Close(), r.secret.Close())
 	r.directory, r.secret = nil, nil
 	return err
+}
+
+// The pinned directory descriptor retains this cooperative cross-process lease
+// through authentication and all operations until Close. It never replaces
+// restic locks or excludes an unrelated writer that ignores this protocol.
+func leaseRepositoryDirectory(ctx context.Context, directory *os.File) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if directory == nil {
+		return ErrRepository
+	}
+	info, err := directory.Stat()
+	var native unix.Stat_t
+	if err != nil || !info.IsDir() || info.Mode().Perm() != 0700 || unix.Fstat(int(directory.Fd()), &native) != nil || native.Uid != uint32(os.Geteuid()) {
+		return ErrRepository
+	}
+	if unix.Flock(int(directory.Fd()), unix.LOCK_EX|unix.LOCK_NB) != nil {
+		return ErrRepository
+	}
+	return ctx.Err()
 }
