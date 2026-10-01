@@ -148,7 +148,7 @@ func lookupAccount(ctx context.Context, database, key string) ([]byte, bool, err
 	if database != "passwd" && database != "group" {
 		return nil, false, ErrAccounts
 	}
-	allowed := key == "homenode" || key == "homenode-transfer" || key == "homenode-runtime" || key == "libvirt-qemu"
+	allowed := key == "homenode" || key == "homenode-transfer" || key == "homenode-runtime" || key == "homenode-backup" || key == "libvirt-qemu"
 	if !allowed {
 		if _, err := accountID(key); err != nil {
 			return nil, false, ErrAccounts
