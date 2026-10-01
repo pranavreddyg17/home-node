@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -22,6 +23,7 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/install"
 	"github.com/pranavreddyg17/home-node/internal/networkcheck"
 	"github.com/pranavreddyg17/home-node/internal/runtimeclient"
+	"github.com/pranavreddyg17/home-node/internal/socketactivation"
 	"github.com/pranavreddyg17/home-node/internal/state"
 	"github.com/pranavreddyg17/home-node/internal/workload"
 )
@@ -167,7 +169,24 @@ func serve(args []string) {
 	ui := flags.String("web-dir", "web/dist", "built first-party web assets")
 	cert := flags.String("tls-cert", "", "certificate PEM path")
 	key := flags.String("tls-key", "", "private key PEM path")
+	maintenanceUID := flags.Int("maintenance-uid", -1, "distinct backup UID; requires inherited private listener")
+	maintenanceGID := flags.Int("maintenance-gid", -1, "backup socket group")
+	maintenanceSocket := flags.String("maintenance-socket", "/run/homenode-backup/apps.sock", "inherited private app-maintenance socket")
 	_ = flags.Parse(args)
+	var maintenanceListener net.Listener
+	if *maintenanceUID != -1 || *maintenanceGID != -1 {
+		if *dev || runtime.GOOS != "linux" || os.Geteuid() == 0 || *maintenanceUID < 100 || *maintenanceUID > 999 || *maintenanceUID == os.Geteuid() || *maintenanceGID < 100 || *maintenanceGID > 999 {
+			fatal(errors.New("invalid private maintenance identity"))
+		}
+		var err error
+		maintenanceListener, err = socketactivation.TakePrivateListener("homenode-app-maintenance", *maintenanceSocket, uint32(*maintenanceGID))
+		if err != nil {
+			fatal(err)
+		}
+		defer maintenanceListener.Close()
+	} else if os.Getenv("LISTEN_FDS") != "" || os.Getenv("LISTEN_PID") != "" || os.Getenv("LISTEN_FDNAMES") != "" || os.Getenv("LISTEN_PIDFDID") != "" {
+		fatal(errors.New("unexpected activated listener"))
+	}
 	if *port < 1 || *port > 65535 {
 		fatal(fmt.Errorf("port must be 1..65535"))
 	}
@@ -220,6 +239,13 @@ func serve(args []string) {
 	defer listener.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	maintenanceDone := make(chan error, 1)
+	if maintenanceListener != nil {
+		go func() {
+			maintenanceDone <- handler.ServeMaintenance(ctx, maintenanceListener, uint32(os.Geteuid()), uint32(*maintenanceUID))
+			stop()
+		}()
+	}
 	if err = handler.Workloads.Reconcile(ctx); err != nil {
 		fatal(err)
 	}
@@ -254,7 +280,14 @@ func serve(args []string) {
 	} else {
 		err = server.ServeTLS(listener, "", "")
 	}
-	if err != nil && err != http.ErrServerClosed {
+	if errors.Is(err, http.ErrServerClosed) {
+		err = nil
+	}
+	stop()
+	if maintenanceListener != nil {
+		err = errors.Join(err, <-maintenanceDone)
+	}
+	if err != nil {
 		fatal(err)
 	}
 }
