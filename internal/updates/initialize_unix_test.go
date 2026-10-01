@@ -21,7 +21,13 @@ import (
 
 func thresholdBootstrap(t *testing.T) BootstrapRoot {
 	t.Helper()
+	return thresholdBootstrapVersion(t, 1)
+}
+
+func thresholdBootstrapVersion(t *testing.T, version int64) BootstrapRoot {
+	t.Helper()
 	root := metadata.Root(time.Now().UTC().Add(time.Hour))
+	root.Signed.Version = version
 	root.Signed.Roles[metadata.ROOT].Threshold = 2
 	var signers []signature.Signer
 	for _, role := range []string{metadata.ROOT, metadata.TIMESTAMP, metadata.SNAPSHOT, metadata.TARGETS} {
@@ -144,5 +150,41 @@ func TestCacheRootInitializationNeverAdoptsOrResetsState(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCompletedInitializationPreservesRotatedTrustAndHistory(t *testing.T) {
+	provisioned, directory := updateCacheFixture(t)
+	bootstrap := thresholdBootstrap(t)
+	if err := InitializeCacheRoot(context.Background(), provisioned, bootstrap); err != nil {
+		t.Fatal(err)
+	}
+	// Represent the protected result of a previously verified rotation. The
+	// initializer does not perform rotation itself or recover a lost history.
+	rotated := thresholdBootstrapVersion(t, 2)
+	currentPath := filepath.Join(directory, "metadata", "root.json")
+	if err := os.WriteFile(currentPath, rotated.Data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	history := map[string][]byte{
+		"metadata/timestamp.json": []byte("retained timestamp"),
+		"metadata/snapshot.json":  []byte("retained snapshot"),
+		"metadata/targets.json":   []byte("retained targets"),
+		"clock":                   []byte("123456789\n"),
+	}
+	for name, data := range history {
+		if err := os.WriteFile(filepath.Join(directory, name), data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := InitializeCacheRoot(context.Background(), provisioned, bootstrap); err != nil {
+		t.Fatal(err)
+	}
+	history["metadata/root.json"] = rotated.Data
+	for name, expected := range history {
+		actual, err := os.ReadFile(filepath.Join(directory, name))
+		if err != nil || string(actual) != string(expected) {
+			t.Fatalf("initialization changed protected %s: %v", name, err)
+		}
 	}
 }
