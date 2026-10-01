@@ -24,6 +24,14 @@ type InspectionStage struct {
 
 func (s *InspectionStage) Close() error { return errors.Join(s.Package.Close(), s.directory.Close()) }
 
+// Environment binds service inputs to the identity admitted under this lock.
+func (s *InspectionStage) Environment() ([]byte, error) {
+	if s == nil || s.Package == nil || s.directory == nil {
+		return nil, ErrInspectionResult
+	}
+	return InspectionEnvironment(s.identity)
+}
+
 // VerifyResult checks bounded worker output against retained operation identity
 // and rehashes the pinned package after worker completion. The caller must first
 // authenticate successful isolated execution; this method grants no installation
