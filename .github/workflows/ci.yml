@@ -30,6 +30,8 @@ jobs:
         run: sudo "$(command -v go)" test ./internal/install ./cmd/homenode-supervisor
       - name: Test received maintenance disk admission with root fixture
         run: sudo env HOMENODE_DISK_TRANSPORT_ROOT_INTEGRATION=1 "$(command -v go)" test ./internal/disktransport -run '^TestNativeDiskAdmission$'
+      - name: Test backup disk client across kernel identities
+        run: sudo env HOMENODE_DISK_CLIENT_INTEGRATION=1 "$(command -v go)" test ./internal/runtimeclient -run '^TestNativeBackupDiskClient$'
       - name: Test guest object root ownership with disposable fixture
         run: sudo env HOMENODE_GUEST_ROOT_INTEGRATION=1 "$(command -v go)" test ./internal/guest -run '^TestNativeForeignDataRootPreserved$'
       - name: Test guest object directory initialization
