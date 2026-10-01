@@ -85,6 +85,7 @@ jobs:
         run: |
           packaging/debian/build.sh 0.1.0~ci
           HOMENODE_PACKAGE_CONTENT_FIXTURE="$GITHUB_WORKSPACE/artifacts/homenode_0.1.0~ci_amd64.deb" go test ./internal/updates -run '^TestNativeBuiltPackageContent$' -count=1
+          sudo env HOMENODE_INSPECT_ENTRY_INTEGRATION=1 HOMENODE_PACKAGE_CONTENT_FIXTURE="$GITHUB_WORKSPACE/artifacts/homenode_0.1.0~ci_amd64.deb" "$(command -v go)" test ./cmd/homenode-inspect -run '^TestNativeInspectionDescriptor$' -count=1
           dpkg-deb --info artifacts/homenode_0.1.0~ci_amd64.deb
           dpkg-deb --extract artifacts/homenode_0.1.0~ci_amd64.deb /tmp/homenode-package
           cd /tmp/homenode-package

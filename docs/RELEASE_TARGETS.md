@@ -193,3 +193,13 @@ capability sets. Missing, malformed or duplicate capability fields fail closed.
 These startup checks still do not establish the pending filesystem, network or
 cgroup sandbox. Actual build-content CI at d47a61a (run 36928911181) completed
 successfully; the centralized decoder and worker changes await their own CI.
+
+Distribution decoding now reads bounded sections of the inherited descriptor
+through stdin (`dpkg-deb ... -`), rather than reopening `/proc/self/fd/3` under
+the worker UID. Reopening can fail DAC checks on a root-owned mode `0400` file,
+even when the worker possesses a readable descriptor. The new opt-in Linux CI
+entry fixture copies the real built package into a root-private directory,
+passes its read-only descriptor across UID/GID 804 with empty supplementary and
+capability sets plus `NoNewPrivileges`, then requires content success with no
+installation authority. Execution still awaits CI. This fixture does not prove
+the pending filesystem/network/cgroup service sandbox.

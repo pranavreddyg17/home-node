@@ -36,6 +36,10 @@ func ValidateDistributionPackage(ctx context.Context, file *os.File, release Rel
 	if _, err = InspectDebianArchive(file); err != nil {
 		return err
 	}
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	for _, role := range []string{"control", "data"} {
@@ -43,7 +47,7 @@ func ValidateDistributionPackage(ctx context.Context, file *os.File, release Rel
 		if role == "data" {
 			flag = "--fsys-tarfile"
 		}
-		command := exec.CommandContext(ctx, "/usr/bin/dpkg-deb", flag, "/proc/self/fd/3")
+		command := exec.CommandContext(ctx, "/usr/bin/dpkg-deb", flag, "-")
 		command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		command.Cancel = func() error {
 			err := unix.Kill(-command.Process.Pid, unix.SIGKILL)
@@ -53,7 +57,7 @@ func ValidateDistributionPackage(ctx context.Context, file *os.File, release Rel
 			return err
 		}
 		command.WaitDelay = 2 * time.Second
-		command.ExtraFiles = []*os.File{file}
+		command.Stdin = io.NewSectionReader(file, 0, info.Size())
 		command.Env = []string{"PATH=/usr/bin:/bin", "LC_ALL=C"}
 		command.Stderr = io.Discard
 		pipe, err := command.StdoutPipe()
