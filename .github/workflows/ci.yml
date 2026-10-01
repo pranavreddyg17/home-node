@@ -28,7 +28,7 @@ jobs:
           HOMENODE_FILESYSTEM_INTEGRATION: '1'
         run: go test -race ./...
       - name: Test installer ownership with root fixture
-        run: sudo "$(command -v go)" test ./internal/install ./cmd/homenode-supervisor
+        run: sudo env HOMENODE_UPDATE_INIT_INTEGRATION=1 "$(command -v go)" test ./internal/install ./cmd/homenode-supervisor
       - name: Test inherited private backup listener
         run: sudo env HOMENODE_ACTIVATION_INTEGRATION=1 "$(command -v go)" test ./internal/socketactivation -run '^TestNativeInheritedPrivate(Packet)?Listener$'
       - name: Test isolated backup executable activation and shutdown
