@@ -114,3 +114,11 @@ limits. xz control decoding is still refused by this API: the evaluated Go xz
 reader dictionary option is not a hard maximum, so xz support requires the
 planned constrained inspection worker. The existing development package uses
 xz and therefore is not yet qualified by this compression/content chain.
+
+`updates.ValidateDebianControl` joins outer structure and compressed control
+inspection on the same opened descriptor. A pathname replacement does not
+redirect inspection, and the descriptor's current offset is unchanged. The
+joined fixture validates a gzip control section within an ar container, rejects
+version mismatch, hooks and truncation, and explicitly uses an unqualified data
+payload: passing this control check says nothing about payload contents. Real
+build output inspection and constrained xz support still require qualification.
