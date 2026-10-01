@@ -102,7 +102,7 @@ func TestRootPreparedMaintenanceSocketConfiguration(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err = engine.saveJournalBytes("maintenance-accounts.json", data); err != nil {
+			if err = engine.saveJournalBytes("maintenance-accounts", data); err != nil {
 				t.Fatal(err)
 			}
 			if err = engine.placeImages(context.Background(), source, c.Publisher, c.MinimumCatalogVersion, now); err != nil {
