@@ -86,6 +86,23 @@ func TestNativeExt4Qualification(t *testing.T) {
 	if err = QualifyExt4Disk(ctx, source); err != nil || digest() != before {
 		t.Fatal("checker followed replacement", err)
 	}
+	// Corrupt the root inode through the fixture tool while leaving the clean
+	// superblock header intact. This must reach and fail the full checker.
+	corrupt := exec.CommandContext(ctx, "/usr/sbin/debugfs", "-w", "-R", "set_inode_field <2> mode 0", path+".original")
+	if output, err := corrupt.CombinedOutput(); err != nil {
+		t.Fatalf("corrupt fixture inode: %v: %s", err, output)
+	}
+	if err = requireCleanExt4Header(source); err != nil {
+		t.Fatal("corruption fixture did not retain clean header", err)
+	}
+	corruptHash := digest()
+	invoked = false
+	if err = (QualifiedMaintenanceDisks{Source: bridge}).WithMaintenanceDisk(ctx, "owned-token", "owned-instance", func(context.Context, *os.File, supervisor.Instance) error { invoked = true; return nil }); err == nil || invoked || bridge.active {
+		t.Fatal("corrupt filesystem copied despite clean header", err)
+	}
+	if digest() != corruptHash {
+		t.Fatal("corrupt filesystem repaired")
+	}
 	// Mutate the primary state on the pinned inode; never repair it here.
 	if _, err = writer.WriteAt([]byte{0, 0}, 1024+0x3a); err != nil {
 		t.Fatal(err)

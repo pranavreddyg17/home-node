@@ -1193,3 +1193,11 @@ QualifiedMaintenanceDisks wraps a trusted descriptor source and holds its existi
 A native opt-in Linux fixture formats a real 16 MiB ext4 source and verifies clean admission, unchanged full-image hashes, writable-descriptor refusal, cancellation, pinned descriptor behavior after source path replacement, and dirty-state refusal without repair. It also exercises the adapter's retained source lease and proves a dirty disk never invokes copying. CI enables the fixture in its Linux race suite. Local backup tests and final Linux test compilation passed; this new fixture's native execution is pending.
 
 CI run 36811625576 at 1f5044b09c5f49fcf45f16dc4d11b26346e7561d completed successfully, including the explicit root-to-backup UID disk client fixture. This establishes that descriptor/client boundary on the disposable runner; the full manager lifecycle and physical guest consistency remain separate requirements.
+
+### Full checker refusal and encrypted round-trip integration
+
+The native ext4 fixture now corrupts the root inode using debugfs while explicitly requiring that the preliminary clean header still passes. The qualified bridge must reject that filesystem before copying; whole-image hashing verifies the checker did not repair it. This covers the full checker's refusal path separately from header-based refusal.
+
+The existing native maintenance/restic round trip now formats its source as real ext4, reopens it read-only, and stages through QualifiedMaintenanceDisks. After encrypted publication and restore, both restored app disks undergo filesystem qualification in addition to the existing manifest/hash and management inventory validation. App/root authorities and source disk providers remain modeled; no physical VM clean shutdown or replacement-host activation claim follows.
+
+Validation: local backup tests and final Linux compilation passed. Native execution of these expanded cases awaits CI after the current run finishes.

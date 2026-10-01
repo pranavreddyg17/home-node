@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -19,6 +20,18 @@ func TestRealResticMaintenanceBackupRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	store, disks, staging, token, policy := recoveryStageFixture(t)
+	// Replace the modeled byte payload with a real clean ext4 fixture and
+	// reopen it read-only before passing it through the qualified bridge.
+	format := exec.CommandContext(ctx, "/usr/sbin/mkfs.ext4", "-q", "-F", "-m", "0", "-E", "nodiscard,lazy_itable_init=0,lazy_journal_init=0", disks.source.Name())
+	if output, err := format.CombinedOutput(); err != nil {
+		t.Fatalf("format backup fixture: %v: %s", err, output)
+	}
+	readonly, err := os.Open(disks.source.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readonly.Close()
+	disks.source = readonly
 	if err := store.EndMaintenance(ctx, token); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +67,7 @@ func TestRealResticMaintenanceBackupRoundTrip(t *testing.T) {
 	defer repository.Close()
 	apps := &coordinatorApps{}
 	runtime := &coordinatorRoot{token: disks.token}
-	result, err := RunBackup(ctx, store, device, apps, runtime, disks, staging, repository, "0.1.0", 1, policy)
+	result, err := RunBackup(ctx, store, device, apps, runtime, QualifiedMaintenanceDisks{Source: disks}, staging, repository, "0.1.0", 1, policy)
 	if err != nil || !repositoryPattern.MatchString(result.SnapshotID) || result.JobID == "" {
 		t.Fatal(result, err)
 	}
@@ -91,6 +104,17 @@ func TestRealResticMaintenanceBackupRoundTrip(t *testing.T) {
 	if err = ValidateRecoverySet(ctx, restored, manifest, policy); err != nil {
 		t.Fatal("restored recovery set", err)
 	}
+	for _, workload := range []string{"files", "ai"} {
+		file, err := restored.Open(workload + ".raw")
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkErr := QualifyExt4Disk(ctx, file)
+		closeErr := file.Close()
+		if checkErr != nil || closeErr != nil {
+			t.Fatal("restored filesystem failed qualification", workload, checkErr, closeErr)
+		}
+	}
 	snapshot, err := restored.Open("snapshot.db")
 	if err != nil {
 		t.Fatal(err)
@@ -101,5 +125,6 @@ func TestRealResticMaintenanceBackupRoundTrip(t *testing.T) {
 		t.Fatal("restored management inventory", inventory, err)
 	}
 	// Restoration validates every payload hash. This fixture's disk providers and
-	// app/root bridges are modeled; no guest filesystem or VM activation is proved.
+	// app/root bridges are modeled. Real ext4 checking and restic restore are
+	// exercised, but clean shutdown of an actual guest or VM activation is not proved.
 }
