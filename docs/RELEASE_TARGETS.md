@@ -157,3 +157,12 @@ version, expected header sizes and a nonempty program-header table contained in
 the declared file length. Header bytes remain included in the inventory hash.
 Tests reject scripts and a different architecture. This is format compatibility,
 not proof of executable behavior, linkage, build identity or runtime safety.
+
+The opt-in Linux `TestNativeBuiltPackageContent` consumes the actual CI
+`0.1.0~ci` package through a pinned descriptor. Distribution `dpkg-deb` streams
+control and data tar sections (including the development build's xz sections)
+to the validators without extracting or installing during this test. Execution
+is refused as root and bounded by a two-minute command context. This qualifies
+build-output compatibility only; it does not implement the production inspection
+sandbox or change the production xz refusal. CI must execute this new fixture
+before real build compatibility can be claimed.
