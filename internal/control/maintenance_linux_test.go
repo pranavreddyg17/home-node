@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -118,12 +119,23 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 		t.Fatal(err)
 	}
 	policy := backup.RestorePolicy{MinimumCatalogVersion: 1}
-	manifest, err := backup.StagePrivateRecoverySet(ctx, bridge, runtimeclient.NewDiskClient("/tmp/unused-empty-inventory.sock"), device, token, owned.RootToken, staging, "0.1.0", 1, policy)
-	if err != nil || len(manifest.Files) != 1 {
-		t.Fatal("private recovery staging", manifest, err)
+	publisher := &maintenancePublicationFixture{store: server.Store, token: token, jobID: job.ID, rootToken: owned.RootToken}
+	published, err := backup.RunPrivateBackup(ctx, bridge, runtimeclient.NewDiskClient("/tmp/unused-empty-inventory.sock"), publisher, device, token, owned.RootToken, staging, "0.1.0", 1, policy)
+	if err != nil || published != state.Hash("fixture repository acknowledgement") || publisher.calls != 1 {
+		t.Fatal("private combined backup", published, err, publisher.calls)
 	}
-	if err = backup.ValidateRecoverySet(ctx, staging, manifest, policy); err != nil {
-		t.Fatal("private staged recovery set", err)
+	replayDirectory := t.TempDir()
+	if err = os.Chmod(replayDirectory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	replayStaging, err := os.OpenRoot(replayDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replayStaging.Close()
+	replayID, replayErr := backup.RunPrivateBackup(ctx, bridge, runtimeclient.NewDiskClient("/tmp/unused-empty-inventory.sock"), publisher, device, token, owned.RootToken, replayStaging, "0.1.0", 1, policy)
+	if replayErr == nil || replayID != "" || publisher.calls != 1 {
+		t.Fatal("publishing job replay reached repository", replayID, replayErr)
 	}
 	snapshot, err := staging.Open("snapshot.db")
 	if err != nil {
@@ -144,13 +156,9 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 		t.Fatal("publish confirmation", err)
 	}
 	call("/v1/maintenance/verify-stage", request, 409)
-	if err = bridge.ClaimPublication(ctx, token, device); err != nil {
-		t.Fatal("publication claim", err)
-	}
 	if err = bridge.ClaimPublication(ctx, token, device); err == nil {
 		t.Fatal("repeated publication claim accepted")
 	}
-	published := state.Hash("fixture repository acknowledgement")
 	if err = bridge.RecordPublication(ctx, token, device, published); err != nil {
 		t.Fatal("durable acknowledgement", err)
 	}
@@ -182,4 +190,36 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 	if err = server.Store.Transaction(ctx, state.RequireAdmission); err == nil {
 		t.Fatal("handler released management barrier")
 	}
+}
+
+// The repository is modeled here; the socket, snapshot stream, controller
+// transitions, claim, and outcome acknowledgement are real Linux adapters.
+type maintenancePublicationFixture struct {
+	store                   *state.Store
+	token, jobID, rootToken string
+	calls                   int
+}
+
+func (p *maintenancePublicationFixture) Snapshot(ctx context.Context, directory *os.File, manifest backup.Manifest, policy backup.RestorePolicy) (string, error) {
+	p.calls++
+	job, err := p.store.InspectMaintenanceJob(ctx, p.token)
+	if err != nil || job.ID != p.jobID || job.RootToken != p.rootToken || job.Phase != "publishing" {
+		return "", errors.New("repository effects without retained job authority")
+	}
+	current, success, err := p.store.InspectBackupOutcomes(ctx)
+	if err != nil || current == nil || current.JobID != p.jobID || current.Status != "unknown" || success != nil {
+		return "", errors.New("repository effects without durable unknown claim")
+	}
+	root, err := os.OpenRoot(directory.Name())
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
+	if len(manifest.Files) != 1 {
+		return "", errors.New("unexpected management-only inventory")
+	}
+	if err = backup.ValidateRecoverySet(ctx, root, manifest, policy); err != nil {
+		return "", err
+	}
+	return state.Hash("fixture repository acknowledgement"), nil
 }
