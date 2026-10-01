@@ -14,7 +14,12 @@ import (
 
 func imagePlacementFixture(t *testing.T) (*Engine, Configuration, string, string, string, time.Time) {
 	t.Helper()
+	return imagePlacementFixtureWithMaintenance(t, nil)
+}
+func imagePlacementFixtureWithMaintenance(t *testing.T, maintenance *MaintenanceAccount) (*Engine, Configuration, string, string, string, time.Time) {
+	t.Helper()
 	c, m, key, now := configurationFixture(t)
+	c.Maintenance = maintenance
 	source := t.TempDir()
 	for index := range m.Images {
 		data := bytes.Repeat([]byte(m.Images[index].ID), 256)

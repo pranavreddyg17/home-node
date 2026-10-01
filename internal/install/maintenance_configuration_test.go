@@ -2,7 +2,9 @@ package install
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -75,5 +77,59 @@ func TestRootMaintenanceConfigurationBindsObservedIdentity(t *testing.T) {
 	unit := string(findConfiguration(t, preview.Plan, "etc/systemd/system/homenode-supervisor.service").Data)
 	if !strings.Contains(unit, "--maintenance-uid 803 --maintenance-gid 803\n") {
 		t.Fatal("observed socket identity missing")
+	}
+}
+
+func TestRootPreparedMaintenanceSocketConfiguration(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("disposable root-owned configuration fixture")
+	}
+	for _, scenario := range []string{"valid", "changed-controller", "changed-socket", "missing-socket", "unfinished-account"} {
+		t.Run(scenario, func(t *testing.T) {
+			identity := MaintenanceAccount{UID: 803, GID: 803}
+			engine, c, host, _, source, now := imagePlacementFixtureWithMaintenance(t, &identity)
+			defer engine.Close()
+			readyAccountIntent(t, engine, c.Accounts, true)
+			base, err := engine.loadAccountJournal()
+			if err != nil {
+				t.Fatal(err)
+			}
+			journal := maintenanceAccountJournal{Version: 1, Completed: 2, Ready: true, Plan: MaintenanceAccountPlan{OwnerID: base.OwnerID, Identity: identity, Commands: maintenanceCreationCommands(base.OwnerID, identity)}}
+			if scenario == "unfinished-account" {
+				journal.Ready = false
+			}
+			data, err := json.Marshal(journal)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = engine.saveJournalBytes("maintenance-accounts.json", data); err != nil {
+				t.Fatal(err)
+			}
+			if err = engine.placeImages(context.Background(), source, c.Publisher, c.MinimumCatalogVersion, now); err != nil {
+				t.Fatal(err)
+			}
+			switch scenario {
+			case "changed-controller":
+				err = os.WriteFile(filepath.Join(host, "etc/systemd/system/homenode-control.service"), []byte("[Service]\nExecStart=/bin/true\n"), 0644)
+			case "changed-socket":
+				err = os.WriteFile(filepath.Join(host, "etc/systemd/system/homenode-app-maintenance.socket"), []byte("[Socket]\nSocketMode=0666\n"), 0644)
+			case "missing-socket":
+				err = os.Remove(filepath.Join(host, "etc/systemd/system/homenode-app-maintenance.socket"))
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := engine.checkPrepared(context.Background(), now)
+			if scenario == "valid" {
+				if err != nil || result.Maintenance == nil || *result.Maintenance != identity {
+					t.Fatal("owned socket preparation refused", result, err)
+				}
+				if result.AccountsVerified {
+					t.Fatal("modeled journals claimed live accounts")
+				}
+			} else if err == nil {
+				t.Fatal("unsafe maintenance configuration accepted", scenario)
+			}
+		})
 	}
 }
