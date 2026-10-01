@@ -142,6 +142,9 @@ func (e *Engine) checkPrepared(ctx context.Context, now time.Time) (Installation
 		identity := backup.Plan.Identity
 		maintenance = &identity
 	}
+	if err = validateMaintenanceStaging(config, maintenance); err != nil {
+		return result, err
+	}
 	controlUnit, err := e.readConfiguration(config, "etc/systemd/system/homenode-control.service")
 	if err != nil {
 		return result, err

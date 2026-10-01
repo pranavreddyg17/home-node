@@ -175,3 +175,25 @@ func TestRootPreparedMaintenanceSocketConfiguration(t *testing.T) {
 		})
 	}
 }
+
+func TestPreparedStagingRequiresJournalBoundIdentity(t *testing.T) {
+	identity := &MaintenanceAccount{UID: 803, GID: 803}
+	parent := record{Path: "var/lib/homenode-backup", Directory: true, Mode: 0755}
+	staging := record{Path: "var/lib/homenode-backup/staging", Directory: true, Mode: 0700, UID: 803, GID: 803}
+	if err := validateMaintenanceStaging(journal{Items: []record{parent, staging}}, identity); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateMaintenanceStaging(journal{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	wrong := staging
+	wrong.UID = 804
+	for _, items := range [][]record{nil, {parent}, {staging}, {parent, parent}, {parent, staging, staging}, {parent, wrong}} {
+		if err := validateMaintenanceStaging(journal{Items: items}, identity); err == nil {
+			t.Fatal("incomplete or foreign staging adopted", items)
+		}
+	}
+	if err := validateMaintenanceStaging(journal{Items: []record{parent, staging}}, nil); err == nil {
+		t.Fatal("backup paths adopted without maintenance identity")
+	}
+}

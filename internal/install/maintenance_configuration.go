@@ -62,3 +62,25 @@ func maintenanceControlUnit(data []byte, identity MaintenanceAccount) ([]byte, e
 func maintenanceSocketUnit() []byte {
 	return []byte("[Unit]\nDescription=HomeNode backup-only app maintenance listener\n\n[Socket]\nListenStream=/run/homenode-backup/apps.sock\nFileDescriptorName=homenode-app-maintenance\nSocketUser=root\nSocketGroup=homenode-backup\nSocketMode=0660\nDirectoryMode=0755\nService=homenode-control.service\nRemoveOnStop=yes\n\n[Install]\nWantedBy=sockets.target\n")
 }
+
+func validateMaintenanceStaging(config journal, identity *MaintenanceAccount) error {
+	parent, staging := false, false
+	for _, item := range config.Items {
+		switch item.Path {
+		case "var/lib/homenode-backup":
+			if parent || identity == nil || !item.Directory || item.UID != 0 || item.GID != 0 || item.Mode != 0755 {
+				return ErrPlan
+			}
+			parent = true
+		case "var/lib/homenode-backup/staging":
+			if staging || identity == nil || !item.Directory || item.UID != int(identity.UID) || item.GID != identity.GID || item.Mode != 0700 {
+				return ErrPlan
+			}
+			staging = true
+		}
+	}
+	if identity != nil && (!parent || !staging) {
+		return ErrPlan
+	}
+	return nil
+}
