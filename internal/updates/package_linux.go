@@ -44,6 +44,15 @@ func (release *AcquiredRelease) Close() error { return release.Package.Close() }
 // session's exclusive lock must remain held throughout acquisition. Partial
 // files remain explicit failed intent and are never used as verified packages.
 func (session *verificationSession) AcquirePackage(name, targetsURL string, staging *os.Root, policy ReleasePolicy) (*AcquiredRelease, error) {
+	fetcher, err := newMetadataFetcher(session.ctx, targetsURL)
+	if err != nil {
+		return nil, err
+	}
+	defer fetcher.client.CloseIdleConnections()
+	return session.acquirePackageWithFetcher(name, fetcher, staging, policy)
+}
+
+func (session *verificationSession) acquirePackageWithFetcher(name string, fetcher *metadataFetcher, staging *os.Root, policy ReleasePolicy) (*AcquiredRelease, error) {
 	target, err := session.TargetInfo(name)
 	if err != nil {
 		return nil, err
@@ -52,11 +61,6 @@ func (session *verificationSession) AcquirePackage(name, targetsURL string, stag
 	if err != nil {
 		return nil, err
 	}
-	fetcher, err := newMetadataFetcher(session.ctx, targetsURL)
-	if err != nil {
-		return nil, err
-	}
-	defer fetcher.client.CloseIdleConnections()
 	if fetcher.base.Host != session.fetcher.base.Host {
 		return nil, errDownloadPolicy
 	}

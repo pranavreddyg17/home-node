@@ -8,10 +8,14 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -61,6 +65,19 @@ func TestSignedRepositoryRefreshRotationAndRestartRollback(t *testing.T) {
 	targets.Signed.Version = 2
 	hash := sha256.Sum256([]byte("release fixture"))
 	targets.Signed.Targets["release.json"] = &metadata.TargetFiles{Length: 15, Hashes: metadata.Hashes{"sha256": hash[:]}}
+	release := releaseMetadataFixture()
+	customBytes, err := json.Marshal(release)
+	if err != nil {
+		t.Fatal(err)
+	}
+	custom := json.RawMessage(customBytes)
+	packageName := "releases/0.1.0/homenode.deb"
+	targets.Signed.Targets[packageName] = &metadata.TargetFiles{Length: 15, Hashes: metadata.Hashes{"sha256": hash[:]}, Custom: &custom}
+	evidenceBytes := map[string][]byte{release.SBOMTarget: []byte(`{"components":[]}`), release.ProvenanceTarget: []byte(`{"buildType":"fixture"}`)}
+	for name, data := range evidenceBytes {
+		sum := sha256.Sum256(data)
+		targets.Signed.Targets[name] = &metadata.TargetFiles{Length: int64(len(data)), Hashes: metadata.Hashes{"sha256": sum[:]}}
+	}
 	targetsData := signedFixture(t, targets, signers[metadata.TARGETS])
 	snapshot := metadata.Snapshot(expires)
 	snapshot.Signed.Version = 2
@@ -72,6 +89,12 @@ func TestSignedRepositoryRefreshRotationAndRestartRollback(t *testing.T) {
 	timestampData := signedFixture(t, timestamp, signers[metadata.TIMESTAMP])
 	var mutex sync.Mutex
 	files := map[string][]byte{"/metadata/2.root.json": rotated, "/metadata/timestamp.json": timestampData, "/metadata/2.snapshot.json": snapshotData, "/metadata/2.targets.json": targetsData}
+	files["/targets/releases/0.1.0/"+hex.EncodeToString(hash[:])+".homenode.deb"] = []byte("release fixture")
+	for name, data := range evidenceBytes {
+		descriptor := targets.Signed.Targets[name]
+		basename := filepath.Base(name)
+		files["/targets/"+filepath.Dir(name)+"/"+hex.EncodeToString(descriptor.Hashes["sha256"])+"."+basename] = data
+	}
 	var requests []string
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mutex.Lock()
@@ -112,6 +135,79 @@ func TestSignedRepositoryRefreshRotationAndRestartRollback(t *testing.T) {
 	if err != nil || again.Length != 15 {
 		first.Close()
 		t.Fatal("trusted target mutated", again, err)
+	}
+	stagingDirectory := t.TempDir()
+	if err = os.Chmod(stagingDirectory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	staging, err := os.OpenRoot(stagingDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer staging.Close()
+	targetFetcher, err := newMetadataFetcher(context.Background(), server.URL+"/targets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetFetcher.client.Transport = server.Client().Transport
+	defer targetFetcher.client.CloseIdleConnections()
+	acquired, err := first.acquirePackageWithFetcher(packageName, targetFetcher, staging, ReleasePolicy{MinimumSequence: 5, MinimumCatalogVersion: 3, CurrentStateSchema: 4})
+	if err != nil {
+		first.Close()
+		t.Fatal("signed release acquisition failed", err)
+	}
+	contents, readErr := io.ReadAll(acquired.Package)
+	closeErr := acquired.Close()
+	if readErr != nil || closeErr != nil || string(contents) != "release fixture" || acquired.Metadata != release || string(acquired.SBOM) != string(evidenceBytes[release.SBOMTarget]) || string(acquired.Provenance) != string(evidenceBytes[release.ProvenanceTarget]) {
+		first.Close()
+		t.Fatal("acquired evidence/package mismatch", readErr, closeErr)
+	}
+	mutex.Lock()
+	beforeDenied := len(requests)
+	mutex.Unlock()
+	deniedRelease, deniedErr := first.acquirePackageWithFetcher(packageName, targetFetcher, staging, ReleasePolicy{MinimumSequence: 6, MinimumCatalogVersion: 3, CurrentStateSchema: 4})
+	if deniedRelease != nil {
+		deniedRelease.Close()
+	}
+	if deniedErr == nil {
+		first.Close()
+		t.Fatal("release below security floor acquired")
+	}
+	mutex.Lock()
+	afterDenied := len(requests)
+	mutex.Unlock()
+	if beforeDenied != afterDenied {
+		first.Close()
+		t.Fatal("denied release caused a target request")
+	}
+	sbomDescriptor := targets.Signed.Targets[release.SBOMTarget]
+	sbomURL := "/targets/" + filepath.Dir(release.SBOMTarget) + "/" + hex.EncodeToString(sbomDescriptor.Hashes["sha256"]) + "." + filepath.Base(release.SBOMTarget)
+	badSBOM := append([]byte(nil), evidenceBytes[release.SBOMTarget]...)
+	badSBOM[0] ^= 1
+	mutex.Lock()
+	files[sbomURL] = badSBOM
+	beforeBadEvidence := len(requests)
+	mutex.Unlock()
+	deniedEvidence, evidenceErr := first.acquirePackageWithFetcher(packageName, targetFetcher, staging, ReleasePolicy{MinimumSequence: 5, MinimumCatalogVersion: 3, CurrentStateSchema: 4})
+	if deniedEvidence != nil {
+		deniedEvidence.Close()
+	}
+	if evidenceErr == nil {
+		first.Close()
+		t.Fatal("corrupt signed evidence acquired")
+	}
+	mutex.Lock()
+	requestedPackage := false
+	for _, request := range requests[beforeBadEvidence:] {
+		if strings.HasSuffix(request, ".homenode.deb") {
+			requestedPackage = true
+		}
+	}
+	files[sbomURL] = evidenceBytes[release.SBOMTarget]
+	mutex.Unlock()
+	if requestedPackage {
+		first.Close()
+		t.Fatal("package requested after corrupt evidence")
 	}
 	if err = first.Close(); err != nil {
 		t.Fatal(err)
