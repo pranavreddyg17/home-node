@@ -40,8 +40,10 @@ configuration ownership journal. Schema one fixes HTTPS metadata and target
 repository scopes on the same host, plus positive release-sequence and catalog
 floors. Its catalog floor cannot be below the installation's catalog floor.
 The current database schema is measured for each acquisition, rather than saved
-as an immutable installation-time value. This configuration is not yet exposed
-by the installer CLI or activated as an updater service.
+as an immutable installation-time value. The installer CLI accepts this configuration through the complete set
+`--update-metadata-url`, `--update-targets-url`, and
+`--update-sequence-floor`, together with the pinned bootstrap flags. The
+catalog floor comes from `--catalog-floor`. No updater service is activated.
 
 On Linux, `updates.AcquireRelease` joins metadata refresh, signed compatibility
 checks, evidence downloads, and the verified read-only package under one cache

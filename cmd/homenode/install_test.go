@@ -136,8 +136,24 @@ func TestPreparationAcceptsIndependentlyPinnedThresholdUpdateRoot(t *testing.T) 
 	}
 	sum := sha256.Sum256(data)
 	pin := hex.EncodeToString(sum[:])
-	p, err := parsePreparation(append(args, "--update-root", name, "--update-root-sha256", pin), now)
+	trustedArgs := append(args, "--update-root", name, "--update-root-sha256", pin)
+	p, err := parsePreparation(trustedArgs, now)
 	if err != nil || p.configuration.UpdateBootstrap == nil || p.configuration.UpdateBootstrap.SHA256 != pin || string(p.configuration.UpdateBootstrap.Data) != string(data) {
 		t.Fatal("pinned bootstrap omitted", err)
 	}
+	p, err = parsePreparation(append(trustedArgs, "--update-metadata-url", "https://updates.example/metadata/", "--update-targets-url", "https://updates.example/targets/", "--update-sequence-floor", "5"), now)
+	if err != nil || p.configuration.UpdateRepository == nil || p.configuration.UpdateRepository.MinimumSequence != 5 || p.configuration.UpdateRepository.MinimumCatalogVersion != p.configuration.MinimumCatalogVersion {
+		t.Fatal("repository policy omitted", err)
+	}
+	for _, extra := range [][]string{
+		{"--update-metadata-url", "https://updates.example/metadata/"},
+		{"--update-targets-url", "https://updates.example/targets/"},
+		{"--update-sequence-floor", "5"},
+		{"--update-metadata-url", "https://updates.example/metadata/", "--update-targets-url", "https://other.example/targets/", "--update-sequence-floor", "5"},
+	} {
+		if _, err := parsePreparation(append(trustedArgs, extra...), now); err == nil {
+			t.Fatal("partial or cross-host repository accepted", extra)
+		}
+	}
+
 }

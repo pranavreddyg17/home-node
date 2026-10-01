@@ -33,6 +33,9 @@ func parsePreparation(args []string, now time.Time) (preparation, error) {
 	key := flags.String("publisher-key", "", "independently verified publisher Ed25519 public key, hex")
 	updateRoot := flags.String("update-root", "", "independently trusted TUF bootstrap root file")
 	updatePin := flags.String("update-root-sha256", "", "independently verified bootstrap root SHA256; required with update-root")
+	updateMetadata := flags.String("update-metadata-url", "", "trusted HTTPS TUF metadata repository")
+	updateTargets := flags.String("update-targets-url", "", "trusted HTTPS release target repository on the same host")
+	updateSequence := flags.Int64("update-sequence-floor", 0, "independently verified minimum release security sequence")
 	file := flags.String("catalog", "", "signed release catalog file")
 	flags.Int64Var(&p.configuration.MinimumCatalogVersion, "catalog-floor", 0, "independently verified minimum catalog version")
 	flags.StringVar(&p.source, "images", "", "local release image directory")
@@ -64,6 +67,16 @@ func parsePreparation(args []string, now time.Time) (preparation, error) {
 			return p, err
 		}
 		p.configuration.UpdateBootstrap = bootstrap
+	}
+	if *updateMetadata != "" || *updateTargets != "" || *updateSequence != 0 {
+		if p.configuration.UpdateBootstrap == nil {
+			return p, install.ErrPlan
+		}
+		repository := &updates.RepositoryConfiguration{Schema: 1, MetadataURL: *updateMetadata, TargetsURL: *updateTargets, MinimumSequence: *updateSequence, MinimumCatalogVersion: p.configuration.MinimumCatalogVersion}
+		if err := repository.Validate(); err != nil {
+			return p, err
+		}
+		p.configuration.UpdateRepository = repository
 	}
 	pub, err := hex.DecodeString(*key)
 	if err != nil || len(pub) != ed25519.PublicKeySize {
