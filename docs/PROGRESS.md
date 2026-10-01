@@ -1253,3 +1253,9 @@ A new opt-in disposable root fixture creates a root:1003 0660 listener and passe
 NewActivatedMaintenanceApps therefore provides an explicit client mode authenticating the root creator of the installed systemd socket. NewMaintenanceApps retains its non-root controller peer check for directly created listeners. Both preserve the same restricted request/acknowledgement and owned-job checks.
 
 Validation: local runtimeclient/socketactivation race suites and Linux activation test compilation passed. Native inherited listener execution and systemd/installer deployment remain pending. Previous CI run 36831523945 completed successfully at 8ad8f1e1eb9616bde9fa5af9e32eb31cf0245d59; controller startup additions are included in the upcoming run.
+
+### Owned installer configuration for controller backup socket
+
+Configuration planning now adds homenode-app-maintenance.socket only with an observed valid backup account. The generated unit creates the fixed root-owned backup-group 0660 listener, names its descriptor, selects the controller service, and removes the path on stop. The corresponding controller unit binds the exact UID/GID arguments and explicit socket association/dependency/order. Standard installations retain their unchanged controller template. The installer plan allowlist includes this specific owned socket unit; prepared-installation checks require exact controller and socket bytes when maintenance is configured. Configuration does not start services.
+
+Validation: installer race tests passed before the final explicit association/order refinement, final installer tests passed, and final Linux compilation passed. Plan tests check literal controller identity and socket root/group/mode/descriptor/service values. Disposable root configuration checks and actual systemd startup remain pending native validation.

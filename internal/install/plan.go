@@ -51,10 +51,11 @@ var directories = map[string]bool{
 var files = map[string]bool{
 	"etc/homenode/services.env": true, "etc/homenode/runtime-policy.json": true,
 	"etc/homenode/catalog.pub": true, "etc/homenode/catalog-floor": true, "var/lib/homenode/catalog/catalog.json": true,
-	"etc/systemd/system/homenode-control.service":    true,
-	"etc/systemd/system/homenode-supervisor.service": true,
-	"etc/systemd/system/homenode-transfer.service":   true,
-	"etc/systemd/system/homenode.slice":              true,
+	"etc/systemd/system/homenode-app-maintenance.socket": true,
+	"etc/systemd/system/homenode-control.service":        true,
+	"etc/systemd/system/homenode-supervisor.service":     true,
+	"etc/systemd/system/homenode-transfer.service":       true,
+	"etc/systemd/system/homenode.slice":                  true,
 }
 
 func digest(data []byte) string { value := sha256.Sum256(data); return hex.EncodeToString(value[:]) }

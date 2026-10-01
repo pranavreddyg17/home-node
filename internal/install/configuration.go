@@ -167,7 +167,16 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 				return result, err
 			}
 		}
+		if name == "homenode-control.service" && c.Maintenance != nil {
+			data, err = maintenanceControlUnit(data, *c.Maintenance)
+			if err != nil {
+				return result, err
+			}
+		}
 		addFile("etc/systemd/system/"+name, 0644, data)
+	}
+	if c.Maintenance != nil {
+		addFile("etc/systemd/system/homenode-app-maintenance.socket", 0644, maintenanceSocketUnit())
 	}
 	slice := fmt.Sprintf("[Unit]\nDescription=HomeNode workload resource boundary\n\n[Slice]\nMemoryMax=%d\nCPUQuota=%d%%\nTasksMax=512\n", int64(c.Policy.MemoryMiB)*(1<<20), c.Policy.VCPUs*100)
 	addFile("etc/systemd/system/homenode.slice", 0644, []byte(slice))

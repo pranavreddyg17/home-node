@@ -18,6 +18,16 @@ func TestMaintenanceConfigurationUsesObservedDistinctIdentity(t *testing.T) {
 	if !strings.Contains(unit, "--maintenance-uid 803 --maintenance-gid 803\n") {
 		t.Fatal("maintenance socket omitted", unit)
 	}
+	control := string(findConfiguration(t, preview.Plan, "etc/systemd/system/homenode-control.service").Data)
+	if !strings.Contains(control, "--maintenance-uid 803 --maintenance-gid 803\n") || !strings.Contains(control, "homenode-transfer.service homenode-app-maintenance.socket\n") {
+		t.Fatal("controller activation omitted", control)
+	}
+	socket := string(findConfiguration(t, preview.Plan, "etc/systemd/system/homenode-app-maintenance.socket").Data)
+	for _, required := range []string{"SocketUser=root\n", "SocketGroup=homenode-backup\n", "SocketMode=0660\n", "FileDescriptorName=homenode-app-maintenance\n", "Service=homenode-control.service\n"} {
+		if !strings.Contains(socket, required) {
+			t.Fatal("unsafe activation socket", socket)
+		}
+	}
 	for _, identity := range []MaintenanceAccount{{UID: 0, GID: 803}, {UID: 800, GID: 803}, {UID: 803, GID: 802}, {UID: 1000, GID: 803}} {
 		c.Maintenance = &identity
 		if _, err := ConfigurationPlan(c, now); err == nil {

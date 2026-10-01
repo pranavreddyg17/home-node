@@ -142,6 +142,27 @@ func (e *Engine) checkPrepared(ctx context.Context, now time.Time) (Installation
 		identity := backup.Plan.Identity
 		maintenance = &identity
 	}
+	controlUnit, err := e.readConfiguration(config, "etc/systemd/system/homenode-control.service")
+	if err != nil {
+		return result, err
+	}
+	expectedControl, err := servicetemplates.Unit("homenode-control.service")
+	if err != nil {
+		return result, err
+	}
+	if maintenance != nil {
+		expectedControl, err = maintenanceControlUnit(expectedControl, *maintenance)
+		if err != nil {
+			return result, err
+		}
+		socketUnit, err := e.readConfiguration(config, "etc/systemd/system/homenode-app-maintenance.socket")
+		if err != nil || !bytes.Equal(socketUnit, maintenanceSocketUnit()) {
+			return result, ErrPlan
+		}
+	}
+	if !bytes.Equal(controlUnit, expectedControl) {
+		return result, ErrPlan
+	}
 	policyBytes, err := e.readConfiguration(config, "etc/homenode/runtime-policy.json")
 	if err != nil {
 		return result, err
