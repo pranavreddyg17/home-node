@@ -37,6 +37,12 @@ func AcquireRelease(ctx context.Context, provisioned, staging *os.Root, metadata
 	if metadataFetcher.base.Host != targetFetcher.base.Host {
 		return nil, errDownloadPolicy
 	}
+	return acquireReleaseWithFetchers(ctx, provisioned, staging, target, policy, metadataFetcher, targetFetcher)
+}
+
+// The private transport seam permits signed TLS repository fixtures without
+// exposing alternate trust stores or network clients to production callers.
+func acquireReleaseWithFetchers(ctx context.Context, provisioned, staging *os.Root, target string, policy ReleasePolicy, metadataFetcher, targetFetcher *metadataFetcher) (result *AcquiredRelease, resultErr error) {
 	session, err := newVerificationSessionWithFetcher(ctx, provisioned, metadataFetcher)
 	if err != nil {
 		return nil, err

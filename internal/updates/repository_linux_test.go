@@ -212,6 +212,36 @@ func TestSignedRepositoryRefreshRotationAndRestartRollback(t *testing.T) {
 	if err = first.Close(); err != nil {
 		t.Fatal(err)
 	}
+	joinedDirectory := t.TempDir()
+	if err = os.Chmod(joinedDirectory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	joinedStaging, err := os.OpenRoot(joinedDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer joinedStaging.Close()
+	joinedMetadata, err := newMetadataFetcher(context.Background(), server.URL+"/metadata")
+	if err != nil {
+		t.Fatal(err)
+	}
+	joinedMetadata.client.Transport = server.Client().Transport
+	defer joinedMetadata.client.CloseIdleConnections()
+	joinedRelease, err := acquireReleaseWithFetchers(context.Background(), provisioned, joinedStaging, packageName, ReleasePolicy{MinimumSequence: 5, MinimumCatalogVersion: 3, CurrentStateSchema: 4}, joinedMetadata, targetFetcher)
+	if err != nil {
+		t.Fatal("joined refresh and acquisition failed", err)
+	}
+	joinedBytes, joinedReadErr := io.ReadAll(joinedRelease.Package)
+	joinedCloseErr := joinedRelease.Close()
+	if joinedReadErr != nil || joinedCloseErr != nil || string(joinedBytes) != "release fixture" || joinedRelease.Metadata != release {
+		t.Fatal("joined acquisition mismatch", joinedReadErr, joinedCloseErr)
+	}
+	// Acquiring again must fail on retained publication rather than keep the
+	// cache locked or silently adopt the prior package as a new operation.
+	joinedRelease, err = acquireReleaseWithFetchers(context.Background(), provisioned, joinedStaging, packageName, ReleasePolicy{MinimumSequence: 5, MinimumCatalogVersion: 3, CurrentStateSchema: 4}, joinedMetadata, targetFetcher)
+	if err == nil || joinedRelease != nil {
+		t.Fatal("retained package silently adopted")
+	}
 	current, err := os.ReadFile(rootName)
 	if err != nil || string(current) != string(rotated) {
 		t.Fatal("rotated root not retained", err)
