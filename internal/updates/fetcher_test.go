@@ -3,6 +3,7 @@ package updates
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -114,5 +115,31 @@ func TestMetadataDownloadCancellationDuringBody(t *testing.T) {
 	}
 	if _, err = f.DownloadFile(server.URL+"/metadata/root.json", 1024, 0); !errors.Is(err, context.Canceled) {
 		t.Fatal("canceled operation reused", err)
+	}
+}
+
+// A transport may report clean EOF after cancellation. Cancellation must win
+// even if its body reader returns no transport error.
+type cancelAtEOFBody struct{ cancel context.CancelFunc }
+
+func (b cancelAtEOFBody) Read([]byte) (int, error) { b.cancel(); return 0, io.EOF }
+func (b cancelAtEOFBody) Close() error             { return nil }
+
+type cancellationTransport struct{ cancel context.CancelFunc }
+
+func (t cancellationTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: cancelAtEOFBody{t.cancel}, ContentLength: -1}, nil
+}
+func TestMetadataCancellationWinsOverCleanEOF(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fetcher, err := newMetadataFetcher(ctx, "https://updates.example/metadata/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fetcher.client.Transport = cancellationTransport{cancel}
+	data, err := fetcher.DownloadFile("https://updates.example/metadata/root.json", 1024, 0)
+	if !errors.Is(err, context.Canceled) || data != nil {
+		t.Fatal("canceled EOF accepted", data, err)
 	}
 }

@@ -75,6 +75,9 @@ func (f *metadataFetcher) DownloadFile(address string, maximum int64, _ time.Dur
 	if err != nil {
 		return nil, err
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if int64(len(data)) > maximum {
 		return nil, errDownloadPolicy
 	}

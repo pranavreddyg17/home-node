@@ -1723,3 +1723,7 @@ InspectionEnvironment renders exactly the release and operation variables consum
 ### Inspection descriptor lifecycle
 
 InspectionStage now privately owns its pinned package, serializes close/configuration/result operations and refuses reuse after close. DuplicatePackage produces an independently closable read-only close-on-exec descriptor for explicit worker inheritance; closing that duplicate cannot release the stage execution lock. Close is idempotent and handles nil/zero state. Linux fixture assertions verify duplicate hash/length, continued verification after duplicate close, repeated close and refusal of all closed-stage requests. Portable update race tests and Linux compilation passed; native lifecycle assertions await CI publication. CI 36932829177 remains active.
+
+### Metadata cancellation versus clean EOF
+
+CI 36932829177 failed TestMetadataDownloadCancellationDuringBody because cancellation can close a response with clean EOF before the transport reports a context error. The fetcher now checks its bounded operation context after reading the body and refuses canceled bytes. A deterministic transport fixture cancels during a clean EOF read and requires nil data plus context.Canceled. The original TLS cancellation fixture passed 100 race-enabled repetitions locally; the complete portable update race suite, Linux compilation and diff validation passed. The failed CI run is terminal; the correction and pending inspection configuration/lifecycle work will be pushed together for fresh execution.
