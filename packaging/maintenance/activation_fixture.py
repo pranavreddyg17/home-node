@@ -10,6 +10,14 @@ import time
 if os.geteuid() != 0 or os.environ.get("HOMENODE_ACTIVATION_SYSTEMD_INTEGRATION") != "1":
     raise SystemExit("requires explicit disposable root fixture")
 
+packet_flag = os.environ.get("HOMENODE_ACTIVATION_PACKET", "0")
+if packet_flag not in ("0", "1"):
+    raise SystemExit("invalid activation transport")
+packet = packet_flag == "1"
+listener_directive = "ListenSequentialPacket" if packet else "ListenStream"
+descriptor_name = "homenode-backup-credential" if packet else "homenode-app-maintenance"
+socket_type = socket.SOCK_SEQPACKET if packet else socket.SOCK_STREAM
+
 unit_root = pathlib.Path("/run/systemd/system")
 service = "homenode-activation-fixture.service"
 socket_unit = "homenode-activation-fixture.socket"
@@ -46,7 +54,7 @@ User=1001
 Group=1001
 Sockets={socket_unit}
 ExecStart={binary} -test.run=^TestNativeInheritedPrivateListener$ -test.v
-Environment=HOMENODE_ACTIVATION_CHILD=1 HOMENODE_ACTIVATION_SYSTEMD=1 HOMENODE_ACTIVATION_PATH={socket_path}
+Environment=HOMENODE_ACTIVATION_CHILD=1 HOMENODE_ACTIVATION_SYSTEMD=1 HOMENODE_ACTIVATION_PATH={socket_path} HOMENODE_ACTIVATION_PACKET={packet_flag}
 NoNewPrivileges=yes
 CapabilityBoundingSet=
 AmbientCapabilities=
@@ -59,8 +67,8 @@ TimeoutStartSec=20
     paths[1].write_text(f"""[Unit]
 Description=Disposable HomeNode root-created listener
 [Socket]
-ListenStream={socket_path}
-FileDescriptorName=homenode-app-maintenance
+{listener_directive}={socket_path}
+FileDescriptorName={descriptor_name}
 SocketUser=root
 SocketGroup={group_name}
 SocketMode=0660
@@ -72,7 +80,7 @@ RemoveOnStop=yes
         path.chmod(0o644)
     command("systemctl", "daemon-reload")
     command("systemctl", "start", socket_unit)
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+    with socket.socket(socket.AF_UNIX, socket_type) as connection:
         connection.settimeout(15)
         connection.connect(str(socket_path))
         _, uid, _ = struct.unpack("3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
@@ -99,7 +107,7 @@ RemoveOnStop=yes
     result = command("systemctl", "show", service, "--property=ExecMainStatus", "--value").stdout.strip()
     if phase != "inactive" or result != "0":
         raise RuntimeError("activated service failed")
-    print("Root-created named socket activated UID 1001; filesystem access denied; inherited accept succeeded.")
+    print(f"Root-created named {'packet' if packet else 'stream'} socket activated UID 1001; filesystem access denied; inherited accept succeeded.")
 except Exception:
     for arguments in (("systemctl", "status", service, socket_unit, "--no-pager", "--full"), ("journalctl", "-u", service, "-u", socket_unit, "--no-pager", "-n", "80")):
         result = subprocess.run(arguments, check=False, capture_output=True, text=True, timeout=30)
