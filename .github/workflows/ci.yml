@@ -31,6 +31,8 @@ jobs:
         run: sudo "$(command -v go)" test ./internal/install ./cmd/homenode-supervisor
       - name: Test inherited private backup listener
         run: sudo env HOMENODE_ACTIVATION_INTEGRATION=1 "$(command -v go)" test ./internal/socketactivation -run '^TestNativeInheritedPrivate(Packet)?Listener$'
+      - name: Test isolated backup executable activation and shutdown
+        run: sudo env HOMENODE_BACKUP_ENTRY_INTEGRATION=1 "$(command -v go)" test ./cmd/homenode-backup -run '^TestNativeBackupEntryActivation$'
       - name: Test activated credential handoff across kernel identities
         run: sudo env HOMENODE_CREDENTIAL_INTEGRATION=1 "$(command -v go)" test ./internal/backup -run '^TestNativeActivatedCredentialHandoff$'
       - name: Test systemd activation of private backup listener
