@@ -65,13 +65,7 @@ func stageRecoverySet(ctx context.Context, disks MaintenanceDisks, managementTok
 	created := map[string]os.FileInfo{}
 	defer func() {
 		if resultErr != nil {
-			for name, original := range created {
-				current, err := root.Lstat(name)
-				if err == nil && os.SameFile(original, current) {
-					resultErr = errors.Join(resultErr, root.Remove(name))
-				}
-			}
-			resultErr = errors.Join(resultErr, directory.Sync())
+			resultErr = errors.Join(resultErr, removeOwnedStaging(root, created), directory.Sync())
 			result = Manifest{}
 		}
 	}()
