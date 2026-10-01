@@ -1245,3 +1245,11 @@ The serve command now supports explicit maintenance UID/GID and socket flags. It
 ServeMaintenance owns the private listener, applies kernel peer context, bounds headers/body reading/idle time and operation responses, and limits active handlers to two. Its lifetime follows the controller's signal context; shutdown cancels requests and drains under a ten-second bound, force-closing on drain failure. Controller startup joins private service termination before closing management state, and a private listener failure stops the controller.
 
 Validation: affected command/controller race suites passed, Linux command compilation passed, and listener cancellation/error tests passed. Actual systemd activation, positive inherited root-owned listener validation, installer unit/configuration ownership, and deployment remain required.
+
+### Inherited listener credentials and root fixture
+
+A new opt-in disposable root fixture creates a root:1003 0660 listener and passes it as descriptor 3 to UID/GID 1001 without supplementary groups. The child must fail direct filesystem socket access yet successfully consume and accept the inherited listener, clearing activation variables. The parent verifies the unprivileged controller response and observes root through SO_PEERCRED: peer credentials reflect listen-time creation, not the current accepting UID (https://man7.org/linux/man-pages/man7/unix.7.html). CI runs this fixture explicitly as root.
+
+NewActivatedMaintenanceApps therefore provides an explicit client mode authenticating the root creator of the installed systemd socket. NewMaintenanceApps retains its non-root controller peer check for directly created listeners. Both preserve the same restricted request/acknowledgement and owned-job checks.
+
+Validation: local runtimeclient/socketactivation race suites and Linux activation test compilation passed. Native inherited listener execution and systemd/installer deployment remain pending. Previous CI run 36831523945 completed successfully at 8ad8f1e1eb9616bde9fa5af9e32eb31cf0245d59; controller startup additions are included in the upcoming run.

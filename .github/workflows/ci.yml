@@ -29,6 +29,8 @@ jobs:
         run: go test -race ./...
       - name: Test installer ownership with root fixture
         run: sudo "$(command -v go)" test ./internal/install ./cmd/homenode-supervisor
+      - name: Test inherited private backup listener
+        run: sudo env HOMENODE_ACTIVATION_INTEGRATION=1 "$(command -v go)" test ./internal/socketactivation -run '^TestNativeInheritedPrivateListener$'
       - name: Test received maintenance disk admission with root fixture
         run: sudo env HOMENODE_DISK_TRANSPORT_ROOT_INTEGRATION=1 "$(command -v go)" test ./internal/disktransport -run '^TestNativeDiskAdmission$'
       - name: Test backup disk client across kernel identities

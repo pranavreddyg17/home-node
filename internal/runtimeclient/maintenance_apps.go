@@ -24,8 +24,21 @@ type MaintenanceAppsClient struct {
 }
 
 func NewMaintenanceApps(socket string, controllerUID uint32, inspect func(context.Context, string) (state.MaintenanceJob, error)) *MaintenanceAppsClient {
+	if controllerUID == 0 {
+		return &MaintenanceAppsClient{inspect: inspect}
+	}
+	return newMaintenanceApps(socket, controllerUID, inspect)
+}
+
+// NewActivatedMaintenanceApps authenticates the root creator of a systemd
+// listener inherited by the controller. SO_PEERCRED reports that creator, not
+// the current accepting process. Use only the installed backup-only socket.
+func NewActivatedMaintenanceApps(socket string, inspect func(context.Context, string) (state.MaintenanceJob, error)) *MaintenanceAppsClient {
+	return newMaintenanceApps(socket, 0, inspect)
+}
+func newMaintenanceApps(socket string, listenerUID uint32, inspect func(context.Context, string) (state.MaintenanceJob, error)) *MaintenanceAppsClient {
 	c := &MaintenanceAppsClient{inspect: inspect}
-	if controllerUID == 0 || inspect == nil || !filepath.IsAbs(socket) || filepath.Clean(socket) != socket {
+	if inspect == nil || !filepath.IsAbs(socket) || filepath.Clean(socket) != socket {
 		return c
 	}
 	c.client = &http.Client{Timeout: 185 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }, Transport: &http.Transport{MaxConnsPerHost: 2, MaxIdleConns: 1, IdleConnTimeout: 30 * time.Second, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
@@ -39,7 +52,7 @@ func NewMaintenanceApps(socket string, controllerUID uint32, inspect func(contex
 			return nil, ErrMaintenance
 		}
 		peer, err := supervisor.PeerUID(unix)
-		if err != nil || peer != controllerUID {
+		if err != nil || peer != listenerUID {
 			connection.Close()
 			return nil, ErrMaintenance
 		}
