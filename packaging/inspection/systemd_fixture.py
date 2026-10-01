@@ -38,7 +38,11 @@ for raw in source.read_text().splitlines():
     properties.append("--property=" + key + "=" + value)
 if seen != allowed | {"ExecStart", "EnvironmentFile", "OpenFile"}:
     sys.exit("Incomplete service fixture source")
-with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, socket.socket() as listener:
+with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, tempfile.TemporaryDirectory(prefix="hn-inspect-hidden-") as hidden, socket.socket() as listener:
+    Path(hidden).chmod(0o755)
+    marker = Path(hidden) / "marker"
+    marker.write_text("world-readable host fixture")
+    marker.chmod(0o644)
     listener.bind(("127.0.0.1", 0))
     listener.listen(1)
     private = Path(directory) / "package.deb"
@@ -48,6 +52,8 @@ with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, soc
                "--unit=homenode-inspect-fixture-" + uuid.uuid4().hex, *properties,
                "--property=OpenFile=" + str(private) + ":verified-package:read-only",
                "--setenv=HOMENODE_INSPECT_ENTRY_CHILD=1",
+               "--setenv=HOMENODE_INSPECT_SERVICE_LIMITS=1",
+               "--setenv=HOMENODE_INSPECT_HIDDEN_PATH=" + str(marker),
                "--setenv=HOMENODE_INSPECT_DENIED_PORT=" + str(listener.getsockname()[1]), str(binary),
                "-test.run=^TestNativeInspectionDescriptor$", "-test.count=1", "-test.v"]
     subprocess.run(command, timeout=180, check=True)

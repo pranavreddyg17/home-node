@@ -226,3 +226,12 @@ confirmed listening host TCP endpoint. Source completeness, Python syntax and
 Linux test compilation pass locally; native service execution awaits CI. This
 fixture does not yet activate the product updater or qualify its root result
 binding and staging lifecycle.
+
+The inspection service child fixture additionally reads its unified cgroup
+limits and requires effective 256 MiB memory, no swap, 32 tasks, OOM group kill,
+and 50% CPU quota. It must also fail to read an otherwise world-readable host
+`/tmp` marker, testing private temporary storage. These new runtime assertions
+await native CI execution. HomeNode CI 36929627382 at fbaf582 completed
+successfully, including centralized distribution decoding of real build output;
+the subsequent cross-identity/service fixture changes are not covered by that
+older run.

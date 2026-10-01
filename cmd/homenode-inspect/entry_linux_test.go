@@ -24,6 +24,14 @@ func TestNativeInspectionDescriptor(t *testing.T) {
 				t.Fatal("inspection reached host listener")
 			}
 		}
+		if hidden := os.Getenv("HOMENODE_INSPECT_HIDDEN_PATH"); hidden != "" {
+			if _, err := os.ReadFile(hidden); err == nil {
+				t.Fatal("inspection read host temporary marker")
+			}
+		}
+		if os.Getenv("HOMENODE_INSPECT_SERVICE_LIMITS") == "1" {
+			verifyInspectionServiceLimits(t)
+		}
 		var output bytes.Buffer
 		if err := run(context.Background(), []string{"--release", "0.1.0~ci"}, &output); err != nil {
 			t.Fatal("worker inspection", err)
