@@ -72,6 +72,8 @@ never fall back to an ordinary host directory.
 for `/dev/disk/by-uuid` admission. `PrivateDevices=yes` would hide that identity
 and is deliberately absent. No capabilities or network sockets are granted.
 The 1 GiB memory ceiling is a development ceiling requiring measured host reserve
-qualification, not a supported-device performance claim. The installer does not
-yet emit backup.env, promote these templates, enable the socket, or coordinate
-approved owner jobs; actual worker startup and confinement remain release gates.
+qualification, not a supported-device performance claim. Maintenance-aware
+configuration preparation journals these templates under `/etc/systemd/system`
+and prepared checks require their exact embedded content. The installer does not
+yet emit backup.env, enable the socket, or coordinate approved owner jobs;
+actual worker startup and confinement remain release gates.

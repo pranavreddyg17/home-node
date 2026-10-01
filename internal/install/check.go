@@ -162,6 +162,13 @@ func (e *Engine) checkPrepared(ctx context.Context, now time.Time) (Installation
 		if err != nil || !bytes.Equal(socketUnit, maintenanceSocketUnit()) {
 			return result, ErrPlan
 		}
+		for _, name := range []string{"homenode-backup.service", "homenode-backup-credential.socket"} {
+			actual, readErr := e.readConfiguration(config, "etc/systemd/system/"+name)
+			expected, templateErr := servicetemplates.Unit(name)
+			if readErr != nil || templateErr != nil || !bytes.Equal(actual, expected) {
+				return result, ErrPlan
+			}
+		}
 	}
 	if !bytes.Equal(controlUnit, expectedControl) {
 		return result, ErrPlan
@@ -237,7 +244,11 @@ func (e *Engine) checkPrepared(ctx context.Context, now time.Time) (Installation
 			return result, err
 		}
 	}
-	return InstallationCheck{Maintenance: maintenance, ConfigurationID: config.ID, Network: network, Accounts: a.Accounts, RuntimePolicy: policy, PublisherKeyID: catalog.KeyID(pub), CatalogFloor: floor, CatalogVersion: manifest.Version, ArtifactsVerified: true, Pending: []string{"verify supported host enforcement and measured VM overhead", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}, nil
+	result = InstallationCheck{Maintenance: maintenance, ConfigurationID: config.ID, Network: network, Accounts: a.Accounts, RuntimePolicy: policy, PublisherKeyID: catalog.KeyID(pub), CatalogFloor: floor, CatalogVersion: manifest.Version, ArtifactsVerified: true, Pending: []string{"verify supported host enforcement and measured VM overhead", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
+	if maintenance != nil {
+		result.Pending = append(result.Pending, "register and qualify an external backup repository", "generate trusted backup launch configuration and qualify worker activation")
+	}
+	return result, nil
 }
 
 func (e *Engine) checkTLSAccess(a Accounts) error {

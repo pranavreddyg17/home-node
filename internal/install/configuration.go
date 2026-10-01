@@ -181,6 +181,13 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 	}
 	if c.Maintenance != nil {
 		addFile("etc/systemd/system/homenode-app-maintenance.socket", 0644, maintenanceSocketUnit())
+		for _, name := range []string{"homenode-backup.service", "homenode-backup-credential.socket"} {
+			data, err := servicetemplates.Unit(name)
+			if err != nil {
+				return result, err
+			}
+			addFile("etc/systemd/system/"+name, 0644, data)
+		}
 	}
 	slice := fmt.Sprintf("[Unit]\nDescription=HomeNode workload resource boundary\n\n[Slice]\nMemoryMax=%d\nCPUQuota=%d%%\nTasksMax=512\n", int64(c.Policy.MemoryMiB)*(1<<20), c.Policy.VCPUs*100)
 	addFile("etc/systemd/system/homenode.slice", 0644, []byte(slice))
@@ -188,5 +195,8 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 		return result, err
 	}
 	result = ConfigurationPreview{Maintenance: c.Maintenance, Network: c.Network, RuntimePolicy: c.Policy, Accounts: c.Accounts, ProvidedCapacity: c.Capacity, Plan: plan, CatalogVersion: m.Version, PublisherKeyID: catalog.KeyID(c.Publisher), RequiredDiskBytes: required, VerifiedImageBytes: imageCredit, RequiredFreeDiskBytes: required - imageCredit, Pending: []string{"verify actual service account memberships", "verify supported host enforcement and measured VM overhead", "place and verify immutable guest images", "verify live Tailscale and protected HTTPS identity", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
+	if c.Maintenance != nil {
+		result.Pending = append(result.Pending, "register and qualify an external backup repository", "generate trusted backup launch configuration and qualify worker activation")
+	}
 	return result, nil
 }
