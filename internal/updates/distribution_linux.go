@@ -26,6 +26,9 @@ func ValidateDistributionPackage(ctx context.Context, file *os.File, release Rel
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if !releaseName.MatchString(release.Release) || release.Platform != "ubuntu-24.04-amd64" {
+		return ErrPackageControl
+	}
 	flags, err := unix.FcntlInt(file.Fd(), unix.F_GETFL, 0)
 	if err != nil || flags&unix.O_ACCMODE != unix.O_RDONLY {
 		return ErrPackageArchive
