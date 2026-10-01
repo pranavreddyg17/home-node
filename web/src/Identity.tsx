@@ -81,10 +81,11 @@ export function Devices({ session, verify }: { session: Session; verify: () => P
   </div>
 }
 
-export function Settings({ logout }: { logout: () => Promise<void> }) {
+export function Settings({ logout, session }: { logout: () => Promise<void>; session: Session }) {
   const [error, setError] = useState('')
   const [diagnostics, setDiagnostics] = useState('')
   const preview = async () => { try { setDiagnostics(JSON.stringify(await api('/diagnostics'), null, 2)) } catch (e) { setError(message(e)) } }
   const download = () => { const url = URL.createObjectURL(new Blob([diagnostics], { type: 'application/json' })); const a = document.createElement('a'); a.href = url; a.download = 'homenode-diagnostics.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000) }
-  return <div className="stack">{error && <p className="form-error" role="alert">{error}</p>}<section className="panel"><h2>Diagnostics</h2><p>Preview the report before exporting it. File contents, chats, credentials, device names, and host storage paths are excluded.</p><button onClick={() => void preview()}>Preview report</button>{diagnostics && <><pre className="diagnostics">{diagnostics}</pre><button onClick={download}>Download report</button></>}</section><section className="panel"><h2>Session</h2><p>Sessions expire after 30 minutes of inactivity, or 12 hours after sign-in.</p><button onClick={() => void logout().catch(e => setError(message(e)))}>Sign out</button></section></div>
+  return <div className="stack">{session.device.capabilities.includes('admin') && <BackupStatus />} {error && <p className="form-error" role="alert">{error}</p>}<section className="panel"><h2>Diagnostics</h2><p>Preview the report before exporting it. File contents, chats, credentials, device names, and host storage paths are excluded.</p><button onClick={() => void preview()}>Preview report</button>{diagnostics && <><pre className="diagnostics">{diagnostics}</pre><button onClick={download}>Download report</button></>}</section><section className="panel"><h2>Session</h2><p>Sessions expire after 30 minutes of inactivity, or 12 hours after sign-in.</p><button onClick={() => void logout().catch(e => setError(message(e)))}>Sign out</button></section></div>
 }
+import { BackupStatus } from './BackupStatus'
