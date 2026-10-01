@@ -1,13 +1,13 @@
 [Unit]
 Description=HomeNode isolated package content inspection
-ConditionPathExists=/etc/homenode/inspection.env
+ConditionPathExists=/var/lib/homenode-update/inspection.env
 ConditionPathExists=/var/lib/homenode-update/inspection/package.deb
 
 [Service]
 Type=oneshot
 DynamicUser=yes
 SupplementaryGroups=
-EnvironmentFile=/etc/homenode/inspection.env
+EnvironmentFile=/var/lib/homenode-update/inspection.env
 OpenFile=/var/lib/homenode-update/inspection/package.deb:verified-package:read-only
 ExecStart=/usr/lib/homenode/homenode-inspect --release ${INSPECTION_RELEASE} --operation ${INSPECTION_OPERATION_ID}
 UMask=0077
