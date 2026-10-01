@@ -312,3 +312,25 @@ records current artifact/account/HTTPS verification, certificate expiry and
 explicit remaining enforcement, tailnet policy, activation and phone gates.
 Missing, incomplete, changed and expired state fails closed. Inspection makes
 no journal progress, no enrollment codes and no saved activation attestation.
+
+The backup peer has a separate account phase after the existing controller and
+transfer account phase is complete. On a supported Linux host, as root:
+
+```sh
+homenode maintenance-accounts-prepare
+homenode maintenance-accounts-provision
+homenode maintenance-accounts-check
+```
+
+These commands use the existing `/var/lib/homenode-install` journal; a different
+existing private journal can be selected with `--journal-dir`. Preparation checks
+owned base accounts and live identity vacancy and commits the fixed creation
+intent. Provisioning runs only that committed intent and can be rerun after an
+interruption; completed account commands are reconciled rather than duplicated.
+Do not rerun preparation after partial creation: resume provisioning instead.
+Check verifies local account isolation and live NSS agreement without mutation.
+Existing `homenode-backup` identities are not adopted during preparation.
+
+The commands do not enable services or modify the standard service environment.
+Maintenance socket activation, backup service installation, rollback, and the
+complete owner backup workflow remain separate unfinished installation work.

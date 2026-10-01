@@ -41,6 +41,12 @@ func main() {
 		serve(os.Args[2:])
 	case "accounts-provision":
 		accountsProvision(os.Args[2:])
+	case "maintenance-accounts-prepare":
+		maintenanceAccounts(os.Args[2:], "prepare")
+	case "maintenance-accounts-provision":
+		maintenanceAccounts(os.Args[2:], "provision")
+	case "maintenance-accounts-check":
+		maintenanceAccounts(os.Args[2:], "check")
 	case "accounts-check":
 		accountsCheck(os.Args[2:])
 	case "network-check":
@@ -52,7 +58,7 @@ func main() {
 	}
 }
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: homenode <install-check|install-prepare|doctor|accounts-provision|accounts-check|network-check|serve|setup-code> [options]")
+	fmt.Fprintln(os.Stderr, "usage: homenode <install-check|install-prepare|doctor|accounts-provision|accounts-check|maintenance-accounts-prepare|maintenance-accounts-provision|maintenance-accounts-check|network-check|serve|setup-code> [options]")
 	os.Exit(2)
 }
 func fatal(err error) { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
