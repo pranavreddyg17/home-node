@@ -92,3 +92,29 @@ func RunRegisteredDispatchedBackup(ctx context.Context, dispatch backup.Dispatch
 	defer func() { resultErr = errors.Join(resultErr, repository.Close()) }()
 	return RunLeasedDispatchedBackup(ctx, dispatch, config, repository)
 }
+
+// RunCredentialedDispatchedBackup consumes and closes the supplied credential
+// descriptor on every path. It clears its temporary password copy after use.
+// Credential transport must independently authenticate trusted local handoff;
+// ordinary dispatch packets continue to reject descriptors and secrets.
+func RunCredentialedDispatchedBackup(ctx context.Context, dispatch backup.Dispatch, config BackupWorkerConfig, credential *os.File) (result backup.BackupResult, resultErr error) {
+	if credential == nil {
+		return result, backup.ErrRepository
+	}
+	defer func() { resultErr = errors.Join(resultErr, credential.Close()) }()
+	if err := validateBackupWorker(ctx, dispatch, config); err != nil {
+		return result, err
+	}
+	if !filepath.IsAbs(config.StagingParent) || filepath.Clean(config.StagingParent) != config.StagingParent {
+		return result, backup.ErrManifest
+	}
+	if err := config.RepositoryTarget.Validate(); err != nil {
+		return result, err
+	}
+	password, err := backup.ReadRepositoryPassword(ctx, credential)
+	if err != nil {
+		return result, err
+	}
+	defer clear(password)
+	return RunRegisteredDispatchedBackup(ctx, dispatch, config, password)
+}
