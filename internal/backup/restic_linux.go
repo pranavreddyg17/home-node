@@ -199,29 +199,9 @@ func (r *Repository) Snapshot(ctx context.Context, stage *os.File, manifest Mani
 	if err = resticProcess(deadline, args, []*os.File{r.directory, r.secret, stage}, output); err != nil {
 		return "", err
 	}
-	decoder := json.NewDecoder(bytes.NewReader(output.data))
-	snapshotID := ""
-	for {
-		var summary struct {
-			Type string `json:"message_type"`
-			ID   string `json:"snapshot_id"`
-		}
-		err = decoder.Decode(&summary)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return "", ErrRepository
-		}
-		if summary.Type == "summary" {
-			if snapshotID != "" || !repositoryPattern.MatchString(summary.ID) {
-				return "", ErrRepository
-			}
-			snapshotID = summary.ID
-		}
-	}
-	if snapshotID == "" {
-		return "", ErrRepository
+	snapshotID, err := parseSnapshotSummary(output.data)
+	if err != nil {
+		return "", err
 	}
 	if err = ValidateRecoverySet(deadline, root, manifest, policy); err != nil {
 		return "", err
