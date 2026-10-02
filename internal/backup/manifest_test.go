@@ -109,3 +109,26 @@ func FuzzBackupManifest(f *testing.F) {
 		}
 	})
 }
+
+func TestManifestDecoderRequiresExactNonNullFields(t *testing.T) {
+	manifest, _, _ := manifestFixture()
+	raw, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeManifest(raw); err != nil {
+		t.Fatal(err)
+	}
+	for _, invalid := range []string{
+		strings.Replace(string(raw), `"version":1`, `"Version":1`, 1),
+		strings.Replace(string(raw), `"protocol":0`, `"Protocol":0`, 1),
+		strings.Replace(string(raw), `"protocol":0`, `"protocol":null`, 1),
+		strings.Replace(string(raw), `"catalogVersion":3,`, "", 1),
+		strings.Replace(string(raw), `"workload":"management"`, `"workload":null`, 1),
+		strings.Replace(string(raw), `"release":"0.1.0~dev"`, `"release":"`+string([]byte{255})+`"`, 1),
+	} {
+		if _, err := DecodeManifest([]byte(invalid)); err == nil {
+			t.Fatal("ambiguous manifest admitted")
+		}
+	}
+}

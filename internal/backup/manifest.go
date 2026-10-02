@@ -11,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"time"
+	"unicode/utf8"
 )
 
 const MaxManifestBytes = 64 << 10
@@ -47,13 +48,16 @@ type RestorePolicy struct {
 
 func DecodeManifest(data []byte) (Manifest, error) {
 	var m Manifest
-	if len(data) == 0 || len(data) > MaxManifestBytes {
+	if len(data) == 0 || len(data) > MaxManifestBytes || !utf8.Valid(data) {
 		return m, ErrManifest
 	}
 	// Avoid ambiguous duplicate security fields rather than letting JSON's
 	// last-value-wins behavior decide restore policy.
 	if err := uniqueJSON(json.NewDecoder(bytes.NewReader(data)), 0); err != nil {
 		return m, ErrManifest
+	}
+	if err := requireManifestFields(data); err != nil {
+		return m, err
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -186,6 +190,45 @@ func verifyBackupFile(ctx context.Context, root *os.Root, entry BackupFile) erro
 	}
 	if hex.EncodeToString(hash.Sum(nil)) != entry.SHA256 {
 		return ErrManifest
+	}
+	return nil
+}
+
+func exactManifestObject(raw []byte, required []string, optional string) (map[string]json.RawMessage, error) {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil || fields == nil {
+		return nil, ErrManifest
+	}
+	allowed := map[string]bool{}
+	for _, key := range required {
+		allowed[key] = true
+		if value, ok := fields[key]; !ok || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return nil, ErrManifest
+		}
+	}
+	if optional != "" {
+		allowed[optional] = true
+	}
+	for key, value := range fields {
+		if !allowed[key] || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return nil, ErrManifest
+		}
+	}
+	return fields, nil
+}
+func requireManifestFields(raw []byte) error {
+	fields, err := exactManifestObject(raw, []string{"version", "createdAt", "release", "platform", "managementSchema", "catalogVersion", "files"}, "")
+	if err != nil {
+		return err
+	}
+	var files []json.RawMessage
+	if json.Unmarshal(fields["files"], &files) != nil {
+		return ErrManifest
+	}
+	for _, file := range files {
+		if _, err := exactManifestObject(file, []string{"workload", "name", "bytes", "sha256", "dataSchema", "protocol"}, "imageSha256"); err != nil {
+			return err
+		}
 	}
 	return nil
 }
