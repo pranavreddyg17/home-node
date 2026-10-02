@@ -57,6 +57,8 @@ type Facts struct {
 	Architecture        string
 	Distribution        string
 	DistributionVersion string
+	SafePathResolution  bool
+	MountIdentity       bool
 	KVMUsable           bool
 	AppArmorEnforcing   bool
 	LibvirtReachable    bool
@@ -83,6 +85,8 @@ func Evaluate(f Facts, now time.Time) Report {
 	add("os", "Linux host", f.OS == "linux", f.OS, "Install the supported Linux release on a dedicated machine.")
 	add("architecture", "x86-64 processor", f.Architecture == "amd64", f.Architecture, "Use a supported x86-64 host; other architectures need a separate validation.")
 	add("distribution", "Supported Linux release", f.Distribution == "ubuntu" && f.DistributionVersion == "24.04", valueOrUnknown(f.Distribution)+" "+valueOrUnknown(f.DistributionVersion), "Use Ubuntu Server 24.04 LTS for the initial supported host matrix.")
+	add("safe-path-resolution", "Kernel safe path resolution", f.SafePathResolution, boolDetail(f.SafePathResolution, "openat2 protection is available", "openat2 protection is unavailable"), "Use the supported kernel and permit the required path-resolution syscall.")
+	add("mount-identity", "Kernel mount identity", f.MountIdentity, boolDetail(f.MountIdentity, "Descriptor mount identity is available", "Descriptor mount identity is unavailable"), "Use the supported kernel and permit statx mount identity queries.")
 	add("kvm", "Hardware virtualization", f.KVMUsable, boolDetail(f.KVMUsable, "KVM is accessible", "KVM is unavailable or cannot be opened"), "Enable CPU virtualization in firmware and grant the service appropriate KVM access.")
 	add("apparmor", "AppArmor", f.AppArmorEnforcing, boolDetail(f.AppArmorEnforcing, "AppArmor is enabled", "AppArmor is unavailable or disabled"), "Enable and verify AppArmor on the host.")
 	add("libvirt", "Local VM service", f.LibvirtReachable, boolDetail(f.LibvirtReachable, "libvirt is reachable", "libvirt is unavailable or inaccessible"), "Install and start the supported libvirt service; check local socket permissions.")
@@ -112,6 +116,7 @@ func Evaluate(f Facts, now time.Time) Report {
 func probe(dataRoot string) Facts {
 	f := Facts{OS: runtime.GOOS, Architecture: runtime.GOARCH}
 	if runtime.GOOS == "linux" {
+		f.SafePathResolution, f.MountIdentity = probeKernelPaths()
 		f.Distribution, f.DistributionVersion = readOSRelease("/etc/os-release")
 		if kvm, err := os.OpenFile("/dev/kvm", os.O_RDWR, 0); err == nil {
 			f.KVMUsable = true
