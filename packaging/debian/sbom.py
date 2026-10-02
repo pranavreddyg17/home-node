@@ -19,6 +19,8 @@ def document(root, archive, version):
     archive = pathlib.Path(archive)
     if not archive.is_file() or archive.is_symlink():
         raise ValueError("package must be a regular file")
+    if (root / "usr").is_symlink() or not (root / "usr").is_dir():
+        raise ValueError("payload root must be a real directory")
     files = []
     for path in sorted((root / "usr").rglob("*")):
         if path.is_symlink():
@@ -28,6 +30,8 @@ def document(root, archive, version):
         if not path.is_file():
             raise ValueError("payload special files are unsupported")
         relative = path.relative_to(root).as_posix()
+        if len(relative.encode("utf-8")) > 240 or len(files) >= 4096:
+            raise ValueError("payload inventory limit exceeded")
         files.append({"type": "file", "bom-ref": "file:" + relative,
                       "name": relative,
                       "hashes": [{"alg": "SHA-256", "content": digest(path)}]})
@@ -44,5 +48,7 @@ def document(root, archive, version):
 if __name__ == "__main__":
     if len(sys.argv) != 4:
         raise SystemExit("usage: sbom.py STAGED_ROOT PACKAGE VERSION")
-    json.dump(document(*sys.argv[1:]), sys.stdout, sort_keys=True, separators=(",", ":"))
-    sys.stdout.write("\n")
+    encoded = json.dumps(document(*sys.argv[1:]), sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
+    if len(encoded) > 8 * 1024 * 1024:
+        raise SystemExit("SBOM exceeds evidence limit")
+    sys.stdout.buffer.write(encoded)

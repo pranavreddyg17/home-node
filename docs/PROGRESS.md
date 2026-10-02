@@ -2157,3 +2157,7 @@ Added a separate verifier that does not import the generator. Development packag
 ### Persistent development SBOM refusal regression suite
 
 Added five portable Python unittest cases exercising matching archive/payload evidence, changed package or extracted payload, missing/foreign/duplicate claims, wrong hashes/version, extra extracted files, payload links and duplicate JSON keys. CI runs them before real Debian generation and independent extracted-package comparison. All five passed locally with bytecode writes disabled; diff checks passed. Native package generation/comparison still awaits publication/execution. CI 36996402338 remains in progress for earlier owned evidence integration; these tooling commits remain local. Full dependency/license/vulnerability and product qualification remain unfinished.
+
+### Development SBOM generation/verification bounds
+
+Aligned development generator and extracted-package verifier with4096-file and240-byte UTF8 path limits. Generator encodes and checks the8MiB evidence limit before writing output. Both independently refuse a symlinked/non-directory usr payload root, avoiding enumeration of a substituted tree. Added real4097-file, overlong-path and symlink-root refusal regressions; all eight Python tests and diff checks passed. Native generation/comparison remains pending publication. CI 36996402338 remains live for earlier evidence qualification, so tooling follow-ups remain local. Dependency/license/vulnerability and full product acceptance remain unfinished.

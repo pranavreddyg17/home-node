@@ -32,6 +32,8 @@ def verify(root, archive, version, evidence):
     claims = bom.get("components")
     if not isinstance(claims, list) or not 1 <= len(claims) <= 4096:
         raise ValueError("invalid file inventory")
+    if (root / "usr").is_symlink() or not (root / "usr").is_dir():
+        raise ValueError("payload root must be a real directory")
     actual = {}
     for path in (root / "usr").rglob("*"):
         if path.is_symlink():
@@ -40,7 +42,10 @@ def verify(root, archive, version, evidence):
             continue
         if not path.is_file():
             raise ValueError("payload special file")
-        actual[path.relative_to(root).as_posix()] = sha256(path)
+        relative = path.relative_to(root).as_posix()
+        if len(relative.encode("utf-8")) > 240 or len(actual) >= 4096:
+            raise ValueError("payload inventory limit exceeded")
+        actual[relative] = sha256(path)
     retained = set()
     for claim in claims:
         name = claim.get("name")

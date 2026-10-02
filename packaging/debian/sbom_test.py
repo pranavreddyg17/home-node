@@ -71,6 +71,31 @@ class PackageEvidenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             document(self.root, self.archive, '1')
 
+    def test_payload_root_link(self):
+        (self.root / 'usr').rename(self.root / 'foreign')
+        (self.root / 'usr').symlink_to(self.root / 'foreign', target_is_directory=True)
+        with self.assertRaises(ValueError):
+            document(self.root, self.archive, '1')
+        with self.assertRaises(ValueError):
+            self.check()
+
+    def test_inventory_count_limit(self):
+        for number in range(4096):
+            (self.root / 'usr' / str(number)).write_bytes(b'x')
+        with self.assertRaises(ValueError):
+            document(self.root, self.archive, '1')
+        with self.assertRaises(ValueError):
+            self.check()
+
+    def test_payload_path_limit(self):
+        directory = self.root / 'usr' / ('a' * 120)
+        directory.mkdir()
+        (directory / ('b' * 120)).write_bytes(b'x')
+        with self.assertRaises(ValueError):
+            document(self.root, self.archive, '1')
+        with self.assertRaises(ValueError):
+            self.check()
+
     def test_duplicate_json_key(self):
         self.evidence.write_text('{"bomFormat":"CycloneDX",' + self.evidence.read_text()[1:])
         with self.assertRaises(ValueError):
