@@ -186,6 +186,12 @@ func TestNativeInspectionJournalResult(t *testing.T) {
 		t.Fatal("native result collection/publication failed", retained, err)
 	}
 	manager("stop", unit)
+	if err := VerifyInspectionDormant(ctx); err != nil {
+		t.Fatal("stopped fixture did not become dormant", err)
+	}
+	if err := VerifyInspectionExecutionCompletion(ctx, execution); err == nil {
+		t.Fatal("stopped fixture retained active completion authority")
+	}
 	if err := stage.Close(); err != nil {
 		t.Fatal(err)
 	}
