@@ -15,7 +15,7 @@ func TestBackupServiceRequiresExplicitTrustedConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{
-		{}, append(validArguments(), "unexpected"), append(validArguments(), "--password", "secret"), append(validArguments(), "--controller-uid", "0"), append(validArguments(), "--socket", "relative"), append(validArguments(), "--minimum-catalog-version", "3"), append(validArguments(), "--release", "../binary"), append(validArguments(), "--socket", "/run/homenode-backup/apps.sock"),
+		{}, append(validArguments(), "--maintenance-socket", "relative"), append(validArguments(), "--maintenance-socket", "/run/homenode-backup/credential.sock"), append(validArguments(), "--maintenance-socket", "/run/homenode/maintenance-disk.sock"), append(validArguments(), "unexpected"), append(validArguments(), "--password", "secret"), append(validArguments(), "--controller-uid", "0"), append(validArguments(), "--socket", "relative"), append(validArguments(), "--minimum-catalog-version", "3"), append(validArguments(), "--release", "../binary"), append(validArguments(), "--socket", "/run/homenode-backup/apps.sock"),
 	} {
 		if _, err := parseOptions(args); err == nil {
 			t.Fatal("unsafe configuration accepted")

@@ -32,6 +32,7 @@ func parseOptions(args []string) (options, error) {
 	flags.UintVar(&option.controllerGID, "controller-gid", 0, "installed controller GID")
 	flags.StringVar(&option.socket, "socket", "/run/homenode-backup/credential.sock", "named activated credential listener")
 	flags.StringVar(&option.worker.ManagementSocket, "management-socket", "/run/homenode-backup/apps.sock", "private management socket")
+	flags.StringVar(&option.worker.MaintenanceSocket, "maintenance-socket", "/run/homenode/maintenance.sock", "backup-only supervisor maintenance socket")
 	flags.StringVar(&option.worker.DiskSocket, "disk-socket", "/run/homenode/maintenance-disk.sock", "private root disk socket")
 	flags.StringVar(&option.worker.StagingParent, "staging", "/var/lib/homenode-backup/staging", "provisioned private staging parent")
 	flags.StringVar(&option.worker.RepositoryTarget.MountPath, "repository-mount", "", "registered external drive mount")
@@ -46,12 +47,15 @@ func parseOptions(args []string) (options, error) {
 	if flags.NArg() != 0 || option.controllerUID < 100 || option.controllerUID > 999 || option.controllerGID < 100 || option.controllerGID > 999 {
 		return option, errConfiguration
 	}
-	for _, path := range []string{option.socket, option.worker.ManagementSocket, option.worker.DiskSocket, option.worker.StagingParent} {
+	for _, path := range []string{option.socket, option.worker.ManagementSocket, option.worker.DiskSocket, option.worker.StagingParent, option.worker.MaintenanceSocket} {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 			return option, errConfiguration
 		}
 	}
 	if option.socket == option.worker.ManagementSocket || option.socket == option.worker.DiskSocket || option.worker.ManagementSocket == option.worker.DiskSocket {
+		return option, errConfiguration
+	}
+	if option.worker.MaintenanceSocket == option.socket || option.worker.MaintenanceSocket == option.worker.ManagementSocket || option.worker.MaintenanceSocket == option.worker.DiskSocket {
 		return option, errConfiguration
 	}
 	if !regexp.MustCompile(`^[0-9][a-zA-Z0-9.+~-]{0,63}$`).MatchString(option.worker.Release) || option.worker.Policy.MinimumCatalogVersion < 1 || option.worker.CatalogVersion < option.worker.Policy.MinimumCatalogVersion {

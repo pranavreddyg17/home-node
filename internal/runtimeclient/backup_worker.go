@@ -15,6 +15,7 @@ import (
 // Release/catalog values must come from verified installed release metadata.
 type BackupWorkerConfig struct {
 	ManagementSocket, DiskSocket, Release string
+	MaintenanceSocket                     string
 	StagingParent                         string
 	RepositoryTarget                      backup.Target
 	ControllerListenerUID                 uint32
@@ -129,9 +130,23 @@ func RunCredentialedDispatchedBackup(ctx context.Context, dispatch backup.Dispat
 // trusted installed configuration and an exclusively owned protected listener.
 // Durable controller outcomes, not socket closure, establish publication.
 func ServeRegisteredBackupWorker(ctx context.Context, listener net.Listener, controllerUID uint32, config BackupWorkerConfig) error {
-	return backup.ServeAcknowledgedCredentialDispatch(ctx, listener, controllerUID, func(operation context.Context, dispatch backup.Dispatch, credential *os.File) error {
-		_, err := RunCredentialedDispatchedBackup(operation, dispatch, config, credential)
-		return err
+	if !filepath.IsAbs(config.MaintenanceSocket) || filepath.Clean(config.MaintenanceSocket) != config.MaintenanceSocket {
+		if listener != nil {
+			listener.Close()
+		}
+		return backup.ErrManifest
+	}
+	return backup.ServeAcknowledgedCredentialWorker(ctx, listener, controllerUID, func(operation context.Context, request backup.WorkerRequest, credential *os.File) error {
+		root := NewMaintenance(config.MaintenanceSocket)
+		defer root.client.CloseIdleConnections()
+		if request.Launch != nil && request.Cleanup == nil {
+			_, _, err := RunCredentialedLaunchedBackup(operation, *request.Launch, config, credential, root)
+			return err
+		}
+		if request.Cleanup != nil && request.Launch == nil {
+			return RunRegisteredBackupCleanup(operation, *request.Cleanup, config, root)
+		}
+		return backup.ErrManifest
 	})
 }
 
