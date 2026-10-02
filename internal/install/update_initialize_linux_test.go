@@ -130,6 +130,9 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 		if _, err := os.Lstat(filepath.Join(host, "var/lib/homenode-update/inspection.env")); !os.IsNotExist(err) {
 			t.Fatal("drop-in refusal published launch", err)
 		}
+		if result, err := engine.collectAndPublishUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); !errors.Is(err, ErrConflict) || result != (updates.InspectionResult{}) {
+			t.Fatal("collection bypassed service drop-in refusal", name, result, err)
+		}
 		if err := os.Remove(dropIn); err != nil {
 			t.Fatal(err)
 		}
@@ -175,6 +178,18 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	if result, err := engine.collectAndPublishUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); err == nil || result != (updates.InspectionResult{}) {
 		t.Fatal("collection accepted missing recorded execution", result, err)
 	}
+	for _, name := range []string{"inspection.result", "inspection.result.pending"} {
+		if _, err := updateParent.Lstat(name); !errors.Is(err, os.ErrNotExist) {
+			t.Fatal("failed collection published result evidence", name, err)
+		}
+	}
+	afterCollection, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000001")
+	if err != nil {
+		t.Fatal("refused collection leaked execution lock", err)
+	}
+	if err := afterCollection.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if result, err := engine.readRecordedUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); err == nil || result != (updates.InspectionResult{}) {
 		t.Fatal("missing recorded execution/result accepted", result, err)
 	}
@@ -188,6 +203,9 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	}
 	if result, err := engine.readRecordedUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000002", execution); err == nil || result != (updates.InspectionResult{}) {
 		t.Fatal("unrelated recorded operation accepted", result, err)
+	}
+	if result, err := engine.collectAndPublishUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000002", execution); err == nil || result != (updates.InspectionResult{}) {
+		t.Fatal("collection admitted unrelated operation", result, err)
 	}
 	if err := os.WriteFile(servicePath, []byte("changed readback service"), 0644); err != nil {
 		t.Fatal(err)
