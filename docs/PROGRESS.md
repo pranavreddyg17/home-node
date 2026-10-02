@@ -2031,3 +2031,7 @@ CI 36971939695 at 91adfab is confirmed live. Its installer root fixture and nati
 ### Worker argument identity bounds
 
 The Linux inspector now validates operation/release lengths before compiled regex matching, and requires the same release-name grammar used by signed metadata instead of merely a nonempty release. This occurs before host identity/capability/descriptor admission. Direct pure-validator fixtures distinguish argument refusal from unrelated root identity refusal and cover malformed/newline, 65-byte and 1MiB inputs plus a valid development release. Linux amd64 test compilation and diff checks passed; Linux execution awaits disposable CI. Full production activation/recovery and product acceptance remain unfinished.
+
+### Worker inherited descriptor access authority
+
+The inspector now checks F_GETFL before reading inherited FD3 and requires O_RDONLY without O_PATH. Root-owned mode-0400 inode checks alone do not constrain an already-open writable descriptor; O_PATH also has read-only access bits while granting no readable contents. Direct Linux fixtures accept an actual readable read-only descriptor and refuse write-only, read/write, path-only and closed descriptors independently of worker UID admission. Linux amd64 compilation and diff checks passed; actual Linux tests/worker service qualification remain pending publication. Full production activation/recovery and product acceptance remain unfinished.

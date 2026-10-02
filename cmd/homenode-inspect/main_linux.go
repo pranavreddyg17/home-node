@@ -74,6 +74,9 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 		return errors.New("inherited package descriptor missing")
 	}
 	defer file.Close()
+	if !readOnlyInspectionDescriptor(file.Fd()) {
+		return errors.New("inherited package descriptor must grant read-only access")
+	}
 	info, err := file.Stat()
 	if err != nil {
 		return err
@@ -96,6 +99,11 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 		return errors.Join(errors.New("package identity changed during inspection"), err)
 	}
 	return json.NewEncoder(output).Encode(updates.InspectionResult{OperationID: *operation, Schema: 1, Release: *release, PackageSHA256: digest, PackageLength: length, ContentValid: true})
+}
+
+func readOnlyInspectionDescriptor(fd uintptr) bool {
+	flags, err := unix.FcntlInt(fd, unix.F_GETFL, 0)
+	return err == nil && flags&unix.O_ACCMODE == unix.O_RDONLY && flags&unix.O_PATH == 0
 }
 
 func main() {
