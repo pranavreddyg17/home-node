@@ -2559,3 +2559,7 @@ UI audit found shared resume text claimed released runtime barrier for rootless 
 ### Serialize visible backup controls during approved workload recovery
 
 Status audit confirmed request sequence guards already discard superseded refresh results and backend requalifies recovery. Refresh and reminder editing/saving are now disabled during passkey/resume work, and resume handler refuses while status/reminder work is busy, keeping the visible workflow stable during approval. Frontend TypeScript/build, full browser regression and diff checks passed. CI37067528058 remains live in Go/Linux adapters test step; no overlapping push. Full application acceptance remains unfinished.
+
+### Sample backup initiation availability without granting authority
+
+Configuration endpoint now distinguishes not-configured, available and paused based on configured execution, task admission/shutdown and durable host admission. Errors fail to paused rather than implying availability. It exposes no maintenance token, runtime path or secret, and does not assert drive presence; actual job start retains fresh admission/approval qualification. HTTP race fixture covers idle configured availability, active worker pause and maintenance pause/no-token disclosure. Focused configuration race tests and diff checks passed. Browser consumption/refresh of sampled availability remains required. CI37067528058 remains active; follow-up stays local. Full application acceptance remains unfinished.

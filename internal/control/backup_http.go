@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"errors"
+	"github.com/pranavreddyg17/home-node/internal/state"
 	"net/http"
 	"os"
 
@@ -67,5 +68,18 @@ func (s *Server) backupConfiguration(w http.ResponseWriter, r *http.Request) {
 	if enabled {
 		repository = s.config.BackupRepositoryID
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"enabled": enabled, "repositoryId": repository})
+	availability := "not-configured"
+	if enabled {
+		availability = "paused"
+		if s.backupTasks != nil {
+			s.backupTasks.mu.Lock()
+			idle := !s.backupTasks.active && !s.backupTasks.stopping
+			s.backupTasks.mu.Unlock()
+			if idle && s.Store.Transaction(r.Context(), state.RequireAdmission) == nil {
+				availability = "available"
+			}
+		}
+	}
+	// This sampled hint grants no authority and does not assert drive presence.
+	writeJSON(w, http.StatusOK, map[string]any{"enabled": enabled, "repositoryId": repository, "availability": availability})
 }

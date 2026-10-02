@@ -114,6 +114,27 @@ func TestBackupConfigurationEndpointOnlyExposesEnabledRegisteredIdentity(t *test
 	if got.Code != 200 || !strings.Contains(got.Body.String(), s.config.BackupRepositoryID) || strings.Contains(got.Body.String(), "release") || strings.Contains(got.Body.String(), "socket") {
 		t.Fatal(got.Code, got.Body.String())
 	}
+	if !strings.Contains(got.Body.String(), `"availability":"available"`) {
+		t.Fatal("idle configured backup unavailable", got.Body.String())
+	}
+	s.backupTasks.mu.Lock()
+	s.backupTasks.active = true
+	s.backupTasks.mu.Unlock()
+	paused := request(s, "GET", path, "", token, "")
+	if paused.Code != 200 || !strings.Contains(paused.Body.String(), `"availability":"paused"`) {
+		t.Fatal("active work offered backup", paused.Body.String())
+	}
+	s.backupTasks.mu.Lock()
+	s.backupTasks.active = false
+	s.backupTasks.mu.Unlock()
+	maintenance, err := s.Store.BeginMaintenance(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	paused = request(s, "GET", path, "", token, "")
+	if paused.Code != 200 || !strings.Contains(paused.Body.String(), `"availability":"paused"`) || strings.Contains(paused.Body.String(), maintenance) {
+		t.Fatal("maintenance availability leaked or reopened", paused.Body.String())
+	}
 	if got.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("configuration cached")
 	}
