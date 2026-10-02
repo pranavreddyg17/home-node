@@ -22,6 +22,10 @@ func (e *Engine) ReadUpdateProvenancePolicy(ctx context.Context) (updates.Proven
 func (e *Engine) readUpdateProvenancePolicyOwned(ctx context.Context) (updates.ProvenancePolicy, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.readUpdateProvenancePolicyLocked(ctx)
+}
+
+func (e *Engine) readUpdateProvenancePolicyLocked(ctx context.Context) (updates.ProvenancePolicy, error) {
 	var zero updates.ProvenancePolicy
 	if _, err := e.readUpdateRepositoryLocked(ctx); err != nil {
 		return zero, err

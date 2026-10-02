@@ -106,6 +106,9 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 		t.Fatal("rejected release mutated staging", err)
 	}
 	release.Metadata.Sequence = 5
+	if err := engine.verifyUpdateReleaseProvenanceOwned(ctx, release); !errors.Is(err, updates.ErrProvenanceBinding) {
+		t.Fatal("missing acquired provenance bypassed owned verification", err)
+	}
 	if err := engine.stageUpdateInspectionOwned(ctx, release, "inspection-fixture-000001"); err != nil {
 		t.Fatal("owned inspection staging failed", err)
 	}
