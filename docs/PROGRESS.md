@@ -2651,3 +2651,7 @@ ValidateRecoverySet now refuses observed cancellation before filesystem inspecti
 ### Bound isolated backup and filesystem-check resource use
 
 Backup systemd unit now caps CPU at100% (one CPU worth), disables service swap with MemorySwapMax=0, and explicitly uses OOMPolicy=kill/KillMode=control-group. Existing1GiB memory and64-task limits remain. This bounds inherited restic/e2fsck subprocess resource use and requests whole-service teardown on OOM instead of leaving siblings active. Strict unit parsing/directive checks and diff checks passed. Effective Linux systemd/cgroup enforcement, OOM subprocess shutdown and loaded dashboard performance remain unverified; these settings do not prove worker stop. CI37070514721 remains live; follow-up stays local. Full application acceptance remains unfinished.
+
+### Verify backup resource directives in native activation fixture
+
+Packet activation fixture now parses actual backup unit resource directives with strict source syntax, requires declared CPU/memory/swap/tasks/OOM/group policy, applies them to disposable unprivileged socket-activated service and checks loaded systemd property values. Stream maintenance fixture remains outside this resource check. Python compilation and diff checks passed. Native execution remains pending Linux CI; manager properties do not prove actual OOM sibling termination, CPU enforcement under load or dashboard performance. CI37070514721 remains active; follow-up stays local. Full application acceptance remains unfinished.

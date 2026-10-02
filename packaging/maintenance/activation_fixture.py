@@ -1,5 +1,6 @@
 """Disposable Linux CI fixture; never run on an owner's installation."""
 import os
+import configparser
 import grp
 import pathlib
 import socket
@@ -40,6 +41,20 @@ for lookup, value in ((grp.getgrnam, group_name), (grp.getgrgid, 1003)):
     except KeyError:
         continue
     raise SystemExit("fixture group vacancy invalid")
+resource_directives = ""
+resource_properties = {}
+if packet:
+    source = configparser.ConfigParser(interpolation=None, strict=True)
+    source.optionxform = str
+    source.read(pathlib.Path(__file__).resolve().parents[1] / "systemd" / "homenode-backup.service")
+    service_source = source["Service"]
+    required = {"MemoryMax": "1G", "MemorySwapMax": "0", "CPUQuota": "100%", "TasksMax": "64", "OOMPolicy": "kill", "KillMode": "control-group"}
+    for key, value in required.items():
+        if service_source.get(key) != value:
+            raise SystemExit("backup resource policy differs from required fixture contract")
+    resource_directives = "".join(f"{key}={service_source[key]}\n" for key in required)
+    resource_properties = {"MemoryMax": "1073741824", "MemorySwapMax": "0", "CPUQuotaPerSecUSec": "1s", "TasksMax": "64", "OOMPolicy": "kill", "KillMode": "control-group"}
+
 group_created = False
 try:
     command("/usr/sbin/groupadd", "--gid", "1003", group_name)
@@ -63,7 +78,7 @@ ProtectHome=yes
 PrivateTmp=yes
 RestrictAddressFamilies=AF_UNIX
 TimeoutStartSec=20
-""")
+{resource_directives}""")
     paths[1].write_text(f"""[Unit]
 Description=Disposable HomeNode root-created listener
 [Socket]
@@ -80,6 +95,10 @@ RemoveOnStop=yes
         path.chmod(0o644)
     command("systemctl", "daemon-reload")
     command("systemctl", "start", socket_unit)
+    for key, expected in resource_properties.items():
+        effective = command("systemctl", "show", service, f"--property={key}", "--value").stdout.strip()
+        if effective != expected:
+            raise RuntimeError(f"backup resource property {key} was not applied")
     with socket.socket(socket.AF_UNIX, socket_type) as connection:
         connection.settimeout(15)
         connection.connect(str(socket_path))
@@ -107,6 +126,8 @@ RemoveOnStop=yes
     result = command("systemctl", "show", service, "--property=ExecMainStatus", "--value").stdout.strip()
     if phase != "inactive" or result != "0":
         raise RuntimeError("activated service failed")
+    if packet:
+        print("Backup source CPU/memory/swap/tasks/OOM/group termination directives match loaded systemd properties; OOM enforcement is not exercised.")
     print(f"Root-created named {'packet' if packet else 'stream'} socket activated UID 1001; filesystem access denied; inherited accept succeeded.")
 except Exception:
     for arguments in (("systemctl", "status", service, socket_unit, "--no-pager", "--full"), ("journalctl", "-u", service, "-u", socket_unit, "--no-pager", "-n", "80")):
