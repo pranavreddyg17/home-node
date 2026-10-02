@@ -13,7 +13,7 @@ import (
 )
 
 func TestLaunchedCoordinatorQualifiesWorkerBeforeCleanupAndRestore(t *testing.T) {
-	for _, scenario := range []string{"success", "lost-launch", "missing-publication", "lost-completion", "cleanup-failed", "cleanup-unrecorded"} {
+	for _, scenario := range []string{"success", "lost-launch", "repository-refused", "missing-publication", "lost-completion", "cleanup-failed", "cleanup-unrecorded"} {
 		t.Run(scenario, func(t *testing.T) {
 			ctx := context.Background()
 			store, err := state.Open(filepath.Join(t.TempDir(), "management"))
@@ -51,6 +51,9 @@ func TestLaunchedCoordinatorQualifiesWorkerBeforeCleanupAndRestore(t *testing.T)
 				}
 				if scenario == "lost-launch" {
 					return failure
+				}
+				if scenario == "repository-refused" {
+					return ErrLaunchRepositoryAdmission
 				}
 				if e = store.AttachMaintenanceRoot(operation, token, job.ID, rootToken); e != nil {
 					return e
@@ -99,16 +102,16 @@ func TestLaunchedCoordinatorQualifiesWorkerBeforeCleanupAndRestore(t *testing.T)
 				}
 				owned, e := store.InspectMaintenanceJob(ctx, token)
 				expectedPhase := "requires-action"
-				if scenario == "lost-launch" {
+				if scenario == "lost-launch" || scenario == "repository-refused" {
 					expectedPhase = "freezing"
 				}
 				if e != nil || owned.Phase != expectedPhase {
 					t.Fatal("recovery intent lost", owned, e)
 				}
-				if e := store.RequireBackupWorkerStopped(ctx, token, job.ID); (scenario == "lost-launch" || scenario == "missing-publication" || scenario == "lost-completion") && e == nil {
+				if e := store.RequireBackupWorkerStopped(ctx, token, job.ID); (scenario == "lost-launch" || scenario == "repository-refused" || scenario == "missing-publication" || scenario == "lost-completion") && e == nil {
 					t.Fatal("uncertain worker lost cleanup barrier")
 				}
-				if (scenario == "lost-launch" || scenario == "missing-publication" || scenario == "lost-completion") && cleanupCalled {
+				if (scenario == "lost-launch" || scenario == "repository-refused" || scenario == "missing-publication" || scenario == "lost-completion") && cleanupCalled {
 					t.Fatal("uncertain worker cleanup attempted")
 				}
 			}

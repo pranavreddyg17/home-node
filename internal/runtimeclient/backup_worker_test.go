@@ -117,7 +117,7 @@ func TestLaunchedWorkerRefusesConfigurationBeforeRuntimeEffects(t *testing.T) {
 	launch := backup.Launch{Version: 2, JobID: state.Random(), DeviceID: state.Random(), ManagementToken: state.Random(), Release: "0.1.0", CatalogVersion: 1}
 	root := &acquisitionFixture{root: state.Random(), job: launch.JobID, token: launch.ManagementToken, device: launch.DeviceID}
 	dispatch, result, err := RunCredentialedLaunchedBackup(context.Background(), launch, BackupWorkerConfig{}, file, root)
-	if err == nil || dispatch != (backup.Dispatch{}) || result != (backup.BackupResult{}) || len(root.steps) != 0 {
+	if err == nil || errors.Is(err, backup.ErrLaunchRepositoryAdmission) || dispatch != (backup.Dispatch{}) || result != (backup.BackupResult{}) || len(root.steps) != 0 {
 		t.Fatal("invalid worker had effects", dispatch, result, err, root.steps)
 	}
 	if _, err = file.Stat(); err == nil {

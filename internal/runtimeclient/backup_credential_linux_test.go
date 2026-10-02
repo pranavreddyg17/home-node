@@ -4,6 +4,7 @@ package runtimeclient
 
 import (
 	"context"
+	"errors"
 	"github.com/pranavreddyg17/home-node/internal/state"
 	"os"
 	"path/filepath"
@@ -38,7 +39,7 @@ func TestLaunchedWorkerMissingDriveRefusesBeforeRuntimeAcquisition(t *testing.T)
 	root := &acquisitionFixture{root: state.Random(), job: launch.JobID, token: launch.ManagementToken, device: launch.DeviceID}
 	config := BackupWorkerConfig{ManagementSocket: filepath.Join(parent, "unused-management.sock"), DiskSocket: filepath.Join(parent, "unused-disk.sock"), StagingParent: parent, Release: "0.1.0", CatalogVersion: 1, Policy: backup.RestorePolicy{MinimumCatalogVersion: 1}, RepositoryTarget: backup.Target{MountPath: filepath.Join(parent, "missing-drive"), UUID: "fixture-missing-drive", RepositoryID: state.Hash("repository")}}
 	dispatch, result, err := RunCredentialedLaunchedBackup(context.Background(), launch, config, credential, root)
-	if err == nil || dispatch != (backup.Dispatch{}) || result != (backup.BackupResult{}) || len(root.steps) != 0 {
+	if !errors.Is(err, backup.ErrLaunchRepositoryAdmission) || !errors.Is(err, backup.ErrTarget) || dispatch != (backup.Dispatch{}) || result != (backup.BackupResult{}) || len(root.steps) != 0 {
 		t.Fatal("unadmitted destination acquired runtime authority", dispatch, result, root.steps, err)
 	}
 	if _, err = credential.Stat(); err == nil {

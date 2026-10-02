@@ -181,7 +181,7 @@ func RunCredentialedLaunchedBackup(ctx context.Context, launch backup.Launch, co
 	repository, err := backup.OpenRepository(ctx, config.RepositoryTarget, password)
 	clear(password)
 	if err != nil {
-		return dispatch, result, err
+		return dispatch, result, errors.Join(backup.ErrLaunchRepositoryAdmission, err)
 	}
 	defer func() { resultErr = errors.Join(resultErr, repository.Close()) }()
 
