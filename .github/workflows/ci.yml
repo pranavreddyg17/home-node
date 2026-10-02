@@ -27,6 +27,8 @@ jobs:
           HOMENODE_RESTIC_INTEGRATION: '1'
           HOMENODE_FILESYSTEM_INTEGRATION: '1'
         run: go test -race ./...
+      - name: Test inspection syscall candidate refusal before native effects
+        run: python3 packaging/inspection/resolve_syscall_candidate_test.py
       - name: Test installer ownership with root fixture
         run: sudo env HOMENODE_UPDATE_INIT_INTEGRATION=1 "$(command -v go)" test ./internal/install ./cmd/homenode-supervisor
       - name: Test inspection completion with local system manager
