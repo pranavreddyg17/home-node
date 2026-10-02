@@ -83,6 +83,7 @@ func TestNativeInspectionJournalResult(t *testing.T) {
 			t.Fatal(string(output), err)
 		}
 	}
+	var observedJournal string
 	awaitJournalEntries := func(execution InspectionExecution, expectedCount int) {
 		boot := strings.ReplaceAll(execution.Epoch.BootID, "-", "")
 		for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
@@ -116,6 +117,7 @@ func TestNativeInspectionJournalResult(t *testing.T) {
 				count++
 			}
 			if count == expectedCount {
+				observedJournal = output.String()
 				return
 			}
 			time.Sleep(25 * time.Millisecond)
@@ -126,7 +128,7 @@ func TestNativeInspectionJournalResult(t *testing.T) {
 	awaitJournalEntries(execution, 1)
 	result, err := ReadInspectionJournalResult(ctx, identity, execution)
 	if err != nil || !result.ContentValid || result.InstallAuthorized {
-		t.Fatal("native journal result refused", result, err)
+		t.Fatal("native journal result refused", result, err, "bounded synthetic fixture journal:", observedJournal)
 	}
 	wrong := identity
 	wrong.PackageSHA256 = strings.Repeat("cd", 32)
