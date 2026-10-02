@@ -2,6 +2,7 @@
 """Opt-in disposable Linux service fixture for package inspection."""
 import os
 import ipaddress
+import json
 from pathlib import Path
 import shutil
 import socket
@@ -18,6 +19,16 @@ package = Path(os.environ["HOMENODE_PACKAGE_CONTENT_FIXTURE"])
 if not binary.is_file() or not package.is_file():
     sys.exit("Missing fixture binary or development package")
 source = Path(__file__).resolve().parents[1] / "systemd/homenode-inspect.service"
+resolution = subprocess.run(
+    [sys.executable, str(Path(__file__).with_name("resolve_syscall_candidate.py"))],
+    timeout=10, check=True, capture_output=True, text=True,
+    env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"})
+if len(resolution.stdout) > 16384:
+    sys.exit("Oversized independent syscall observation")
+syscall_observation = json.loads(resolution.stdout)
+required_syscalls = syscall_observation["requiredSyscalls"]
+if syscall_observation["status"] != "native-resolution-observation-not-qualified" or not required_syscalls or len(required_syscalls) != len(set(required_syscalls)):
+    sys.exit("Missing independent syscall observation")
 allowed = {"Type", "RemainAfterExit", "DynamicUser", "SupplementaryGroups", "UMask", "Restart", "TimeoutStartSec", "TimeoutStopSec", "KillMode", "NoNewPrivileges", "CapabilityBoundingSet", "AmbientCapabilities", "ProtectSystem", "ProtectHome", "PrivateTmp", "PrivateDevices", "PrivateNetwork", "ProtectKernelTunables", "ProtectKernelModules", "ProtectKernelLogs", "ProtectControlGroups", "ProtectProc", "ProcSubset", "RestrictNamespaces", "RestrictSUIDSGID", "RestrictRealtime", "LockPersonality", "RestrictAddressFamilies", "IPAddressDeny", "SystemCallArchitectures", "SystemCallFilter", "InaccessiblePaths", "MemoryMax", "MemorySwapMax", "CPUQuota", "TasksMax", "OOMPolicy"}
 properties, seen, section = [], set(), ""
 for raw in source.read_text().splitlines():
@@ -87,6 +98,20 @@ with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, tem
                 values[key] = value
             if values.keys() != keys:
                 sys.exit("Missing inspection manager evidence")
+            # Query separately to retain the existing manager snapshot bound.
+            # Expected names come only from reviewed source plus libseccomp,
+            # never this unit's reported configuration.
+            syscall_query = subprocess.run(
+                ["/usr/bin/systemctl", "--system", "--no-pager", "show",
+                 "--property=SystemCallFilter", unit],
+                timeout=5, check=True, capture_output=True, text=True,
+                env={"PATH": "/usr/bin:/bin", "LC_ALL": "C", "SYSTEMD_COLORS": "0", "SYSTEMD_PAGER": "cat"})
+            syscall_line = syscall_query.stdout.removesuffix("\n")
+            if len(syscall_query.stdout) > 2048 or not syscall_line.startswith("SystemCallFilter=~") or any(c in syscall_line for c in "\r\n\x00"):
+                sys.exit("Ambiguous inspection syscall denyset")
+            observed_syscalls = syscall_line.removeprefix("SystemCallFilter=~").split()
+            if len(observed_syscalls) != len(set(observed_syscalls)) or set(observed_syscalls) != set(required_syscalls):
+                sys.exit("Inspection syscall denyset differs from independent source/ABI observation")
             if any(values[key] != value for key, value in resource_values.items()):
                 sys.exit("Inspection manager resource limits differ from source contract")
             if any(values[key] != value for key, value in isolation_values.items()):
@@ -119,6 +144,7 @@ with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, tem
                 if invocation is None or values["Result"] != "success" or values["ExecMainCode"] != "1" or values["ExecMainStatus"] != "0" or start < boundary or end < start:
                     sys.exit("Inspection completion evidence refused")
                 print("Source-isolated inspection completed with retained manager identity")
+                print("Independent syscall observation: " + resolution.stdout.strip())
                 break
             time.sleep(0.1)
         else:

@@ -32,6 +32,14 @@ names = candidate["candidateSyscalls"]
 if not isinstance(names, list) or len(names) != 63 or names != sorted(set(names)) or any(not isinstance(name, str) or not name or len(name) > 64 or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789_" for c in name) for name in names):
     sys.exit("Malformed source syscall union")
 lib = ctypes.CDLL("libseccomp.so.2")
+class SeccompVersion(ctypes.Structure):
+    _fields_ = [("major", ctypes.c_uint), ("minor", ctypes.c_uint), ("micro", ctypes.c_uint)]
+
+lib.seccomp_version.restype = ctypes.POINTER(SeccompVersion)
+version = lib.seccomp_version()
+if not version:
+    sys.exit("Missing native libseccomp version")
+version_text = ".".join(str(getattr(version.contents, name)) for name in ("major", "minor", "micro"))
 lib.seccomp_arch_native.restype = ctypes.c_uint32
 if lib.seccomp_arch_native() != 0xC000003E:
     sys.exit("Unexpected native seccomp ABI")
@@ -57,4 +65,4 @@ for name in names:
     finally:
         libc.free(pointer)
     resolved[name] = {"number": number, "canonicalName": canonical}
-print(json.dumps({"schema": 1, "status": "native-resolution-observation-not-qualified", "sourceSha256": candidate["sourceSha256"], "nativeABI": "x86_64", "resolved": resolved, "unknown": unknown, "requiredSyscalls": sorted({entry["canonicalName"] for entry in resolved.values()})}, sort_keys=True))
+print(json.dumps({"schema": 1, "status": "native-resolution-observation-not-qualified", "sourceSha256": candidate["sourceSha256"], "nativeABI": "x86_64", "libseccompVersion": version_text, "resolved": resolved, "unknown": unknown, "requiredSyscalls": sorted({entry["canonicalName"] for entry in resolved.values()})}, sort_keys=True))
