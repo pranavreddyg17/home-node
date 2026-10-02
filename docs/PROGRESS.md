@@ -1763,3 +1763,7 @@ Added an explicitly opted-in disposable Linux/root fixture and CI step that excl
 ### Manager subprocess refusal fixtures
 
 Added Linux subprocess fixtures requiring refusal of success-looking properties from a nonzero-exit process, excessive output, malformed properties and a blocked process canceled by the caller deadline. The command-scope assertion now checks the exact completion property list. These helpers execute the test binary through the production bounded command runner and do not simulate authenticated systemd success. Linux compilation, portable update race suite and diff checks passed; Linux-only subprocess cases have not yet executed locally or in CI. CI 36963492790 remains active, so the native manager and subprocess fixtures remain local pending its terminal result.
+
+### Fixed-size invocation validation
+
+Completion parsing and manager-query preflight now share a fixed 32-byte lowercase hexadecimal nonzero invocation check. Oversized input is rejected before decoding/allocation; duplicate validators cannot drift. Portable fixtures cover canonical IDs, zero/uppercase/nonhex/wrong-length/control input and allocation-free refusal of a megabyte-long value. Update race tests, Linux compilation and diff checks passed. CI 36963492790 remains active; native manager/subprocess qualification and production inspection launch/result transport remain unfinished.

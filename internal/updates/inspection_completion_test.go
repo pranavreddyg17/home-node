@@ -29,3 +29,20 @@ func TestInspectionCompletionRequiresFreshSuccessfulInvocation(t *testing.T) {
 		t.Fatal("missing start boundary accepted")
 	}
 }
+
+func TestInspectionInvocationHasFixedCanonicalBound(t *testing.T) {
+	for _, value := range []string{"", strings.Repeat("0", 32), strings.Repeat("A", 32), strings.Repeat("g", 32), strings.Repeat("a", 31), strings.Repeat("a", 33), strings.Repeat("a", 1<<20), strings.Repeat("a", 31) + "\n"} {
+		if validInspectionInvocation(value) {
+			t.Fatal("noncanonical invocation accepted")
+		}
+	}
+	for _, value := range []string{strings.Repeat("a", 32), strings.Repeat("0", 31) + "1", "0123456789abcdef0123456789abcdef"} {
+		if !validInspectionInvocation(value) {
+			t.Fatal("canonical invocation refused", value)
+		}
+	}
+	oversized := strings.Repeat("a", 1<<20)
+	if allocations := testing.AllocsPerRun(100, func() { validInspectionInvocation(oversized) }); allocations != 0 {
+		t.Fatal("oversized identity allocated", allocations)
+	}
+}

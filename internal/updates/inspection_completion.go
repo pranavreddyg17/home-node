@@ -1,7 +1,6 @@
 package updates
 
 import (
-	"encoding/hex"
 	"strconv"
 	"strings"
 )
@@ -11,8 +10,7 @@ import (
 // bytes must never originate in worker output, browser input or stored claims.
 // A matching result document alone is insufficient execution evidence.
 func ValidateInspectionCompletion(properties []byte, invocation string, notBeforeMicros uint64) error {
-	decoded, err := hex.DecodeString(invocation)
-	if err != nil || len(decoded) != 16 || hex.EncodeToString(decoded) != invocation || invocation == strings.Repeat("0", 32) || notBeforeMicros == 0 || len(properties) == 0 || len(properties) > 2048 {
+	if !validInspectionInvocation(invocation) || notBeforeMicros == 0 || len(properties) == 0 || len(properties) > 2048 {
 		return ErrInspectionResult
 	}
 	expected := map[string]string{"InvocationID": invocation, "Result": "success", "ExecMainCode": "1", "ExecMainStatus": "0", "ActiveState": "inactive", "SubState": "dead"}
@@ -45,4 +43,19 @@ func ValidateInspectionCompletion(properties []byte, invocation string, notBefor
 		return ErrInspectionResult
 	}
 	return nil
+}
+
+func validInspectionInvocation(invocation string) bool {
+	if len(invocation) != 32 {
+		return false
+	}
+	nonzero := false
+	for i := range len(invocation) {
+		character := invocation[i]
+		if !(character >= '0' && character <= '9' || character >= 'a' && character <= 'f') {
+			return false
+		}
+		nonzero = nonzero || character != '0'
+	}
+	return nonzero
 }

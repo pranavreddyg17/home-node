@@ -5,12 +5,10 @@ package updates
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"errors"
 	"io"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 )
 
@@ -25,8 +23,7 @@ func VerifyInspectionServiceCompletion(ctx context.Context, invocation string, n
 }
 
 func verifyInspectionServiceCompletionWith(ctx context.Context, invocation string, notBeforeMicros uint64, command func(context.Context, string, ...string) *exec.Cmd) error {
-	decoded, err := hex.DecodeString(invocation)
-	if err != nil || len(decoded) != 16 || hex.EncodeToString(decoded) != invocation || invocation == strings.Repeat("0", 32) || notBeforeMicros == 0 {
+	if !validInspectionInvocation(invocation) || notBeforeMicros == 0 {
 		return ErrInspectionResult
 	}
 	if err := ctx.Err(); err != nil {
