@@ -79,6 +79,13 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	if policy, err := engine.readUpdateProvenancePolicyOwned(ctx); err == nil || len(policy.Keys) != 0 {
 		t.Fatal("public provenance policy exposed trust keys", err)
 	}
+	if acquired, err := engine.acquireUpdateReleaseOwned(ctx, "releases/home.deb", 1); !errors.Is(err, ErrConflict) || acquired != nil {
+		t.Fatal("altered policy entered acquisition", err)
+	}
+	downloads, err := os.ReadDir(filepath.Join(host, "var/lib/homenode-update/downloads"))
+	if err != nil || len(downloads) != 0 {
+		t.Fatal("policy refusal mutated downloads", err)
+	}
 	if err := os.Chmod(provenancePath, 0400); err != nil {
 		t.Fatal(err)
 	}
@@ -114,6 +121,13 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	release.Metadata.Sequence = 5
 	if err := engine.verifyUpdateReleaseProvenanceOwned(ctx, release); !errors.Is(err, updates.ErrProvenanceBinding) {
 		t.Fatal("missing acquired provenance bypassed owned verification", err)
+	}
+	if err := engine.stageUpdateInspectionOwned(ctx, release, "inspection-fixture-000001"); !errors.Is(err, updates.ErrProvenanceBinding) {
+		t.Fatal("missing provenance entered inspection staging", err)
+	}
+	entries, err = os.ReadDir(stagePath)
+	if err != nil || len(entries) != 0 {
+		t.Fatal("provenance refusal mutated staging", err)
 	}
 	payload := []byte(`{"_type":"https://in-toto.io/Statement/v1","subject":[{"digest":{"sha256":"` + release.PackageSHA256 + `"}}],"predicateType":"https://slsa.dev/provenance/v1","predicate":{"buildDefinition":{"buildType":"fixture","externalParameters":{},"resolvedDependencies":[{"uri":"fixture","digest":{"gitCommit":"` + strings.Repeat("ef", 20) + `"}}]},"runDetails":{"builder":{"id":"fixture"}}}}`)
 	pae := []byte(fmt.Sprintf("DSSEv1 28 application/vnd.in-toto+json %d %s", len(payload), payload))

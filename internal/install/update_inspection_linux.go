@@ -32,6 +32,9 @@ func (e *Engine) stageUpdateInspectionOwned(ctx context.Context, release *update
 	if release == nil || release.Metadata.Platform != "ubuntu-24.04-amd64" || release.Metadata.Sequence < configuration.MinimumSequence || release.Metadata.CatalogVersion < configuration.MinimumCatalogVersion {
 		return ErrConflict
 	}
+	if err := e.verifyUpdateReleaseProvenanceLocked(ctx, release); err != nil {
+		return err
+	}
 	staging, err := e.openInspectionDirectoryLocked()
 	if err != nil {
 		return err
