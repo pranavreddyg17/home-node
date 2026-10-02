@@ -13,7 +13,7 @@ import (
 )
 
 func TestLaunchedCoordinatorQualifiesWorkerBeforeCleanupAndRestore(t *testing.T) {
-	for _, scenario := range []string{"success", "lost-launch", "repository-refused", "missing-publication", "lost-completion", "cleanup-failed", "cleanup-unrecorded"} {
+	for _, scenario := range []string{"success", "lost-launch", "repository-refused", "stopped-refusal", "refusal-restore-failed", "missing-publication", "lost-completion", "cleanup-failed", "cleanup-unrecorded"} {
 		t.Run(scenario, func(t *testing.T) {
 			ctx := context.Background()
 			store, err := state.Open(filepath.Join(t.TempDir(), "management"))
@@ -35,6 +35,9 @@ func TestLaunchedCoordinatorQualifiesWorkerBeforeCleanupAndRestore(t *testing.T)
 			}
 			defer credential.Close()
 			apps := &coordinatorApps{}
+			if scenario == "refusal-restore-failed" {
+				apps.restoreErr = errors.New("fixture restore failure")
+			}
 			rootToken := state.Random()
 			cleanupCalled := false
 			failure := errors.New("fixture uncertain transport")
@@ -51,6 +54,9 @@ func TestLaunchedCoordinatorQualifiesWorkerBeforeCleanupAndRestore(t *testing.T)
 				}
 				if scenario == "lost-launch" {
 					return failure
+				}
+				if scenario == "stopped-refusal" || scenario == "refusal-restore-failed" {
+					return ErrLaunchRepositoryRefusedStopped
 				}
 				if scenario == "repository-refused" {
 					return ErrLaunchRepositoryAdmission
@@ -95,6 +101,32 @@ func TestLaunchedCoordinatorQualifiesWorkerBeforeCleanupAndRestore(t *testing.T)
 			if scenario == "success" {
 				if err != nil || snapshot != state.Hash("snapshot") || !cleanupCalled || !apps.restored {
 					t.Fatal(snapshot, err, cleanupCalled, apps.restored)
+				}
+			} else if scenario == "stopped-refusal" {
+				if !errors.Is(err, ErrLaunchRepositoryRefusedStopped) || snapshot != "" || cleanupCalled || !apps.restored {
+					t.Fatal("stopped refusal recovery failed", snapshot, err, cleanupCalled, apps.restored)
+				}
+				observation, e := store.InspectBackupObservation(ctx)
+				if e != nil || observation.Current != nil || observation.LastPublished != nil || observation.WorkerCompletion != "none" {
+					t.Fatal("refusal claimed publication", observation, e)
+				}
+				if _, _, e := store.BeginMaintenanceJob(ctx, device); e != nil {
+					t.Fatal("refusal restoration retained admission", e)
+				}
+			} else if scenario == "refusal-restore-failed" {
+				if !errors.Is(err, ErrLaunchRepositoryRefusedStopped) || !errors.Is(err, apps.restoreErr) || !apps.restored || cleanupCalled || snapshot != "" {
+					t.Fatal("failed restoration misclassified", snapshot, err)
+				}
+				owned, e := store.InspectMaintenanceJob(ctx, token)
+				if e != nil || owned.Phase != "requires-action" || owned.RootToken != "" {
+					t.Fatal("failed refusal restoration lost recovery", owned, e)
+				}
+				if _, _, e := store.BeginMaintenanceJob(ctx, device); e == nil {
+					t.Fatal("failed restoration reopened admission")
+				}
+				observation, e := store.InspectBackupObservation(ctx)
+				if e != nil || observation.WorkerCompletion != "refused" || observation.Current != nil {
+					t.Fatal(observation, e)
 				}
 			} else {
 				if err == nil || apps.restored {

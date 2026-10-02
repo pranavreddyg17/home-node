@@ -37,8 +37,9 @@ func RunAdmittedLaunchedMaintenance(ctx context.Context, store *state.Store, dev
 	if _, err = store.InspectAdmittedMaintenanceJob(ctx, token, jobID, device); err != nil {
 		return "", err
 	}
+	restorationCompleted := false
 	defer func() {
-		if resultErr == nil {
+		if resultErr == nil || restorationCompleted {
 			return
 		}
 		recovery, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -61,7 +62,27 @@ func RunAdmittedLaunchedMaintenance(ctx context.Context, store *state.Store, dev
 		return "", err
 	}
 	if err = launchWorker(ctx, launch, credential); err != nil {
-		return "", err
+		if !errors.Is(err, ErrLaunchRepositoryRefusedStopped) {
+			return "", err
+		}
+		refusal := err
+		recovery, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		defer cancel()
+		if err = store.RecordBackupLaunchRefused(recovery, token, jobID); err != nil {
+			return "", errors.Join(refusal, err)
+		}
+		if err = store.RequireBackupWorkerStopped(recovery, token, jobID); err != nil {
+			return "", errors.Join(refusal, err)
+		}
+		if err = apps.RestoreMaintenanceApps(recovery, token, device); err != nil {
+			return "", errors.Join(refusal, err)
+		}
+		if err = store.CompleteMaintenanceJob(recovery, token, jobID); err != nil {
+			return "", errors.Join(refusal, err)
+		}
+		restorationCompleted = true
+		// Recovery completed, but the requested backup did not publish a snapshot.
+		return "", refusal
 	}
 	current, _, err := store.InspectBackupOutcomes(ctx)
 	if err != nil {
