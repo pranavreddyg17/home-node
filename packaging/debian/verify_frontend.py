@@ -15,7 +15,7 @@ def verify(web_root, evidence, lockfile):
     if evidence.is_symlink() or not evidence.is_file() or evidence.stat().st_size > 8 * 1024 * 1024:
         raise ValueError('invalid frontend evidence')
     record = json.loads(evidence.read_bytes(), object_pairs_hook=unique)
-    if not isinstance(record, dict) or record.get('schema') != 1 or record.get('completeness') != 'incomplete':
+    if not isinstance(record, dict) or type(record.get('schema')) is not int or record.get('schema') != 1 or record.get('completeness') != 'incomplete':
         raise ValueError('invalid frontend evidence schema')
     assets = record.get('assets')
     if not isinstance(assets, list) or not 1 <= len(assets) <= 4096:

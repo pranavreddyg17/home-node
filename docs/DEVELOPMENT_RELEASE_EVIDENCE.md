@@ -8,7 +8,8 @@
 | `.deb.sha256` | Package transport checksum |
 | `.deb.sbom.json` | CycloneDX 1.6 package binding and staged file inventory |
 | `.deb.gomodules.json` | Build information from the six actual packaged Go binaries |
-| `.deb.evidence.sha256` | Relative-path checksums for both evidence documents |
+| `.deb.frontend.json` | Emitted asset hashes and bundled npm package lock identities |
+| `.deb.evidence.sha256` | Relative-path checksums for all three evidence documents |
 
 The module record includes executable SHA256, embedded Go version, main module,
 dependencies, replacement modules and build settings. It reads binary build
@@ -31,7 +32,9 @@ an exact comparison. The development package artifact upload retains these files
 for 14 days. Passing these checks proves the checked identities and inventories;
 it does not make the build a production release.
 
-The file SBOM and module evidence explicitly remain incomplete. Frontend bundle
+Frontend evidence records packages represented in emitted chunks and compares installed names/versions with lock entries. CI separately compares recorded asset hashes and exact file set with the extracted package, and dependency identities with the reviewed npm lockfile. This does not independently reconstruct bundler reachability or authenticate installed npm package contents.
+
+The file SBOM, module and frontend evidence explicitly remain incomplete. Frontend bundle
 and host/guest system dependencies, licenses/notices, vulnerability assessment,
 full CycloneDX dependency integration, authenticated provenance, signing,
 controlled promotion, installation/rollback and hardware qualification still

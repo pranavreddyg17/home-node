@@ -91,6 +91,7 @@ jobs:
       - name: Build and inspect development Debian package
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 packaging/debian/sbom_test.py
+          PYTHONDONTWRITEBYTECODE=1 python3 packaging/debian/verify_frontend_test.py
           packaging/debian/build.sh 0.1.0~ci
           (cd artifacts && sha256sum --check homenode_0.1.0~ci_amd64.deb.evidence.sha256)
           HOMENODE_PACKAGE_CONTENT_FIXTURE="$GITHUB_WORKSPACE/artifacts/homenode_0.1.0~ci_amd64.deb" go test ./internal/updates -run '^TestNativeBuiltPackage(Content|SBOM)$' -count=1
