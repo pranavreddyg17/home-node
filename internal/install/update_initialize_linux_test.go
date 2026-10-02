@@ -4,9 +4,13 @@ package install
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/pranavreddyg17/home-node/internal/updates"
 	servicetemplates "github.com/pranavreddyg17/home-node/packaging/systemd"
@@ -23,7 +27,9 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	host, journal := roots(t)
 	bootstrap := updateBootstrapFixture(t, 2)
 	repository := []byte(`{"schema":1,"metadataUrl":"https://updates.example/metadata/","targetsUrl":"https://updates.example/targets/","minimumSequence":5,"minimumCatalogVersion":3}`)
-	provenance := []byte(`{"schema":1,"threshold":2,"keys":["` + strings.Repeat("ab", 32) + `","` + strings.Repeat("cd", 32) + `"],"builderId":"fixture","buildType":"fixture","externalParameters":{},"sourceUri":"fixture","sourceCommit":"` + strings.Repeat("ef", 20) + `"}`)
+	firstSigner := ed25519.NewKeyFromSeed([]byte(strings.Repeat("a", 32)))
+	secondSigner := ed25519.NewKeyFromSeed([]byte(strings.Repeat("b", 32)))
+	provenance := []byte(`{"schema":1,"threshold":2,"keys":["` + hex.EncodeToString(firstSigner.Public().(ed25519.PublicKey)) + `","` + hex.EncodeToString(secondSigner.Public().(ed25519.PublicKey)) + `"],"builderId":"fixture","buildType":"fixture","externalParameters":{},"sourceUri":"fixture","sourceCommit":"` + strings.Repeat("ef", 20) + `"}`)
 	service, err := servicetemplates.Unit("homenode-inspect.service")
 	if err != nil {
 		t.Fatal(err)
@@ -108,6 +114,31 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	release.Metadata.Sequence = 5
 	if err := engine.verifyUpdateReleaseProvenanceOwned(ctx, release); !errors.Is(err, updates.ErrProvenanceBinding) {
 		t.Fatal("missing acquired provenance bypassed owned verification", err)
+	}
+	payload := []byte(`{"_type":"https://in-toto.io/Statement/v1","subject":[{"digest":{"sha256":"` + release.PackageSHA256 + `"}}],"predicateType":"https://slsa.dev/provenance/v1","predicate":{"buildDefinition":{"buildType":"fixture","externalParameters":{},"resolvedDependencies":[{"uri":"fixture","digest":{"gitCommit":"` + strings.Repeat("ef", 20) + `"}}]},"runDetails":{"builder":{"id":"fixture"}}}}`)
+	pae := []byte(fmt.Sprintf("DSSEv1 28 application/vnd.in-toto+json %d %s", len(payload), payload))
+	encoded, err := json.Marshal(map[string]any{"payloadType": "application/vnd.in-toto+json", "payload": base64.StdEncoding.EncodeToString(payload), "signatures": []map[string]string{
+		{"sig": base64.StdEncoding.EncodeToString(ed25519.Sign(firstSigner, pae))},
+		{"sig": base64.StdEncoding.EncodeToString(ed25519.Sign(secondSigner, pae))},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	release.Provenance = encoded
+	if err := engine.verifyUpdateReleaseProvenanceOwned(ctx, release); err != nil {
+		t.Fatal("owned acquired provenance refused", err)
+	}
+	if err := os.WriteFile(provenancePath, []byte("changed policy"), 0400); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.verifyUpdateReleaseProvenanceOwned(ctx, release); !errors.Is(err, ErrConflict) {
+		t.Fatal("modified owned trust policy admitted", err)
+	}
+	if err := os.WriteFile(provenancePath, provenance, 0400); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.verifyUpdateReleaseProvenanceOwned(ctx, release); err != nil {
+		t.Fatal("restored owned acquired provenance refused", err)
 	}
 	if err := engine.stageUpdateInspectionOwned(ctx, release, "inspection-fixture-000001"); err != nil {
 		t.Fatal("owned inspection staging failed", err)
