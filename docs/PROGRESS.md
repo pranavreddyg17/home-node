@@ -1771,3 +1771,7 @@ Completion parsing and manager-query preflight now share a fixed 32-byte lowerca
 ### Failed real invocation qualification
 
 Extended the opt-in native manager fixture to reconfigure only its owned disposable unit for a failing oneshot, require systemd start failure and a distinct canonical invocation, and refuse completion for that fresh failed invocation. Cleanup now clears that fixture failed state before deleting/reloading its unit. This verifies that freshness alone cannot turn a failed service into inspection evidence. Linux compilation and diff validation passed; actual native execution remains pending with the held fixture commits. CI 36963492790 was confirmed active at go vet.
+
+### Fresh inspection invocation capture contract
+
+InspectionInvocationFromManager now extracts an invocation only from the shared bounded exact manager property parser, with a retained pre-launch monotonic boundary. It accepts a fresh running oneshot with no reported exit or delegates fast already-completed services to strict successful-completion verification. Stale starts, failed exits/results, pre-start or unrelated active states and missing boundaries refuse. Portable race fixtures cover running and fast completion plus those refusals; update race tests, Linux compilation and diff validation passed. The privileged query still needs to wire this capture into launch coordination; native fixture execution and production result transport remain pending. CI 36963932736 is running for the real-manager qualification changes.
