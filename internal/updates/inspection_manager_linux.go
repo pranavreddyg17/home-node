@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -149,4 +150,34 @@ func VerifyInspectionAccessPolicy(ctx context.Context) error {
 		return err
 	}
 	return ValidateInspectionAccessPolicy(properties)
+}
+
+// VerifyInspectionSyscallFilter compares the fixed manager unit's expanded
+// denyset with an independently qualified complete native-ABI profile. The
+// caller must obtain required from protected release policy, never this unit.
+func VerifyInspectionSyscallFilter(ctx context.Context, required []string) error {
+	if os.Geteuid() != 0 {
+		return ErrInspectionResult
+	}
+	return verifyInspectionSyscallFilterWith(ctx, required, exec.CommandContext)
+}
+
+func verifyInspectionSyscallFilterWith(ctx context.Context, required []string, command func(context.Context, string, ...string) *exec.Cmd) error {
+	// Validate the independent profile before contacting the manager.
+	if len(required) == 0 || len(required) > 256 {
+		return ErrInspectionResult
+	}
+	for _, name := range required {
+		if !inspectionSyscallName(name) {
+			return ErrInspectionResult
+		}
+	}
+	if err := ValidateInspectionSyscallFilter([]byte("SystemCallFilter=~"+strings.Join(required, " ")), required); err != nil {
+		return err
+	}
+	properties, err := inspectionManagerQuery(ctx, "--property=SystemCallFilter", command)
+	if err != nil {
+		return err
+	}
+	return ValidateInspectionSyscallFilter(properties, required)
 }

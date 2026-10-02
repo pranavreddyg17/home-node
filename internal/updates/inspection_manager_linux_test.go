@@ -107,3 +107,25 @@ func TestInspectionManagerRejectsFailedOversizedMalformedAndCanceledProcesses(t 
 		})
 	}
 }
+
+func TestInspectionSyscallManagerQualifiedProfile(t *testing.T) {
+	called := false
+	factory := func(ctx context.Context, path string, args ...string) *exec.Cmd {
+		called = true
+		if path != "/usr/bin/systemctl" || strings.Join(args, " ") != "--system --no-pager show --property=SystemCallFilter homenode-inspect.service" {
+			t.Fatal("unexpected syscall manager scope", path, args)
+		}
+		return exec.CommandContext(ctx, "/usr/bin/printf", "%s", "SystemCallFilter=~reboot mount\n")
+	}
+	for _, profile := range [][]string{nil, {"mount", "mount"}, {"@mount"}, {strings.Repeat("a", 4096)}} {
+		if err := verifyInspectionSyscallFilterWith(context.Background(), profile, factory); err == nil || called {
+			t.Fatal("unqualified profile reached manager")
+		}
+	}
+	if err := verifyInspectionSyscallFilterWith(context.Background(), []string{"mount", "reboot"}, factory); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyInspectionSyscallFilterWith(context.Background(), []string{"mount"}, factory); err == nil {
+		t.Fatal("unexpected manager denyset accepted")
+	}
+}
