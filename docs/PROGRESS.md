@@ -2695,3 +2695,7 @@ Added InspectSnapshot on retained authenticated repository with exact full snaps
 ### Stable redacted snapshot selector ordering
 
 Candidate inventories now sort newest first with lexical full-ID tie break for equal instants. Ordering never chooses or approves restore automatically. Fixture uses equal instants with different timezone representations and verifies serialized results exclude private source paths/host names/tags. Focused inventory race tests and diff checks passed. Full backup/runtimeclient/state race suites passed for listing/preview changes before this ordering follow-up. Native restic listing/preview remains unverified; CI37072361478 remains queued and follow-up stays local. Owner-facing selection and full application acceptance remain unfinished.
+
+### Recheck snapshot selector cancellation after parsing
+
+Snapshot listing now rechecks its deadline after bounded parsing/sorting and returns no candidates if cancellation is observable before the final response. Existing pre-process and post-process checks remain. Linux backup fixture compilation and diff checks passed; deterministic cancellation-during-parse fixture has not been added. CI37072361478 was last observed queued; current GitHub read timed out at API connection, so no terminal/stopped state is inferred and no overlapping push occurred. Full application acceptance remains unfinished.

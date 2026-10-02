@@ -29,5 +29,12 @@ func (r *Repository) Snapshots(ctx context.Context) ([]SnapshotReference, error)
 	if err := deadline.Err(); err != nil {
 		return nil, err
 	}
-	return parseSnapshotInventory(output.data, time.Now())
+	candidates, err := parseSnapshotInventory(output.data, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	if err := deadline.Err(); err != nil {
+		return nil, err
+	}
+	return candidates, nil
 }
