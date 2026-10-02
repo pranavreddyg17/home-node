@@ -70,7 +70,9 @@ The administrator can save a reminder interval of 1–90 days; the default is se
 Reminders appear when status is checked and use the last acknowledged publication.
 They do not schedule backups or send external notifications.
 
-The repository restore and manifest/payload verification components exist, but the
+The repository restore components check manifest compatibility, payload integrity,
+removed management authority and recovered ext4 filesystems without repair. Disk
+checks do not establish application health or grant runtime start authority. The
 owner-facing backup-data restore and replacement-host recovery workflow is not
 available yet. New identity, recovery epoch, trust reconstruction, fresh device
 and passkey enrollment, disconnected disk installation and application health

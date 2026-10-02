@@ -2639,3 +2639,7 @@ Added QualifyRecoveryDisks after payload/authority/inventory validation. It open
 ### Encrypted restore fixture separates integrity layers
 
 Extended Linux real-restic fixture to corrupt an ext4 root inode while retaining clean superblock state, independently recompute declared disk checksum and verify metadata/payload validation still succeeds. A raw encrypted repository snapshot then exercises Restore: full filesystem qualification must refuse it with ErrManifest and identity-qualified cleanup must remove all extracted files. This prevents hash/metadata rejection from masquerading as filesystem-check evidence. Linux fixture compilation and diff checks passed; actual native execution is not yet verified. CI37070514721 remains active; follow-up stays local. Full application acceptance remains unfinished.
+
+### Combined regression for restored filesystem qualification
+
+Full backup/runtimeclient/state race suites passed on current source after adding recovered-filesystem qualification and encrypted-corruption fixtures. Owner backup guide now explains implemented read-only ext4 gate and its limits without presenting absent owner-facing restore/new-host activation as available. Diff checks passed. Linux native fixtures remain unexecuted for local8f9d5c5/2f35780 while CI37070514721 remains active at guest tool installation; no overlapping push. Full application acceptance remains unfinished.
