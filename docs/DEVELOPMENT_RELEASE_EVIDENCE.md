@@ -96,3 +96,12 @@ full CycloneDX dependency integration, authenticated provenance, signing,
 controlled promotion, installation/rollback and hardware qualification still
 need completed evidence before distribution as a supported release. The updater's
 package-binding gates alone do not authorize installation.
+
+CI runs pinned `golang.org/x/vuln/cmd/govulncheck@v1.8.0` against `./...`
+with verbose text output and a five-minute limit, retaining the report for14 days.
+Text mode preserves scanner failure for reachable findings; pipeline failure
+also blocks on tool/database errors. This covers the CI source build context,
+not every platform/build-tag combination or complete packaged binary, npm,
+distribution/guest image and model dependency inventory. Module-only findings
+remain visible for review; a zero reachable-symbol result is not release approval.
+See [official govulncheck documentation](https://pkg.go.dev/golang.org/x/vuln@v1.8.0/cmd/govulncheck).

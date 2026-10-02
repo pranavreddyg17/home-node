@@ -79,6 +79,19 @@ jobs:
           sudo install -m 0755 "$RUNNER_TEMP/supervisor.test" /usr/lib/homenode-fixtures/supervisor.test
           sudo env HOMENODE_SUPERVISOR_SYSTEMD_INTEGRATION=1 python3 packaging/systemd/supervisor_fixture.py
       - run: go vet ./...
+      - name: Check reachable Go vulnerabilities
+        timeout-minutes: 5
+        run: |
+          set -o pipefail
+          go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 -show verbose ./... 2>&1 | tee "$RUNNER_TEMP/go-vulnerability-scan.txt"
+      - name: Retain Go vulnerability scan
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: go-vulnerability-scan
+          path: ${{ runner.temp }}/go-vulnerability-scan.txt
+          if-no-files-found: ignore
+          retention-days: 14
       - run: go build ./cmd/...
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
