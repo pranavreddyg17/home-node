@@ -130,9 +130,6 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 		if _, err := os.Lstat(filepath.Join(host, "var/lib/homenode-update/inspection.env")); !os.IsNotExist(err) {
 			t.Fatal("drop-in refusal published launch", err)
 		}
-		if result, err := engine.collectAndPublishUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); !errors.Is(err, ErrConflict) || result != (updates.InspectionResult{}) {
-			t.Fatal("collection bypassed service drop-in refusal", name, result, err)
-		}
 		if err := os.Remove(dropIn); err != nil {
 			t.Fatal(err)
 		}
@@ -226,6 +223,9 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 		}
 		if result, err := engine.readRecordedUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); !errors.Is(err, ErrConflict) || result != (updates.InspectionResult{}) {
 			t.Fatal("readback bypassed service drop-in refusal", name, result, err)
+		}
+		if result, err := engine.collectAndPublishUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); !errors.Is(err, ErrConflict) || result != (updates.InspectionResult{}) {
+			t.Fatal("collection bypassed service drop-in refusal", name, result, err)
 		}
 		if err := os.Remove(dropIn); err != nil {
 			t.Fatal(err)
