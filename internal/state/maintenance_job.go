@@ -324,7 +324,7 @@ func (s *Store) CompleteMaintenanceJob(ctx context.Context, token, id string) er
 				return ErrMaintenance
 			}
 		}
-		if _, err = tx.Exec("DELETE FROM settings WHERE key=? AND value=?", backupDispatchKey, "complete:"+id); err != nil {
+		if _, err = tx.Exec("DELETE FROM settings WHERE key=? AND value IN (?,?)", backupDispatchKey, "complete:"+id, "refused:"+id); err != nil {
 			return err
 		}
 		if _, err = tx.Exec("DELETE FROM settings WHERE key GLOB 'host.maintenance-job.*'"); err != nil {

@@ -174,3 +174,72 @@ func TestPreliminaryLaunchIntentSurvivesRestartAndBlocksCleanup(t *testing.T) {
 		t.Fatal("unpublished worker completion admitted")
 	}
 }
+
+func TestStoppedLaunchRefusalIsOwnedAtomicAndDistinctFromPublication(t *testing.T) {
+	store, device, directory := maintenanceJobFixture(t)
+	defer func() { store.Close() }()
+	ctx := context.Background()
+	token, job, err := store.BeginMaintenanceJob(ctx, device)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordBackupLaunchRefused(ctx, token, job.ID); err == nil {
+		t.Fatal("draining refusal admitted")
+	}
+	if err := store.AdvanceMaintenanceJob(ctx, token, job.ID, "draining", "freezing"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordBackupLaunchRefused(ctx, token, job.ID); err == nil {
+		t.Fatal("unattempted launch admitted")
+	}
+	if err := store.ClaimBackupLaunch(ctx, token, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, owner := range []struct{ token, id string }{{Random(), job.ID}, {token, Random()}} {
+		if err := store.RecordBackupLaunchRefused(ctx, owner.token, owner.id); err == nil {
+			t.Fatal("foreign refusal admitted")
+		}
+	}
+	if _, err := store.DB.Exec("CREATE TRIGGER refusal_fixture BEFORE UPDATE ON settings WHEN NEW.key='host.maintenance-job.phase' AND NEW.value='restoring' BEGIN SELECT RAISE(ABORT,'phase failure'); END"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordBackupLaunchRefused(ctx, token, job.ID); err == nil {
+		t.Fatal("partial refusal committed")
+	}
+	observation, err := store.InspectBackupObservation(ctx)
+	if err != nil || observation.WorkerCompletion != "uncertain" {
+		t.Fatal("rollback lost uncertainty", observation, err)
+	}
+	if _, err := store.DB.Exec("DROP TRIGGER refusal_fixture"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordBackupLaunchRefused(ctx, token, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordBackupLaunchRefused(ctx, token, job.ID); err == nil {
+		t.Fatal("refusal replay admitted")
+	}
+	if err := store.AttachMaintenanceRoot(ctx, token, job.ID, Random()); err == nil {
+		t.Fatal("refused worker acquired runtime")
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = Open(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation, err = store.InspectBackupObservation(ctx)
+	if err != nil || observation.WorkerCompletion != "refused" || observation.Current != nil || observation.LastPublished != nil {
+		t.Fatal("refusal fabricated publication", observation, err)
+	}
+	if err := store.RequireBackupWorkerStopped(ctx, token, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CompleteMaintenanceJob(ctx, token, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.BeginMaintenanceJob(ctx, device); err != nil {
+		t.Fatal("completed refusal left admission closed", err)
+	}
+}
