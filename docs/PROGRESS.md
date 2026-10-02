@@ -1877,3 +1877,7 @@ Extended native launch-intent fixtures to reject missing, symlink, hard-linked, 
 ### Bounded inspection identity preflight
 
 Corrected shared inspection identity validation to reject field lengths before hexadecimal decoding or regular-expression scans. Oversized hash input previously allocated before refusal; bounded operation/release/hash/package lengths now refuse immediately across environment, persisted intent and worker result paths. Portable fixtures assert zero allocations for preallocated one-megabyte operation/release/hash inputs, accept supported maximum identity/package boundaries, and reject below/above supported limits. Targeted allocation tests, full portable update tests and diff checks passed. CI 36966796592 is still in progress; no terminal outcome or native execution of unpublished changes is assumed.
+
+### Native preflight and boot-epoch qualification result
+
+CI 36966796592 at 84c7cdb completed successfully. This executes the published combined confinement refusal fixtures, dormant-state assertions against the real disposable system manager, live kernel boot-epoch checks, installed seccomp/source-service probes and existing installer/package/browser workflows. It does not yet execute the later durable launch-intent publication/verification/filesystem fixtures or identity allocation fix. Those accumulated committed changes are now being published for their own native qualification; launch execution, authenticated result transport, recovery and full end-to-end acceptance remain unfinished.
