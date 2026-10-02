@@ -23,6 +23,7 @@ type Target struct {
 
 type Device struct{ Major, Minor uint32 }
 type Mount struct {
+	ID                     uint64
 	Device                 Device
 	Root, Path, Filesystem string
 	Writable               bool
@@ -121,6 +122,10 @@ func ParseMountInfo(data []byte) ([]Mount, error) {
 		if separator < 6 || len(fields) != separator+4 {
 			return nil, ErrTarget
 		}
+		id, err := strconv.ParseUint(fields[0], 10, 64)
+		if err != nil || id == 0 {
+			return nil, ErrTarget
+		}
 		numbers := strings.Split(fields[2], ":")
 		if len(numbers) != 2 {
 			return nil, ErrTarget
@@ -149,7 +154,7 @@ func ParseMountInfo(data []byte) ([]Mount, error) {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 			return nil, fmt.Errorf("invalid mount path: %w", ErrTarget)
 		}
-		mounts = append(mounts, Mount{Device: Device{uint32(major), uint32(minor)}, Root: root, Path: path, Filesystem: fields[separator+1], Writable: rw && !ro})
+		mounts = append(mounts, Mount{ID: id, Device: Device{uint32(major), uint32(minor)}, Root: root, Path: path, Filesystem: fields[separator+1], Writable: rw && !ro})
 	}
 	return mounts, nil
 }

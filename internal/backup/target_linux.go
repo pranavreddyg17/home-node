@@ -42,7 +42,8 @@ func OpenTarget(t Target) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err = AdmitMount(t, mounts, registered); err != nil {
+	admitted, err := AdmitMount(t, mounts, registered)
+	if err != nil {
 		return nil, err
 	}
 	info, err := os.Lstat(t.MountPath)
@@ -63,6 +64,10 @@ func OpenTarget(t Target) (*os.File, error) {
 		_ = directory.Close()
 		return nil, ErrTarget
 	}
+	if err := requireTargetMountID(directory, admitted.ID); err != nil {
+		directory.Close()
+		return nil, err
+	}
 	var filesystem unix.Statfs_t
 	if err = unix.Fstatfs(int(directory.Fd()), &filesystem); err != nil || filesystem.Flags&unix.ST_RDONLY != 0 {
 		_ = directory.Close()
@@ -78,4 +83,15 @@ func openTargetDirectory(path string) (*os.File, error) {
 		return nil, err
 	}
 	return os.NewFile(uintptr(fd), "registered-backup-target"), nil
+}
+
+func requireTargetMountID(directory *os.File, expected uint64) error {
+	if directory == nil || expected == 0 {
+		return ErrTarget
+	}
+	var info unix.Statx_t
+	if err := unix.Statx(int(directory.Fd()), "", unix.AT_EMPTY_PATH, unix.STATX_MNT_ID, &info); err != nil || info.Mask&unix.STATX_MNT_ID == 0 || info.Mnt_id != expected {
+		return ErrTarget
+	}
+	return nil
 }

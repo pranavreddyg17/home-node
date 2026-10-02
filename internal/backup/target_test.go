@@ -15,6 +15,9 @@ func TestRegisteredDriveAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if mounts[1].ID != 25 {
+		t.Fatal("mount identity lost")
+	}
 	target := registeredTarget()
 	if _, err = AdmitMount(target, mounts, Device{8, 17}); err != nil {
 		t.Fatal(err)
@@ -45,7 +48,7 @@ func TestMalformedTargetAndMountInfo(t *testing.T) {
 	if err := target.Validate(); err == nil {
 		t.Fatal("device path injection")
 	}
-	for _, data := range []string{"", "24 1 8:x / / rw - ext4 /dev/sda1 rw", "24 1 8:1 / /bad\\999path rw - ext4 /dev/sda1 rw", "24 1 8:1 / / rw - ext4"} {
+	for _, data := range []string{"", "0 1 8:1 / / rw - ext4 /dev/sda1 rw", "invalid 1 8:1 / / rw - ext4 /dev/sda1 rw", "24 1 8:x / / rw - ext4 /dev/sda1 rw", "24 1 8:1 / /bad\\999path rw - ext4 /dev/sda1 rw", "24 1 8:1 / / rw - ext4"} {
 		if _, err := ParseMountInfo([]byte(data)); err == nil {
 			t.Fatal("malformed mount accepted", data)
 		}

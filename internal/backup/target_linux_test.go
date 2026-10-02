@@ -41,3 +41,23 @@ func TestTargetDirectoryOpenRejectsReplacementSymlink(t *testing.T) {
 		t.Fatal("target descriptor inheritable", err)
 	}
 }
+
+func TestTargetDescriptorMountIdentity(t *testing.T) {
+	file, err := openTargetDirectory(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	var info unix.Statx_t
+	if err := unix.Statx(int(file.Fd()), "", unix.AT_EMPTY_PATH, unix.STATX_MNT_ID, &info); err != nil {
+		t.Fatal(err)
+	}
+	if err := requireTargetMountID(file, info.Mnt_id); err != nil {
+		t.Fatal(err)
+	}
+	for _, wrong := range []uint64{0, info.Mnt_id + 1} {
+		if err := requireTargetMountID(file, wrong); err == nil {
+			t.Fatal("wrong mount admitted")
+		}
+	}
+}
