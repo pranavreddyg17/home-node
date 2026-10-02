@@ -26,6 +26,18 @@ function readManifest(filename) {
   }
 }
 
+export function renderDependencyNotices(evidence) {
+  let text = 'HomeNode development frontend notices\nIncomplete source collection; license review remains required.\n'
+  for (const dependency of evidence.dependencies) {
+    text += `\n${dependency.name}@${dependency.version}\nDeclared license: ${typeof dependency.license === 'string' ? dependency.license : JSON.stringify(dependency.license)}\n`
+    if (!dependency.licenseFiles.length) text += 'No matched package-root notice files collected.\n'
+    for (const notice of dependency.licenseFiles) {
+      text += `Source: ${notice.path}\nSHA256: ${notice.sha256}\n${notice.text}\n`
+    }
+  }
+  return text
+}
+
 // Build-graph evidence is incomplete until dependency/license review qualifies it.
 export function dependencyEvidence() {
   let root
@@ -78,8 +90,11 @@ export function dependencyEvidence() {
       if (!evidence.dependencies.length) throw new Error('Empty bundled dependency inventory')
       const encoded = JSON.stringify(evidence) + '\n'
       if (Buffer.byteLength(encoded) > 8 * 1024 * 1024) throw new Error('Oversized dependency evidence')
+      const notices = renderDependencyNotices(evidence)
+      if (Buffer.byteLength(notices) > 8 * 1024 * 1024) throw new Error('Oversized notice artifact')
       mkdirSync(path.join(root, 'build-evidence'), { recursive: true })
       writeFileSync(path.join(root, 'build-evidence/dependencies.json'), encoded)
+      writeFileSync(path.join(root, 'build-evidence/frontend-notices.txt'), notices)
     },
   }
 }

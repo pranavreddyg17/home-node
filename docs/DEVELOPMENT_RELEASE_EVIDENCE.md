@@ -9,7 +9,8 @@
 | `.deb.sbom.json` | CycloneDX 1.6 package binding and staged file inventory |
 | `.deb.gomodules.json` | Build information from the six actual packaged Go binaries |
 | `.deb.frontend.json` | Emitted asset hashes and bundled npm package lock identities |
-| `.deb.evidence.sha256` | Relative-path checksums for all three evidence documents |
+| `.deb.frontend-notices.txt` | Readable collected npm license/notice sources, marked incomplete |
+| `.deb.evidence.sha256` | Relative-path checksums for all four evidence artifacts |
 
 The module record includes executable SHA256, embedded Go version, main module,
 dependencies, replacement modules and build settings. It reads binary build
