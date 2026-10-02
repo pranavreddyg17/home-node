@@ -133,3 +133,58 @@ func TestApprovedBackupRequiresBothWorkerOperationsBeforeAdmission(t *testing.T)
 		t.Fatal("caller credential closed", err)
 	}
 }
+
+func TestAsyncApprovedBackupClearsPasswordOnRefusal(t *testing.T) {
+	s := testServer(t)
+	actor, err := s.Identity.Authenticate(context.Background(), seedSession(t, s, `["admin"]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	launch := func(context.Context, backup.Launch, *os.File) error {
+		t.Fatal("unexpected asynchronous launch")
+		return backup.ErrManifest
+	}
+	for _, scenario := range []string{"cancelled", "invalid-password", "unconfigured"} {
+		ctx := context.Background()
+		password := []byte("owned-secret")
+		if scenario == "cancelled" {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithCancel(ctx)
+			cancel()
+		}
+		if scenario == "invalid-password" {
+			password = []byte("secret\ninvalid")
+		}
+		job, err := s.StartApprovedBackupPassword(ctx, actor, "unissued", []byte(`{}`), "request-1234567890", "0.1.0", 1, password, launch, refusedBackupCleanup(t))
+		if err == nil || job != "" {
+			t.Fatal("refusal returned admitted job", job, err)
+		}
+		for _, b := range password {
+			if b != 0 {
+				t.Fatal("owned password retained")
+			}
+		}
+		if err = s.Store.Transaction(context.Background(), state.RequireAdmission); err != nil {
+			t.Fatal("refusal closed admission", err)
+		}
+	}
+}
+
+func TestAdmittedBackupTaskClosesCredentialOnFailure(t *testing.T) {
+	s := testServer(t)
+	credential, err := os.CreateTemp(t.TempDir(), "invalid-credential")
+	if err != nil {
+		t.Fatal(err)
+	}
+	launch := func(context.Context, backup.Launch, *os.File) error {
+		t.Fatal("unexpected launch")
+		return backup.ErrManifest
+	}
+	run := s.admittedBackupTask(state.Random(), state.Random(), state.MaintenanceJob{ID: state.Random()}, "0.1.0", 1, credential, launch, refusedBackupCleanup(t))
+	if err = run(context.Background()); err == nil {
+		t.Fatal("invalid credential accepted")
+	}
+	if _, err = credential.Stat(); err == nil {
+		t.Fatal("task retained owned descriptor")
+	}
+}
