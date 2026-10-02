@@ -63,6 +63,8 @@ with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, tem
     keys = {"InvocationID", "Result", "ExecMainCode", "ExecMainStatus", "ActiveState", "SubState", "ExecMainStartTimestampMonotonic", "ExecMainExitTimestampMonotonic"}
     resource_values = {"MemoryMax": "268435456", "MemorySwapMax": "0", "CPUQuotaPerSecUSec": "500ms", "TasksMax": "32", "OOMPolicy": "kill", "KillMode": "control-group", "Restart": "no", "TimeoutStartUSec": "2min 30s", "TimeoutStopUSec": "5s"}
     isolation_values = {"NoNewPrivileges": "yes", "CapabilityBoundingSet": "", "AmbientCapabilities": "", "ProtectSystem": "strict", "ProtectHome": "yes", "PrivateTmp": "yes", "PrivateDevices": "yes", "PrivateNetwork": "yes", "ProtectKernelTunables": "yes", "ProtectKernelModules": "yes", "ProtectKernelLogs": "yes", "ProtectControlGroups": "yes", "ProtectProc": "invisible", "ProcSubset": "pid", "RestrictSUIDSGID": "yes", "RestrictRealtime": "yes", "LockPersonality": "yes", "UMask": "0077", "SupplementaryGroups": ""}
+    process_values = {"RestrictNamespaces": "yes", "RestrictAddressFamilies": "AF_UNIX", "SystemCallArchitectures": "native"}
+    keys |= process_values.keys()
     keys |= isolation_values.keys()
     keys |= resource_values.keys()
     invocation = None
@@ -87,6 +89,8 @@ with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, tem
                 sys.exit("Inspection manager resource limits differ from source contract")
             if any(values[key] != value for key, value in isolation_values.items()):
                 sys.exit("Inspection manager confinement differs from source contract")
+            if any(values[key] != value for key, value in process_values.items()):
+                sys.exit("Inspection manager process policy differs from source contract")
             observed = values["InvocationID"]
             if observed:
                 if len(observed) != 32 or any(c not in "0123456789abcdef" for c in observed) or observed == "0" * 32:

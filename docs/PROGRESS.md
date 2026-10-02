@@ -1821,3 +1821,7 @@ Added a fixed privileged bounded manager query and strict core confinement valid
 ### Effective deadlines and private worker identity
 
 The configured-resource prerequisite now includes the source 150-second start and five-second stop deadlines; core confinement also requires UMask 0077 and an empty supplementary group list. Fixed bounded queries and retained source-fixture observations include these properties. Portable refusal fixtures cover relaxed deadlines and missing/modified mask/group fields. Update race tests, Linux compilation, Python syntax and diff validation passed. Exact native manager formatting and enforcement are still pending qualification. CI 36965142904 remains active; this closes additional prerequisite coverage without claiming complete activation authorization.
+
+### Configured namespace/socket/ABI restrictions
+
+Added fixed bounded manager querying and strict namespace/socket-family/syscall-architecture prerequisites: namespace restriction enabled, AF_UNIX only and native architecture only. Portable fixtures refuse broader namespace/socket/ABI settings and ambiguous/missing snapshots. The retained source-service fixture now observes actual manager values alongside worker runtime probes. Update race tests, Linux compilation, Python syntax and diff validation passed; serialization and native effectiveness remain pending. Syscall denysets, IP/path policies and complete live enforcement/activation authorization are still unfinished. CI 36965142904 remains active.

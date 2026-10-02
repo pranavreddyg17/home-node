@@ -125,3 +125,16 @@ func VerifyInspectionIsolation(ctx context.Context) error {
 	}
 	return ValidateInspectionIsolation(properties)
 }
+
+// VerifyInspectionProcessPolicy queries configured namespace/socket/ABI limits.
+// Other effective policy and live checks remain required before activation.
+func VerifyInspectionProcessPolicy(ctx context.Context) error {
+	if os.Geteuid() != 0 {
+		return ErrInspectionResult
+	}
+	properties, err := inspectionManagerQuery(ctx, "--property=RestrictNamespaces,RestrictAddressFamilies,SystemCallArchitectures", exec.CommandContext)
+	if err != nil {
+		return err
+	}
+	return ValidateInspectionProcessPolicy(properties)
+}
