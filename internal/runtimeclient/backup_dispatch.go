@@ -74,3 +74,24 @@ func (d ActivatedBackupDispatcher) DeliverCleanup(ctx context.Context, cleanup b
 		return backup.SendActivatedCredentialCleanupAndWait(ctx, connection, cleanup, credential)
 	})
 }
+
+// SnapshotPage uses only the installed credential socket. Device authorization
+// must be established separately; this transport cannot establish owner access.
+func (d ActivatedBackupDispatcher) SnapshotPage(ctx context.Context, request backup.SnapshotPageRequest, credential *os.File) (backup.SnapshotPage, error) {
+	if err := ctx.Err(); err != nil {
+		return backup.SnapshotPage{}, err
+	}
+	if _, err := backup.EncodeSnapshotPageRequest(request); err != nil {
+		return backup.SnapshotPage{}, err
+	}
+	var page backup.SnapshotPage
+	err := d.deliver(ctx, credential, func(connection *net.UnixConn) error {
+		var err error
+		page, err = backup.SendActivatedCredentialSnapshotPageAndWait(ctx, connection, request, credential)
+		return err
+	})
+	if err != nil {
+		return backup.SnapshotPage{}, err
+	}
+	return page, nil
+}

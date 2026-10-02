@@ -26,3 +26,13 @@ func SendActivatedCredentialSnapshotPage(ctx context.Context, connection *net.Un
 func ReceiveCredentialSnapshotPage(ctx context.Context, connection *net.UnixConn, controllerUID uint32) (SnapshotPageRequest, *os.File, error) {
 	return receiveCredentialPayload(ctx, connection, controllerUID, DecodeSnapshotPageRequest)
 }
+
+// SendActivatedCredentialSnapshotPageAndWait authenticates the installed
+// listener before sending and accepts only the response to this request.
+// A returned page contains candidates, not authority to restore them.
+func SendActivatedCredentialSnapshotPageAndWait(ctx context.Context, connection *net.UnixConn, request SnapshotPageRequest, credential *os.File) (SnapshotPage, error) {
+	if err := SendActivatedCredentialSnapshotPage(ctx, connection, request, credential); err != nil {
+		return SnapshotPage{}, err
+	}
+	return receiveSnapshotPageResponse(ctx, connection, request.RequestID)
+}
