@@ -2523,3 +2523,7 @@ Added contracts/backup-worker.md from current implementation: strict disjoint la
 ### Enforce read-only credential descriptor access
 
 Credential audit found ReadRepositoryPassword validated anonymous regular file, bounds, seals and close-on-exec but omitted declared read-only access requirement. It now checks F_GETFL/O_ACCMODE and rejects writable sealed descriptors before allocating payload bytes. Linux fixtures separately reject valid sealed writable descriptors and read-only descriptors with CLOEXEC removed; invalid sealed-payload fixture now reopens read-only so payload validation remains independently exercised. Linux backup/runtimeclient fixture compilation and diff checks passed. Portable backup/runtimeclient race suites are running in session12554; native Linux execution remains required. No root integration ran on owner Mac. Full application acceptance remains unfinished.
+
+### Publish refused-launch recovery follow-ups for native validation
+
+CI37040526899 at e9f27b4 completed successfully, including development package inspection. Portable backup/runtimeclient race suites from session12554 passed. Repository-before-runtime acquisition, stopped-refusal transport/server, durable qualification/restoration/approved retry/history consistency, HTTP/browser tests, protocol contract and read-only credential changes are now being pushed for native Linux CI. No success claim for the newly added native fixtures is made before their run completes. Unrelated worktree edits remain unstaged. Full application acceptance remains unfinished.
