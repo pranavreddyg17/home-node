@@ -12,8 +12,9 @@ import (
 // ServeDispatch owns a private unixpacket listener and admits at most one
 // received/running job. Overflow connections are closed without reading tokens.
 // Cancellation or listener failure cancels and joins active work before return.
-// A worker failure stops the service; the coordinator must reconcile its owned
-// job rather than treating socket delivery or process restart as backup success.
+// A worker failure stops the service unless an explicit typed refusal reply is
+// configured and sent successfully. The coordinator independently qualifies its
+// owned job; socket delivery or process restart never establishes backup success.
 // Work must persist repository outcomes through the authenticated controller.
 func ServeDispatch(ctx context.Context, listener net.Listener, controllerUID uint32, work func(context.Context, Dispatch) error) error {
 	var operation func(context.Context, Dispatch, *os.File) error
