@@ -319,6 +319,64 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	} else {
 		t.Log("capacity refusal fixture requires less than 512GiB plus reserve available")
 	}
+
+	// Corrupt the root inode without changing the clean superblock state, then
+	// honestly checksum it. Restore must reject filesystem structure, rather than
+	// relying on a manifest hash mismatch to detect this failure.
+	corruptCtx, cancelCorrupt := context.WithTimeout(context.Background(), time.Minute)
+	defer cancelCorrupt()
+	corrupt := exec.CommandContext(corruptCtx, "/usr/sbin/debugfs", "-w", "-R", "set_inode_field <2> mode 0", diskPath)
+	if output, err := corrupt.CombinedOutput(); err != nil {
+		t.Fatalf("corrupt restored disk fixture: %v: %s", err, output)
+	}
+	corruptDisk, err := os.Open(diskPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headerErr := requireCleanExt4Header(corruptDisk)
+	corruptDisk.Close()
+	if headerErr != nil {
+		t.Fatal("corruption fixture did not retain clean header", headerErr)
+	}
+	corruptBytes, err := os.ReadFile(diskPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	corruptManifest := manifest
+	corruptManifest.Files = append([]BackupFile(nil), manifest.Files...)
+	corruptDigest := sha256.Sum256(corruptBytes)
+	corruptManifest.Files[1].SHA256 = hex.EncodeToString(corruptDigest[:])
+	encodedCorrupt, err := json.Marshal(corruptManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "manifest.json"), encodedCorrupt, 0600); err != nil {
+		t.Fatal(err)
+	}
+	corruptRoot, err := os.OpenRoot(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadataErr := ValidateRecoverySet(corruptCtx, corruptRoot, corruptManifest, policy)
+	corruptRoot.Close()
+	if metadataErr != nil {
+		t.Fatal("corruption fixture did not pass independent metadata validation", metadataErr)
+	}
+	corruptOutput := &boundedOutput{maximum: 32768}
+	corruptArgs := append(append([]string(nil), partialArgs...), "/proc/self/fd/5/files.raw")
+	if err := resticProcess(corruptCtx, corruptArgs, []*os.File{repository.directory, repository.secret, stage}, corruptOutput); err != nil {
+		t.Fatal("corrupt encrypted snapshot", err)
+	}
+	corruptID, err := parseSnapshotSummary(corruptOutput.data)
+	if err != nil {
+		t.Fatal("corrupt fixture summary", err)
+	}
+	if _, err := repository.Restore(corruptCtx, corruptID, failedStage, policy); !errors.Is(err, ErrManifest) {
+		t.Fatal("checksummed corrupt filesystem restored", err)
+	}
+	if entries, err := os.ReadDir(failedPath); err != nil || len(entries) != 0 {
+		t.Fatal("filesystem refusal retained recovery files", entries, err)
+	}
 	if err = os.WriteFile(filepath.Join(path, "files.raw"), []byte("corrupt"), 0600); err != nil {
 		t.Fatal(err)
 	}
