@@ -185,3 +185,53 @@ func TestRecoverySnapshotRefusesPublicDirectoryAndCancelledContext(t *testing.T)
 		t.Fatal("failed snapshot left behind", err)
 	}
 }
+
+func TestRecoverySnapshotRejectsMalformedFreshIdentity(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "source"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if _, err := store.DB.Exec("INSERT INTO identity(singleton,owner_id,claimed,epoch) VALUES(1,?,1,1)", Random()); err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path, err := store.RecoverySnapshot(context.Background(), directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writable, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writable.Close()
+	validate := func() error {
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		_, err = ValidateRecoverySnapshot(context.Background(), file)
+		return err
+	}
+	if err := validate(); err != nil {
+		t.Fatal("generated identity refused", err)
+	}
+	for _, statement := range []string{"UPDATE identity SET owner_id='short'", "UPDATE identity SET owner_id='invalid identity with spaces'", "UPDATE identity SET owner_id='AAAAAAAAAAAAAAAAAAAAAAAA',epoch=1.5"} {
+		if _, err := writable.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+		if err := validate(); err == nil {
+			t.Fatal("malformed restored identity admitted")
+		}
+	}
+	if _, err := writable.Exec("UPDATE identity SET owner_id=?,epoch=2", Random()); err != nil {
+		t.Fatal(err)
+	}
+	if err := validate(); err != nil {
+		t.Fatal("valid replacement identity refused", err)
+	}
+}

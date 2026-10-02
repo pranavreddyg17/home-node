@@ -104,6 +104,12 @@ func ValidateRecoverySnapshot(ctx context.Context, file *os.File) ([]RecoveryApp
 	if err != nil || invalid {
 		return nil, ErrRecovery
 	}
+	var ownerID, epochType string
+	var epoch int64
+	var claimed int
+	if err := db.QueryRowContext(deadline, "SELECT owner_id,claimed,epoch,typeof(epoch) FROM identity WHERE singleton=1").Scan(&ownerID, &claimed, &epoch, &epochType); err != nil || !recoveryInstanceID.MatchString(ownerID) || claimed != 0 || epoch < 1 || epochType != "integer" {
+		return nil, ErrRecovery
+	}
 	for _, query := range []string{
 		"SELECT count(*) FROM identity WHERE claimed=0 AND epoch>0 AND length(owner_id)>0",
 	} {
