@@ -117,6 +117,22 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	if err := os.WriteFile(servicePath, service, 0644); err != nil {
 		t.Fatal(err)
 	}
+	for _, name := range []string{"service.d", "homenode-.service.d", "homenode-inspect.service.d"} {
+		dropIn := filepath.Join(host, "etc/systemd/system", name)
+		if err := os.Mkdir(dropIn, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if other, err := engine.prepareUpdateInspectionLaunchOwned(ctx, release, "inspection-fixture-000001"); err == nil {
+			other.Close()
+			t.Fatal("unreviewed systemd drop-in admitted launch", name)
+		}
+		if _, err := os.Lstat(filepath.Join(host, "var/lib/homenode-update/inspection.env")); !os.IsNotExist(err) {
+			t.Fatal("drop-in refusal published launch", err)
+		}
+		if err := os.Remove(dropIn); err != nil {
+			t.Fatal(err)
+		}
+	}
 	launch, err := engine.prepareUpdateInspectionLaunchOwned(ctx, release, "inspection-fixture-000001")
 	if err != nil {
 		t.Fatal("owned launch preparation failed", err)

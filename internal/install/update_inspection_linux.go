@@ -138,6 +138,16 @@ func (e *Engine) prepareUpdateInspectionLaunchOwned(ctx context.Context, release
 }
 
 func (e *Engine) requireInspectionServiceLocked() error {
+	// Filesystem refusal supplements, but cannot replace, checking the manager's
+	// effective unit and DropInPaths immediately before activation.
+	for _, base := range []string{"etc/systemd/system", "run/systemd/system", "usr/local/lib/systemd/system", "usr/lib/systemd/system", "lib/systemd/system"} {
+		for _, name := range []string{"service.d", "homenode-.service.d", "homenode-inspect.service.d"} {
+			if _, err := e.host.Lstat(base + "/" + name); !errors.Is(err, os.ErrNotExist) {
+				return errors.Join(ErrConflict, err)
+			}
+		}
+	}
+
 	reviewed, err := servicetemplates.Unit("homenode-inspect.service")
 	if err != nil {
 		return err
