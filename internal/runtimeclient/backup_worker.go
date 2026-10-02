@@ -176,13 +176,22 @@ func RunCredentialedLaunchedBackup(ctx context.Context, launch backup.Launch, co
 		return dispatch, result, err
 	}
 	defer clear(password)
+	// Authenticate and pin the registered destination before runtime acquisition.
+	// Retain this exact repository lease through publication; never reopen by path.
+	repository, err := backup.OpenRepository(ctx, config.RepositoryTarget, password)
+	clear(password)
+	if err != nil {
+		return dispatch, result, err
+	}
+	defer func() { resultErr = errors.Join(resultErr, repository.Close()) }()
+
 	management := newOwnedMaintenanceApps(config.ManagementSocket, config.ControllerListenerUID, launch.ManagementToken, launch.JobID, launch.DeviceID)
 	defer management.Close()
 	dispatch, err = AcquireLaunchedBackupRuntime(ctx, launch, management, root)
 	if err != nil {
 		return dispatch, result, err
 	}
-	result, err = RunRegisteredDispatchedBackup(ctx, dispatch, config, password)
+	result, err = RunLeasedDispatchedBackup(ctx, dispatch, config, repository)
 	return dispatch, result, err
 }
 
