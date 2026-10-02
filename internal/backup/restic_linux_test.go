@@ -207,6 +207,18 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if err != nil || len(inventory) != 1 || inventory[0].ID != snapshot || inventory[0].CreatedAt.IsZero() {
 		t.Fatal("published snapshot not selectable", inventory, err)
 	}
+	preview, err := repository.InspectSnapshot(context.Background(), snapshot, policy)
+	if err != nil || preview.Release != manifest.Release || !preview.CreatedAt.Equal(manifest.CreatedAt) || len(preview.Files) != len(manifest.Files) {
+		t.Fatal("selected manifest preview", preview, err)
+	}
+	incompatiblePreviewPolicy := policy
+	incompatiblePreviewPolicy.MinimumCatalogVersion = manifest.CatalogVersion + 1
+	if _, err := repository.InspectSnapshot(context.Background(), snapshot, incompatiblePreviewPolicy); !errors.Is(err, ErrManifest) {
+		t.Fatal("incompatible preview admitted", err)
+	}
+	if _, err := repository.InspectSnapshot(cancelledInventory, snapshot, policy); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled preview admitted", err)
+	}
 	// Verify actual encrypted storage returns the exact sanitized database bytes.
 	// Physical guest consistency and drive admission remain separate gates.
 	var restored bytes.Buffer
