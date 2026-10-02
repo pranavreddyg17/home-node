@@ -11,6 +11,8 @@ import (
 )
 
 func (s *Server) approvalRoutes() {
+	s.mux.Handle("POST /api/v1/backups/{id}/resume/approval", s.require("admin", false, http.HandlerFunc(s.backupResumeApproval)))
+	s.mux.Handle("POST /api/v1/backups/{id}/resume", s.require("admin", false, http.HandlerFunc(s.backupResume)))
 	s.mux.Handle("POST /api/v1/backups/approval", s.require("admin", false, http.HandlerFunc(s.backupApproval)))
 	s.mux.Handle("POST /api/v1/ai/conversations/{id}/delete/approval", s.require("ai", false, http.HandlerFunc(s.conversationDeleteApproval)))
 	s.mux.Handle("POST /api/v1/apps/{workload}/actions/approval", s.require("admin", false, http.HandlerFunc(s.appApproval)))
