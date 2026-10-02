@@ -91,6 +91,24 @@ func TestNativeInspectionDescriptor(t *testing.T) {
 	if err := inspectionPackageAuthority(authority); err != nil {
 		t.Fatal("explicitly restored package authority refused", err)
 	}
+	if err := os.Chown(authorityPath, 0, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := inspectionPackageAuthority(authority); err == nil {
+		t.Fatal("changed package group ownership admitted")
+	}
+	if err := os.Chown(authorityPath, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := inspectionPackageAuthority(authority); err != nil {
+		t.Fatal("restored root group ownership refused", err)
+	}
+	if err := os.Remove(authorityPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := inspectionPackageAuthority(authority); err == nil {
+		t.Fatal("unlinked inherited package admitted")
+	}
 	fixture := os.Getenv("HOMENODE_PACKAGE_CONTENT_FIXTURE")
 	if fixture == "" {
 		t.Fatal("built package fixture missing")
