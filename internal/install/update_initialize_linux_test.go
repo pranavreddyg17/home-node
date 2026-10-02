@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 
 	"github.com/pranavreddyg17/home-node/internal/updates"
 	servicetemplates "github.com/pranavreddyg17/home-node/packaging/systemd"
@@ -185,6 +186,34 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	if result, err := engine.readRecordedUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000002", execution); err == nil || result != (updates.InspectionResult{}) {
 		t.Fatal("unrelated recorded operation accepted", result, err)
 	}
+	if err := os.WriteFile(servicePath, []byte("changed readback service"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if result, err := engine.readRecordedUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); !errors.Is(err, ErrConflict) || result != (updates.InspectionResult{}) {
+		t.Fatal("readback bypassed changed service ownership", result, err)
+	}
+	if err := os.WriteFile(servicePath, service, 0644); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"service.d", "homenode-.service.d", "homenode-inspect.service.d"} {
+		dropIn := filepath.Join(host, "etc/systemd/system", name)
+		if err := os.Mkdir(dropIn, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if result, err := engine.readRecordedUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); !errors.Is(err, ErrConflict) || result != (updates.InspectionResult{}) {
+			t.Fatal("readback bypassed service drop-in refusal", name, result, err)
+		}
+		if err := os.Remove(dropIn); err != nil {
+			t.Fatal(err)
+		}
+	}
+	afterPolicyRefusal, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000001")
+	if err != nil {
+		t.Fatal("policy refusal leaked readback stage lock", err)
+	}
+	if err := afterPolicyRefusal.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if other, err := engine.prepareUpdateInspectionLaunchOwned(ctx, release, "inspection-fixture-000001"); err == nil {
 		other.Close()
 		t.Fatal("existing launch silently replaced")
@@ -202,6 +231,9 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 		t.Fatal("wrong inspection operation admitted")
 	}
 	release.Metadata.Sequence = 4
+	if result, err := engine.readRecordedUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); !errors.Is(err, ErrConflict) || result != (updates.InspectionResult{}) {
+		t.Fatal("readback bypassed release floor", result, err)
+	}
 	if other, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000001"); err == nil {
 		other.Close()
 		t.Fatal("staged release below floor admitted")
@@ -216,6 +248,9 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	}
 	if _, err = engine.readUpdateRepositoryOwned(ctx); err == nil {
 		t.Fatal("modified repository policy accepted")
+	}
+	if result, err := engine.readRecordedUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); !errors.Is(err, ErrConflict) || result != (updates.InspectionResult{}) {
+		t.Fatal("readback bypassed modified repository ownership", result, err)
 	}
 	if other, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000001"); err == nil {
 		other.Close()
