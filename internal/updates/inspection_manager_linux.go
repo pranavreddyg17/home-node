@@ -54,12 +54,29 @@ func captureInspectionServiceInvocationWith(ctx context.Context, notBeforeMicros
 }
 
 func inspectionServiceProperties(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd) ([]byte, error) {
+	return inspectionManagerQuery(ctx, "--property=InvocationID,Result,ExecMainCode,ExecMainStatus,ActiveState,SubState,ExecMainStartTimestampMonotonic,ExecMainExitTimestampMonotonic", command)
+}
+
+// VerifyInspectionUnitIdentity checks manager load identity for the owned unit;
+// it is not a complete effective-confinement check or activation authorization.
+func VerifyInspectionUnitIdentity(ctx context.Context) error {
+	if os.Geteuid() != 0 {
+		return ErrInspectionResult
+	}
+	properties, err := inspectionManagerQuery(ctx, "--property=Id,LoadState,FragmentPath,DropInPaths,NeedDaemonReload,Type,RemainAfterExit,DynamicUser,Transient", exec.CommandContext)
+	if err != nil {
+		return err
+	}
+	return ValidateInspectionUnitIdentity(properties)
+}
+
+func inspectionManagerQuery(ctx context.Context, propertyFlag string, command func(context.Context, string, ...string) *exec.Cmd) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	cmd := command(bounded, "/usr/bin/systemctl", "--system", "--no-pager", "show", "--property=InvocationID,Result,ExecMainCode,ExecMainStatus,ActiveState,SubState,ExecMainStartTimestampMonotonic,ExecMainExitTimestampMonotonic", "homenode-inspect.service")
+	cmd := command(bounded, "/usr/bin/systemctl", "--system", "--no-pager", "show", propertyFlag, "homenode-inspect.service")
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "LC_ALL=C", "SYSTEMD_COLORS=0", "SYSTEMD_PAGER=cat"}
 	output := &inspectionManagerOutput{}
 	cmd.Stdout = output
