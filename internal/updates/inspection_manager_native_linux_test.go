@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/sys/unix"
 )
 
 func TestNativeInspectionManagerCompletion(t *testing.T) {
@@ -51,11 +49,10 @@ func TestNativeInspectionManagerCompletion(t *testing.T) {
 	if output, err := manager("daemon-reload"); err != nil {
 		t.Fatal(string(output), err)
 	}
-	var clock unix.Timespec
-	if err := unix.ClockGettime(unix.CLOCK_MONOTONIC, &clock); err != nil {
+	boundary, err := InspectionLaunchBoundary(ctx)
+	if err != nil {
 		t.Fatal(err)
 	}
-	boundary := uint64(clock.Sec)*1_000_000 + uint64(clock.Nsec)/1000
 	if output, err := manager("start", "--no-block", unit); err != nil {
 		t.Fatal(string(output), err)
 	}
@@ -111,10 +108,10 @@ func TestNativeInspectionManagerCompletion(t *testing.T) {
 	if output, err := manager("daemon-reload"); err != nil {
 		t.Fatal(string(output), err)
 	}
-	if err := unix.ClockGettime(unix.CLOCK_MONOTONIC, &clock); err != nil {
+	failedBoundary, err := InspectionLaunchBoundary(ctx)
+	if err != nil {
 		t.Fatal(err)
 	}
-	failedBoundary := uint64(clock.Sec)*1_000_000 + uint64(clock.Nsec)/1000
 	if output, err := manager("start", unit); err == nil {
 		t.Fatal("failed fixture start reported success", string(output))
 	}
