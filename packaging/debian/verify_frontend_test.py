@@ -4,6 +4,9 @@ import hashlib
 import json
 import pathlib
 import os
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -132,6 +135,23 @@ class FrontendEvidenceTests(unittest.TestCase):
         original_read = os.read
         with patch('verify_frontend.os.read', side_effect=lambda fd, size: original_read(fd, min(size, 3))):
             self.check()
+
+    def test_cli_bytecode_setting_keeps_checkout_clean(self):
+        for disabled in (False, True):
+            with self.subTest(bytecode_disabled=disabled):
+                tools = self.directory / ('disabled' if disabled else 'enabled')
+                tools.mkdir()
+                for name in ('verify_frontend.py', 'verify_sbom.py'):
+                    shutil.copyfile(pathlib.Path(__file__).with_name(name), tools / name)
+                environment = dict(os.environ)
+                environment.pop('PYTHONDONTWRITEBYTECODE', None)
+                if disabled:
+                    environment['PYTHONDONTWRITEBYTECODE'] = '1'
+                result = subprocess.run([sys.executable, str(tools / 'verify_frontend.py'),
+                    str(self.root), str(self.evidence), str(self.lock)],
+                    env=environment, capture_output=True, text=True, check=False)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual((tools / '__pycache__').exists(), not disabled)
 
     def test_duplicate_json_key(self):
         self.evidence.write_text('{"schema":1,' + self.evidence.read_text()[1:])

@@ -102,6 +102,8 @@ jobs:
           go run ./packaging/debian/modules /tmp/homenode-package > "$RUNNER_TEMP/extracted-gomodules.json"
           cmp artifacts/homenode_0.1.0~ci_amd64.deb.gomodules.json "$RUNNER_TEMP/extracted-gomodules.json"
           PYTHONDONTWRITEBYTECODE=1 python3 packaging/debian/verify_frontend.py /tmp/homenode-package/usr/share/homenode/web artifacts/homenode_0.1.0~ci_amd64.deb.frontend.json web/package-lock.json
+          git status --short
+          test -z "$(git status --porcelain)"
           cd /tmp/homenode-package
           sha256sum --check usr/share/doc/homenode/SHA256SUMS
           test -x usr/bin/homenode
