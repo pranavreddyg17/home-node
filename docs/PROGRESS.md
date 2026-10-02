@@ -2707,3 +2707,7 @@ Retried GitHub observation succeeded: CI37072361478 completed successfully at901
 ### Distinguish selected metadata preview from recoverability
 
 Real encrypted corruption fixture now requires compatible preview of the honestly checksummed corrupt disk without extracting any recovery files, followed by actual Restore filesystem rejection and cleanup. This explicitly separates compatibility metadata evidence from recoverability instead of letting a successful preview imply a successful restore test. Linux backup fixture compilation and diff checks passed; new native boundary fixture remains unexecuted. CI37072981616 remains in progress; follow-up stays local. Full owner-facing restore workflow and application acceptance remain unfinished.
+
+### Native snapshot listing and preview evidence
+
+CI37072981616 at published a0332b0 completed Test Go and Linux adapters successfully with real-restic/filesystem integration flags enabled. This covers empty/tag-filtered encrypted inventory, cancelled listing, selected compatible preview/catalog-floor refusal and the published recovery/OOM source prerequisites. The later compatible-preview-versus-corrupt-filesystem assertion at local22da2ff has not run natively. Overall CI remains active in systemd activation checks, so no overlapping push. Dedicated owner-facing metadata worker protocol, restore installation/re-enrollment and complete application acceptance remain unfinished.
