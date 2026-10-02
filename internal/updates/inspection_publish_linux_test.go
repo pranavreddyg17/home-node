@@ -470,6 +470,35 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	if retained, err := os.ReadFile(resultPath); err != nil || string(retained) != string(resultData) {
 		t.Fatal("result evidence changed on retry", err)
 	}
+	if recorded, err := stage.readRecordedInspectionResultOwned(ctx, parent, captured); err != nil || recorded != collected || recorded.InstallAuthorized {
+		t.Fatal("retained result readback failed", recorded, err)
+	}
+	if recorded, err := stage.readRecordedInspectionResultOwned(canceled, parent, captured); err == nil || recorded != (InspectionResult{}) {
+		t.Fatal("canceled retained result exposed", recorded, err)
+	}
+	for _, altered := range [][]byte{[]byte(`{"schema":1}`), append(append([]byte(nil), resultData...), '\n'), make([]byte, 2049)} {
+		if err := os.WriteFile(resultPath, altered, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if recorded, err := stage.readRecordedInspectionResultOwned(ctx, parent, captured); err == nil || recorded != (InspectionResult{}) {
+			t.Fatal("altered retained result exposed", recorded, err)
+		}
+	}
+	if err := os.WriteFile(resultPath, resultData, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(resultPending, []byte("conflicting"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if recorded, err := stage.readRecordedInspectionResultOwned(ctx, parent, captured); err == nil || recorded != (InspectionResult{}) {
+		t.Fatal("conflicting retained result exposed", recorded, err)
+	}
+	if err := os.Remove(resultPending); err != nil {
+		t.Fatal(err)
+	}
+	if recorded, err := stage.readRecordedInspectionResultOwned(ctx, parent, captured); err != nil || recorded != collected {
+		t.Fatal("restored retained result refused", recorded, err)
+	}
 	packagePath := filepath.Join(parentPath, "inspection/package.deb")
 	retainedPath := filepath.Join(parentPath, "inspection/package.retained")
 	if err := os.Rename(packagePath, retainedPath); err != nil {
