@@ -52,4 +52,5 @@ dpkg-deb --root-owner-group --build "$root" "$archive"
 sha256sum "$archive" > "$archive.sha256"
 # External evidence avoids a package/SBOM hash cycle; inventory is incomplete.
 python3 packaging/debian/sbom.py "$root" "$archive" "$version" > "$archive.sbom.json"
+go run ./packaging/debian/modules "$root" > "$archive.gomodules.json"
 printf '%s\n' "$archive"
