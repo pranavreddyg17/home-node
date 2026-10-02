@@ -55,3 +55,48 @@ func TestApprovedBackupPreflightRefusesBeforeAdmission(t *testing.T) {
 		t.Fatal("caller credential closed", err)
 	}
 }
+
+func TestApprovedBackupPasswordClearsOwnedInputOnRefusal(t *testing.T) {
+	s := testServer(t)
+	s.config.BackupRepositoryID = strings.Repeat("a", 64)
+	s.config.Runtime = fileBackend{}
+	session := seedSession(t, s, `["admin"]`)
+	actor, err := s.Identity.Authenticate(context.Background(), session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deliver := func(context.Context, backup.Dispatch, *os.File) error {
+		t.Fatal("unexpected delivery")
+		return backup.ErrManifest
+	}
+	for _, scenario := range []string{"invalid-release", "unissued-grant", "cancelled", "invalid-password"} {
+		t.Run(scenario, func(t *testing.T) {
+			ctx := context.Background()
+			release := "0.1.0"
+			password := []byte("fixture-owned-password")
+			if scenario == "invalid-release" {
+				release = "invalid"
+			}
+			if scenario == "invalid-password" {
+				password = []byte("fixture\nsecret")
+			}
+			if scenario == "cancelled" {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancel()
+			}
+			job, snapshot, err := s.RunApprovedBackupPassword(ctx, actor, "unissued-grant", []byte(`{"repositoryId":"`+s.config.BackupRepositoryID+`"}`), "backup-request-1234567890", release, 1, password, refusedBackupRoot{t}, deliver)
+			if err == nil || job != "" || snapshot != "" {
+				t.Fatal("refused password launch exposed result", job, snapshot, err)
+			}
+			for _, value := range password {
+				if value != 0 {
+					t.Fatal("owned credential bytes retained")
+				}
+			}
+			if err := s.Store.Transaction(context.Background(), state.RequireAdmission); err != nil {
+				t.Fatal("refused launch closed admission", err)
+			}
+		})
+	}
+}
