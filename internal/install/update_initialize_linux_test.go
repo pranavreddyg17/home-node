@@ -172,6 +172,9 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 		t.Fatal("closed admission retained launch authority")
 	}
 	execution := updates.InspectionExecution{Epoch: epoch, InvocationID: "0123456789abcdef0123456789abcdef"}
+	if result, err := engine.collectAndPublishUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); err == nil || result != (updates.InspectionResult{}) {
+		t.Fatal("collection accepted missing recorded execution", result, err)
+	}
 	if result, err := engine.readRecordedUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); err == nil || result != (updates.InspectionResult{}) {
 		t.Fatal("missing recorded execution/result accepted", result, err)
 	}
@@ -191,6 +194,9 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	}
 	if result, err := engine.readRecordedUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); !errors.Is(err, ErrConflict) || result != (updates.InspectionResult{}) {
 		t.Fatal("readback bypassed changed service ownership", result, err)
+	}
+	if result, err := engine.collectAndPublishUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); !errors.Is(err, ErrConflict) || result != (updates.InspectionResult{}) {
+		t.Fatal("collection policy refusal: readback bypassed changed service ownership", result, err)
 	}
 	if err := os.WriteFile(servicePath, service, 0644); err != nil {
 		t.Fatal(err)
@@ -234,6 +240,9 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	if result, err := engine.readRecordedUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); !errors.Is(err, ErrConflict) || result != (updates.InspectionResult{}) {
 		t.Fatal("readback bypassed release floor", result, err)
 	}
+	if result, err := engine.collectAndPublishUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); !errors.Is(err, ErrConflict) || result != (updates.InspectionResult{}) {
+		t.Fatal("collection policy refusal: readback bypassed release floor", result, err)
+	}
 	if other, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000001"); err == nil {
 		other.Close()
 		t.Fatal("staged release below floor admitted")
@@ -251,6 +260,9 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	}
 	if result, err := engine.readRecordedUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); !errors.Is(err, ErrConflict) || result != (updates.InspectionResult{}) {
 		t.Fatal("readback bypassed modified repository ownership", result, err)
+	}
+	if result, err := engine.collectAndPublishUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); !errors.Is(err, ErrConflict) || result != (updates.InspectionResult{}) {
+		t.Fatal("collection policy refusal: readback bypassed modified repository ownership", result, err)
 	}
 	if other, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000001"); err == nil {
 		other.Close()
