@@ -57,6 +57,40 @@ func TestNativeInspectionDescriptor(t *testing.T) {
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_INSPECT_ENTRY_INTEGRATION") != "1" {
 		t.Skip("requires explicit disposable Linux root fixture")
 	}
+	authorityPath := filepath.Join(t.TempDir(), "authority.deb")
+	if err := os.WriteFile(authorityPath, []byte("private fixture"), 0400); err != nil {
+		t.Fatal(err)
+	}
+	authority, err := os.Open(authorityPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer authority.Close()
+	if err := inspectionPackageAuthority(authority); err != nil {
+		t.Fatal("private root descriptor refused", err)
+	}
+	if err := os.Chmod(authorityPath, 0440); err != nil {
+		t.Fatal(err)
+	}
+	if err := inspectionPackageAuthority(authority); err == nil {
+		t.Fatal("changed package permission admitted")
+	}
+	if err := os.Chmod(authorityPath, 0400); err != nil {
+		t.Fatal(err)
+	}
+	linked := authorityPath + ".link"
+	if err := os.Link(authorityPath, linked); err != nil {
+		t.Fatal(err)
+	}
+	if err := inspectionPackageAuthority(authority); err == nil {
+		t.Fatal("new package hard link admitted")
+	}
+	if err := os.Remove(linked); err != nil {
+		t.Fatal(err)
+	}
+	if err := inspectionPackageAuthority(authority); err != nil {
+		t.Fatal("explicitly restored package authority refused", err)
+	}
 	fixture := os.Getenv("HOMENODE_PACKAGE_CONTENT_FIXTURE")
 	if fixture == "" {
 		t.Fatal("built package fixture missing")

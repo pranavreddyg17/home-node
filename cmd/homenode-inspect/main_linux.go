@@ -74,16 +74,8 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 		return errors.New("inherited package descriptor missing")
 	}
 	defer file.Close()
-	if !readOnlyInspectionDescriptor(file.Fd()) {
-		return errors.New("inherited package descriptor must grant read-only access")
-	}
-	info, err := file.Stat()
-	if err != nil {
+	if err := inspectionPackageAuthority(file); err != nil {
 		return err
-	}
-	native, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || !validInspectionPackageStat(native) {
-		return errors.New("inherited package must be private root-owned verified bytes")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
@@ -98,7 +90,28 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	if err != nil || finalDigest != digest || finalLength != length {
 		return errors.Join(errors.New("package identity changed during inspection"), err)
 	}
+	if err := inspectionPackageAuthority(file); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	return json.NewEncoder(output).Encode(updates.InspectionResult{OperationID: *operation, Schema: 1, Release: *release, PackageSHA256: digest, PackageLength: length, ContentValid: true})
+}
+
+func inspectionPackageAuthority(file *os.File) error {
+	if file == nil || !readOnlyInspectionDescriptor(file.Fd()) {
+		return errors.New("inherited package descriptor must grant read-only access")
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	native, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || !validInspectionPackageStat(native) {
+		return errors.New("inherited package must be private root-owned verified bytes")
+	}
+	return nil
 }
 
 func validInspectionPackageStat(native *syscall.Stat_t) bool {
