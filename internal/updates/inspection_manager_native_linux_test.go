@@ -49,10 +49,11 @@ func TestNativeInspectionManagerCompletion(t *testing.T) {
 	if output, err := manager("daemon-reload"); err != nil {
 		t.Fatal(string(output), err)
 	}
-	boundary, err := InspectionLaunchBoundary(ctx)
+	epoch, err := CaptureInspectionLaunchEpoch(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
+	boundary := epoch.NotBeforeMicros
 	// The seam changes only the disposable unit; executable, scope, environment,
 	// bounded output and completion parsing follow the production manager path.
 	factory := func(ctx context.Context, path string, args ...string) *exec.Cmd {
@@ -71,9 +72,9 @@ func TestNativeInspectionManagerCompletion(t *testing.T) {
 	}
 	var invocation string
 	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
-		captured, err := captureInspectionServiceInvocationWith(ctx, boundary, factory)
+		captured, err := captureInspectionExecutionWith(ctx, epoch, factory)
 		if err == nil {
-			invocation = captured
+			invocation = captured.InvocationID
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -95,6 +96,9 @@ func TestNativeInspectionManagerCompletion(t *testing.T) {
 	if completionErr != nil {
 		output, _ := manager("show", unit)
 		t.Fatal("completed invocation refused", completionErr, string(output))
+	}
+	if err := verifyInspectionExecutionCompletionWith(ctx, InspectionExecution{Epoch: epoch, InvocationID: invocation}, factory); err != nil {
+		t.Fatal("boot-bound native completion refused", err)
 	}
 	if err := verifyInspectionDormantWith(ctx, factory); err == nil {
 		t.Fatal("retained completed invocation admitted as dormant")
