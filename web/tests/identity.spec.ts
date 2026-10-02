@@ -28,6 +28,7 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await expect(page.locator('.check-row')).toHaveCount(8)
   await expect(page.getByRole('heading', { name: 'External backup', exact: true })).toBeVisible()
   await expect(page.getByText('No acknowledged external backup is recorded.')).toBeVisible()
+  await expect(page.getByText('Weekly backup reminder: create your first external backup.')).toBeVisible()
   // Transport/UI fixture: mocked backup operations do not prove disk backup.
   const repositoryId = 'a'.repeat(64)
   let approvalBody = '', approvalKey = '', backupRequests = 0
@@ -110,10 +111,11 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
 
 
   await page.route('**/api/v1/backups/outcomes', route => route.fulfill({ json: {
-    schema: 1, current: { status: 'unknown', publishedAt: 0 }, lastPublished: { status: 'published', publishedAt: 10 },
+    schema: 1, current: { status: 'unknown', publishedAt: 0 }, lastPublished: { status: 'published', publishedAt: 10 }, reminder: { state: 'overdue', intervalDays: 7, dueAt: 604810 },
   } }))
   await page.getByRole('button', { name: 'Refresh backup status' }).click()
-  await expect(page.getByRole('status')).toContainText('latest backup outcome is uncertain')
+  await expect(page.getByRole('status').filter({ hasText: 'latest backup outcome is uncertain' })).toBeVisible()
+  await expect(page.getByText('Weekly backup reminder: the last acknowledged publication is at least seven days old.')).toBeVisible()
   await expect(page.getByText('Last acknowledged publication:', { exact: false })).toBeVisible()
   await page.unroute('**/api/v1/backups/outcomes')
   await page.route('**/api/v1/backups/outcomes', route => route.fulfill({ json: {

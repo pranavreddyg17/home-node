@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/pranavreddyg17/home-node/internal/state"
 	"net/http"
+	"time"
 )
 
 // backupOutcomes reports durable publication evidence only. It grants no
@@ -34,5 +35,5 @@ func (s *Server) backupOutcomes(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"resumeJobId": resumeJobID, "schema": 1, "current": observation.Current, "lastPublished": observation.LastPublished, "workerCompletion": observation.WorkerCompletion})
+	writeJSON(w, http.StatusOK, map[string]any{"reminder": publicationBackupReminder(time.Now().Unix(), observation.LastPublished), "resumeJobId": resumeJobID, "schema": 1, "current": observation.Current, "lastPublished": observation.LastPublished, "workerCompletion": observation.WorkerCompletion})
 }

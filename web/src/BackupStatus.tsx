@@ -4,7 +4,7 @@ import { BackupStart } from './BackupStart'
 import { approvedAction } from './approvals'
 
 type Outcome = { status: 'unknown' | 'published'; publishedAt: number }
-type Outcomes = { schema: number; current: Outcome | null; lastPublished: Outcome | null; workerCompletion: 'none' | 'uncertain' | 'complete'; resumeJobId?: string }
+type Outcomes = { schema: number; current: Outcome | null; lastPublished: Outcome | null; workerCompletion: 'none' | 'uncertain' | 'complete'; resumeJobId?: string; reminder?: { state: 'never-published' | 'current' | 'overdue' | 'unavailable'; intervalDays: number; dueAt?: number } }
 
 export function BackupStatus() {
   const [outcomes, setOutcomes] = useState<Outcomes | null>(null)
@@ -42,6 +42,10 @@ export function BackupStatus() {
     {busy && <p role="status">Checking backup publication status…</p>}
     {error && <p className="form-error" role="alert">Backup status is unavailable. {error}</p>}
     {outcomes && <>
+      {outcomes.reminder?.state === 'never-published' && <p role="status">Weekly backup reminder: create your first external backup.</p>}
+      {outcomes.reminder?.state === 'overdue' && <p role="status">Weekly backup reminder: the last acknowledged publication is at least seven days old.</p>}
+      {outcomes.reminder?.state === 'current' && outcomes.reminder.dueAt && <p>Next weekly backup reminder: <time dateTime={new Date(outcomes.reminder.dueAt * 1000).toISOString()}>{new Date(outcomes.reminder.dueAt * 1000).toLocaleString()}</time>.</p>}
+      {outcomes.reminder?.state === 'unavailable' && <p>Backup reminder timing is unavailable. Check backup status before relying on it.</p>}
       {outcomes.workerCompletion === 'uncertain' && <p role="status">Backup worker completion is uncertain. New work remains paused until reconciliation.</p>}
       {outcomes.current?.status === 'unknown' && <p role="status">The latest backup outcome is uncertain. It needs reconciliation before another backup can run.</p>}
       {outcomes.lastPublished ? <p>Last acknowledged publication: <time dateTime={new Date(outcomes.lastPublished.publishedAt * 1000).toISOString()}>{new Date(outcomes.lastPublished.publishedAt * 1000).toLocaleString()}</time>.</p> : <p>No acknowledged external backup is recorded.</p>}
