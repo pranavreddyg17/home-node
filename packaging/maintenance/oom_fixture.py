@@ -34,6 +34,11 @@ if child == 0:
     while True:
         time.sleep(1)
 pathlib.Path('/run/homenode-backup-oom-fixture/sibling').write_text(str(child))
+deadline = time.monotonic() + 30
+while not pathlib.Path('/run/homenode-backup-oom-fixture/allocate').exists():
+    if time.monotonic() >= deadline:
+        raise SystemExit('parent did not authorize allocation')
+    time.sleep(0.05)
 # Allocate and touch more than the service memory ceiling, without relying on
 # virtual-address overcommit. Keep each allocation live until the OOM event.
 blocks = []
@@ -67,6 +72,19 @@ TimeoutStopSec=5
     unit_path.chmod(0o644)
     command("systemctl", "daemon-reload")
     command("systemctl", "start", unit)
+    ready = time.monotonic() + 15
+    while not (runtime / "sibling").exists() and time.monotonic() < ready:
+        time.sleep(0.1)
+    sibling = int((runtime / "sibling").read_text())
+    if sibling <= 1 or not pathlib.Path(f"/proc/{sibling}").exists():
+        raise RuntimeError("sibling was not alive before memory pressure")
+    cgroup = command("systemctl", "show", unit, "--property=ControlGroup", "--value").stdout.strip()
+    membership = pathlib.Path(f"/proc/{sibling}/cgroup").read_text().splitlines()
+    if not cgroup.startswith("/") or f"0::{cgroup}" not in membership:
+        raise RuntimeError("sibling did not inherit service cgroup")
+    if command("systemctl", "show", unit, "--property=MemoryMax", "--value").stdout.strip() != "1073741824":
+        raise RuntimeError("test service memory ceiling was not loaded")
+    (runtime / "allocate").write_text("go")
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
         result = command("systemctl", "show", unit, "--property=Result", "--value").stdout.strip()
@@ -78,9 +96,6 @@ TimeoutStopSec=5
         time.sleep(0.2)
     else:
         raise RuntimeError("bounded service did not report OOM")
-    sibling = int((runtime / "sibling").read_text())
-    if sibling <= 1:
-        raise RuntimeError("invalid sibling identity")
     deadline = time.monotonic() + 10
     while pathlib.Path(f"/proc/{sibling}").exists() and time.monotonic() < deadline:
         time.sleep(0.1)
@@ -95,4 +110,5 @@ finally:
     command("systemctl", "reset-failed", unit, check=False)
     if runtime.exists():
         (runtime / "sibling").unlink(missing_ok=True)
+        (runtime / "allocate").unlink(missing_ok=True)
         runtime.rmdir()

@@ -2659,3 +2659,7 @@ Packet activation fixture now parses actual backup unit resource directives with
 ### Native backup OOM sibling enforcement fixture
 
 Added explicitly gated disposable Linux/root systemd fixture and ordered CI step. It copies required backup CPU/memory/swap/task/OOM/group directives into an unprivileged test service, forks a sleeping sibling, allocates and touches up to2GiB within the1GiB service ceiling, requires systemd oom-kill result and disappearance of the sibling before bounded cleanup. Unique fixture paths must be vacant; no owner installation execution occurred. Python syntax and diff checks passed. Native execution, portability across the supported systemd/cgroup matrix and actual production subprocess behavior remain unverified. CI37070514721 remains active; follow-up stays local. Full application acceptance remains unfinished.
+
+### Observe live sibling before OOM pressure
+
+OOM fixture now waits for the harness sibling before releasing allocation, verifies its live proc entry and cgroup-v2 membership against systemd service ControlGroup, and checks loaded1GiB memory ceiling. Harness waits on bounded root-controlled allocation gate. Cleanup removes both known marker files. This prevents an already-failed sibling/harness from masquerading as OOM group shutdown evidence. Python syntax and diff checks passed; native execution remains pending. CI37070514721 remains active; follow-up stays local. Full application acceptance remains unfinished.
