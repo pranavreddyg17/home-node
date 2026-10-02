@@ -34,7 +34,7 @@ class FrontendEvidenceTests(unittest.TestCase):
             'assets': [{'path': 'index.html', 'sha256': hashlib.sha256(b'frontend').hexdigest()}],
             'dependencies': [{'path': 'node_modules/react', 'name': 'react',
                 'version': '1.0.0', 'integrity': 'fixture', 'resolved': 'fixture-source',
-                'license': None, 'manifestSHA256': hashlib.sha256(self.manifest.read_bytes()).hexdigest()}]}
+                'license': None, 'licenseFiles': [], 'manifestSHA256': hashlib.sha256(self.manifest.read_bytes()).hexdigest()}]}
         self.write(self.record)
 
     def write(self, record):
@@ -154,6 +154,18 @@ class FrontendEvidenceTests(unittest.TestCase):
                     env=environment, capture_output=True, text=True, check=False)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual((tools / '__pycache__').exists(), not disabled)
+
+    def test_notice_bytes_and_claims_are_bound(self):
+        notice = self.manifest.parent / 'LICENSE'
+        notice.write_bytes(b'fixture notice')
+        self.record['dependencies'][0]['licenseFiles'] = [{'path': 'LICENSE',
+            'sha256': hashlib.sha256(b'fixture notice').hexdigest(), 'text': 'fixture notice'}]
+        self.write(self.record)
+        self.check()
+        self.record['dependencies'][0]['licenseFiles'][0]['text'] = 'changed claim'
+        self.write(self.record)
+        with self.assertRaisesRegex(ValueError, 'license/notice file mismatch'):
+            self.check()
 
     def test_duplicate_json_key(self):
         self.evidence.write_text('{"schema":1,' + self.evidence.read_text()[1:])

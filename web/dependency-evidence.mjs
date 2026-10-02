@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { readFileSync, mkdirSync, writeFileSync, openSync, closeSync, fstatSync, readSync, constants } from 'node:fs'
+import { readFileSync, mkdirSync, writeFileSync, openSync, closeSync, fstatSync, readSync, constants, readdirSync } from 'node:fs'
 import path from 'node:path'
 
 function readManifest(filename) {
@@ -59,10 +59,15 @@ export function dependencyEvidence() {
           if (!locked || !locked.version || installed.name !== name || installed.version !== locked.version) {
             throw new Error(`Bundled dependency differs from lockfile: ${name}`)
           }
+          const licenseFiles = readdirSync(directory).filter(name => /^(LICENSE|COPYING|NOTICE)(\..*)?$/i.test(name)).sort().map(name => {
+            const data = readManifest(path.join(directory, name))
+            return { path: name, sha256: createHash('sha256').update(data).digest('hex'),
+              text: new TextDecoder('utf-8', { fatal: true }).decode(data) }
+          })
           dependencies.set(key, { path: key, name, version: locked.version,
             integrity: locked.integrity ?? null, resolved: locked.resolved ?? null,
             manifestSHA256: createHash('sha256').update(manifest).digest('hex'),
-            license: installed.license ?? null })
+            license: installed.license ?? null, licenseFiles })
         }
       }
       const evidence = { schema: 1, completeness: 'incomplete',

@@ -5,6 +5,7 @@ import json
 import pathlib
 import os
 import stat
+import re
 import sys
 
 from verify_sbom import unique
@@ -71,7 +72,7 @@ def verify(web_root, evidence, lockfile):
         raise ValueError('invalid dependency inventory')
     seen = set()
     for dependency in dependencies:
-        if not isinstance(dependency, dict) or set(dependency) != {'path', 'name', 'version', 'integrity', 'resolved', 'license', 'manifestSHA256'} or not isinstance(dependency.get('path'), str):
+        if not isinstance(dependency, dict) or set(dependency) != {'path', 'name', 'version', 'integrity', 'resolved', 'license', 'manifestSHA256', 'licenseFiles'} or not isinstance(dependency.get('path'), str):
             raise ValueError('invalid dependency claim')
         key = dependency['path']
         entry = locked.get(key)
@@ -86,6 +87,16 @@ def verify(web_root, evidence, lockfile):
         data = manifest_bytes(manifest)
         if dependency.get('manifestSHA256') != hashlib.sha256(data).hexdigest():
             raise ValueError('installed package manifest mismatch')
+        expected_notices = []
+        for notice in sorted(manifest.parent.iterdir()):
+            if not re.fullmatch(r'(LICENSE|COPYING|NOTICE)(\..*)?', notice.name, re.IGNORECASE):
+                continue
+            notice_data = manifest_bytes(notice)
+            expected_notices.append({'path': notice.name,
+                'sha256': hashlib.sha256(notice_data).hexdigest(),
+                'text': notice_data.decode('utf-8')})
+        if dependency['licenseFiles'] != expected_notices:
+            raise ValueError('installed license/notice file mismatch')
         name = key.rsplit('node_modules/', 1)[1]
         installed = json.loads(data, object_pairs_hook=unique)
         if not isinstance(installed, dict) or installed.get('name') != name or installed.get('version') != dependency['version'] or installed.get('license') != dependency['license']:
