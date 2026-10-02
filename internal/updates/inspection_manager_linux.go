@@ -171,22 +171,35 @@ func VerifyInspectionConfinement(ctx context.Context, required []string) error {
 	if os.Geteuid() != 0 {
 		return ErrInspectionResult
 	}
+	return verifyInspectionConfinementWith(ctx, required, exec.CommandContext)
+}
+
+func verifyInspectionConfinementWith(ctx context.Context, required []string, command func(context.Context, string, ...string) *exec.Cmd) error {
+	bounded, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	// Refuse missing or malformed release policy before collecting evidence.
-	if err := verifyInspectionSyscallFilterWith(ctx, required, exec.CommandContext); err != nil {
+	if err := verifyInspectionSyscallFilterWith(bounded, required, command); err != nil {
 		return err
 	}
-	for _, check := range []func(context.Context) error{
-		VerifyInspectionUnitIdentity,
-		VerifyInspectionResources,
-		VerifyInspectionIsolation,
-		VerifyInspectionProcessPolicy,
-		VerifyInspectionAccessPolicy,
+	for _, check := range []struct {
+		properties string
+		validate   func([]byte) error
+	}{
+		{"--property=Id,LoadState,FragmentPath,DropInPaths,NeedDaemonReload,Type,RemainAfterExit,DynamicUser,Transient", ValidateInspectionUnitIdentity},
+		{"--property=MemoryMax,MemorySwapMax,CPUQuotaPerSecUSec,TasksMax,OOMPolicy,KillMode,Restart,TimeoutStartUSec,TimeoutStopUSec", ValidateInspectionResources},
+		{"--property=NoNewPrivileges,CapabilityBoundingSet,AmbientCapabilities,ProtectSystem,ProtectHome,PrivateTmp,PrivateDevices,PrivateNetwork,ProtectKernelTunables,ProtectKernelModules,ProtectKernelLogs,ProtectControlGroups,ProtectProc,ProcSubset,RestrictSUIDSGID,RestrictRealtime,LockPersonality,UMask,SupplementaryGroups", ValidateInspectionIsolation},
+		{"--property=RestrictNamespaces,RestrictAddressFamilies,SystemCallArchitectures", ValidateInspectionProcessPolicy},
+		{"--property=IPAddressDeny,IPAddressAllow,InaccessiblePaths", ValidateInspectionAccessPolicy},
 	} {
-		if err := check(ctx); err != nil {
+		properties, err := inspectionManagerQuery(bounded, check.properties, command)
+		if err != nil {
+			return err
+		}
+		if err := check.validate(properties); err != nil {
 			return err
 		}
 	}
-	return ctx.Err()
+	return bounded.Err()
 }
 
 func verifyInspectionSyscallFilterWith(ctx context.Context, required []string, command func(context.Context, string, ...string) *exec.Cmd) error {

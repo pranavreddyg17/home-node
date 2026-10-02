@@ -1849,3 +1849,7 @@ CI 36965636368 at 3d01c10 completed successfully, including the source inspector
 ### Combined effective-confinement prerequisite
 
 Added VerifyInspectionConfinement to require the independent syscall profile plus every implemented local-manager unit identity, resource, isolation, process and access-policy check. It fails on the first refused or canceled observation and remains root-only. Linux compilation and diff checks passed. These sequential observations are explicitly not an atomic snapshot, activation authority, or live enforcement proof: owned package/unit admission, durable launch intent, qualified ABI policy, authenticated result collection and stop/recovery remain required. CI 36966385683 is currently in progress; no outcome is assumed.
+
+### Bounded aggregate preflight refusal coverage
+
+The combined confinement query now has one 30-second overall deadline in addition to each query's five-second limit. Added Linux process-factory fixtures exercising all six manager observations, rejecting each independently, stopping immediately on refusal, preserving fixed local syscall/unit query scope, refusing missing independent profiles before effects, and preventing canceled requests from reaching a process factory. Linux compilation and diff checks passed; fixture execution awaits Linux CI publication. Synthetic profiles test orchestration only and do not qualify the production ABI policy.

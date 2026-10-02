@@ -129,3 +129,79 @@ func TestInspectionSyscallManagerQualifiedProfile(t *testing.T) {
 		t.Fatal("unexpected manager denyset accepted")
 	}
 }
+
+func TestInspectionConfinementStopsAtFirstRefusedObservation(t *testing.T) {
+	for _, denyset := range []string{"SystemCallFilter=~mount\n", "SystemCallFilter=~reboot\n"} {
+		calls := 0
+		factory := func(ctx context.Context, path string, args ...string) *exec.Cmd {
+			calls++
+			if path != "/usr/bin/systemctl" || len(args) != 5 || args[4] != "homenode-inspect.service" {
+				t.Fatal("unexpected aggregate manager scope", path, args)
+			}
+			output := denyset
+			if calls == 2 {
+				if args[3] != "--property=Id,LoadState,FragmentPath,DropInPaths,NeedDaemonReload,Type,RemainAfterExit,DynamicUser,Transient" {
+					t.Fatal("unit identity check bypassed", args)
+				}
+				output = "Id=substituted.service\n"
+			}
+			if calls > 2 {
+				t.Fatal("refused observation did not stop preflight")
+			}
+			return exec.CommandContext(ctx, "/usr/bin/printf", "%s", output)
+		}
+		if err := verifyInspectionConfinementWith(context.Background(), []string{"mount"}, factory); err == nil {
+			t.Fatal("refused confinement accepted")
+		}
+		expected := 1
+		if strings.Contains(denyset, "~mount") {
+			expected = 2
+		}
+		if calls != expected {
+			t.Fatal("unexpected observation count", calls, expected)
+		}
+	}
+	calls := 0
+	factory := func(context.Context, string, ...string) *exec.Cmd { calls++; return nil }
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := verifyInspectionConfinementWith(ctx, []string{"mount"}, factory); !errors.Is(err, context.Canceled) || calls != 0 {
+		t.Fatal("canceled aggregate preflight reached manager", err, calls)
+	}
+	if err := verifyInspectionConfinementWith(context.Background(), nil, factory); err == nil || calls != 0 {
+		t.Fatal("missing qualified profile reached manager")
+	}
+}
+
+func TestInspectionConfinementRequiresEveryPolicy(t *testing.T) {
+	snapshots := []string{
+		"SystemCallFilter=~mount\n",
+		"Id=homenode-inspect.service\nLoadState=loaded\nFragmentPath=/etc/systemd/system/homenode-inspect.service\nDropInPaths=\nNeedDaemonReload=no\nType=oneshot\nRemainAfterExit=yes\nDynamicUser=yes\nTransient=no\n",
+		"MemoryMax=268435456\nMemorySwapMax=0\nCPUQuotaPerSecUSec=500ms\nTasksMax=32\nOOMPolicy=kill\nKillMode=control-group\nRestart=no\nTimeoutStartUSec=2min 30s\nTimeoutStopUSec=5s\n",
+		"NoNewPrivileges=yes\nCapabilityBoundingSet=\nAmbientCapabilities=\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\nPrivateDevices=yes\nPrivateNetwork=yes\nProtectKernelTunables=yes\nProtectKernelModules=yes\nProtectKernelLogs=yes\nProtectControlGroups=yes\nProtectProc=invisible\nProcSubset=pid\nRestrictSUIDSGID=yes\nRestrictRealtime=yes\nLockPersonality=yes\nUMask=0077\nSupplementaryGroups=\n",
+		"RestrictNamespaces=yes\nRestrictAddressFamilies=AF_UNIX\nSystemCallArchitectures=native\n",
+		"IPAddressDeny=0.0.0.0/0 ::/0\nIPAddressAllow=\nInaccessiblePaths=-/etc/homenode -/var/lib/homenode -/var/lib/homenode-update -/var/lib/homenode-backup -/run/homenode -/run/homenode-transfer\n",
+	}
+	for refused := -1; refused < len(snapshots); refused++ {
+		calls := 0
+		factory := func(ctx context.Context, path string, args ...string) *exec.Cmd {
+			if calls >= len(snapshots) {
+				t.Fatal("unexpected extra query")
+			}
+			output := snapshots[calls]
+			if calls == refused {
+				output = "Unknown=unsafe\n"
+			}
+			calls++
+			return exec.CommandContext(ctx, "/usr/bin/printf", "%s", output)
+		}
+		err := verifyInspectionConfinementWith(context.Background(), []string{"mount"}, factory)
+		if refused < 0 {
+			if err != nil || calls != len(snapshots) {
+				t.Fatal("complete preflight refused", err, calls)
+			}
+		} else if err == nil || calls != refused+1 {
+			t.Fatal("policy refusal bypassed", refused, err, calls)
+		}
+	}
+}
