@@ -105,7 +105,9 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 	if err = server.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "draining", "freezing"); err != nil {
 		t.Fatal(err)
 	}
-	call("/v1/maintenance/attach-root", rootCheckpoint, 200)
+	if err = bridge.AttachRuntimeRoot(ctx, token, device, rootCheckpoint.RootToken); err != nil {
+		t.Fatal("owned root checkpoint client", err)
+	}
 	call("/v1/maintenance/attach-root", rootCheckpoint, 409)
 	snapshotDirectory := t.TempDir()
 	if err = os.Chmod(snapshotDirectory, 0700); err != nil {

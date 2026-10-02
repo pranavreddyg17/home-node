@@ -2,6 +2,7 @@ package runtimeclient
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -114,5 +115,33 @@ func TestOwnedMaintenanceClientBindsDispatchedIdentity(t *testing.T) {
 		if invalid.client != nil {
 			t.Fatal("invalid owned transport admitted")
 		}
+	}
+}
+
+func TestRuntimeRootCheckpointBindsOwnedJobAndToken(t *testing.T) {
+	token, device, id, root := state.Random(), state.Random(), state.Random(), state.Random()
+	calls := 0
+	client := &MaintenanceAppsClient{client: &http.Client{Transport: maintenanceRoundTrip(func(request *http.Request) (*http.Response, error) {
+		calls++
+		if request.URL.Path != "/v1/maintenance/attach-root" || request.Method != "POST" {
+			t.Fatal("wrong checkpoint operation")
+		}
+		data, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var payload map[string]any
+		if json.Unmarshal(data, &payload) != nil || len(payload) != 5 || payload["version"] != float64(1) || payload["token"] != token || payload["jobId"] != id || payload["deviceId"] != device || payload["rootToken"] != root {
+			t.Fatal("checkpoint binding differs", string(data))
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"version":1}`)), Header: make(http.Header)}, nil
+	})}, inspect: func(context.Context, string) (state.MaintenanceJob, error) {
+		return state.MaintenanceJob{ID: id, Device: device}, nil
+	}}
+	if err := client.AttachRuntimeRoot(context.Background(), token, device, "short"); !errors.Is(err, ErrMaintenance) || calls != 0 {
+		t.Fatal("invalid root reached transport", err, calls)
+	}
+	if err := client.AttachRuntimeRoot(context.Background(), token, device, root); err != nil || calls != 1 {
+		t.Fatal("valid checkpoint refused", err, calls)
 	}
 }

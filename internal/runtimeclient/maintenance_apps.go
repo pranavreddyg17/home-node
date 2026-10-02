@@ -71,6 +71,9 @@ func (c *MaintenanceAppsClient) call(ctx context.Context, path, token, device st
 	return c.callPayload(ctx, path, token, device, "")
 }
 func (c *MaintenanceAppsClient) callPayload(ctx context.Context, path, token, device, snapshot string) error {
+	return c.callFields(ctx, path, token, device, snapshot, "")
+}
+func (c *MaintenanceAppsClient) callFields(ctx context.Context, path, token, device, snapshot, rootToken string) error {
 	if c == nil || c.client == nil || c.inspect == nil || !maintenanceID.MatchString(token) || !maintenanceID.MatchString(device) {
 		return ErrMaintenance
 	}
@@ -81,6 +84,9 @@ func (c *MaintenanceAppsClient) callPayload(ctx context.Context, path, token, de
 	payload := map[string]any{"version": 1, "token": token, "jobId": job.ID, "deviceId": device}
 	if snapshot != "" {
 		payload["snapshotId"] = snapshot
+	}
+	if rootToken != "" {
+		payload["rootToken"] = rootToken
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -168,4 +174,13 @@ func newOwnedMaintenanceApps(socket string, listenerUID uint32, token, jobID, de
 		}
 		return state.MaintenanceJob{ID: jobID, Device: device}, nil
 	})
+}
+
+// AttachRuntimeRoot records the supervisor token acquired by the isolated backup
+// identity. The private controller independently validates ownership and phase.
+func (c *MaintenanceAppsClient) AttachRuntimeRoot(ctx context.Context, token, device, rootToken string) error {
+	if !maintenanceID.MatchString(rootToken) {
+		return ErrMaintenance
+	}
+	return c.callFields(ctx, "/v1/maintenance/attach-root", token, device, "", rootToken)
 }
