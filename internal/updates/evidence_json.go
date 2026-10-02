@@ -66,5 +66,11 @@ func validEvidenceJSON(data []byte) bool {
 		}
 		return false
 	}
-	return value(1, true) && decoder.Decode(new(any)) == io.EOF
+	if !value(1, true) {
+		return false
+	}
+	// Probe only the next token: decoding an entire trailing value would parse
+	// a second document outside the structural budget before refusing it.
+	_, err := decoder.Token()
+	return err == io.EOF
 }

@@ -17,3 +17,15 @@ func TestEvidenceJSONRejectsAmbiguityAndUnboundedStructure(t *testing.T) {
 		}
 	}
 }
+
+func TestEvidenceJSONRejectsTrailingDocumentBeforeMaterializingIt(t *testing.T) {
+	data := []byte(`{} {"components":[` + strings.Repeat(`{"x":1},`, 10000) + `{}]}`)
+	allocations := testing.AllocsPerRun(5, func() {
+		if validEvidenceJSON(data) {
+			t.Fatal("trailing document accepted")
+		}
+	})
+	if allocations > 200 {
+		t.Fatal("trailing document materialized outside token budget", allocations)
+	}
+}
