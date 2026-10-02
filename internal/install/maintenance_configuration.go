@@ -93,3 +93,12 @@ func backupApprovalControlUnit(data []byte, identity MaintenanceAccount, reposit
 	replacement := []byte(fmt.Sprintf(" --maintenance-uid %d --maintenance-gid %d --backup-repository-id %s\n", identity.UID, identity.GID, repository))
 	return bytes.Replace(data, line, replacement, 1), nil
 }
+
+func backupExecutionControlUnit(data []byte, repository, release string, catalog int64) ([]byte, error) {
+	line := []byte(fmt.Sprintf(" --backup-repository-id %s\n", repository))
+	if bytes.Count(data, line) != 1 {
+		return nil, ErrPlan
+	}
+	replacement := []byte(fmt.Sprintf(" --backup-repository-id %s --backup-release %s --backup-catalog-version %d\n", repository, release, catalog))
+	return bytes.Replace(data, line, replacement, 1), nil
+}

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/pranavreddyg17/home-node/internal/backup"
 	"github.com/pranavreddyg17/home-node/internal/catalog"
 	"github.com/pranavreddyg17/home-node/internal/networkcheck"
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
@@ -31,6 +32,7 @@ type Capacity struct {
 }
 type Configuration struct {
 	BackupRepositoryID    string
+	BackupRelease         string
 	UpdateProvenance      []byte
 	UpdateRepository      *updates.RepositoryConfiguration
 	UpdateBootstrap       *updates.BootstrapRoot
@@ -45,6 +47,7 @@ type Configuration struct {
 }
 type ConfigurationPreview struct {
 	BackupRepositoryID     string              `json:"backupRepositoryId,omitempty"`
+	BackupRelease          string              `json:"backupRelease,omitempty"`
 	UpdateBootstrapSHA256  string              `json:"updateBootstrapSha256,omitempty"`
 	UpdateBootstrapVersion int64               `json:"updateBootstrapVersion,omitempty"`
 	Maintenance            *MaintenanceAccount `json:"maintenance,omitempty"`
@@ -123,6 +126,15 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 	if c.BackupRepositoryID != "" {
 		digest, err := hex.DecodeString(c.BackupRepositoryID)
 		if c.Maintenance == nil || err != nil || len(digest) != 32 || hex.EncodeToString(digest) != c.BackupRepositoryID {
+			return result, ErrPlan
+		}
+	}
+	if c.BackupRelease != "" {
+		sentinel := "backup-validation-identity"
+		if c.BackupRepositoryID == "" || a.ControllerGID < 100 || a.ControllerGID > 999 {
+			return result, ErrPlan
+		}
+		if _, err := backup.EncodeLaunch(backup.Launch{Version: 2, JobID: sentinel, DeviceID: sentinel, ManagementToken: sentinel, Release: c.BackupRelease, CatalogVersion: 1}); err != nil {
 			return result, ErrPlan
 		}
 	}
@@ -237,6 +249,13 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 				if err != nil {
 					return result, err
 				}
+				if c.BackupRelease != "" {
+					data, err = backupExecutionControlUnit(data, c.BackupRepositoryID, c.BackupRelease, m.Version)
+					if err != nil {
+						return result, err
+					}
+				}
+
 			}
 		}
 		addFile("etc/systemd/system/"+name, 0644, data)
@@ -263,7 +282,7 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 	if _, _, err = planRecords(plan, 0); err != nil {
 		return result, err
 	}
-	result = ConfigurationPreview{BackupRepositoryID: c.BackupRepositoryID, Maintenance: c.Maintenance, Network: c.Network, RuntimePolicy: c.Policy, Accounts: c.Accounts, ProvidedCapacity: c.Capacity, Plan: plan, CatalogVersion: m.Version, PublisherKeyID: catalog.KeyID(c.Publisher), RequiredDiskBytes: required, VerifiedImageBytes: imageCredit, RequiredFreeDiskBytes: required - imageCredit, Pending: []string{"verify actual service account memberships", "verify supported host enforcement and measured VM overhead", "place and verify immutable guest images", "verify live Tailscale and protected HTTPS identity", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
+	result = ConfigurationPreview{BackupRelease: c.BackupRelease, BackupRepositoryID: c.BackupRepositoryID, Maintenance: c.Maintenance, Network: c.Network, RuntimePolicy: c.Policy, Accounts: c.Accounts, ProvidedCapacity: c.Capacity, Plan: plan, CatalogVersion: m.Version, PublisherKeyID: catalog.KeyID(c.Publisher), RequiredDiskBytes: required, VerifiedImageBytes: imageCredit, RequiredFreeDiskBytes: required - imageCredit, Pending: []string{"verify actual service account memberships", "verify supported host enforcement and measured VM overhead", "place and verify immutable guest images", "verify live Tailscale and protected HTTPS identity", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
 	if c.Maintenance != nil {
 		result.Pending = append(result.Pending, "register and qualify an external backup repository", "generate trusted backup launch configuration and qualify worker activation")
 	}

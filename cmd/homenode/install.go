@@ -40,6 +40,7 @@ func parsePreparation(args []string, now time.Time) (preparation, error) {
 	updateTargets := flags.String("update-targets-url", "", "trusted HTTPS release target repository on the same host")
 	updateSequence := flags.Int64("update-sequence-floor", 0, "independently verified minimum release security sequence")
 	flags.StringVar(&p.configuration.BackupRepositoryID, "backup-repository-id", "", "trusted registered backup repository identity; requires provisioned maintenance account")
+	flags.StringVar(&p.configuration.BackupRelease, "backup-release", "", "trusted installed backup worker release; requires registered repository")
 	file := flags.String("catalog", "", "signed release catalog file")
 	flags.Int64Var(&p.configuration.MinimumCatalogVersion, "catalog-floor", 0, "independently verified minimum catalog version")
 	flags.StringVar(&p.source, "images", "", "local release image directory")

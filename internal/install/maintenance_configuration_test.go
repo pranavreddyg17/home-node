@@ -3,6 +3,7 @@ package install
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -218,5 +219,32 @@ func TestRegisteredBackupApprovalConfiguration(t *testing.T) {
 		if _, err := ConfigurationPlan(c, now); err == nil {
 			t.Fatal("unsafe repository identity accepted")
 		}
+	}
+}
+
+func TestBackupExecutionUnitUsesVerifiedCatalogAndValidatedRelease(t *testing.T) {
+	c, _, _, now := configurationFixture(t)
+	c.Maintenance = &MaintenanceAccount{UID: 803, GID: 803}
+	c.BackupRepositoryID = strings.Repeat("a", 64)
+	c.BackupRelease = "0.1.0"
+	preview, err := ConfigurationPlan(c, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit := findConfiguration(t, preview.Plan, "etc/systemd/system/homenode-control.service")
+	expected := fmt.Sprintf("--backup-release 0.1.0 --backup-catalog-version %d\n", preview.CatalogVersion)
+	if !strings.Contains(string(unit.Data), expected) || preview.BackupRelease != c.BackupRelease || unit.UID != 0 || unit.Mode != 0644 {
+		t.Fatal("installed execution metadata omitted", string(unit.Data))
+	}
+	for _, invalid := range []string{"invalid", "0.1.0\nExecStart=evil", "0.1.0 --flag", "0.1.0${VALUE}"} {
+		c.BackupRelease = invalid
+		if _, err := ConfigurationPlan(c, now); err == nil {
+			t.Fatal("unsafe release accepted", invalid)
+		}
+	}
+	c.BackupRelease = "0.1.0"
+	c.BackupRepositoryID = ""
+	if _, err := ConfigurationPlan(c, now); err == nil {
+		t.Fatal("execution without repository accepted")
 	}
 }
