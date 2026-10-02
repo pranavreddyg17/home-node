@@ -76,3 +76,30 @@ func waitLaunchCompletion(ctx context.Context, connection *net.UnixConn, launch 
 	}
 	return bounded.Err()
 }
+
+func cleanupCompletionPacket(cleanup Cleanup) []byte {
+	return []byte("homenode-backup-cleanup-complete-v3 " + cleanup.JobID)
+}
+func sendCleanupCompletion(ctx context.Context, connection *net.UnixConn, cleanup Cleanup) error {
+	if !cleanup.valid() {
+		return ErrManifest
+	}
+	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return disktransport.SendPacket(bounded, connection, cleanupCompletionPacket(cleanup))
+}
+func SendActivatedCredentialCleanupAndWait(ctx context.Context, connection *net.UnixConn, cleanup Cleanup, credential *os.File) error {
+	if err := SendActivatedCredentialCleanup(ctx, connection, cleanup, credential); err != nil {
+		return err
+	}
+	bounded, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+	raw, err := disktransport.ReceivePacket(bounded, connection)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(raw, cleanupCompletionPacket(cleanup)) {
+		return ErrManifest
+	}
+	return bounded.Err()
+}

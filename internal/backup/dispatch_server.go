@@ -134,3 +134,10 @@ func serveDispatch[T any](ctx context.Context, listener net.Listener, controller
 func ServeAcknowledgedCredentialLaunch(ctx context.Context, listener net.Listener, controllerUID uint32, work func(context.Context, Launch, *os.File) error) error {
 	return serveDispatch(ctx, listener, controllerUID, ReceiveCredentialLaunch, work, sendLaunchCompletion)
 }
+
+// ServeAcknowledgedCredentialCleanup accepts only explicit stopped-job cleanup.
+// The callback must independently qualify stopped/restoring ownership before
+// releasing root authority; credential possession alone is never sufficient.
+func ServeAcknowledgedCredentialCleanup(ctx context.Context, listener net.Listener, controllerUID uint32, work func(context.Context, Cleanup, *os.File) error) error {
+	return serveDispatch(ctx, listener, controllerUID, ReceiveCredentialCleanup, work, sendCleanupCompletion)
+}

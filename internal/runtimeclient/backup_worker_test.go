@@ -124,3 +124,13 @@ func TestLaunchedWorkerRefusesConfigurationBeforeRuntimeEffects(t *testing.T) {
 		t.Fatal("refused launch retained owned credential")
 	}
 }
+
+func TestRegisteredCleanupRejectsUnconfiguredManagementBeforeRootEffects(t *testing.T) {
+	cleanup := backup.Cleanup{Version: 3, JobID: state.Random(), DeviceID: state.Random(), ManagementToken: state.Random(), RuntimeToken: state.Random()}
+	root := &releaseFixture{token: cleanup.ManagementToken, device: cleanup.DeviceID, root: cleanup.RuntimeToken}
+	for _, socket := range []string{"", "relative", "/run/../run/management.sock"} {
+		if err := RunRegisteredBackupCleanup(context.Background(), cleanup, BackupWorkerConfig{ManagementSocket: socket}, root); err == nil || len(root.steps) != 0 {
+			t.Fatal("unconfigured cleanup reached root", err, root.steps)
+		}
+	}
+}

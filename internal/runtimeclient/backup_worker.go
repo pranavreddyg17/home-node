@@ -170,3 +170,21 @@ func RunCredentialedLaunchedBackup(ctx context.Context, launch backup.Launch, co
 	result, err = RunRegisteredDispatchedBackup(ctx, dispatch, config, password)
 	return dispatch, result, err
 }
+
+// RunRegisteredBackupCleanup runs on the isolated backup peer after publication
+// callback completion is acknowledged. No repository access/password is needed
+// here; the private management preflight independently proves stopped ownership.
+func RunRegisteredBackupCleanup(ctx context.Context, cleanup backup.Cleanup, config BackupWorkerConfig, root backup.MaintenanceRoot) error {
+	if _, err := backup.EncodeCleanup(cleanup); err != nil {
+		return err
+	}
+	if root == nil || !filepath.IsAbs(config.ManagementSocket) || filepath.Clean(config.ManagementSocket) != config.ManagementSocket {
+		return backup.ErrManifest
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	management := newOwnedMaintenanceApps(config.ManagementSocket, config.ControllerListenerUID, cleanup.ManagementToken, cleanup.JobID, cleanup.DeviceID)
+	defer management.Close()
+	return ReleaseOwnedBackupRuntime(ctx, management, root, cleanup.ManagementToken, cleanup.DeviceID, cleanup.RuntimeToken)
+}
