@@ -39,10 +39,11 @@ func initializeUpdateTrust(args []string) {
 	if err != nil {
 		fatal(err)
 	}
-	defer engine.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err = engine.InitializeUpdateCache(ctx); err != nil {
+	initializeErr := engine.InitializeUpdateCache(ctx)
+	closeErr := engine.Close()
+	if err = errors.Join(initializeErr, closeErr, ctx.Err()); err != nil {
 		fatal(err)
 	}
 	if err = json.NewEncoder(os.Stdout).Encode(map[string]bool{"updateTrustInitialized": true, "updatesActivated": false}); err != nil {
