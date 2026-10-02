@@ -117,3 +117,8 @@ on failure. Lower-severity findings remain visible and need reviewed disposition
 before release. This queries registry advisory metadata; it does not prove bundle
 reachability, package authenticity or absence of unreported vulnerabilities.
 See [npm audit documentation](https://docs.npmjs.com/cli/audit/).
+
+Retained source-scan evidence also identifies the checked Git revision. Go source
+reports include exact go.mod/go.sum hashes and the scanner's reported version;
+frontend reports include the revision beside the lock hash and tool versions.
+These context files aid review and do not cryptographically authenticate reports.

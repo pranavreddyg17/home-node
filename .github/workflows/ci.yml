@@ -83,6 +83,9 @@ jobs:
         timeout-minutes: 5
         run: |
           set -o pipefail
+          git rev-parse HEAD > "$RUNNER_TEMP/go-vulnerability-source-revision.txt"
+          sha256sum go.mod go.sum > "$RUNNER_TEMP/go-vulnerability-source-inputs.sha256"
+          go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 -version > "$RUNNER_TEMP/go-vulnerability-scanner-version.txt"
           go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 -show verbose ./... 2>&1 | tee "$RUNNER_TEMP/go-vulnerability-scan.txt"
       - run: go build ./cmd/...
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
@@ -99,6 +102,7 @@ jobs:
           node --version > "$RUNNER_TEMP/frontend-vulnerability-scan/node-version.txt"
           npm --version > "$RUNNER_TEMP/frontend-vulnerability-scan/npm-version.txt"
           sha256sum web/package-lock.json > "$RUNNER_TEMP/frontend-vulnerability-scan/package-lock.sha256"
+          git rev-parse HEAD > "$RUNNER_TEMP/frontend-vulnerability-scan/source-revision.txt"
           npm --prefix web audit --audit-level=high --json | tee "$RUNNER_TEMP/frontend-vulnerability-scan/audit.json"
       - name: Retain frontend vulnerability scan
         if: always()
@@ -164,6 +168,9 @@ jobs:
           name: go-vulnerability-scans
           path: |
             ${{ runner.temp }}/go-vulnerability-scan.txt
+            ${{ runner.temp }}/go-vulnerability-source-revision.txt
+            ${{ runner.temp }}/go-vulnerability-source-inputs.sha256
+            ${{ runner.temp }}/go-vulnerability-scanner-version.txt
             ${{ runner.temp }}/go-binary-vulnerability-scans/
           if-no-files-found: ignore
           retention-days: 14
