@@ -22,7 +22,10 @@ func requireBackupWorkerStopped(tx *sql.Tx, id string) error {
 		if err != nil || job.ID != id || job.RootToken != "" || (job.Phase != "restoring" && job.Phase != "requires-action") {
 			return ErrMaintenanceOwner
 		}
-		return maintenanceDevice(tx, job.Device)
+		if err := maintenanceDevice(tx, job.Device); err != nil {
+			return err
+		}
+		return requireNoBackupPublicationForJob(tx, id)
 	}
 	if value != "complete:"+id {
 		return ErrMaintenanceOwner
@@ -131,6 +134,9 @@ func (s *Store) InspectBackupObservation(ctx context.Context) (observation Backu
 		case "refused:" + job.ID:
 			if job.RootToken != "" || (job.Phase != "restoring" && job.Phase != "requires-action") {
 				return ErrMaintenance
+			}
+			if err := requireNoBackupPublicationForJob(tx, job.ID); err != nil {
+				return err
 			}
 			observation.WorkerCompletion = "refused"
 		case "complete:" + job.ID:

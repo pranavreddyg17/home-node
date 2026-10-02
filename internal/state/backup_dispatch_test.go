@@ -112,6 +112,28 @@ func TestBackupDispatchIntentSurvivesRestartAndBlocksCleanup(t *testing.T) {
 	if err != nil || observation.WorkerCompletion != "refused" || observation.Current == nil || observation.Current.JobID != prior.ID || observation.LastPublished == nil || observation.LastPublished.JobID != prior.ID {
 		t.Fatal("refusal altered history", observation, err)
 	}
+	// Simulate contradictory durable publication for the refused job.
+	if _, err := store.DB.Exec("UPDATE settings SET value=json_set(value,'$.jobId',?) WHERE key=?", job.ID, backupOutcomeKey); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DB.Exec("UPDATE settings SET value=? WHERE key=?", job.ID, backupPublicationKey); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RequireBackupWorkerStopped(ctx, token, job.ID); err == nil {
+		t.Fatal("contradictory refusal qualified stopped worker")
+	}
+	if err := store.CompleteMaintenanceJob(ctx, token, job.ID); err == nil {
+		t.Fatal("contradictory refusal reopened admission")
+	}
+	if _, err := store.InspectBackupObservation(ctx); err == nil {
+		t.Fatal("contradictory refusal reported coherent status")
+	}
+	if _, err := store.DB.Exec("UPDATE settings SET value=json_set(value,'$.jobId',?) WHERE key=?", prior.ID, backupOutcomeKey); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DB.Exec("UPDATE settings SET value=? WHERE key=?", prior.ID, backupPublicationKey); err != nil {
+		t.Fatal(err)
+	}
 	if err := store.CompleteMaintenanceJob(ctx, token, job.ID); err != nil {
 		t.Fatal(err)
 	}

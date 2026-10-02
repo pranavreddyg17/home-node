@@ -68,3 +68,40 @@ func TestRefusalServerClosesCredentialBeforeReplyAndRemainsAvailable(t *testing.
 		t.Fatal("server failed to join")
 	}
 }
+
+func TestRefusalReplyFailureStopsAndJoinsServer(t *testing.T) {
+	listener, err := net.ListenUnix("unixpacket", &net.UnixAddr{Name: filepath.Join(t.TempDir(), "worker.sock"), Net: "unixpacket"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	failure := errors.New("fixture refusal send failure")
+	go func() {
+		done <- serveDispatch(ctx, listener, 351,
+			func(context.Context, *net.UnixConn, uint32) (Launch, *os.File, error) { return Launch{}, nil, nil },
+			func(context.Context, Launch, *os.File) error { return ErrLaunchRepositoryAdmission },
+			sendLaunchCompletion,
+			func(context.Context, *net.UnixConn, Launch, error) error { return failure })
+	}()
+	peer, err := net.DialUnix("unixpacket", nil, listener.Addr().(*net.UnixAddr))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer peer.Close()
+	select {
+	case err := <-done:
+		if !errors.Is(err, failure) {
+			t.Fatal("reply failure discarded", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("failed refusal server did not stop and join")
+	}
+	peer.SetReadDeadline(time.Now().Add(time.Second))
+	raw := make([]byte, 256)
+	n, err := peer.Read(raw)
+	if n != 0 || err == nil {
+		t.Fatal("failed reply emitted stop evidence", n, err)
+	}
+}
