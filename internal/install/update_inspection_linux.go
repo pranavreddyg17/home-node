@@ -166,6 +166,9 @@ func (e *Engine) withUpdateInspectionResultOwned(ctx context.Context, release *u
 			readErr = ErrConflict
 		}
 		if readErr == nil {
+			readErr = e.verifyUpdateReleaseProvenanceLocked(ctx, release)
+		}
+		if readErr == nil {
 			readErr = e.requireInspectionServiceLocked()
 		}
 	}

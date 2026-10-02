@@ -298,9 +298,10 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	if err := os.WriteFile(servicePath, service, 0644); err != nil {
 		t.Fatal(err)
 	}
-	for _, mutation := range []string{"repository", "sequence", "catalog", "platform", "release", "hash", "length", "cancellation"} {
+	for _, mutation := range []string{"repository", "sequence", "catalog", "platform", "release", "hash", "length", "provenance", "cancellation"} {
 		collectionCtx, cancel := context.WithCancel(ctx)
 		metadata, packageHash, packageLength := release.Metadata, release.PackageSHA256, release.PackageLength
+		provenanceEvidence := release.Provenance
 		policyPath := filepath.Join(host, "etc/homenode/update-repository.json")
 		result, err := engine.withUpdateInspectionResultOwned(collectionCtx, release, "inspection-fixture-000001", execution, func(_ *updates.InspectionStage, _ context.Context, _ *os.Root, _ updates.InspectionExecution) (updates.InspectionResult, error) {
 			switch mutation {
@@ -320,6 +321,8 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 				release.PackageSHA256 = "changed"
 			case "length":
 				release.PackageLength++
+			case "provenance":
+				release.Provenance = nil
 			case "cancellation":
 				cancel()
 			}
@@ -327,6 +330,9 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 		})
 		cancel()
 		want := ErrConflict
+		if mutation == "provenance" {
+			want = updates.ErrProvenanceBinding
+		}
 		if mutation == "cancellation" {
 			want = context.Canceled
 		}
@@ -334,6 +340,7 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 			t.Fatal("post-collection policy change exposed evidence", mutation, result, err)
 		}
 		release.Metadata, release.PackageSHA256, release.PackageLength = metadata, packageHash, packageLength
+		release.Provenance = provenanceEvidence
 		if err := os.WriteFile(policyPath, repository, 0400); err != nil {
 			t.Fatal(err)
 		}
