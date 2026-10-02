@@ -13,7 +13,7 @@ import (
 // on every path. It creates a sealed read-only credential before admission and
 // retains that descriptor until maintenance and worker completion return. HTTP
 // callers must supply bounded byte input, never persist it or put it in a grant.
-func (s *Server) RunApprovedBackupPassword(ctx context.Context, actor identity.Session, grant string, body []byte, requestKey, release string, catalogVersion int64, password []byte, root backup.MaintenanceRoot, deliver func(context.Context, backup.Dispatch, *os.File) error) (jobID, snapshotID string, resultErr error) {
+func (s *Server) RunApprovedBackupPassword(ctx context.Context, actor identity.Session, grant string, body []byte, requestKey, release string, catalogVersion int64, password []byte, launch func(context.Context, backup.Launch, *os.File) error, cleanup func(context.Context, backup.Cleanup, *os.File) error) (jobID, snapshotID string, resultErr error) {
 	defer clear(password)
 	if err := ctx.Err(); err != nil {
 		return "", "", err
@@ -24,20 +24,20 @@ func (s *Server) RunApprovedBackupPassword(ctx context.Context, actor identity.S
 		return "", "", err
 	}
 	defer func() { resultErr = errors.Join(resultErr, credential.Close()) }()
-	return s.RunApprovedBackup(ctx, actor, grant, body, requestKey, release, catalogVersion, credential, root, deliver)
+	return s.RunApprovedBackup(ctx, actor, grant, body, requestKey, release, catalogVersion, credential, launch, cleanup)
 }
 
 // RunApprovedBackup joins owner approval admission to isolated maintenance.
-// Release/catalog/root/delivery come from trusted installed configuration. The
+// Release/catalog/worker delivery come from trusted installed configuration. The
 // caller owns the sealed credential and must use a server-owned work context.
 // No maintenance token is returned to the browser. Dispatch is never retried.
-func (s *Server) RunApprovedBackup(ctx context.Context, actor identity.Session, grant string, body []byte, requestKey, release string, catalogVersion int64, credential *os.File, root backup.MaintenanceRoot, deliver func(context.Context, backup.Dispatch, *os.File) error) (string, string, error) {
-	if s.config.BackupRepositoryID == "" || s.config.Runtime == nil || root == nil || deliver == nil || credential == nil {
+func (s *Server) RunApprovedBackup(ctx context.Context, actor identity.Session, grant string, body []byte, requestKey, release string, catalogVersion int64, credential *os.File, launch func(context.Context, backup.Launch, *os.File) error, cleanup func(context.Context, backup.Cleanup, *os.File) error) (string, string, error) {
+	if s.config.BackupRepositoryID == "" || s.config.Runtime == nil || launch == nil || cleanup == nil || credential == nil {
 		return "", "", backup.ErrManifest
 	}
-	// Reuse the exact dispatch metadata validator before committing admission.
+	// Qualify preliminary metadata before consuming approval or closing admission.
 	validation := "backup-validation-identity"
-	if _, err := backup.EncodeDispatch(backup.Dispatch{Version: 1, JobID: validation, DeviceID: actor.Device.ID, ManagementToken: validation, RuntimeToken: validation, Release: release, CatalogVersion: catalogVersion}); err != nil {
+	if _, err := backup.EncodeLaunch(backup.Launch{Version: 2, JobID: validation, DeviceID: actor.Device.ID, ManagementToken: validation, Release: release, CatalogVersion: catalogVersion}); err != nil {
 		return "", "", err
 	}
 	password, err := backup.ReadRepositoryPassword(ctx, credential)
@@ -49,5 +49,6 @@ func (s *Server) RunApprovedBackup(ctx context.Context, actor identity.Session, 
 	if err != nil {
 		return "", "", err
 	}
-	return backup.RunAdmittedDispatchedMaintenance(ctx, s.Store, actor.Device.ID, token, job.ID, release, catalogVersion, credential, s.Workloads, root, deliver)
+	snapshot, err := backup.RunAdmittedLaunchedMaintenance(ctx, s.Store, actor.Device.ID, token, job.ID, release, catalogVersion, credential, s.Workloads, launch, cleanup)
+	return job.ID, snapshot, err
 }
