@@ -2671,3 +2671,7 @@ Before allocation gate release, native fixture now requires cgroup-v2 memory.max
 ### Preserve bounded OOM fixture failure evidence
 
 Disposable OOM fixture now collects selected systemd result/resource/phase properties and at most50 fixture journal entries before cleanup on failure. Each diagnostic call is bounded to10seconds and diagnostic subprocess failures do not replace the original exception. No production journal or owner data is queried. Python syntax and diff checks passed; native OOM execution remains pending. CI37070514721 remains live in package inspection; follow-up stays local. Full application acceptance remains unfinished.
+
+### Require complete worker exit in OOM fixture
+
+OOM fixture success now requires observed oom-kill result followed by sibling proc disappearance, systemd MainPID=0 and failed service phase within bounded shutdown wait. Result notification alone no longer passes while a worker remains active. Python syntax and diff checks passed; actual Linux execution remains pending. CI37070514721 remains active in package inspection; follow-up stays local. Full application acceptance remains unfinished.

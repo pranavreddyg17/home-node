@@ -104,10 +104,14 @@ TimeoutStopSec=5
     else:
         raise RuntimeError("bounded service did not report OOM")
     deadline = time.monotonic() + 10
-    while pathlib.Path(f"/proc/{sibling}").exists() and time.monotonic() < deadline:
+    while time.monotonic() < deadline:
+        main_pid = command("systemctl", "show", unit, "--property=MainPID", "--value").stdout.strip()
+        phase = command("systemctl", "show", unit, "--property=ActiveState", "--value").stdout.strip()
+        if not pathlib.Path(f"/proc/{sibling}").exists() and main_pid == "0" and phase == "failed":
+            break
         time.sleep(0.1)
-    if pathlib.Path(f"/proc/{sibling}").exists():
-        raise RuntimeError("sibling survived backup OOM policy")
+    else:
+        raise RuntimeError("worker or sibling survived backup OOM shutdown")
     print("Backup source memory ceiling caused service OOM; sibling process was terminated.")
 except Exception:
     # Retain only disposable fixture diagnostics before its unit is removed.
