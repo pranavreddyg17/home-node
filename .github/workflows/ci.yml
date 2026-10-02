@@ -33,6 +33,8 @@ jobs:
         run: sudo env HOMENODE_UPDATE_INIT_INTEGRATION=1 "$(command -v go)" test ./internal/install ./cmd/homenode-supervisor
       - name: Test inspection completion with local system manager
         run: sudo env HOMENODE_INSPECT_COMPLETION_INTEGRATION=1 "$(command -v go)" test ./internal/updates -run '^TestNativeInspectionManagerCompletion$' -count=1
+      - name: Test inspection result with local system journal
+        run: sudo env HOMENODE_INSPECT_JOURNAL_INTEGRATION=1 "$(command -v go)" test ./internal/updates -run '^TestNativeInspectionJournalResult$' -count=1
       - name: Test inherited private backup listener
         run: sudo env HOMENODE_ACTIVATION_INTEGRATION=1 "$(command -v go)" test ./internal/socketactivation -run '^TestNativeInheritedPrivate(Packet)?Listener$'
       - name: Test isolated backup executable activation and shutdown
