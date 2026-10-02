@@ -50,6 +50,9 @@ jobs:
           sudo install -m 0755 "$RUNNER_TEMP/activation.test" /usr/lib/homenode-fixtures/activation.test
           sudo env HOMENODE_ACTIVATION_SYSTEMD_INTEGRATION=1 python3 packaging/maintenance/activation_fixture.py
           sudo env HOMENODE_ACTIVATION_SYSTEMD_INTEGRATION=1 HOMENODE_ACTIVATION_PACKET=1 python3 packaging/maintenance/activation_fixture.py
+      - name: Test backup service OOM sibling termination
+        timeout-minutes: 3
+        run: sudo env HOMENODE_BACKUP_OOM_INTEGRATION=1 python3 packaging/maintenance/oom_fixture.py
       - name: Test received maintenance disk admission with root fixture
         run: sudo env HOMENODE_DISK_TRANSPORT_ROOT_INTEGRATION=1 "$(command -v go)" test ./internal/disktransport -run '^TestNativeDiskAdmission$'
       - name: Test backup disk client across kernel identities

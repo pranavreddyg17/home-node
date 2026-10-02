@@ -2655,3 +2655,7 @@ Backup systemd unit now caps CPU at100% (one CPU worth), disables service swap w
 ### Verify backup resource directives in native activation fixture
 
 Packet activation fixture now parses actual backup unit resource directives with strict source syntax, requires declared CPU/memory/swap/tasks/OOM/group policy, applies them to disposable unprivileged socket-activated service and checks loaded systemd property values. Stream maintenance fixture remains outside this resource check. Python compilation and diff checks passed. Native execution remains pending Linux CI; manager properties do not prove actual OOM sibling termination, CPU enforcement under load or dashboard performance. CI37070514721 remains active; follow-up stays local. Full application acceptance remains unfinished.
+
+### Native backup OOM sibling enforcement fixture
+
+Added explicitly gated disposable Linux/root systemd fixture and ordered CI step. It copies required backup CPU/memory/swap/task/OOM/group directives into an unprivileged test service, forks a sleeping sibling, allocates and touches up to2GiB within the1GiB service ceiling, requires systemd oom-kill result and disappearance of the sibling before bounded cleanup. Unique fixture paths must be vacant; no owner installation execution occurred. Python syntax and diff checks passed. Native execution, portability across the supported systemd/cgroup matrix and actual production subprocess behavior remain unverified. CI37070514721 remains active; follow-up stays local. Full application acceptance remains unfinished.
