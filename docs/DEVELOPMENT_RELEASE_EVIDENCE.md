@@ -19,6 +19,14 @@ compiled inputs, rather than every dependency in the repository's module file.
 Local replacements remain explicit, including their `(devel)` version; they
 must not be silently reported as the original upstream module/version.
 
+Build and extracted-package regeneration supply reviewed `go.sum` to the collector.
+Compiled third-party module path/version/source sums must match it, using replacement
+identity when present. Local/unversioned replacements refuse that qualification.
+Evidence records `sourceSumsVerified` and the exact `sourceSumsSHA256`; omission of
+the optional reviewed inventory is observational collection and records false.
+This checks source-sum consistency, not main-source provenance, checksum database
+authenticity, licenses or vulnerability status.
+
 For review, first verify downloaded artifact checksums. These detect corruption;
 they do not authenticate a publisher when downloaded alongside untrusted bytes.
 Check executable hashes against the extracted package, inspect replacements and

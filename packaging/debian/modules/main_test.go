@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -81,5 +84,37 @@ func TestCompiledModuleReplacementIsRetained(t *testing.T) {
 	dep := record.Dependencies[0]
 	if dep.Path != "fixture.example/dep" || dep.Version != "v0.0.0" || dep.Replace == nil || dep.Replace.Path != "./dep" || dep.Replace.Version != "(devel)" {
 		t.Fatalf("module replacement lost: original=%+v replacement=%+v", dep, dep.Replace)
+	}
+	data, err := os.ReadFile(filepath.Join(directory, "binary"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"usr/bin/homenode", "usr/lib/homenode/homenode-supervisor", "usr/lib/homenode/homenode-transfer", "usr/lib/homenode/homenode-backup", "usr/lib/homenode/homenode-inspect", "usr/lib/homenode/guest/homenode-guest"} {
+		filename := filepath.Join(directory, name)
+		if err := os.MkdirAll(filepath.Dir(filename), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filename, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var output bytes.Buffer
+	if err := run([]string{directory}, &output); err != nil {
+		t.Fatal("observational collection refused", err)
+	}
+	var observation struct {
+		SourceSumsVerified bool           `json:"sourceSumsVerified"`
+		Binaries           []binaryRecord `json:"binaries"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &observation); err != nil || observation.SourceSumsVerified || len(observation.Binaries) != 6 {
+		t.Fatal("observational collection claimed qualification", err)
+	}
+	output.Reset()
+	sums := filepath.Join(directory, "reviewed.sum")
+	if err := os.WriteFile(sums, []byte("fixture.example/dep v0.0.0 h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{directory, sums}, &output); err == nil || !strings.Contains(err.Error(), "unversioned compiled dependency") || output.Len() != 0 {
+		t.Fatal("unqualified actual compiled dependency exposed evidence", err, output.String())
 	}
 }
