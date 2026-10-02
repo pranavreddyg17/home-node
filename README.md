@@ -43,3 +43,5 @@ The browser test uses a virtual authenticator to exercise actual WebAuthn signat
 Next, validate two confined VMs on real supported hardware and record the isolation and resource results. Do not treat passing diagnostics as proof that VM isolation is safe.
 
 To build an unsigned development Debian package on Ubuntu/Debian after installing web dependencies, run `packaging/debian/build.sh`. It packages Linux amd64 binaries and built web assets under `artifacts/`. It does not provision or start services. [Package ownership](packaging/debian/OWNERSHIP.md) documents installed paths and limits; production signing and the resumable installer are still outstanding.
+
+The current external-backup interface and workload recovery behavior are described in the [backup guide](docs/BACKUP.md). Backup-data restore and replacement-host recovery remain incomplete.
