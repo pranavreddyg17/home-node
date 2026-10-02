@@ -36,7 +36,11 @@ This detects cache changes against Go's downloaded module records. It does not
 authenticate those records independently or exclude a concurrent writer that
 changes and restores cache contents between checks. Build hosts must isolate
 their source cache from untrusted writers. Nested notices, full license review,
-readable Go notices and independent notice verification remain unfinished.
+readable Go notices and license approval remain unfinished. CI independently
+compares the notice sidecar with compiled identities regenerated from extracted
+executables and source notice bytes, checking cache integrity before and after.
+The verifier shares bounded input parsing helpers, but reconstructs the source
+notice inventory without invoking the collector.
 
 For review, first verify downloaded artifact checksums. These detect corruption;
 they do not authenticate a publisher when downloaded alongside untrusted bytes.

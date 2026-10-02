@@ -93,6 +93,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 packaging/debian/sbom_test.py
           PYTHONDONTWRITEBYTECODE=1 python3 packaging/debian/verify_frontend_test.py
           PYTHONDONTWRITEBYTECODE=1 python3 packaging/debian/go_notices_test.py
+          PYTHONDONTWRITEBYTECODE=1 python3 packaging/debian/verify_go_notices_test.py
           packaging/debian/build.sh 0.1.0~ci
           (cd artifacts && sha256sum --check homenode_0.1.0~ci_amd64.deb.evidence.sha256)
           HOMENODE_PACKAGE_CONTENT_FIXTURE="$GITHUB_WORKSPACE/artifacts/homenode_0.1.0~ci_amd64.deb" go test ./internal/updates -run '^TestNativeBuiltPackage(Content|SBOM)$' -count=1
@@ -102,6 +103,10 @@ jobs:
           python3 packaging/debian/verify_sbom.py /tmp/homenode-package artifacts/homenode_0.1.0~ci_amd64.deb 0.1.0~ci artifacts/homenode_0.1.0~ci_amd64.deb.sbom.json
           go run ./packaging/debian/modules /tmp/homenode-package go.sum > "$RUNNER_TEMP/extracted-gomodules.json"
           cmp artifacts/homenode_0.1.0~ci_amd64.deb.gomodules.json "$RUNNER_TEMP/extracted-gomodules.json"
+          go mod verify
+          go list -m -json all > "$RUNNER_TEMP/go-source-modules.json"
+          PYTHONDONTWRITEBYTECODE=1 python3 packaging/debian/verify_go_notices.py "$RUNNER_TEMP/extracted-gomodules.json" "$RUNNER_TEMP/go-source-modules.json" artifacts/homenode_0.1.0~ci_amd64.deb.go-notices.json
+          go mod verify
           PYTHONDONTWRITEBYTECODE=1 python3 packaging/debian/verify_frontend.py /tmp/homenode-package/usr/share/homenode/web artifacts/homenode_0.1.0~ci_amd64.deb.frontend.json web/package-lock.json artifacts/homenode_0.1.0~ci_amd64.deb.frontend-notices.txt
           git status --short
           test -z "$(git status --porcelain)"
