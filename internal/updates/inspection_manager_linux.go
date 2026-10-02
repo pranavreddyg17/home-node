@@ -26,8 +26,36 @@ func verifyInspectionServiceCompletionWith(ctx context.Context, invocation strin
 	if !validInspectionInvocation(invocation) || notBeforeMicros == 0 {
 		return ErrInspectionResult
 	}
-	if err := ctx.Err(); err != nil {
+	properties, err := inspectionServiceProperties(ctx, command)
+	if err != nil {
 		return err
+	}
+	return ValidateInspectionCompletion(properties, invocation, notBeforeMicros)
+}
+
+// CaptureInspectionServiceInvocation queries the fixed local inspection unit
+// and retains only a fresh running or successfully completed invocation.
+func CaptureInspectionServiceInvocation(ctx context.Context, notBeforeMicros uint64) (string, error) {
+	if os.Geteuid() != 0 {
+		return "", ErrInspectionResult
+	}
+	return captureInspectionServiceInvocationWith(ctx, notBeforeMicros, exec.CommandContext)
+}
+
+func captureInspectionServiceInvocationWith(ctx context.Context, notBeforeMicros uint64, command func(context.Context, string, ...string) *exec.Cmd) (string, error) {
+	if notBeforeMicros == 0 {
+		return "", ErrInspectionResult
+	}
+	properties, err := inspectionServiceProperties(ctx, command)
+	if err != nil {
+		return "", err
+	}
+	return InspectionInvocationFromManager(properties, notBeforeMicros)
+}
+
+func inspectionServiceProperties(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -38,12 +66,12 @@ func verifyInspectionServiceCompletionWith(ctx context.Context, invocation strin
 	cmd.Stderr = io.Discard
 	cmd.WaitDelay = time.Second
 	if err := cmd.Run(); err != nil {
-		return errors.Join(ErrInspectionResult, err, bounded.Err())
+		return nil, errors.Join(ErrInspectionResult, err, bounded.Err())
 	}
 	if err := bounded.Err(); err != nil {
-		return err
+		return nil, err
 	}
-	return ValidateInspectionCompletion(output.Bytes(), invocation, notBeforeMicros)
+	return append([]byte(nil), output.Bytes()...), nil
 }
 
 type inspectionManagerOutput struct{ bytes.Buffer }

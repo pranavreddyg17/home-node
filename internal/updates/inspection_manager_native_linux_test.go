@@ -59,21 +59,6 @@ func TestNativeInspectionManagerCompletion(t *testing.T) {
 	if output, err := manager("start", "--no-block", unit); err != nil {
 		t.Fatal(string(output), err)
 	}
-	var invocation string
-	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
-		output, err := manager("show", "--property=InvocationID", "--value", unit)
-		if err != nil {
-			t.Fatal(string(output), err)
-		}
-		invocation = strings.TrimSpace(string(output))
-		if len(invocation) == 32 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if len(invocation) != 32 {
-		t.Fatal("manager never published invocation")
-	}
 	// The seam changes only the disposable unit; executable, scope, environment,
 	// bounded output and completion parsing follow the production manager path.
 	factory := func(ctx context.Context, path string, args ...string) *exec.Cmd {
@@ -83,6 +68,18 @@ func TestNativeInspectionManagerCompletion(t *testing.T) {
 		}
 		copied[len(copied)-1] = unit
 		return exec.CommandContext(ctx, path, copied...)
+	}
+	var invocation string
+	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
+		captured, err := captureInspectionServiceInvocationWith(ctx, boundary, factory)
+		if err == nil {
+			invocation = captured
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(invocation) != 32 {
+		t.Fatal("manager never published invocation")
 	}
 	if err := verifyInspectionServiceCompletionWith(ctx, invocation, boundary, factory); err == nil {
 		t.Fatal("running fixture accepted as completed")

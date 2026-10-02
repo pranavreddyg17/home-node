@@ -26,6 +26,12 @@ func TestInspectionManagerPreflightAndOutputBound(t *testing.T) {
 	if err := verifyInspectionServiceCompletionWith(ctx, strings.Repeat("a", 32), 1, factory); err == nil || called {
 		t.Fatal("canceled check reached manager")
 	}
+	if _, err := captureInspectionServiceInvocationWith(context.Background(), 0, factory); err == nil || called {
+		t.Fatal("missing capture boundary reached manager")
+	}
+	if _, err := captureInspectionServiceInvocationWith(ctx, 1, factory); err == nil || called {
+		t.Fatal("canceled capture reached manager")
+	}
 	output := &inspectionManagerOutput{}
 	if count, err := output.Write(make([]byte, 2048)); err != nil || count != 2048 {
 		t.Fatal("bounded output refused", err)
@@ -48,6 +54,10 @@ func TestInspectionManagerCommandUsesFixedLocalScope(t *testing.T) {
 	}
 	if err := verifyInspectionServiceCompletionWith(context.Background(), invocation, 100, factory); err != nil {
 		t.Fatal(err)
+	}
+	captured, err := captureInspectionServiceInvocationWith(context.Background(), 100, factory)
+	if err != nil || captured != invocation {
+		t.Fatal("manager invocation capture failed", captured, err)
 	}
 	if strings.Join(launched.Env, "\n") != "PATH=/usr/bin:/bin\nLC_ALL=C\nSYSTEMD_COLORS=0\nSYSTEMD_PAGER=cat" {
 		t.Fatal("inherited manager environment", launched.Env)
