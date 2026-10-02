@@ -2719,3 +2719,7 @@ Added SnapshotPage operation with25 candidates, full-ID continuation cursor, exp
 ### Native repository page selection fixture
 
 Real encrypted restic round trip now exercises first page, terminal full-ID cursor returning non-null empty page, missing/stale cursor refusal and cancellation through SnapshotPage. Linux backup fixture compilation and diff checks passed. This new native fixture remains unexecuted until publication; existing portable52-item traversal/wire-bound tests passed previously. CI37072981616 remains active; follow-up stays local. Dedicated metadata worker response authorization and complete owner-facing recovery remain unfinished. Full application acceptance remains unfinished.
+
+### Request-bound snapshot page response schema
+
+Published local page/native-preview boundary prerequisites through3c2f7ac after CI37072981616 succeeded; remote exact SHA verified and CI37073661410 is active. Added portable version/kind/request-bound page response codec limited to existing4KiB transport. It requires exact non-null outer/page/reference fields, unique JSON keys, canonical IDs, valid timestamps, sorted distinct candidates and continuation only from a full page last ID. Foreign request IDs, aliases, duplicate fields, wrong operation domain and trailing data refuse. Focused page/inventory/response race tests and diff checks passed. This codec is not wired to worker admission or owner HTTP/UI and supplies no peer authentication or recovery authority. Full application acceptance remains unfinished.
