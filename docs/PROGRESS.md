@@ -2627,3 +2627,7 @@ Bounded restore writer now checks the pinned staging filesystem before each outp
 ### Execute bounded restore-writer regression on development host
 
 Moved bounded restore writer into portable implementation and passed the restore deadline to it. Each output write now refuses missing context or observed cancellation before capacity observation or destination writes. Moved exact-size/oversized and missing/closed capacity descriptor tests into Linux/macOS fixtures and added cancelled-output/no-byte-consumption test. These writer and staging-descriptor race tests now ran successfully on macOS rather than only cross-compiling. Linux backup fixture compilation and diff checks passed. Actual Linux encrypted restore tests remain pending publication/execution; CI37069859909 remains active and follow-up stays local. Full application acceptance remains unfinished.
+
+### Publish accumulated restore qualification changes
+
+CI37069859909 succeeded at81dbf9b. Full combined backup/state/runtimeclient race suites passed on current local source, including portable bounded-writer behavior. Verified all five pending implementation commits retain requested sole author identity. Publishing encrypted capacity/cancellation fixtures, exact restic summary identity parsing and streaming cancellation/reserve checks for native Linux CI execution. Passing prior CI does not validate these newer fixtures or establish replacement-host recovery/full application acceptance.
