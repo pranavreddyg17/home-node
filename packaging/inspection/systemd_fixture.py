@@ -61,6 +61,8 @@ with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, tem
                "--setenv=HOMENODE_INSPECT_DENIED_PORT=" + str(listener.getsockname()[1]), str(binary),
                "-test.run=^TestNativeInspectionDescriptor$", "-test.count=1", "-test.v"]
     keys = {"InvocationID", "Result", "ExecMainCode", "ExecMainStatus", "ActiveState", "SubState", "ExecMainStartTimestampMonotonic", "ExecMainExitTimestampMonotonic"}
+    resource_values = {"MemoryMax": "268435456", "MemorySwapMax": "0", "CPUQuotaPerSecUSec": "500ms", "TasksMax": "32", "OOMPolicy": "kill", "KillMode": "control-group", "Restart": "no"}
+    keys |= resource_values.keys()
     invocation = None
     try:
         subprocess.run(command, timeout=10, check=True)
@@ -79,6 +81,8 @@ with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, tem
                 values[key] = value
             if values.keys() != keys:
                 sys.exit("Missing inspection manager evidence")
+            if any(values[key] != value for key, value in resource_values.items()):
+                sys.exit("Inspection manager resource limits differ from source contract")
             observed = values["InvocationID"]
             if observed:
                 if len(observed) != 32 or any(c not in "0123456789abcdef" for c in observed) or observed == "0" * 32:

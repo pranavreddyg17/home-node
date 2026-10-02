@@ -99,3 +99,16 @@ func (b *inspectionManagerOutput) Write(data []byte) (int, error) {
 	}
 	return b.Buffer.Write(data)
 }
+
+// VerifyInspectionResources queries configured manager limits. It is an
+// activation prerequisite, not proof of live cgroup enforcement.
+func VerifyInspectionResources(ctx context.Context) error {
+	if os.Geteuid() != 0 {
+		return ErrInspectionResult
+	}
+	properties, err := inspectionManagerQuery(ctx, "--property=MemoryMax,MemorySwapMax,CPUQuotaPerSecUSec,TasksMax,OOMPolicy,KillMode,Restart", exec.CommandContext)
+	if err != nil {
+		return err
+	}
+	return ValidateInspectionResources(properties)
+}
