@@ -216,9 +216,9 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	if err := os.WriteFile(servicePath, service, 0644); err != nil {
 		t.Fatal(err)
 	}
-	for _, mutation := range []string{"repository", "sequence", "catalog", "cancellation"} {
+	for _, mutation := range []string{"repository", "sequence", "catalog", "platform", "release", "hash", "length", "cancellation"} {
 		collectionCtx, cancel := context.WithCancel(ctx)
-		sequence, catalog := release.Metadata.Sequence, release.Metadata.CatalogVersion
+		metadata, packageHash, packageLength := release.Metadata, release.PackageSHA256, release.PackageLength
 		policyPath := filepath.Join(host, "etc/homenode/update-repository.json")
 		result, err := engine.withUpdateInspectionResultOwned(collectionCtx, release, "inspection-fixture-000001", execution, func(_ *updates.InspectionStage, _ context.Context, _ *os.Root, _ updates.InspectionExecution) (updates.InspectionResult, error) {
 			switch mutation {
@@ -230,6 +230,14 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 				release.Metadata.Sequence = 4
 			case "catalog":
 				release.Metadata.CatalogVersion = 2
+			case "platform":
+				release.Metadata.Platform = "unsupported"
+			case "release":
+				release.Metadata.Release = "0.2.0"
+			case "hash":
+				release.PackageSHA256 = "changed"
+			case "length":
+				release.PackageLength++
 			case "cancellation":
 				cancel()
 			}
@@ -243,7 +251,7 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 		if !errors.Is(err, want) || result != (updates.InspectionResult{}) {
 			t.Fatal("post-collection policy change exposed evidence", mutation, result, err)
 		}
-		release.Metadata.Sequence, release.Metadata.CatalogVersion = sequence, catalog
+		release.Metadata, release.PackageSHA256, release.PackageLength = metadata, packageHash, packageLength
 		if err := os.WriteFile(policyPath, repository, 0400); err != nil {
 			t.Fatal(err)
 		}

@@ -146,12 +146,16 @@ func (e *Engine) withUpdateInspectionResultOwned(ctx context.Context, release *u
 	if err != nil {
 		return zero, errors.Join(err, stage.Close())
 	}
+	metadata, packageHash, packageLength := release.Metadata, release.PackageSHA256, release.PackageLength
 	result, readErr := collect(stage, ctx, parent, execution)
 	// Collection may wait on manager/journal processes. Recheck installer policy
 	// before exposing evidence rather than relying only on its earlier admission.
 	if readErr == nil {
 		configuration, policyErr := e.readUpdateRepositoryLocked(ctx)
 		readErr = policyErr
+		if readErr == nil && (release.Metadata != metadata || release.PackageSHA256 != packageHash || release.PackageLength != packageLength) {
+			readErr = ErrConflict
+		}
 		if readErr == nil && (release.Metadata.Sequence < configuration.MinimumSequence || release.Metadata.CatalogVersion < configuration.MinimumCatalogVersion) {
 			readErr = ErrConflict
 		}
