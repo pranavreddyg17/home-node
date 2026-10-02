@@ -212,8 +212,14 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 	}
 	call("/v1/maintenance/drain", request, 409)
 	call("/v1/maintenance/restore", request, 409)
-	if err = server.Store.ReleaseMaintenanceRoot(ctx, token, job.ID, func(context.Context, string) error { return nil }); err != nil {
-		t.Fatal(err)
+	if err = bridge.ConfirmRuntimeRelease(ctx, token, device, rootCheckpoint.RootToken); err != nil {
+		t.Fatal("owned release preflight", err)
+	}
+	if err = bridge.RecordRuntimeReleased(ctx, token, device, rootCheckpoint.RootToken); err != nil {
+		t.Fatal("owned release checkpoint", err)
+	}
+	if err = bridge.RecordRuntimeReleased(ctx, token, device, rootCheckpoint.RootToken); err == nil {
+		t.Fatal("release checkpoint replay accepted")
 	}
 	if err = bridge.RestoreMaintenanceApps(ctx, token, device); err != nil {
 		t.Fatal("owned client restore", err)

@@ -94,7 +94,7 @@ func (s *Server) MaintenanceHandler(controllerUID, backupUID uint32) http.Handle
 			http.Error(w, "peer denied", 403)
 			return
 		}
-		if r.Method != "POST" || r.URL.RawQuery != "" || (r.URL.Path != "/v1/maintenance/verify-freezing" && r.URL.Path != "/v1/maintenance/attach-root" && r.URL.Path != "/v1/maintenance/drain" && r.URL.Path != "/v1/maintenance/restore" && r.URL.Path != "/v1/maintenance/snapshot" && r.URL.Path != "/v1/maintenance/verify-stage" && r.URL.Path != "/v1/maintenance/begin-publish" && r.URL.Path != "/v1/maintenance/verify-publish" && r.URL.Path != "/v1/maintenance/claim-publish" && r.URL.Path != "/v1/maintenance/ack-publish") {
+		if r.Method != "POST" || r.URL.RawQuery != "" || (r.URL.Path != "/v1/maintenance/verify-restoring" && r.URL.Path != "/v1/maintenance/ack-root-release" && r.URL.Path != "/v1/maintenance/verify-freezing" && r.URL.Path != "/v1/maintenance/attach-root" && r.URL.Path != "/v1/maintenance/drain" && r.URL.Path != "/v1/maintenance/restore" && r.URL.Path != "/v1/maintenance/snapshot" && r.URL.Path != "/v1/maintenance/verify-stage" && r.URL.Path != "/v1/maintenance/begin-publish" && r.URL.Path != "/v1/maintenance/verify-publish" && r.URL.Path != "/v1/maintenance/claim-publish" && r.URL.Path != "/v1/maintenance/ack-publish") {
 			http.NotFound(w, r)
 			return
 		}
@@ -103,7 +103,7 @@ func (s *Server) MaintenanceHandler(controllerUID, backupUID uint32) http.Handle
 			http.Error(w, "invalid request", 400)
 			return
 		}
-		request, ok := decodeMaintenancePayloadFields(data, r.URL.Path == "/v1/maintenance/ack-publish", r.URL.Path == "/v1/maintenance/attach-root")
+		request, ok := decodeMaintenancePayloadFields(data, r.URL.Path == "/v1/maintenance/ack-publish", r.URL.Path == "/v1/maintenance/attach-root" || r.URL.Path == "/v1/maintenance/verify-restoring" || r.URL.Path == "/v1/maintenance/ack-root-release")
 		if !ok {
 			http.Error(w, "invalid request", 400)
 			return
@@ -113,6 +113,30 @@ func (s *Server) MaintenanceHandler(controllerUID, backupUID uint32) http.Handle
 		job, err := s.Store.InspectMaintenanceJob(ctx, request.Token)
 		if err != nil || job.ID != request.JobID || job.Device != request.DeviceID {
 			http.Error(w, "maintenance blocked", 409)
+			return
+		}
+		if r.URL.Path == "/v1/maintenance/verify-restoring" || r.URL.Path == "/v1/maintenance/ack-root-release" {
+			if job.Phase != "restoring" || job.RootToken != request.RootToken || s.Store.RequireBackupWorkerStopped(ctx, request.Token, request.JobID) != nil {
+				http.Error(w, "maintenance blocked", 409)
+				return
+			}
+			if r.URL.Path == "/v1/maintenance/ack-root-release" {
+				// Only the authenticated backup peer can attest its supervisor
+				// release. State rechecks ownership/stopped worker transactionally.
+				err = s.Store.ReleaseMaintenanceRoot(ctx, request.Token, request.JobID, func(_ context.Context, rootToken string) error {
+					if rootToken != request.RootToken {
+						return state.ErrMaintenanceOwner
+					}
+					return nil
+				})
+				if err != nil {
+					http.Error(w, "maintenance blocked", 409)
+					return
+				}
+			}
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]int{"version": 1})
 			return
 		}
 		if r.URL.Path == "/v1/maintenance/verify-freezing" {

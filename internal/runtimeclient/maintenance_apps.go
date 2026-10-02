@@ -196,3 +196,20 @@ func (c *MaintenanceAppsClient) ConfirmFreezing(ctx context.Context, token, jobI
 	}
 	return c.call(ctx, "/v1/maintenance/verify-freezing", token, device)
 }
+
+// ConfirmRuntimeRelease qualifies the stopped owned job before supervisor release.
+func (c *MaintenanceAppsClient) ConfirmRuntimeRelease(ctx context.Context, token, device, rootToken string) error {
+	if !maintenanceID.MatchString(rootToken) {
+		return ErrMaintenance
+	}
+	return c.callFields(ctx, "/v1/maintenance/verify-restoring", token, device, "", rootToken)
+}
+
+// RecordRuntimeReleased attests a successful backup-peer supervisor release.
+// Uncertain release must not call this checkpoint.
+func (c *MaintenanceAppsClient) RecordRuntimeReleased(ctx context.Context, token, device, rootToken string) error {
+	if !maintenanceID.MatchString(rootToken) {
+		return ErrMaintenance
+	}
+	return c.callFields(ctx, "/v1/maintenance/ack-root-release", token, device, "", rootToken)
+}
