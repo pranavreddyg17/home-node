@@ -42,11 +42,11 @@ func ServeAcknowledgedCredentialDispatch(ctx context.Context, listener net.Liste
 	return serveDispatch(ctx, listener, controllerUID, ReceiveCredentialDispatch, work, sendWorkerCompletion)
 }
 
-func serveDispatch[T any](ctx context.Context, listener net.Listener, controllerUID uint32, receive func(context.Context, *net.UnixConn, uint32) (T, *os.File, error), work func(context.Context, T, *os.File) error, complete func(context.Context, *net.UnixConn, T) error) (resultErr error) {
+func serveDispatch[T any](ctx context.Context, listener net.Listener, controllerUID uint32, receive func(context.Context, *net.UnixConn, uint32) (T, *os.File, error), work func(context.Context, T, *os.File) error, complete func(context.Context, *net.UnixConn, T) error, refusal ...func(context.Context, *net.UnixConn, T, error) error) (resultErr error) {
 	if listener == nil {
 		return ErrManifest
 	}
-	if controllerUID == 0 || work == nil || receive == nil || listener.Addr().Network() != "unixpacket" {
+	if len(refusal) > 1 || controllerUID == 0 || work == nil || receive == nil || listener.Addr().Network() != "unixpacket" {
 		_ = listener.Close()
 		return ErrManifest
 	}
@@ -121,7 +121,9 @@ func serveDispatch[T any](ctx context.Context, listener net.Listener, controller
 				return
 			}
 			err = work(operation, dispatch, credential)
-			if complete != nil && err == nil {
+			if complete != nil && (err == nil || (len(refusal) == 1 && errors.Is(err, ErrLaunchRepositoryAdmission))) {
+				cause := err
+				err = nil
 				if credential != nil {
 					closeErr := credential.Close()
 					if closeErr != nil && !errors.Is(closeErr, os.ErrClosed) {
@@ -132,7 +134,11 @@ func serveDispatch[T any](ctx context.Context, listener net.Listener, controller
 					// A peer may connect cleanup immediately after receiving this
 					// reply. Hold admission until the completed callback slot is freed.
 					admission.Lock()
-					err = complete(operation, packet, dispatch)
+					if cause == nil {
+						err = complete(operation, packet, dispatch)
+					} else {
+						err = refusal[0](operation, packet, dispatch, cause)
+					}
 					if err != nil && serving.Err() == nil {
 						select {
 						case failure <- err:
@@ -159,7 +165,7 @@ func serveDispatch[T any](ctx context.Context, listener net.Listener, controller
 // ServeAcknowledgedCredentialLaunch admits only preliminary launch messages.
 // It shares joined single-job lifecycle and closes credentials before completion.
 func ServeAcknowledgedCredentialLaunch(ctx context.Context, listener net.Listener, controllerUID uint32, work func(context.Context, Launch, *os.File) error) error {
-	return serveDispatch(ctx, listener, controllerUID, ReceiveCredentialLaunch, work, sendLaunchCompletion)
+	return serveDispatch(ctx, listener, controllerUID, ReceiveCredentialLaunch, work, sendLaunchCompletion, sendLaunchRepositoryRefusal)
 }
 
 // ServeAcknowledgedCredentialCleanup accepts only explicit stopped-job cleanup.

@@ -35,3 +35,12 @@ func TestLaunchReplyDomainsSeparateStoppedRefusalFromSuccessfulPublication(t *te
 		}
 	}
 }
+
+func TestWorkerRefusalNeverAdmitsCleanupOrMixedRequest(t *testing.T) {
+	launch := Launch{Version: 2, JobID: strings.Repeat("a", 24), DeviceID: strings.Repeat("b", 24), ManagementToken: strings.Repeat("c", 24), Release: "0.1.0", CatalogVersion: 1}
+	for _, request := range []WorkerRequest{{}, {Cleanup: &Cleanup{}}, {Launch: &launch, Cleanup: &Cleanup{}}} {
+		if err := sendWorkerRequestRefusal(context.Background(), nil, request, ErrLaunchRepositoryAdmission); !errors.Is(err, ErrManifest) {
+			t.Fatal("non-launch refusal admitted", err)
+		}
+	}
+}

@@ -35,5 +35,13 @@ func sendWorkerRequestCompletion(ctx context.Context, connection *net.UnixConn, 
 	return ErrManifest
 }
 func ServeAcknowledgedCredentialWorker(ctx context.Context, listener net.Listener, controllerUID uint32, work func(context.Context, WorkerRequest, *os.File) error) error {
-	return serveDispatch(ctx, listener, controllerUID, receiveCredentialWorkerRequest, work, sendWorkerRequestCompletion)
+	return serveDispatch(ctx, listener, controllerUID, receiveCredentialWorkerRequest, work, sendWorkerRequestCompletion, sendWorkerRequestRefusal)
+}
+
+// Cleanup failures cannot be represented as pre-acquisition launch refusals.
+func sendWorkerRequestRefusal(ctx context.Context, connection *net.UnixConn, request WorkerRequest, cause error) error {
+	if request.Launch == nil || request.Cleanup != nil {
+		return ErrManifest
+	}
+	return sendLaunchRepositoryRefusal(ctx, connection, *request.Launch, cause)
 }
