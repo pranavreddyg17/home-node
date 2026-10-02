@@ -43,7 +43,11 @@ func validateBackupWorker(ctx context.Context, dispatch backup.Dispatch, config 
 	if _, err := backup.EncodeDispatch(dispatch); err != nil {
 		return err
 	}
-	if config.Release != dispatch.Release || config.CatalogVersion != dispatch.CatalogVersion || config.Policy.MinimumCatalogVersion < 1 || config.CatalogVersion < config.Policy.MinimumCatalogVersion || !filepath.IsAbs(config.ManagementSocket) || filepath.Clean(config.ManagementSocket) != config.ManagementSocket || !filepath.IsAbs(config.DiskSocket) || filepath.Clean(config.DiskSocket) != config.DiskSocket {
+	return validateBackupWorkerInputs(ctx, dispatch.Release, dispatch.CatalogVersion, config)
+}
+
+func validateBackupWorkerInputs(ctx context.Context, release string, catalogVersion int64, config BackupWorkerConfig) error {
+	if config.Release != release || config.CatalogVersion != catalogVersion || config.Policy.MinimumCatalogVersion < 1 || config.CatalogVersion < config.Policy.MinimumCatalogVersion || !filepath.IsAbs(config.ManagementSocket) || filepath.Clean(config.ManagementSocket) != config.ManagementSocket || !filepath.IsAbs(config.DiskSocket) || filepath.Clean(config.DiskSocket) != config.DiskSocket {
 		return backup.ErrManifest
 	}
 	if err := ctx.Err(); err != nil {
@@ -129,4 +133,40 @@ func ServeRegisteredBackupWorker(ctx context.Context, listener net.Listener, con
 		_, err := RunCredentialedDispatchedBackup(operation, dispatch, config, credential)
 		return err
 	})
+}
+
+// RunCredentialedLaunchedBackup executes as the isolated backup identity. It
+// retains acquired dispatch state on later errors and never releases the runtime
+// barrier while publication or callback completion may still be active. Separate
+// acknowledged cleanup/recovery must run before apps resume.
+func RunCredentialedLaunchedBackup(ctx context.Context, launch backup.Launch, config BackupWorkerConfig, credential *os.File, root backup.MaintenanceRoot) (dispatch backup.Dispatch, result backup.BackupResult, resultErr error) {
+	if credential == nil {
+		return dispatch, result, backup.ErrRepository
+	}
+	defer func() { resultErr = errors.Join(resultErr, credential.Close()) }()
+	if _, err := backup.EncodeLaunch(launch); err != nil {
+		return dispatch, result, err
+	}
+	if err := validateBackupWorkerInputs(ctx, launch.Release, launch.CatalogVersion, config); err != nil {
+		return dispatch, result, err
+	}
+	if root == nil || !filepath.IsAbs(config.StagingParent) || filepath.Clean(config.StagingParent) != config.StagingParent {
+		return dispatch, result, backup.ErrManifest
+	}
+	if err := config.RepositoryTarget.Validate(); err != nil {
+		return dispatch, result, err
+	}
+	password, err := backup.ReadRepositoryPassword(ctx, credential)
+	if err != nil {
+		return dispatch, result, err
+	}
+	defer clear(password)
+	management := newOwnedMaintenanceApps(config.ManagementSocket, config.ControllerListenerUID, launch.ManagementToken, launch.JobID, launch.DeviceID)
+	defer management.Close()
+	dispatch, err = AcquireLaunchedBackupRuntime(ctx, launch, management, root)
+	if err != nil {
+		return dispatch, result, err
+	}
+	result, err = RunRegisteredDispatchedBackup(ctx, dispatch, config, password)
+	return dispatch, result, err
 }

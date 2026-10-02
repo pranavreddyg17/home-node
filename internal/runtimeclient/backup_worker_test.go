@@ -104,3 +104,23 @@ func TestRegisteredWorkerRefusesDestinationBeforeCreatingStaging(t *testing.T) {
 		})
 	}
 }
+
+func TestLaunchedWorkerRefusesConfigurationBeforeRuntimeEffects(t *testing.T) {
+	file, err := os.CreateTemp(t.TempDir(), "fixture-credential")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if _, err = file.WriteString("fixture-secret"); err != nil {
+		t.Fatal(err)
+	}
+	launch := backup.Launch{Version: 2, JobID: state.Random(), DeviceID: state.Random(), ManagementToken: state.Random(), Release: "0.1.0", CatalogVersion: 1}
+	root := &acquisitionFixture{root: state.Random(), job: launch.JobID, token: launch.ManagementToken, device: launch.DeviceID}
+	dispatch, result, err := RunCredentialedLaunchedBackup(context.Background(), launch, BackupWorkerConfig{}, file, root)
+	if err == nil || dispatch != (backup.Dispatch{}) || result != (backup.BackupResult{}) || len(root.steps) != 0 {
+		t.Fatal("invalid worker had effects", dispatch, result, err, root.steps)
+	}
+	if _, err = file.Stat(); err == nil {
+		t.Fatal("refused launch retained owned credential")
+	}
+}
