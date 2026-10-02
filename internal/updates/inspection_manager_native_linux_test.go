@@ -25,7 +25,7 @@ func TestNativeInspectionManagerCompletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data := "[Unit]\nDescription=Disposable inspection completion fixture\n[Service]\nType=oneshot\nExecStart=/usr/bin/sleep 1\n"
+	data := "[Unit]\nDescription=Disposable inspection completion fixture\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/bin/sleep 1\n"
 	if _, err := file.WriteString(data); err != nil {
 		file.Close()
 		os.Remove(path)
@@ -101,7 +101,10 @@ func TestNativeInspectionManagerCompletion(t *testing.T) {
 	}
 	// Reconfigure only this owned disposable fixture for a failed invocation.
 	// A new invocation ID is insufficient when the manager reports failure.
-	failedUnit := "[Unit]\nDescription=Disposable failed inspection completion fixture\n[Service]\nType=oneshot\nExecStart=/usr/bin/false\n"
+	if output, err := manager("stop", unit); err != nil {
+		t.Fatal(string(output), err)
+	}
+	failedUnit := "[Unit]\nDescription=Disposable failed inspection completion fixture\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/bin/false\n"
 	if err := os.WriteFile(path, []byte(failedUnit), 0644); err != nil {
 		t.Fatal(err)
 	}

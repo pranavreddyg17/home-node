@@ -13,7 +13,7 @@ func ValidateInspectionCompletion(properties []byte, invocation string, notBefor
 	if !validInspectionInvocation(invocation) || notBeforeMicros == 0 || len(properties) == 0 || len(properties) > 2048 {
 		return ErrInspectionResult
 	}
-	expected := map[string]string{"InvocationID": invocation, "Result": "success", "ExecMainCode": "1", "ExecMainStatus": "0", "ActiveState": "inactive", "SubState": "dead"}
+	expected := map[string]string{"InvocationID": invocation, "Result": "success", "ExecMainCode": "1", "ExecMainStatus": "0", "ActiveState": "active", "SubState": "exited"}
 	seen, err := inspectionManagerProperties(properties)
 	if err != nil {
 		return err
@@ -87,7 +87,7 @@ func InspectionInvocationFromManager(properties []byte, notBeforeMicros uint64) 
 	if !validInspectionInvocation(invocation) {
 		return "", ErrInspectionResult
 	}
-	if values["ActiveState"] == "inactive" && values["SubState"] == "dead" {
+	if values["ActiveState"] == "active" && values["SubState"] == "exited" {
 		if err := ValidateInspectionCompletion(properties, invocation, notBeforeMicros); err != nil {
 			return "", err
 		}

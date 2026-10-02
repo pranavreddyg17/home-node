@@ -5,6 +5,7 @@ ConditionPathExists=/var/lib/homenode-update/inspection/package.deb
 
 [Service]
 Type=oneshot
+RemainAfterExit=yes
 DynamicUser=yes
 SupplementaryGroups=
 EnvironmentFile=/var/lib/homenode-update/inspection.env

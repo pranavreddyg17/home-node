@@ -16,7 +16,7 @@ package = Path(os.environ["HOMENODE_PACKAGE_CONTENT_FIXTURE"])
 if not binary.is_file() or not package.is_file():
     sys.exit("Missing fixture binary or development package")
 source = Path(__file__).resolve().parents[1] / "systemd/homenode-inspect.service"
-allowed = {"Type", "DynamicUser", "SupplementaryGroups", "UMask", "Restart", "TimeoutStartSec", "TimeoutStopSec", "KillMode", "NoNewPrivileges", "CapabilityBoundingSet", "AmbientCapabilities", "ProtectSystem", "ProtectHome", "PrivateTmp", "PrivateDevices", "PrivateNetwork", "ProtectKernelTunables", "ProtectKernelModules", "ProtectKernelLogs", "ProtectControlGroups", "ProtectProc", "ProcSubset", "RestrictNamespaces", "RestrictSUIDSGID", "RestrictRealtime", "LockPersonality", "RestrictAddressFamilies", "IPAddressDeny", "SystemCallArchitectures", "SystemCallFilter", "InaccessiblePaths", "MemoryMax", "MemorySwapMax", "CPUQuota", "TasksMax", "OOMPolicy"}
+allowed = {"Type", "RemainAfterExit", "DynamicUser", "SupplementaryGroups", "UMask", "Restart", "TimeoutStartSec", "TimeoutStopSec", "KillMode", "NoNewPrivileges", "CapabilityBoundingSet", "AmbientCapabilities", "ProtectSystem", "ProtectHome", "PrivateTmp", "PrivateDevices", "PrivateNetwork", "ProtectKernelTunables", "ProtectKernelModules", "ProtectKernelLogs", "ProtectControlGroups", "ProtectProc", "ProcSubset", "RestrictNamespaces", "RestrictSUIDSGID", "RestrictRealtime", "LockPersonality", "RestrictAddressFamilies", "IPAddressDeny", "SystemCallArchitectures", "SystemCallFilter", "InaccessiblePaths", "MemoryMax", "MemorySwapMax", "CPUQuota", "TasksMax", "OOMPolicy"}
 properties, seen, section = [], set(), ""
 for raw in source.read_text().splitlines():
     line = raw.strip()
@@ -35,6 +35,10 @@ for raw in source.read_text().splitlines():
         continue
     if key not in allowed:
         sys.exit("Unreviewed service fixture property: " + key)
+    # This security fixture waits for unit deactivation; completion identity
+    # retention is exercised separately by the real-manager Go fixture.
+    if key == "RemainAfterExit":
+        value = "no"
     properties.append("--property=" + key + "=" + value)
 if seen != allowed | {"ExecStart", "EnvironmentFile", "OpenFile"}:
     sys.exit("Incomplete service fixture source")

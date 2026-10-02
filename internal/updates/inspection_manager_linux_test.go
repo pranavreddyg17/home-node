@@ -43,7 +43,7 @@ func TestInspectionManagerPreflightAndOutputBound(t *testing.T) {
 
 func TestInspectionManagerCommandUsesFixedLocalScope(t *testing.T) {
 	invocation := strings.Repeat("a", 32)
-	properties := "InvocationID=" + invocation + "\nResult=success\nExecMainCode=1\nExecMainStatus=0\nActiveState=inactive\nSubState=dead\nExecMainStartTimestampMonotonic=200\nExecMainExitTimestampMonotonic=300\n"
+	properties := "InvocationID=" + invocation + "\nResult=success\nExecMainCode=1\nExecMainStatus=0\nActiveState=active\nSubState=exited\nExecMainStartTimestampMonotonic=200\nExecMainExitTimestampMonotonic=300\n"
 	var launched *exec.Cmd
 	factory := func(ctx context.Context, path string, args ...string) *exec.Cmd {
 		if path != "/usr/bin/systemctl" || len(args) != 5 || args[0] != "--system" || args[1] != "--no-pager" || args[2] != "show" || args[3] != "--property=InvocationID,Result,ExecMainCode,ExecMainStatus,ActiveState,SubState,ExecMainStartTimestampMonotonic,ExecMainExitTimestampMonotonic" || args[4] != "homenode-inspect.service" {
@@ -70,7 +70,7 @@ func TestInspectionManagerProcessHelper(t *testing.T) {
 	}
 	switch os.Args[len(os.Args)-1] {
 	case "failed":
-		fmt.Print("InvocationID=" + strings.Repeat("a", 32) + "\nResult=success\nExecMainCode=1\nExecMainStatus=0\nActiveState=inactive\nSubState=dead\nExecMainStartTimestampMonotonic=200\nExecMainExitTimestampMonotonic=300\n")
+		fmt.Print("InvocationID=" + strings.Repeat("a", 32) + "\nResult=success\nExecMainCode=1\nExecMainStatus=0\nActiveState=active\nSubState=exited\nExecMainStartTimestampMonotonic=200\nExecMainExitTimestampMonotonic=300\n")
 		os.Exit(3)
 	case "oversized":
 		fmt.Print(strings.Repeat("x", 4096))
