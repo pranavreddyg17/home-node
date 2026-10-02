@@ -28,7 +28,7 @@ export function BackupStatus() {
     } catch (e) { if (id === requestId.current) setError(message(e)) }
     finally { if (id === requestId.current) setBusy(false) }
   }
-  useEffect(() => { if (outcomes?.reminder) setReminderDays(String(outcomes.reminder.intervalDays)) }, [outcomes?.reminder?.intervalDays])
+  useEffect(() => { if (outcomes?.reminder) setReminderDays(String(outcomes.reminder.intervalDays >= 1 && outcomes.reminder.intervalDays <= 90 ? outcomes.reminder.intervalDays : 7)) }, [outcomes?.reminder?.intervalDays])
   const saveReminder = async () => {
     setBusy(true); setReminderError(''); setReminderSaved(false)
     try { await api('/backups/reminder', { intervalDays: Number(reminderDays) }); setReminderSaved(true); await refresh() }

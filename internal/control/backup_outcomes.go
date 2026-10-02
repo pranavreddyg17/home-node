@@ -11,10 +11,9 @@ import (
 // backupOutcomes reports durable publication evidence only. It grants no
 // maintenance authority and makes no claim of repository or restore health.
 func (s *Server) backupOutcomes(w http.ResponseWriter, r *http.Request) {
-	days, err := s.Store.BackupReminderInterval(r.Context())
-	if err != nil {
-		writeJSON(w, 503, map[string]string{"error": "Backup reminder settings are unavailable."})
-		return
+	days, reminderErr := s.Store.BackupReminderInterval(r.Context())
+	if reminderErr != nil {
+		days = 0
 	}
 	observation, err := s.Store.InspectBackupObservation(r.Context())
 	if err != nil {

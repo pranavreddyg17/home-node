@@ -13,8 +13,13 @@ func TestBackupReminderSettingsStrictInputPersistenceAndMaintenance(t *testing.T
 	if got := request(s, "POST", path, `{"intervalDays":14}`, "", origin); got.Code != 401 {
 		t.Fatal(got.Code)
 	}
+	limited := testServer(t)
+	limitedSession := seedSession(t, limited, `["files"]`)
+	if got := request(limited, "POST", path, `{"intervalDays":14}`, limitedSession, origin); got.Code != 403 {
+		t.Fatal("limited device changed reminders", got.Code)
+	}
 	session := seedBackupSession(t, s)
-	for _, body := range []string{`{}`, `null`, `{"intervalDays":null}`, `{"intervalDays":0}`, `{"intervalDays":91}`, `{"intervalDays":7.5}`, `{"intervalDays":"7"}`, `{"IntervalDays":7}`, `{"intervalDays":7,"intervalDays":14}`, `{"intervalDays":7,"password":"secret"}`, `{"intervalDays":7} {}`} {
+	for _, body := range []string{`{}`, `null`, `{"intervalDays":null}`, `{"intervalDays":0}`, `{"intervalDays":91}`, `{"intervalDays":7.5}`, `{"intervalDays":"7"}`, `{"IntervalDays":7}`, `{"intervalDays":7,"intervalDays":14}`, `{"intervalDays":7,"\u0069ntervalDays":14}`, `{"intervalDays":7,"password":"secret"}`, `{"intervalDays":7} {}`} {
 		if got := request(s, "POST", path, body, session, origin); got.Code != 400 {
 			t.Fatal(body, got.Code, got.Body.String())
 		}

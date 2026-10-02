@@ -102,6 +102,16 @@ func TestApprovedBackupResumeHTTPCompletesReleasedEmptyWorkloadJob(t *testing.T)
 	if statusResponse.Code != 200 || !strings.Contains(statusResponse.Body.String(), `"resumeJobId":"`+job.ID+`"`) || strings.Contains(statusResponse.Body.String(), token) {
 		t.Fatal("eligible resume status invalid", statusResponse.Code, statusResponse.Body.String())
 	}
+	if _, err = s.Store.DB.Exec("INSERT INTO settings(key,value) VALUES('backup.reminder.interval-days','broken')"); err != nil {
+		t.Fatal(err)
+	}
+	corruptReminderStatus := request(s, "GET", "http://localhost:8787/api/v1/backups/outcomes", "", session, "")
+	if corruptReminderStatus.Code != 200 || !strings.Contains(corruptReminderStatus.Body.String(), `"resumeJobId":"`+job.ID+`"`) || !strings.Contains(corruptReminderStatus.Body.String(), `"state":"unavailable"`) || strings.Contains(corruptReminderStatus.Body.String(), token) {
+		t.Fatal("reminder corruption hid qualified recovery", corruptReminderStatus.Code, corruptReminderStatus.Body.String())
+	}
+	if _, err = s.Store.DB.Exec("DELETE FROM settings WHERE key='backup.reminder.interval-days'"); err != nil {
+		t.Fatal(err)
+	}
 	s.backupTasks.mu.Lock()
 	s.backupTasks.active = true
 	s.backupTasks.mu.Unlock()

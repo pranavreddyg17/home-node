@@ -79,7 +79,7 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   const resumeJob = 'A'.repeat(24)
   let resumeAccepted = false, resumeRequests = 0, resumeKey = ''
   await page.route('**/api/v1/backups/outcomes', route => route.fulfill({ json: {
-    schema: 1, current: { status: 'published', publishedAt: 10 }, lastPublished: { status: 'published', publishedAt: 10 }, workerCompletion: 'complete', resumeJobId: resumeAccepted ? '' : resumeJob,
+    schema: 1, current: { status: 'published', publishedAt: 10 }, lastPublished: { status: 'published', publishedAt: 10 }, workerCompletion: 'complete', resumeJobId: resumeAccepted ? '' : resumeJob, reminder: { state: 'unavailable', intervalDays: 0 },
   } }))
   await page.route(`**/api/v1/backups/${resumeJob}/resume/approval`, async route => {
     expect(route.request().postData()).toBe('{}')
@@ -96,6 +96,9 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
     await route.fulfill({ status: 202, json: { jobId: resumeJob, status: 'restoring' } })
   })
   await page.getByRole('button', { name: 'Refresh backup status' }).click()
+  await expect(page.getByText('Backup reminder timing is unavailable.', { exact: false })).toBeVisible()
+  await expect(page.getByLabel('Backup reminder interval (days)')).toHaveValue('7')
+  expect((await (await page.request.get('/api/v1/backups/outcomes')).json()).reminder.intervalDays).toBe(14)
   await page.evaluate(() => Object.defineProperty(navigator.credentials, 'get', { configurable: true, value: async () => { throw new DOMException('Resume cancelled', 'NotAllowedError') } }))
   await page.getByRole('button', { name: 'Verify passkey and resume workloads' }).click()
   await expect(page.getByRole('alert').filter({ hasText: 'Resume cancelled' })).toBeVisible()
