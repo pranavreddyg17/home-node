@@ -24,7 +24,7 @@ func downloadReleaseEvidence(fetcher *metadataFetcher, target *metadata.TargetFi
 	if err != nil {
 		return nil, err
 	}
-	if target.VerifyLengthHashes(data) != nil || !json.Valid(data) {
+	if target.VerifyLengthHashes(data) != nil || !validEvidenceJSON(data) {
 		return nil, errReleasePolicy
 	}
 	return json.RawMessage(data), nil

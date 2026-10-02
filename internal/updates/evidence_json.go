@@ -1,0 +1,69 @@
+package updates
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+)
+
+// validEvidenceJSON rejects ambiguous evidence before later semantic review.
+// It establishes bounded object syntax, not SBOM or provenance qualification.
+func validEvidenceJSON(data []byte) bool {
+	if len(data) == 0 || len(data) > 8<<20 {
+		return false
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	tokens := 0
+	var value func(int, bool) bool
+	value = func(depth int, root bool) bool {
+		if depth > 64 || tokens >= 65536 {
+			return false
+		}
+		token, err := decoder.Token()
+		tokens++
+		if err != nil {
+			return false
+		}
+		delimiter, container := token.(json.Delim)
+		if !container {
+			return !root
+		}
+		switch delimiter {
+		case '{':
+			seen := map[string]bool{}
+			for decoder.More() {
+				if tokens >= 65536 {
+					return false
+				}
+				key, err := decoder.Token()
+				tokens++
+				name, ok := key.(string)
+				if err != nil || !ok || seen[name] {
+					return false
+				}
+				seen[name] = true
+				if !value(depth+1, false) {
+					return false
+				}
+			}
+			end, err := decoder.Token()
+			tokens++
+			return err == nil && end == json.Delim('}')
+		case '[':
+			if root {
+				return false
+			}
+			for decoder.More() {
+				if !value(depth+1, false) {
+					return false
+				}
+			}
+			end, err := decoder.Token()
+			tokens++
+			return err == nil && end == json.Delim(']')
+		}
+		return false
+	}
+	return value(1, true) && decoder.Decode(new(any)) == io.EOF
+}
