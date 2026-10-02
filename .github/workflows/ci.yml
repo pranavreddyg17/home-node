@@ -96,6 +96,8 @@ jobs:
           dpkg-deb --info artifacts/homenode_0.1.0~ci_amd64.deb
           dpkg-deb --extract artifacts/homenode_0.1.0~ci_amd64.deb /tmp/homenode-package
           python3 packaging/debian/verify_sbom.py /tmp/homenode-package artifacts/homenode_0.1.0~ci_amd64.deb 0.1.0~ci artifacts/homenode_0.1.0~ci_amd64.deb.sbom.json
+          go run ./packaging/debian/modules /tmp/homenode-package > "$RUNNER_TEMP/extracted-gomodules.json"
+          cmp artifacts/homenode_0.1.0~ci_amd64.deb.gomodules.json "$RUNNER_TEMP/extracted-gomodules.json"
           cd /tmp/homenode-package
           sha256sum --check usr/share/doc/homenode/SHA256SUMS
           test -x usr/bin/homenode
