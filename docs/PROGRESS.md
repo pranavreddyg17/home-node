@@ -1787,3 +1787,9 @@ Native CI 36963932736 failed the real-manager completion fixture: inactive-unit 
 ### Kernel inspection launch boundary
 
 InspectionLaunchBoundary now obtains the current-boot CLOCK_MONOTONIC boundary in systemd microseconds with cancellation, range/overflow and zero checks. Coordinator code must capture it immediately before start and retain it for that boot; wall time or a reboot-restored numeric boundary is not equivalent. Native completion qualification uses this production helper for successful and failed starts instead of its own conversion. Linux fixtures exercise live monotonic progression and canceled refusal. Portable update race tests, Linux compilation and diff validation passed; Linux helper execution and corrected retained-unit qualification await CI. CI 36964303828 remains active.
+
+### Retained source-service qualification and package EOF cancellation
+
+The Python source-service fixture now preserves RemainAfterExit=yes, starts without blocking, polls bounded exact manager properties, verifies a retained canonical fresh invocation and successful exited main process, then explicitly stops its unique unit. No retention override remains; isolation and completion retention are tested together. Syntax/diff checks passed, actual execution pending.
+
+CI 36964303828 failed earlier in TestPackageDownloadCancellationRetainsNoVerifiedAuthority: canceled clean EOF was classified as a target-length policy error. Package streaming now checks operation cancellation immediately after copy, preserving cancellation before length/hash classification and before any descriptor publication. Added a deterministic canceled-EOF transport fixture requiring context.Canceled, no returned descriptor and no verified package publication. Linux compilation and portable update race tests passed; Linux-only acquisition regression execution awaits the next run. Corrected retained-manager qualification still has not executed in CI.

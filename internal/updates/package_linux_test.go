@@ -168,3 +168,36 @@ func TestPackageDownloadCancellationRetainsNoVerifiedAuthority(t *testing.T) {
 		t.Fatal("canceled operation reused", err)
 	}
 }
+
+func TestPackageCancellationWinsOverCleanEOF(t *testing.T) {
+	payload := []byte("expected signed bytes")
+	sum := sha256.Sum256(payload)
+	target := &metadata.TargetFiles{Path: "homenode.deb", Length: int64(len(payload)), Hashes: metadata.Hashes{"sha256": sum[:]}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fetcher, err := newMetadataFetcher(ctx, "https://updates.example/targets/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fetcher.client.Transport = cancellationTransport{cancel}
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	file, err := acquireVerifiedPackage(ctx, fetcher, target, true, root)
+	if file != nil {
+		file.Close()
+		t.Fatal("canceled EOF returned package authority")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatal("cancellation became length refusal", err)
+	}
+	if _, err := root.Lstat(hex.EncodeToString(sum[:]) + ".deb"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("canceled package published", err)
+	}
+}

@@ -155,8 +155,8 @@ func acquireVerifiedPackage(ctx context.Context, fetcher *metadataFetcher, targe
 		writers = append(writers, hash)
 	}
 	count, err := io.Copy(io.MultiWriter(writers...), io.LimitReader(response.Body, target.Length+1))
-	if err != nil {
-		return nil, err
+	if err != nil || operation.Err() != nil {
+		return nil, errors.Join(err, operation.Err())
 	}
 	if count != target.Length {
 		return nil, errDownloadPolicy

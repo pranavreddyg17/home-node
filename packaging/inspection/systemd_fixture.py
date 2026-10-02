@@ -7,6 +7,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 
 if sys.platform != "linux" or os.geteuid() != 0 or os.getenv("HOMENODE_INSPECT_SYSTEMD_INTEGRATION") != "1":
@@ -35,10 +36,6 @@ for raw in source.read_text().splitlines():
         continue
     if key not in allowed:
         sys.exit("Unreviewed service fixture property: " + key)
-    # This security fixture waits for unit deactivation; completion identity
-    # retention is exercised separately by the real-manager Go fixture.
-    if key == "RemainAfterExit":
-        value = "no"
     properties.append("--property=" + key + "=" + value)
 if seen != allowed | {"ExecStart", "EnvironmentFile", "OpenFile"}:
     sys.exit("Incomplete service fixture source")
@@ -52,8 +49,10 @@ with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, tem
     private = Path(directory) / "package.deb"
     shutil.copyfile(package, private)
     private.chmod(0o400)
-    command = ["/usr/bin/systemd-run", "--quiet", "--wait", "--pipe", "--collect",
-               "--unit=homenode-inspect-fixture-" + uuid.uuid4().hex, *properties,
+    unit = "homenode-inspect-fixture-" + uuid.uuid4().hex + ".service"
+    boundary = time.monotonic_ns() // 1000
+    command = ["/usr/bin/systemd-run", "--quiet", "--no-block", "--collect",
+               "--unit=" + unit, *properties,
                "--property=OpenFile=" + str(private) + ":verified-package:read-only",
                "--setenv=HOMENODE_INSPECT_ENTRY_CHILD=1",
                "--setenv=HOMENODE_INSPECT_OPERATION=" + uuid.uuid4().hex,
@@ -61,4 +60,44 @@ with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, tem
                "--setenv=HOMENODE_INSPECT_HIDDEN_PATH=" + str(marker),
                "--setenv=HOMENODE_INSPECT_DENIED_PORT=" + str(listener.getsockname()[1]), str(binary),
                "-test.run=^TestNativeInspectionDescriptor$", "-test.count=1", "-test.v"]
-    subprocess.run(command, timeout=180, check=True)
+    keys = {"InvocationID", "Result", "ExecMainCode", "ExecMainStatus", "ActiveState", "SubState", "ExecMainStartTimestampMonotonic", "ExecMainExitTimestampMonotonic"}
+    invocation = None
+    try:
+        subprocess.run(command, timeout=10, check=True)
+        deadline = time.monotonic() + 180
+        while time.monotonic() < deadline:
+            query = subprocess.run(["/usr/bin/systemctl", "--system", "--no-pager", "show",
+                                    "--property=" + ",".join(sorted(keys)), unit],
+                                   timeout=5, check=True, capture_output=True, text=True)
+            if len(query.stdout) > 2048:
+                sys.exit("Oversized inspection manager evidence")
+            values = {}
+            for line in query.stdout.splitlines():
+                key, separator, value = line.partition("=")
+                if not separator or key not in keys or key in values:
+                    sys.exit("Ambiguous inspection manager evidence")
+                values[key] = value
+            if values.keys() != keys:
+                sys.exit("Missing inspection manager evidence")
+            observed = values["InvocationID"]
+            if observed:
+                if len(observed) != 32 or any(c not in "0123456789abcdef" for c in observed) or observed == "0" * 32:
+                    sys.exit("Invalid inspection invocation")
+                if invocation is not None and invocation != observed:
+                    sys.exit("Inspection invocation changed")
+                invocation = observed
+            if values["ActiveState"] == "failed":
+                sys.exit("Isolated inspection fixture failed: " + values["Result"])
+            if values["ActiveState"] == "active" and values["SubState"] == "exited":
+                start = int(values["ExecMainStartTimestampMonotonic"])
+                end = int(values["ExecMainExitTimestampMonotonic"])
+                if invocation is None or values["Result"] != "success" or values["ExecMainCode"] != "1" or values["ExecMainStatus"] != "0" or start < boundary or end < start:
+                    sys.exit("Inspection completion evidence refused")
+                print("Source-isolated inspection completed with retained manager identity")
+                break
+            time.sleep(0.1)
+        else:
+            sys.exit("Inspection fixture completion timed out")
+    finally:
+        subprocess.run(["/usr/bin/systemctl", "stop", unit], timeout=10, check=False)
+        subprocess.run(["/usr/bin/systemctl", "reset-failed", unit], timeout=5, check=False)
