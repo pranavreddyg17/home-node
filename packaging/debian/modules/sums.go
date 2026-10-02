@@ -29,6 +29,7 @@ func verifyModuleSums(records []binaryRecord, data []byte) error {
 		}
 		trusted[key] = fields[2]
 	}
+	packageIdentities := map[string]string{}
 	for _, binary := range records {
 		if len(binary.Dependencies) > 4096 {
 			return fmt.Errorf("oversized compiled module inventory")
@@ -59,6 +60,11 @@ func verifyModuleSums(records []binaryRecord, data []byte) error {
 			if err != nil || len(digest) != 32 || "h1:"+base64.StdEncoding.EncodeToString(digest) != module.Sum {
 				return fmt.Errorf("noncanonical compiled module source sum")
 			}
+			identity := module.Path + " " + module.Version + " " + module.Sum
+			if prior, exists := packageIdentities[original.Path]; exists && prior != identity {
+				return fmt.Errorf("inconsistent packaged dependency identity: %s", original.Path)
+			}
+			packageIdentities[original.Path] = identity
 			if trusted[module.Path+" "+module.Version] != module.Sum {
 				return fmt.Errorf("compiled source sum differs from reviewed inventory: %s", module.Path)
 			}

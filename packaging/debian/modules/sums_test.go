@@ -48,3 +48,24 @@ func TestCompiledModuleIdentityAmbiguityAndBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestPackageWideCompiledDependencyConsistency(t *testing.T) {
+	sum := "h1:" + base64.StdEncoding.EncodeToString(make([]byte, 32))
+	data := []byte("fixture.example/dep v1.0.0 " + sum + "\nfixture.example/dep v1.1.0 " + sum + "\nfixture.example/replacement v1.0.0 " + sum + "\n")
+	records := []binaryRecord{
+		{Dependencies: []*debug.Module{{Path: "fixture.example/dep", Version: "v1.0.0", Sum: sum}}},
+		{Dependencies: []*debug.Module{{Path: "fixture.example/dep", Version: "v1.0.0", Sum: sum}}},
+	}
+	if err := verifyModuleSums(records, data); err != nil {
+		t.Fatal("consistent packaged dependencies refused", err)
+	}
+	records[1].Dependencies[0].Version = "v1.1.0"
+	if err := verifyModuleSums(records, data); err == nil {
+		t.Fatal("mixed compiled dependency versions admitted")
+	}
+	records[1].Dependencies[0].Version = "v1.0.0"
+	records[1].Dependencies[0].Replace = &debug.Module{Path: "fixture.example/replacement", Version: "v1.0.0", Sum: sum}
+	if err := verifyModuleSums(records, data); err == nil {
+		t.Fatal("mixed compiled replacement identities admitted")
+	}
+}
