@@ -53,4 +53,5 @@ sha256sum "$archive" > "$archive.sha256"
 # External evidence avoids a package/SBOM hash cycle; inventory is incomplete.
 python3 packaging/debian/sbom.py "$root" "$archive" "$version" > "$archive.sbom.json"
 go run ./packaging/debian/modules "$root" > "$archive.gomodules.json"
+(cd "$output" && sha256sum "homenode_${version}_amd64.deb.sbom.json" "homenode_${version}_amd64.deb.gomodules.json" > "homenode_${version}_amd64.deb.evidence.sha256")
 printf '%s\n' "$archive"

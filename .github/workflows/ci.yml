@@ -91,6 +91,7 @@ jobs:
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 packaging/debian/sbom_test.py
           packaging/debian/build.sh 0.1.0~ci
+          (cd artifacts && sha256sum --check homenode_0.1.0~ci_amd64.deb.evidence.sha256)
           HOMENODE_PACKAGE_CONTENT_FIXTURE="$GITHUB_WORKSPACE/artifacts/homenode_0.1.0~ci_amd64.deb" go test ./internal/updates -run '^TestNativeBuiltPackage(Content|SBOM)$' -count=1
           sudo env HOMENODE_INSPECT_ENTRY_INTEGRATION=1 HOMENODE_PACKAGE_CONTENT_FIXTURE="$GITHUB_WORKSPACE/artifacts/homenode_0.1.0~ci_amd64.deb" "$(command -v go)" test ./cmd/homenode-inspect -run '^TestNativeInspectionDescriptor$' -count=1
           dpkg-deb --info artifacts/homenode_0.1.0~ci_amd64.deb

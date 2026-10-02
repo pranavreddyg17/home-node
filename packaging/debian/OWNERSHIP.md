@@ -27,3 +27,6 @@ remains required before execution. Do not put private keys in a package.
 Development packages are unsigned and are not a supported production release.
 The release pipeline must add reviewed provenance and signing, verified update
 metadata, licenses, host setup/rollback, service management, and release evidence.
+
+External build evidence and its limits are described in
+[development release evidence](../../docs/DEVELOPMENT_RELEASE_EVIDENCE.md).
