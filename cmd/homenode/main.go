@@ -175,6 +175,9 @@ func serve(args []string) {
 	maintenanceGID := flags.Int("maintenance-gid", -1, "backup socket group")
 	maintenanceSocket := flags.String("maintenance-socket", "/run/homenode-backup/apps.sock", "inherited private app-maintenance socket")
 	backupRepository := flags.String("backup-repository-id", "", "trusted registered repository ID (requires private maintenance listener)")
+	backupRelease := flags.String("backup-release", "", "installed backup worker release (enables backup execution)")
+	backupCatalog := flags.Int64("backup-catalog-version", 0, "installed backup worker catalog version")
+	backupCredentialSocket := flags.String("backup-credential-socket", "/run/homenode-backup/credential.sock", "protected activated backup credential channel")
 	_ = flags.Parse(args)
 	var maintenanceListener net.Listener
 	if *maintenanceUID != -1 || *maintenanceGID != -1 {
@@ -234,7 +237,11 @@ func serve(args []string) {
 		}
 		backend = runtimeclient.New(*supervisorSocket, *transferSocket)
 	}
-	handler, err := control.New(store, control.Config{BackupRepositoryID: *backupRepository, Runtime: backend, PolicyGeneration: *generation, Origin: *origin, Development: *dev, UI: os.DirFS(*ui), Report: func() hostcheck.Report { return hostcheck.Inspect(*dataRoot) }})
+	backupExecution, err := backupExecutionConfiguration(*backupRepository, *backupRelease, *backupCatalog, *backupCredentialSocket, os.Getgid(), !(*dev) && runtime.GOOS == "linux" && os.Geteuid() != 0 && maintenanceListener != nil && backend != nil, *maintenanceSocket, *supervisorSocket, *transferSocket)
+	if err != nil {
+		fatal(err)
+	}
+	handler, err := control.New(store, control.Config{BackupExecution: backupExecution, BackupRepositoryID: *backupRepository, Runtime: backend, PolicyGeneration: *generation, Origin: *origin, Development: *dev, UI: os.DirFS(*ui), Report: func() hostcheck.Report { return hostcheck.Inspect(*dataRoot) }})
 	if err != nil {
 		fatal(err)
 	}
