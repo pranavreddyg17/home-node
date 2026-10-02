@@ -38,6 +38,20 @@ func RecoverReleasedBackupMaintenance(ctx context.Context, store *state.Store, t
 	if err != nil || observation.WorkerCompletion != "complete" || outcome == nil || outcome.JobID != id || outcome.Status != "published" {
 		return errors.Join(ErrBackupPublicationEvidence, err)
 	}
+	// Record a failed/cancelled restoration independently of the work context.
+	// It retains admission and exact completed-worker/released-root evidence.
+	defer func() {
+		if resultErr == nil {
+			return
+		}
+		checkpoint, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		defer cancel()
+		current, err := store.InspectMaintenanceJob(checkpoint, token)
+		if err == nil && current.ID == id && current.Device == device && current.Phase == "restoring" && current.RootToken == "" {
+			err = store.AdvanceMaintenanceJob(checkpoint, token, id, "restoring", "requires-action")
+		}
+		resultErr = errors.Join(resultErr, err)
+	}()
 	restoration, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	if job.Phase != "restoring" {
