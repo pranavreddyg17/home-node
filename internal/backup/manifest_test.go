@@ -132,3 +132,37 @@ func TestManifestDecoderRequiresExactNonNullFields(t *testing.T) {
 		}
 	}
 }
+
+func TestPublishedManifestSchemaRoundTripAcrossSupportedWorkloads(t *testing.T) {
+	manifest, policy, _ := manifestFixture()
+	for _, workload := range []string{"files", "ai"} {
+		image := strings.Repeat(map[string]string{"files": "b", "ai": "c"}[workload], 64)
+		if policy.ApprovedImages == nil {
+			policy.ApprovedImages = map[string]string{}
+		}
+		policy.ApprovedImages[workload] = image
+		manifest.Files = append(manifest.Files, BackupFile{Workload: workload, Name: workload + ".raw", Bytes: 4096, SHA256: strings.Repeat("d", 64), ImageSHA256: image, DataSchema: 1, Protocol: 1})
+	}
+	// Snapshot writes this exact standard JSON representation, including zero
+	// management protocol and omitted optional management image metadata.
+	raw, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeManifest(raw)
+	if err != nil || decoded.Validate(policy, time.Now()) != nil {
+		t.Fatal("publisher schema incompatible with restore", err)
+	}
+	if len(decoded.Files) != 3 || decoded.Files[0].Protocol != 0 || decoded.Files[0].ImageSHA256 != "" || decoded.Files[1].ImageSHA256 != policy.ApprovedImages["files"] || decoded.Files[2].ImageSHA256 != policy.ApprovedImages["ai"] {
+		t.Fatal("published metadata changed", decoded)
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &object); err != nil {
+		t.Fatal(err)
+	}
+	object["files"] = json.RawMessage("null")
+	invalid, _ := json.Marshal(object)
+	if _, err := DecodeManifest(invalid); err == nil {
+		t.Fatal("null published inventory admitted")
+	}
+}
