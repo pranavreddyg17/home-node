@@ -185,6 +185,19 @@ class FrontendEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'too many package license/notice files'):
             self.check()
 
+    def test_readable_notice_artifact_exact_binding(self):
+        artifact = self.directory / 'notices.txt'
+        text = ('HomeNode development frontend notices\n'
+                'Incomplete source collection; license review remains required.\n'
+                '\nreact@1.0.0\nDeclared license: null\n'
+                'No matched package-root notice files collected.\n')
+        artifact.write_text(text)
+        verify(self.root, self.evidence, self.lock, artifact)
+        for changed in (text + 'extra', text.replace('Incomplete', 'Complete'), text.replace('react', 'foreign')):
+            artifact.write_text(changed)
+            with self.assertRaisesRegex(ValueError, 'readable notice artifact mismatch'):
+                verify(self.root, self.evidence, self.lock, artifact)
+
     def test_duplicate_json_key(self):
         self.evidence.write_text('{"schema":1,' + self.evidence.read_text()[1:])
         with self.assertRaises(ValueError):

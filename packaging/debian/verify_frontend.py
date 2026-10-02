@@ -11,15 +11,15 @@ import sys
 from verify_sbom import unique
 
 
-def manifest_bytes(path):
+def manifest_bytes(path, limit=1024 * 1024):
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
         before = os.fstat(fd)
-        if not stat.S_ISREG(before.st_mode) or not 1 <= before.st_size <= 1024 * 1024:
+        if not stat.S_ISREG(before.st_mode) or not 1 <= before.st_size <= limit:
             raise ValueError('invalid installed package manifest')
         data = bytearray()
-        while len(data) <= 1024 * 1024:
-            chunk = os.read(fd, min(65536, 1024 * 1024 + 1 - len(data)))
+        while len(data) <= limit:
+            chunk = os.read(fd, min(65536, limit + 1 - len(data)))
             if not chunk:
                 break
             data.extend(chunk)
@@ -31,7 +31,20 @@ def manifest_bytes(path):
         os.close(fd)
 
 
-def verify(web_root, evidence, lockfile):
+def render_notices(dependencies):
+    text = 'HomeNode development frontend notices\nIncomplete source collection; license review remains required.\n'
+    for dependency in dependencies:
+        license_value = dependency['license']
+        label = license_value if isinstance(license_value, str) else json.dumps(license_value, ensure_ascii=False, separators=(',', ':'))
+        text += '\n' + dependency['name'] + '@' + dependency['version'] + '\nDeclared license: ' + label + '\n'
+        if not dependency['licenseFiles']:
+            text += 'No matched package-root notice files collected.\n'
+        for notice in dependency['licenseFiles']:
+            text += 'Source: ' + notice['path'] + '\nSHA256: ' + notice['sha256'] + '\n' + notice['text'] + '\n'
+    return text
+
+
+def verify(web_root, evidence, lockfile, notice_artifact=None):
     root, evidence, lockfile = map(pathlib.Path, (web_root, evidence, lockfile))
     if root.is_symlink() or not root.is_dir():
         raise ValueError('invalid web payload root')
@@ -106,8 +119,13 @@ def verify(web_root, evidence, lockfile):
         if dependency.get('name') != name or not entry.get('version') or dependency.get('version') != entry['version'] or dependency.get('integrity') != entry.get('integrity') or dependency.get('resolved') != entry.get('resolved'):
             raise ValueError('dependency lock identity mismatch')
 
+    if notice_artifact is not None:
+        text = manifest_bytes(pathlib.Path(notice_artifact), 8 * 1024 * 1024).decode('utf-8')
+        if text != render_notices(dependencies):
+            raise ValueError('readable notice artifact mismatch')
+
 
 if __name__ == '__main__':
-    if len(sys.argv) != 4:
-        raise SystemExit('usage: verify_frontend.py EXTRACTED_WEB EVIDENCE LOCKFILE')
+    if len(sys.argv) not in (4, 5):
+        raise SystemExit('usage: verify_frontend.py EXTRACTED_WEB EVIDENCE LOCKFILE [NOTICES]')
     verify(*sys.argv[1:])

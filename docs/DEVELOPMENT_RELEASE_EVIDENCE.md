@@ -52,12 +52,14 @@ npm --prefix web run test:evidence
 npm --prefix web run build
 PYTHONDONTWRITEBYTECODE=1 python3 packaging/debian/verify_frontend_test.py
 PYTHONDONTWRITEBYTECODE=1 python3 packaging/debian/verify_frontend.py \
-  web/dist web/build-evidence/dependencies.json web/package-lock.json
+  web/dist web/build-evidence/dependencies.json web/package-lock.json \
+  web/build-evidence/frontend-notices.txt
 ```
 
 For extracted package review, replace `web/dist` in the last command with
 `EXTRACTED_ROOT/usr/share/homenode/web` and use the package's `.deb.frontend.json`.
-Retain the independently reviewed lockfile and matching installed npm tree beside
+Supply the package's `.deb.frontend-notices.txt` as the fourth argument to verify
+its exact readable contents against source-checked evidence. Retain the independently reviewed lockfile and matching installed npm tree beside
 it: verification checks those manifest bytes. Downloaded evidence alone cannot
 supply trusted dependency identities. CI also runs the file SBOM and compiled
 module tests; all checks must pass for the scope of development evidence claimed.
