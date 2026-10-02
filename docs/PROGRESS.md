@@ -2599,3 +2599,7 @@ Recovery snapshot validator now requires canonical owner identity ID, unclaimed 
 ### Prevent malformed or exhausted recovery epoch emission
 
 Snapshot sanitization now verifies copied source identity epoch is a positive SQLite integer below int64 exhaustion before incrementing it. Missing/malformed/fractional/zero/exhausted epochs fail rather than emitting incompatible recovery identity. Negative fixture verifies no returned path, no retained partial snapshot and unchanged claimed live owner. Full state/backup race suites, focused epoch/source-integrity race tests, Linux state fixture compilation and diff checks passed. Replacement-host activation/trust-floor/re-enrollment orchestration and full application acceptance remain unfinished. CI37069186507 remains active; follow-up stays local.
+
+### Reject malformed application revision metadata during recovery
+
+Snapshot sanitization now requires copied application revisions to be nonnegative SQLite integers below int64 exhaustion before incrementing them. Invalid source values fail without changing the live instance or retaining a partial snapshot. Restore validation independently rejects fractional/negative revisions, with a fixture that mutates a valid exported database and verifies rejection and subsequent valid acceptance. Full state and backup race suites, Linux state fixture compilation and diff checks passed. CI37069186507 remains in progress at9c6ec4e; this follow-up stays local to avoid cancelling it. Replacement-host orchestration and full application acceptance remain unfinished.

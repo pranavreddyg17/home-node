@@ -265,3 +265,87 @@ func TestRecoverySnapshotRefusesEpochOverflowWithoutChangingLiveIdentity(t *test
 		store.Close()
 	}
 }
+
+func TestRecoverySnapshotRefusesInvalidApplicationRevision(t *testing.T) {
+	for _, revision := range []any{int64(-1), float64(1.5), int64(math.MaxInt64)} {
+		store, err := Open(filepath.Join(t.TempDir(), "source"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.DB.Exec("INSERT INTO identity(singleton,owner_id,claimed,epoch) VALUES(1,?,1,1)", Random()); err != nil {
+			t.Fatal(err)
+		}
+		instance := Random()
+		if _, err := store.DB.Exec("INSERT INTO apps(workload,instance_id,state,updated_at,revision) VALUES('files',?,'stopped',1,?)", instance, revision); err != nil {
+			t.Fatal(err)
+		}
+		directory := t.TempDir()
+		if err := os.Chmod(directory, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if path, err := store.RecoverySnapshot(context.Background(), directory); err == nil || path != "" {
+			t.Fatal("invalid application revision emitted", path, err)
+		}
+		var retained string
+		if err := store.DB.QueryRow("SELECT instance_id FROM apps WHERE workload='files'").Scan(&retained); err != nil || retained != instance {
+			t.Fatal("failed snapshot modified live app", err)
+		}
+		if _, err := os.Stat(filepath.Join(directory, "snapshot.db")); !os.IsNotExist(err) {
+			t.Fatal("partial snapshot retained", err)
+		}
+		store.Close()
+	}
+}
+
+func TestRecoverySnapshotRejectsNonIntegerRestoredApplicationRevision(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "source"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if _, err := store.DB.Exec("INSERT INTO identity(singleton,owner_id,claimed,epoch) VALUES(1,?,1,1)", Random()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DB.Exec("INSERT INTO apps(workload,instance_id,state,updated_at,revision) VALUES('files',?,'stopped',1,0)", Random()); err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path, err := store.RecoverySnapshot(context.Background(), directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writable, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writable.Close()
+	validate := func() error {
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		_, err = ValidateRecoverySnapshot(context.Background(), file)
+		return err
+	}
+	if err := validate(); err != nil {
+		t.Fatal("valid exported application refused", err)
+	}
+	for _, revision := range []any{float64(1.5), int64(-1)} {
+		if _, err := writable.Exec("UPDATE apps SET revision=?", revision); err != nil {
+			t.Fatal(err)
+		}
+		if err := validate(); err == nil {
+			t.Fatal("invalid restored application revision admitted", revision)
+		}
+	}
+	if _, err := writable.Exec("UPDATE apps SET revision=1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := validate(); err != nil {
+		t.Fatal("valid restored application revision refused", err)
+	}
+}

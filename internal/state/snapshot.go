@@ -90,6 +90,10 @@ func (s *Store) RecoverySnapshot(ctx context.Context, directory string) (_ strin
 		if err := tx.QueryRowContext(deadline, "SELECT epoch,typeof(epoch) FROM identity WHERE singleton=1").Scan(&epoch, &epochType); err != nil || epochType != "integer" || epoch < 1 || epoch == math.MaxInt64 {
 			return ErrRecovery
 		}
+		var invalidRevisions int
+		if err := tx.QueryRowContext(deadline, "SELECT count(*) FROM apps WHERE typeof(revision)!='integer' OR revision<0 OR revision=?", int64(math.MaxInt64)).Scan(&invalidRevisions); err != nil || invalidRevisions != 0 {
+			return ErrRecovery
+		}
 		_, err := tx.ExecContext(deadline, `DELETE FROM sessions; DELETE FROM credentials;
 DELETE FROM invitations; DELETE FROM challenges; DELETE FROM recovery_codes;
 UPDATE devices SET capabilities='[]',revoked_at=coalesce(revoked_at,unixepoch());
