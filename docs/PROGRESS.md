@@ -2527,3 +2527,7 @@ Credential audit found ReadRepositoryPassword validated anonymous regular file, 
 ### Publish refused-launch recovery follow-ups for native validation
 
 CI37040526899 at e9f27b4 completed successfully, including development package inspection. Portable backup/runtimeclient race suites from session12554 passed. Repository-before-runtime acquisition, stopped-refusal transport/server, durable qualification/restoration/approved retry/history consistency, HTTP/browser tests, protocol contract and read-only credential changes are now being pushed for native Linux CI. No success claim for the newly added native fixtures is made before their run completes. Unrelated worktree edits remain unstaged. Full application acceptance remains unfinished.
+
+### Reject final-component replacement symlink during target open
+
+Destination audit found Lstat-to-os.Open race: final target could become a symlink between checks. Target now opens using O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC and wraps that descriptor, then retains existing pinned device/read-only filesystem qualification. This closes final-component symlink following; it is not a claim that all mount/parent replacement races or physical removal scenarios are proven. Linux fixture rejects replacement symlink and checks close-on-exec for real directory. Linux backup fixture compilation and diff checks passed; native fixture execution remains required. CI37043553434 for pushed9b02c8d remains queued; new correction stays local. Full application acceptance remains unfinished.

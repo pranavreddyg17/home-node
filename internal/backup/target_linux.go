@@ -49,9 +49,9 @@ func OpenTarget(t Target) (*os.File, error) {
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return nil, ErrTarget
 	}
-	directory, err := os.Open(t.MountPath)
+	directory, err := openTargetDirectory(t.MountPath)
 	if err != nil {
-		return nil, err
+		return nil, ErrTarget
 	}
 	info, err = directory.Stat()
 	if err != nil {
@@ -69,4 +69,13 @@ func OpenTarget(t Target) (*os.File, error) {
 		return nil, ErrTarget
 	}
 	return directory, nil
+}
+
+// Open the final component atomically without following a replacement symlink.
+func openTargetDirectory(path string) (*os.File, error) {
+	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, err
+	}
+	return os.NewFile(uintptr(fd), "registered-backup-target"), nil
 }
