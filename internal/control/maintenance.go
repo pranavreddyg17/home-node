@@ -21,6 +21,7 @@ type maintenanceRequest struct {
 	JobID      string `json:"jobId"`
 	DeviceID   string `json:"deviceId"`
 	SnapshotID string `json:"snapshotId,omitempty"`
+	RootToken  string `json:"rootToken,omitempty"`
 }
 
 var publicationSnapshotID = regexp.MustCompile(`^[a-f0-9]{64}$`)
@@ -28,7 +29,10 @@ var publicationSnapshotID = regexp.MustCompile(`^[a-f0-9]{64}$`)
 func decodeMaintenanceRequest(data []byte) (maintenanceRequest, bool) {
 	return decodeMaintenancePayload(data, false)
 }
-func decodeMaintenancePayload(data []byte, publication bool) (request maintenanceRequest, ok bool) {
+func decodeMaintenancePayload(data []byte, publication bool) (maintenanceRequest, bool) {
+	return decodeMaintenancePayloadFields(data, publication, false)
+}
+func decodeMaintenancePayloadFields(data []byte, publication, root bool) (request maintenanceRequest, ok bool) {
 	if len(data) > 512 || !utf8.Valid(data) {
 		return request, false
 	}
@@ -50,7 +54,7 @@ func decodeMaintenancePayload(data []byte, publication bool) (request maintenanc
 		if _, exists := fields[name]; exists {
 			return request, false
 		}
-		if name != "version" && name != "token" && name != "jobId" && name != "deviceId" && !(publication && name == "snapshotId") {
+		if name != "version" && name != "token" && name != "jobId" && name != "deviceId" && !(publication && name == "snapshotId") && !(root && name == "rootToken") {
 			return request, false
 		}
 		var raw json.RawMessage
@@ -60,7 +64,7 @@ func decodeMaintenancePayload(data []byte, publication bool) (request maintenanc
 		fields[name] = raw
 	}
 	expectedFields := 4
-	if publication {
+	if publication || root {
 		expectedFields = 5
 	}
 	end, err := decoder.Token()
@@ -71,6 +75,9 @@ func decodeMaintenancePayload(data []byte, publication bool) (request maintenanc
 		return request, false
 	}
 	if publication && !publicationSnapshotID.MatchString(request.SnapshotID) {
+		return request, false
+	}
+	if root && !guestproto.ValidID(request.RootToken) {
 		return request, false
 	}
 	return request, true
@@ -87,7 +94,7 @@ func (s *Server) MaintenanceHandler(controllerUID, backupUID uint32) http.Handle
 			http.Error(w, "peer denied", 403)
 			return
 		}
-		if r.Method != "POST" || r.URL.RawQuery != "" || (r.URL.Path != "/v1/maintenance/drain" && r.URL.Path != "/v1/maintenance/restore" && r.URL.Path != "/v1/maintenance/snapshot" && r.URL.Path != "/v1/maintenance/verify-stage" && r.URL.Path != "/v1/maintenance/begin-publish" && r.URL.Path != "/v1/maintenance/verify-publish" && r.URL.Path != "/v1/maintenance/claim-publish" && r.URL.Path != "/v1/maintenance/ack-publish") {
+		if r.Method != "POST" || r.URL.RawQuery != "" || (r.URL.Path != "/v1/maintenance/attach-root" && r.URL.Path != "/v1/maintenance/drain" && r.URL.Path != "/v1/maintenance/restore" && r.URL.Path != "/v1/maintenance/snapshot" && r.URL.Path != "/v1/maintenance/verify-stage" && r.URL.Path != "/v1/maintenance/begin-publish" && r.URL.Path != "/v1/maintenance/verify-publish" && r.URL.Path != "/v1/maintenance/claim-publish" && r.URL.Path != "/v1/maintenance/ack-publish") {
 			http.NotFound(w, r)
 			return
 		}
@@ -96,7 +103,7 @@ func (s *Server) MaintenanceHandler(controllerUID, backupUID uint32) http.Handle
 			http.Error(w, "invalid request", 400)
 			return
 		}
-		request, ok := decodeMaintenancePayload(data, r.URL.Path == "/v1/maintenance/ack-publish")
+		request, ok := decodeMaintenancePayloadFields(data, r.URL.Path == "/v1/maintenance/ack-publish", r.URL.Path == "/v1/maintenance/attach-root")
 		if !ok {
 			http.Error(w, "invalid request", 400)
 			return
@@ -106,6 +113,16 @@ func (s *Server) MaintenanceHandler(controllerUID, backupUID uint32) http.Handle
 		job, err := s.Store.InspectMaintenanceJob(ctx, request.Token)
 		if err != nil || job.ID != request.JobID || job.Device != request.DeviceID {
 			http.Error(w, "maintenance blocked", 409)
+			return
+		}
+		if r.URL.Path == "/v1/maintenance/attach-root" {
+			if err = s.Store.AttachMaintenanceRoot(ctx, request.Token, request.JobID, request.RootToken); err != nil {
+				http.Error(w, "maintenance blocked", 409)
+				return
+			}
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]int{"version": 1})
 			return
 		}
 		if r.URL.Path == "/v1/maintenance/ack-publish" {

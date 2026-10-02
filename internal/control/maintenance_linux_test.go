@@ -99,12 +99,14 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 	if err = bridge.ClaimPublication(ctx, token, device); err == nil {
 		t.Fatal("draining publication claim accepted")
 	}
+	rootCheckpoint := request
+	rootCheckpoint.RootToken = state.Random()
+	call("/v1/maintenance/attach-root", rootCheckpoint, 409)
 	if err = server.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "draining", "freezing"); err != nil {
 		t.Fatal(err)
 	}
-	if err = server.Store.AttachMaintenanceRoot(ctx, token, job.ID, state.Random()); err != nil {
-		t.Fatal(err)
-	}
+	call("/v1/maintenance/attach-root", rootCheckpoint, 200)
+	call("/v1/maintenance/attach-root", rootCheckpoint, 409)
 	snapshotDirectory := t.TempDir()
 	if err = os.Chmod(snapshotDirectory, 0700); err != nil {
 		t.Fatal(err)

@@ -78,3 +78,20 @@ func TestPublicationAcknowledgementStrictPayload(t *testing.T) {
 		}
 	}
 }
+
+func TestMaintenanceRootCheckpointIsSeparateStrictPayload(t *testing.T) {
+	id := strings.Repeat("a", 24)
+	base := `{"version":1,"token":"` + id + `","jobId":"` + id + `","deviceId":"` + id + `"}`
+	valid := strings.TrimSuffix(base, "}") + `,"rootToken":"` + id + `"}`
+	if _, ok := decodeMaintenancePayloadFields([]byte(valid), false, true); !ok {
+		t.Fatal("root checkpoint refused")
+	}
+	if _, ok := decodeMaintenanceRequest([]byte(valid)); ok {
+		t.Fatal("root token admitted on ordinary operation")
+	}
+	for _, invalid := range []string{base, strings.Replace(valid, `"rootToken":"`+id+`"`, `"rootToken":null`, 1), strings.Replace(valid, `"rootToken":`, `"RootToken":`, 1), strings.TrimSuffix(valid, "}") + `,"rootToken":"` + id + `"}`, strings.Replace(valid, `"rootToken":"`+id+`"`, `"rootToken":"short"`, 1)} {
+		if _, ok := decodeMaintenancePayloadFields([]byte(invalid), false, true); ok {
+			t.Fatal("unsafe root checkpoint admitted", invalid)
+		}
+	}
+}
