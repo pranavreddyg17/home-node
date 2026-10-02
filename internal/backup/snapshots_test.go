@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -29,5 +30,21 @@ func TestSnapshotInventoryRequiresBoundedTaggedUnambiguousCandidates(t *testing.
 		if refs, err := parseSnapshotInventory([]byte(data), now); err == nil || refs != nil {
 			t.Fatal("invalid inventory admitted", data, refs)
 		}
+	}
+}
+
+func TestSnapshotInventoryEntryLimitRejectsWholeResult(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	records := make([]string, maxSnapshotInventoryEntries+1)
+	for index := range records {
+		records[index] = fmt.Sprintf(`{"id":"%064x","time":"2025-12-31T00:00:00Z","tags":["homenode-v1"]}`, index)
+	}
+	allowed := "[" + strings.Join(records[:maxSnapshotInventoryEntries], ",") + "]"
+	if entries, err := parseSnapshotInventory([]byte(allowed), now); err != nil || len(entries) != maxSnapshotInventoryEntries {
+		t.Fatal("bounded inventory refused", len(entries), err)
+	}
+	excess := "[" + strings.Join(records, ",") + "]"
+	if entries, err := parseSnapshotInventory([]byte(excess), now); err == nil || entries != nil {
+		t.Fatal("oversized inventory partially admitted", len(entries), err)
 	}
 }

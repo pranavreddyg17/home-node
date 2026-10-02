@@ -154,6 +154,15 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repository.Close()
+	emptyInventory, err := repository.Snapshots(context.Background())
+	if err != nil || emptyInventory == nil || len(emptyInventory) != 0 {
+		t.Fatal("empty encrypted repository inventory", emptyInventory, err)
+	}
+	cancelledInventory, cancelInventory := context.WithCancel(context.Background())
+	cancelInventory()
+	if entries, err := repository.Snapshots(cancelledInventory); entries != nil || !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled inventory returned candidates", entries, err)
+	}
 	_, manifest, policy, path := recoverySet(t)
 
 	diskPath := filepath.Join(path, "files.raw")
@@ -193,6 +202,10 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	}
 	if err = repository.Check(context.Background()); err != nil {
 		t.Fatal("encrypted packs", err)
+	}
+	inventory, err := repository.Snapshots(context.Background())
+	if err != nil || len(inventory) != 1 || inventory[0].ID != snapshot || inventory[0].CreatedAt.IsZero() {
+		t.Fatal("published snapshot not selectable", inventory, err)
 	}
 	// Verify actual encrypted storage returns the exact sanitized database bytes.
 	// Physical guest consistency and drive admission remain separate gates.
@@ -276,6 +289,10 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	}
 	if err = json.Unmarshal(incomplete.data, &summary); err != nil || !repositoryPattern.MatchString(summary.ID) {
 		t.Fatal("incomplete fixture summary", err)
+	}
+	filtered, err := repository.Snapshots(context.Background())
+	if err != nil || len(filtered) != 1 || filtered[0].ID != snapshot {
+		t.Fatal("untagged snapshot became a HomeNode candidate", filtered, err)
 	}
 	if _, err = repository.Restore(context.Background(), summary.ID, failedStage, policy); err == nil {
 		t.Fatal("missing disk restored successfully")
