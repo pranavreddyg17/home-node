@@ -22,10 +22,14 @@ class FrontendEvidenceTests(unittest.TestCase):
         self.lock = self.directory / 'lock.json'
         self.lock.write_text(json.dumps({'packages': {'node_modules/react': {
             'version': '1.0.0', 'integrity': 'fixture', 'resolved': 'fixture-source'}}}))
+        self.manifest = self.directory / 'node_modules/react/package.json'
+        self.manifest.parent.mkdir(parents=True)
+        self.manifest.write_bytes(b'{"name":"react","version":"1.0.0"}')
         self.record = {'schema': 1, 'completeness': 'incomplete',
             'assets': [{'path': 'index.html', 'sha256': hashlib.sha256(b'frontend').hexdigest()}],
             'dependencies': [{'path': 'node_modules/react', 'name': 'react',
-                'version': '1.0.0', 'integrity': 'fixture', 'resolved': 'fixture-source'}]}
+                'version': '1.0.0', 'integrity': 'fixture', 'resolved': 'fixture-source',
+                'manifestSHA256': hashlib.sha256(self.manifest.read_bytes()).hexdigest()}]}
         self.write(self.record)
 
     def write(self, record):
@@ -87,6 +91,11 @@ class FrontendEvidenceTests(unittest.TestCase):
                 self.write(record)
                 with self.assertRaises(ValueError):
                     self.check()
+
+    def test_changed_manifest_with_retained_version(self):
+        self.manifest.write_bytes(b'{"name":"react","version":"1.0.0","extra":true}')
+        with self.assertRaises(ValueError):
+            self.check()
 
     def test_duplicate_json_key(self):
         self.evidence.write_text('{"schema":1,' + self.evidence.read_text()[1:])

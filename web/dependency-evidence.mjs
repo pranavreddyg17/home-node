@@ -30,12 +30,14 @@ export function dependencyEvidence() {
           const directory = id.slice(0, marker + '/node_modules/'.length) + name
           const key = path.relative(root, directory).split(path.sep).join('/')
           const locked = packages[key]
-          const installed = JSON.parse(readFileSync(path.join(directory, 'package.json'), 'utf8'))
+          const manifest = readFileSync(path.join(directory, 'package.json'))
+          const installed = JSON.parse(manifest.toString('utf8'))
           if (!locked || !locked.version || installed.name !== name || installed.version !== locked.version) {
             throw new Error(`Bundled dependency differs from lockfile: ${name}`)
           }
           dependencies.set(key, { path: key, name, version: locked.version,
             integrity: locked.integrity ?? null, resolved: locked.resolved ?? null,
+            manifestSHA256: createHash('sha256').update(manifest).digest('hex'),
             license: installed.license ?? null })
         }
       }

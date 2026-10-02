@@ -28,6 +28,7 @@ test('emitted package identity and asset hash are retained without host paths', 
   assert.equal(record.completeness, 'incomplete')
   assert.equal(record.dependencies[0].name, '@fixture/package')
   assert.equal(record.dependencies[0].version, '1.0.0')
+  assert.equal(record.dependencies[0].manifestSHA256, createHash('sha256').update(readFileSync(path.join(root, 'node_modules/@fixture/package/package.json'))).digest('hex'))
   assert.equal(record.assets[0].sha256, createHash('sha256').update('console.log(7)').digest('hex'))
 })
 

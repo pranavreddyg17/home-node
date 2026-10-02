@@ -56,6 +56,13 @@ def verify(web_root, evidence, lockfile):
         if key in seen or not isinstance(entry, dict) or '/node_modules/' not in '/' + key:
             raise ValueError('foreign or duplicate dependency')
         seen.add(key)
+        if not key.startswith('node_modules/') or pathlib.PurePosixPath(key).as_posix() != key or '..' in pathlib.PurePosixPath(key).parts:
+            raise ValueError('invalid installed package path')
+        manifest = lockfile.parent / key / 'package.json'
+        if manifest.is_symlink() or not manifest.is_file() or manifest.stat().st_size > 1024 * 1024:
+            raise ValueError('invalid installed package manifest')
+        if dependency.get('manifestSHA256') != hashlib.sha256(manifest.read_bytes()).hexdigest():
+            raise ValueError('installed package manifest mismatch')
         name = key.rsplit('node_modules/', 1)[1]
         if dependency.get('name') != name or not entry.get('version') or dependency.get('version') != entry['version'] or dependency.get('integrity') != entry.get('integrity') or dependency.get('resolved') != entry.get('resolved'):
             raise ValueError('dependency lock identity mismatch')
