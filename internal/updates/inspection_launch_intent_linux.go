@@ -95,6 +95,10 @@ func (s *InspectionStage) verifyLaunchIntentOwned(ctx context.Context, parent *o
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.verifyLaunchIntentLocked(ctx, parent, epoch)
+}
+
+func (s *InspectionStage) verifyLaunchIntentLocked(ctx context.Context, parent *os.Root, epoch InspectionLaunchEpoch) error {
 	if err := s.verifyEnvironmentLocked(ctx, parent); err != nil {
 		return err
 	}

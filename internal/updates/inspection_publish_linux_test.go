@@ -7,7 +7,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -250,6 +252,46 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	}
 	if err := stage.verifyLaunchIntentOwned(ctx, parent, epoch); err != nil {
 		t.Fatal("restored regular launch intent refused", err)
+	}
+	calls := 0
+	invocation := "0123456789abcdef0123456789abcdef"
+	factory := func(ctx context.Context, path string, args ...string) *exec.Cmd {
+		calls++
+		if path != "/usr/bin/systemctl" || len(args) != 5 || args[4] != "homenode-inspect.service" {
+			t.Fatal("unexpected execution query scope", path, args)
+		}
+		properties := fmt.Sprintf("InvocationID=%s\nResult=success\nExecMainCode=1\nExecMainStatus=0\nActiveState=active\nSubState=exited\nExecMainStartTimestampMonotonic=%d\nExecMainExitTimestampMonotonic=%d\n", invocation, epoch.NotBeforeMicros, epoch.NotBeforeMicros+1)
+		return exec.CommandContext(ctx, "/usr/bin/printf", "%s", properties)
+	}
+	executionPending := filepath.Join(parentPath, "inspection.execution.pending")
+	if err := os.WriteFile(executionPending, []byte("interrupted"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if captured, err := stage.captureAndPublishExecutionOwned(ctx, parent, epoch, factory); err == nil || captured != (InspectionExecution{}) || calls != 0 {
+		t.Fatal("interrupted execution record replaced or queried manager", captured, err, calls)
+	}
+	if err := os.Remove(executionPending); err != nil {
+		t.Fatal(err)
+	}
+	captured, err := stage.captureAndPublishExecutionOwned(ctx, parent, epoch, factory)
+	if err != nil || captured.Epoch != epoch || captured.InvocationID != invocation || calls != 1 {
+		t.Fatal("execution publication failed", captured, err, calls)
+	}
+	executionPath := filepath.Join(parentPath, "inspection.execution")
+	executionData, err := os.ReadFile(executionPath)
+	var persisted struct {
+		Schema       int             `json:"schema"`
+		Launch       json.RawMessage `json:"launch"`
+		InvocationID string          `json:"invocationId"`
+	}
+	if err != nil || json.Unmarshal(executionData, &persisted) != nil || persisted.Schema != 1 || string(persisted.Launch) != string(launch) || persisted.InvocationID != invocation {
+		t.Fatal("persisted execution differs from admitted evidence", err)
+	}
+	if info, err := os.Lstat(executionPath); err != nil || info.Mode().Perm() != 0600 {
+		t.Fatal("execution record permissions", err)
+	}
+	if captured, err := stage.captureAndPublishExecutionOwned(ctx, parent, epoch, factory); err == nil || captured != (InspectionExecution{}) || calls != 1 {
+		t.Fatal("existing execution record replaced or queried manager", captured, err, calls)
 	}
 	packagePath := filepath.Join(parentPath, "inspection/package.deb")
 	retainedPath := filepath.Join(parentPath, "inspection/package.retained")
