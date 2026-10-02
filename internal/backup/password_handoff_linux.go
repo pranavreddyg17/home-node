@@ -53,7 +53,8 @@ func ReadRepositoryPassword(ctx context.Context, file *os.File) ([]byte, error) 
 	seals, err := unix.FcntlInt(file.Fd(), unix.F_GET_SEALS, 0)
 	required := unix.F_SEAL_WRITE | unix.F_SEAL_GROW | unix.F_SEAL_SHRINK | unix.F_SEAL_SEAL
 	flags, flagErr := unix.FcntlInt(file.Fd(), unix.F_GETFD, 0)
-	if err != nil || seals&required != required || flagErr != nil || flags&unix.FD_CLOEXEC == 0 {
+	access, accessErr := unix.FcntlInt(file.Fd(), unix.F_GETFL, 0)
+	if err != nil || seals&required != required || flagErr != nil || flags&unix.FD_CLOEXEC == 0 || accessErr != nil || access&unix.O_ACCMODE != unix.O_RDONLY {
 		return nil, ErrRepository
 	}
 	data := make([]byte, int(info.Size()))

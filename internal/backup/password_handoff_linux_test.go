@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"strconv"
 	"testing"
 
 	"golang.org/x/sys/unix"
@@ -78,7 +79,35 @@ func TestRepositoryPasswordHandoffRejectsInvalidSealedPayload(t *testing.T) {
 	if _, err = unix.FcntlInt(file.Fd(), unix.F_ADD_SEALS, unix.F_SEAL_WRITE|unix.F_SEAL_GROW|unix.F_SEAL_SHRINK|unix.F_SEAL_SEAL); err != nil {
 		t.Fatal(err)
 	}
-	if value, err := ReadRepositoryPassword(context.Background(), file); err == nil || value != nil {
+	fd, err = unix.Open("/proc/self/fd/"+strconv.Itoa(int(file.Fd())), unix.O_RDONLY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readonly := os.NewFile(uintptr(fd), "invalid-readonly-secret")
+	defer readonly.Close()
+	if value, err := ReadRepositoryPassword(context.Background(), readonly); err == nil || value != nil {
 		t.Fatal("invalid sealed payload admitted")
+	}
+}
+
+func TestRepositoryPasswordHandoffRejectsSealedWritableDescriptor(t *testing.T) {
+	file, err := passwordDescriptor([]byte("valid-sealed-fixture"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if value, err := ReadRepositoryPassword(context.Background(), file); err == nil || value != nil {
+		t.Fatal("writable sealed descriptor admitted")
+	}
+	readonly, err := CreateRepositoryPassword([]byte("valid-sealed-fixture"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readonly.Close()
+	if _, err := unix.FcntlInt(readonly.Fd(), unix.F_SETFD, 0); err != nil {
+		t.Fatal(err)
+	}
+	if value, err := ReadRepositoryPassword(context.Background(), readonly); err == nil || value != nil {
+		t.Fatal("inheritable credential descriptor admitted")
 	}
 }
