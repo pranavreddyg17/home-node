@@ -75,6 +75,11 @@ func ValidateInspectionResult(data []byte, expected InspectionIdentity) (Inspect
 }
 
 func validInspectionIdentity(expected InspectionIdentity) bool {
+	// Reject oversized caller input before decoding or scanning. This helper is
+	// shared by environment, persisted launch evidence and worker result paths.
+	if len(expected.OperationID) < 20 || len(expected.OperationID) > 64 || len(expected.Release) < 1 || len(expected.Release) > 64 || len(expected.PackageSHA256) != 64 || expected.PackageLength < 1 || expected.PackageLength > 512<<20 {
+		return false
+	}
 	hash, err := hex.DecodeString(expected.PackageSHA256)
 	return inspectionOperation.MatchString(expected.OperationID) && err == nil && len(hash) == 32 && hex.EncodeToString(hash) == expected.PackageSHA256 && expected.PackageLength >= 1 && expected.PackageLength <= 512<<20 && releaseName.MatchString(expected.Release)
 }
