@@ -26,6 +26,11 @@ func (s *InspectionStage) collectInspectionResultOwned(ctx context.Context, pare
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.collectInspectionResultLocked(ctx, parent, execution, command)
+}
+
+func (s *InspectionStage) collectInspectionResultLocked(ctx context.Context, parent *os.Root, execution InspectionExecution, command func(context.Context, string, ...string) *exec.Cmd) (InspectionResult, error) {
+	var zero InspectionResult
 	bounded, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if err := s.verifyExecutionRecordLocked(bounded, parent, execution); err != nil {

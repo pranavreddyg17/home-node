@@ -431,6 +431,45 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	if collected, err := stage.collectInspectionResultOwned(ctx, parent, captured, postReadFailure); err == nil || collected != (InspectionResult{}) || managerQueries != 2 {
 		t.Fatal("valid journal bypassed post-read manager failure", collected, err, managerQueries)
 	}
+	journalPayload = validJournalPayload
+	resultPending := filepath.Join(parentPath, "inspection.result.pending")
+	if err := os.WriteFile(resultPending, []byte("interrupted"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	beforeCalls, beforeJournal := calls, journalCalls
+	if publishedResult, err := stage.collectAndPublishInspectionResultOwned(ctx, parent, captured, collectionFactory); err == nil || publishedResult != (InspectionResult{}) || calls != beforeCalls || journalCalls != beforeJournal {
+		t.Fatal("interrupted result publication queried or replaced evidence", publishedResult, err)
+	}
+	if retained, err := os.ReadFile(resultPending); err != nil || string(retained) != "interrupted" {
+		t.Fatal("interrupted result evidence changed", err)
+	}
+	if err := os.Remove(resultPending); err != nil {
+		t.Fatal(err)
+	}
+	publishedResult, err := stage.collectAndPublishInspectionResultOwned(ctx, parent, captured, collectionFactory)
+	if err != nil || publishedResult != collected || publishedResult.InstallAuthorized || calls != beforeCalls+2 || journalCalls != beforeJournal+1 {
+		t.Fatal("durable result collection failed", publishedResult, err)
+	}
+	resultPath := filepath.Join(parentPath, "inspection.result")
+	resultData, err := os.ReadFile(resultPath)
+	var persistedResult struct {
+		Schema    int              `json:"schema"`
+		Execution json.RawMessage  `json:"execution"`
+		Result    InspectionResult `json:"result"`
+	}
+	if err != nil || json.Unmarshal(resultData, &persistedResult) != nil || persistedResult.Schema != 1 || string(persistedResult.Execution) != string(executionData) || persistedResult.Result != collected {
+		t.Fatal("retained result differs from admitted execution", err)
+	}
+	if info, err := os.Lstat(resultPath); err != nil || info.Mode().Perm() != 0600 {
+		t.Fatal("result record permissions", err)
+	}
+	beforeCalls, beforeJournal = calls, journalCalls
+	if repeated, err := stage.collectAndPublishInspectionResultOwned(ctx, parent, captured, collectionFactory); err == nil || repeated != (InspectionResult{}) || calls != beforeCalls || journalCalls != beforeJournal {
+		t.Fatal("existing result record replaced or recollected", repeated, err)
+	}
+	if retained, err := os.ReadFile(resultPath); err != nil || string(retained) != string(resultData) {
+		t.Fatal("result evidence changed on retry", err)
+	}
 	packagePath := filepath.Join(parentPath, "inspection/package.deb")
 	retainedPath := filepath.Join(parentPath, "inspection/package.retained")
 	if err := os.Rename(packagePath, retainedPath); err != nil {
