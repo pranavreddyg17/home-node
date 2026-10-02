@@ -75,8 +75,16 @@ func (s *Server) backupConfiguration(w http.ResponseWriter, r *http.Request) {
 			s.backupTasks.mu.Lock()
 			idle := !s.backupTasks.active && !s.backupTasks.stopping
 			s.backupTasks.mu.Unlock()
-			if idle && s.Store.Transaction(r.Context(), state.RequireAdmission) == nil {
-				availability = "available"
+			if idle {
+				admissionErr := s.Store.Transaction(r.Context(), state.RequireAdmission)
+				switch {
+				case admissionErr == nil:
+					availability = "available"
+				case errors.Is(admissionErr, state.ErrMaintenance):
+					availability = "paused"
+				default:
+					availability = "unavailable"
+				}
 			}
 		}
 	}

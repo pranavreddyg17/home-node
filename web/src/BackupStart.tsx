@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, message } from './api'
 import { startBackup } from './backup'
 
-type Configuration = { enabled: boolean; repositoryId: string; availability: 'available' | 'paused' | 'not-configured' }
+type Configuration = { enabled: boolean; repositoryId: string; availability: 'available' | 'paused' | 'not-configured' | 'unavailable' }
 export function BackupStart() {
   const [configuration, setConfiguration] = useState<Configuration | null>(null)
   const [error, setError] = useState('')
@@ -40,7 +40,7 @@ export function BackupStart() {
       <label>Repository password<input ref={password} type="password" autoComplete="off" required maxLength={8192} disabled={busy} /></label>
       <button className="primary" disabled={busy}>{busy ? 'Verifying and starting…' : 'Verify passkey and start backup'}</button>
       <p>A connected writable backup drive remains vulnerable to host compromise. Safely disconnect it after backup completes.</p>
-    </form> : configuration && <p>{configuration.enabled ? "New backups are paused while work or maintenance is active. Check availability after it finishes." : "External backup execution has not been configured on this server."}</p>}
+    </form> : configuration && <p>{configuration.enabled ? (configuration.availability === 'paused' ? "New backups are paused while work or maintenance is active. Check availability after it finishes." : "Backup availability could not be verified. Check again before entering the repository password.") : "External backup execution has not been configured on this server."}</p>}
     {job && <p role="status">Backup job {job} started. Refresh backup status to check its outcome.</p>}
     {error && <p role="alert" className="form-error">{error}</p>}
   </div>

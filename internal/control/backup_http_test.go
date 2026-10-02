@@ -139,3 +139,25 @@ func TestBackupConfigurationEndpointOnlyExposesEnabledRegisteredIdentity(t *test
 		t.Fatal("configuration cached")
 	}
 }
+
+func TestBackupConfigurationObservationFailureDoesNotInventMaintenance(t *testing.T) {
+	s := testServer(t)
+	s.config.BackupRepositoryID = strings.Repeat("a", 64)
+	s.config.BackupExecution = &BackupExecutionConfig{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	r := httptest.NewRequest("GET", "/api/v1/backups/configuration", nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+	s.backupConfiguration(w, r)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"availability":"unavailable"`) {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	s.backupTasks.mu.Lock()
+	s.backupTasks.stopping = true
+	s.backupTasks.mu.Unlock()
+	w = httptest.NewRecorder()
+	s.backupConfiguration(w, httptest.NewRequest("GET", "/api/v1/backups/configuration", nil))
+	if !strings.Contains(w.Body.String(), `"availability":"paused"`) {
+		t.Fatal("shutdown offered backup", w.Body.String())
+	}
+}
