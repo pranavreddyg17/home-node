@@ -8,10 +8,40 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"golang.org/x/sys/unix"
 )
 
 func verifyInspectionServiceLimits(t *testing.T) {
 	t.Helper()
+	mode, err := unix.PrctlRetInt(unix.PR_GET_SECCOMP, 0, 0, 0, 0)
+	if err != nil || mode != 2 {
+		t.Fatal("inspection worker lacks seccomp filter mode", mode, err)
+	}
+	status, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	filters := 0
+	seen := false
+	for _, line := range strings.Split(string(status), "\n") {
+		if !strings.HasPrefix(line, "Seccomp_filters:") {
+			continue
+		}
+		if seen {
+			t.Fatal("duplicate seccomp filter count")
+		}
+		seen = true
+		value, parseErr := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "Seccomp_filters:")))
+		if parseErr != nil || value < 1 {
+			t.Fatal("invalid seccomp filter count", line, parseErr)
+		}
+		filters = value
+	}
+	if !seen || filters < 1 {
+		t.Fatal("inspection worker has no installed seccomp filter")
+	}
+
 	data, err := os.ReadFile("/proc/self/cgroup")
 	if err != nil {
 		t.Fatal(err)
