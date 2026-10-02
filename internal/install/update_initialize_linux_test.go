@@ -216,6 +216,45 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	if err := os.WriteFile(servicePath, service, 0644); err != nil {
 		t.Fatal(err)
 	}
+	for _, mutation := range []string{"repository", "sequence", "catalog", "cancellation"} {
+		collectionCtx, cancel := context.WithCancel(ctx)
+		sequence, catalog := release.Metadata.Sequence, release.Metadata.CatalogVersion
+		policyPath := filepath.Join(host, "etc/homenode/update-repository.json")
+		result, err := engine.withUpdateInspectionResultOwned(collectionCtx, release, "inspection-fixture-000001", execution, func(_ *updates.InspectionStage, _ context.Context, _ *os.Root, _ updates.InspectionExecution) (updates.InspectionResult, error) {
+			switch mutation {
+			case "repository":
+				if err := os.WriteFile(policyPath, []byte("changed during collection"), 0400); err != nil {
+					t.Fatal(err)
+				}
+			case "sequence":
+				release.Metadata.Sequence = 4
+			case "catalog":
+				release.Metadata.CatalogVersion = 2
+			case "cancellation":
+				cancel()
+			}
+			return updates.InspectionResult{Schema: 1, ContentValid: true}, nil
+		})
+		cancel()
+		want := ErrConflict
+		if mutation == "cancellation" {
+			want = context.Canceled
+		}
+		if !errors.Is(err, want) || result != (updates.InspectionResult{}) {
+			t.Fatal("post-collection policy change exposed evidence", mutation, result, err)
+		}
+		release.Metadata.Sequence, release.Metadata.CatalogVersion = sequence, catalog
+		if err := os.WriteFile(policyPath, repository, 0400); err != nil {
+			t.Fatal(err)
+		}
+		reopened, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000001")
+		if err != nil {
+			t.Fatal("post-collection refusal leaked execution lock", mutation, err)
+		}
+		if err := reopened.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := os.WriteFile(servicePath, []byte("changed readback service"), 0644); err != nil {
 		t.Fatal(err)
 	}
