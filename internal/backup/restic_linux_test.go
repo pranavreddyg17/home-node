@@ -207,6 +207,20 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if err != nil || len(inventory) != 1 || inventory[0].ID != snapshot || inventory[0].CreatedAt.IsZero() {
 		t.Fatal("published snapshot not selectable", inventory, err)
 	}
+	page, err := repository.SnapshotPage(context.Background(), "")
+	if err != nil || len(page.Snapshots) != 1 || page.Snapshots[0].ID != snapshot || page.Next != "" {
+		t.Fatal("published snapshot page", page, err)
+	}
+	finalPage, err := repository.SnapshotPage(context.Background(), snapshot)
+	if err != nil || finalPage.Snapshots == nil || len(finalPage.Snapshots) != 0 || finalPage.Next != "" {
+		t.Fatal("terminal cursor page", finalPage, err)
+	}
+	if _, err := repository.SnapshotPage(context.Background(), string(bytes.Repeat([]byte("f"), 64))); !errors.Is(err, ErrRepository) {
+		t.Fatal("missing repository cursor accepted", err)
+	}
+	if _, err := repository.SnapshotPage(cancelledInventory, ""); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled page accepted", err)
+	}
 	preview, err := repository.InspectSnapshot(context.Background(), snapshot, policy)
 	if err != nil || preview.Release != manifest.Release || !preview.CreatedAt.Equal(manifest.CreatedAt) || len(preview.Files) != len(manifest.Files) {
 		t.Fatal("selected manifest preview", preview, err)
