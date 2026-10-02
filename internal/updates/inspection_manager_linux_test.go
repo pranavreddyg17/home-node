@@ -179,7 +179,7 @@ func TestInspectionConfinementRequiresEveryPolicy(t *testing.T) {
 		"Id=homenode-inspect.service\nLoadState=loaded\nFragmentPath=/etc/systemd/system/homenode-inspect.service\nDropInPaths=\nNeedDaemonReload=no\nType=oneshot\nRemainAfterExit=yes\nDynamicUser=yes\nTransient=no\n",
 		"MemoryMax=268435456\nMemorySwapMax=0\nCPUQuotaPerSecUSec=500ms\nTasksMax=32\nOOMPolicy=kill\nKillMode=control-group\nRestart=no\nTimeoutStartUSec=2min 30s\nTimeoutStopUSec=5s\n",
 		"NoNewPrivileges=yes\nCapabilityBoundingSet=\nAmbientCapabilities=\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\nPrivateDevices=yes\nPrivateNetwork=yes\nProtectKernelTunables=yes\nProtectKernelModules=yes\nProtectKernelLogs=yes\nProtectControlGroups=yes\nProtectProc=invisible\nProcSubset=pid\nRestrictSUIDSGID=yes\nRestrictRealtime=yes\nLockPersonality=yes\nUMask=0077\nSupplementaryGroups=\n",
-		"RestrictNamespaces=yes\nRestrictAddressFamilies=AF_UNIX\nSystemCallArchitectures=native\n",
+		"RestrictNamespaces=yes\nRestrictAddressFamilies=AF_UNIX\nSystemCallArchitectures=native\nStandardOutput=journal\nStandardError=journal\n",
 		"IPAddressDeny=0.0.0.0/0 ::/0\nIPAddressAllow=\nInaccessiblePaths=-/etc/homenode -/var/lib/homenode -/var/lib/homenode-update -/var/lib/homenode-backup -/run/homenode -/run/homenode-transfer\n",
 	}
 	for refused := -1; refused < len(snapshots); refused++ {

@@ -144,13 +144,13 @@ func VerifyInspectionIsolation(ctx context.Context) error {
 	return ValidateInspectionIsolation(properties)
 }
 
-// VerifyInspectionProcessPolicy queries configured namespace/socket/ABI limits.
+// VerifyInspectionProcessPolicy queries namespace/socket/ABI limits and journal routing.
 // Other effective policy and live checks remain required before activation.
 func VerifyInspectionProcessPolicy(ctx context.Context) error {
 	if os.Geteuid() != 0 {
 		return ErrInspectionResult
 	}
-	properties, err := inspectionManagerQuery(ctx, "--property=RestrictNamespaces,RestrictAddressFamilies,SystemCallArchitectures", exec.CommandContext)
+	properties, err := inspectionManagerQuery(ctx, "--property=RestrictNamespaces,RestrictAddressFamilies,SystemCallArchitectures,StandardOutput,StandardError", exec.CommandContext)
 	if err != nil {
 		return err
 	}
@@ -205,7 +205,7 @@ func verifyInspectionConfinementWith(ctx context.Context, required []string, com
 		{"--property=Id,LoadState,FragmentPath,DropInPaths,NeedDaemonReload,Type,RemainAfterExit,DynamicUser,Transient", ValidateInspectionUnitIdentity},
 		{"--property=MemoryMax,MemorySwapMax,CPUQuotaPerSecUSec,TasksMax,OOMPolicy,KillMode,Restart,TimeoutStartUSec,TimeoutStopUSec", ValidateInspectionResources},
 		{"--property=NoNewPrivileges,CapabilityBoundingSet,AmbientCapabilities,ProtectSystem,ProtectHome,PrivateTmp,PrivateDevices,PrivateNetwork,ProtectKernelTunables,ProtectKernelModules,ProtectKernelLogs,ProtectControlGroups,ProtectProc,ProcSubset,RestrictSUIDSGID,RestrictRealtime,LockPersonality,UMask,SupplementaryGroups", ValidateInspectionIsolation},
-		{"--property=RestrictNamespaces,RestrictAddressFamilies,SystemCallArchitectures", ValidateInspectionProcessPolicy},
+		{"--property=RestrictNamespaces,RestrictAddressFamilies,SystemCallArchitectures,StandardOutput,StandardError", ValidateInspectionProcessPolicy},
 		{"--property=IPAddressDeny,IPAddressAllow,InaccessiblePaths", ValidateInspectionAccessPolicy},
 	} {
 		properties, err := inspectionManagerQuery(bounded, check.properties, command)

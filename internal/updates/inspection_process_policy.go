@@ -3,10 +3,11 @@ package updates
 import "strings"
 
 // ValidateInspectionProcessPolicy checks the configured namespace, socket and
-// syscall-architecture restrictions. Syscall denysets, IP/path policies and live
+// syscall-architecture restrictions and journal output routing. Syscall denysets,
+// IP/path policies and live
 // enforcement remain separate activation prerequisites.
 func ValidateInspectionProcessPolicy(properties []byte) error {
-	expected := map[string]string{"RestrictNamespaces": "yes", "RestrictAddressFamilies": "AF_UNIX", "SystemCallArchitectures": "native"}
+	expected := map[string]string{"RestrictNamespaces": "yes", "RestrictAddressFamilies": "AF_UNIX", "SystemCallArchitectures": "native", "StandardOutput": "journal", "StandardError": "journal"}
 	if len(properties) == 0 || len(properties) > 2048 {
 		return ErrInspectionResult
 	}
