@@ -33,6 +33,7 @@ type Capacity struct {
 type Configuration struct {
 	BackupRepositoryID    string
 	BackupRelease         string
+	BackupDriveUUID       string
 	UpdateProvenance      []byte
 	UpdateRepository      *updates.RepositoryConfiguration
 	UpdateBootstrap       *updates.BootstrapRoot
@@ -46,6 +47,7 @@ type Configuration struct {
 	Capacity              Capacity
 }
 type ConfigurationPreview struct {
+	BackupDriveUUID        string              `json:"backupDriveUuid,omitempty"`
 	BackupRepositoryID     string              `json:"backupRepositoryId,omitempty"`
 	BackupRelease          string              `json:"backupRelease,omitempty"`
 	UpdateBootstrapSHA256  string              `json:"updateBootstrapSha256,omitempty"`
@@ -129,7 +131,14 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 			return result, ErrPlan
 		}
 	}
+	if c.BackupDriveUUID != "" && c.BackupRelease == "" {
+		return result, ErrPlan
+	}
 	if c.BackupRelease != "" {
+		target := backup.Target{MountPath: "/mnt/homenode-backup", UUID: c.BackupDriveUUID, RepositoryID: c.BackupRepositoryID}
+		if err := target.Validate(); err != nil {
+			return result, ErrPlan
+		}
 		sentinel := "backup-validation-identity"
 		if c.BackupRepositoryID == "" || a.ControllerGID < 100 || a.ControllerGID > 999 {
 			return result, ErrPlan
@@ -223,6 +232,10 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 	if err != nil {
 		return result, err
 	}
+	if c.BackupRelease != "" {
+		backupEnv := fmt.Sprintf("CONTROLLER_UID=%d\nCONTROLLER_GID=%d\nBACKUP_UUID=%s\nBACKUP_REPOSITORY_ID=%s\nINSTALLED_RELEASE=%s\nCATALOG_VERSION=%d\nMINIMUM_CATALOG_VERSION=%d\n", a.ControllerUID, a.ControllerGID, c.BackupDriveUUID, c.BackupRepositoryID, c.BackupRelease, m.Version, c.MinimumCatalogVersion)
+		addFile("etc/homenode/backup.env", 0600, []byte(backupEnv))
+	}
 	addFile("etc/homenode/services.env", 0644, []byte(env))
 	addFile("etc/homenode/runtime-policy.json", 0600, append(policy, '\n'))
 	addFile("etc/homenode/catalog.pub", 0644, []byte(hex.EncodeToString(c.Publisher)+"\n"))
@@ -282,7 +295,7 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 	if _, _, err = planRecords(plan, 0); err != nil {
 		return result, err
 	}
-	result = ConfigurationPreview{BackupRelease: c.BackupRelease, BackupRepositoryID: c.BackupRepositoryID, Maintenance: c.Maintenance, Network: c.Network, RuntimePolicy: c.Policy, Accounts: c.Accounts, ProvidedCapacity: c.Capacity, Plan: plan, CatalogVersion: m.Version, PublisherKeyID: catalog.KeyID(c.Publisher), RequiredDiskBytes: required, VerifiedImageBytes: imageCredit, RequiredFreeDiskBytes: required - imageCredit, Pending: []string{"verify actual service account memberships", "verify supported host enforcement and measured VM overhead", "place and verify immutable guest images", "verify live Tailscale and protected HTTPS identity", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
+	result = ConfigurationPreview{BackupDriveUUID: c.BackupDriveUUID, BackupRelease: c.BackupRelease, BackupRepositoryID: c.BackupRepositoryID, Maintenance: c.Maintenance, Network: c.Network, RuntimePolicy: c.Policy, Accounts: c.Accounts, ProvidedCapacity: c.Capacity, Plan: plan, CatalogVersion: m.Version, PublisherKeyID: catalog.KeyID(c.Publisher), RequiredDiskBytes: required, VerifiedImageBytes: imageCredit, RequiredFreeDiskBytes: required - imageCredit, Pending: []string{"verify actual service account memberships", "verify supported host enforcement and measured VM overhead", "place and verify immutable guest images", "verify live Tailscale and protected HTTPS identity", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
 	if c.Maintenance != nil {
 		result.Pending = append(result.Pending, "register and qualify an external backup repository", "generate trusted backup launch configuration and qualify worker activation")
 	}

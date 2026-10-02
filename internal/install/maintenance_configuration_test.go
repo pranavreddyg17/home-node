@@ -227,6 +227,7 @@ func TestBackupExecutionUnitUsesVerifiedCatalogAndValidatedRelease(t *testing.T)
 	c.Maintenance = &MaintenanceAccount{UID: 803, GID: 803}
 	c.BackupRepositoryID = strings.Repeat("a", 64)
 	c.BackupRelease = "0.1.0"
+	c.BackupDriveUUID = "abcd-1234"
 	preview, err := ConfigurationPlan(c, now)
 	if err != nil {
 		t.Fatal(err)
@@ -243,8 +244,37 @@ func TestBackupExecutionUnitUsesVerifiedCatalogAndValidatedRelease(t *testing.T)
 		}
 	}
 	c.BackupRelease = "0.1.0"
+	c.BackupDriveUUID = "abcd-1234"
 	c.BackupRepositoryID = ""
 	if _, err := ConfigurationPlan(c, now); err == nil {
 		t.Fatal("execution without repository accepted")
+	}
+}
+
+func TestBackupWorkerEnvironmentIsFixedAndRootOwned(t *testing.T) {
+	c, _, _, now := configurationFixture(t)
+	c.Maintenance = &MaintenanceAccount{UID: 803, GID: 803}
+	c.BackupRepositoryID = strings.Repeat("a", 64)
+	c.BackupRelease = "0.1.0"
+	c.BackupDriveUUID = "abcd-1234"
+	preview, err := ConfigurationPlan(c, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := findConfiguration(t, preview.Plan, "etc/homenode/backup.env")
+	expected := fmt.Sprintf("CONTROLLER_UID=%d\nCONTROLLER_GID=%d\nBACKUP_UUID=abcd-1234\nBACKUP_REPOSITORY_ID=%s\nINSTALLED_RELEASE=0.1.0\nCATALOG_VERSION=%d\nMINIMUM_CATALOG_VERSION=%d\n", c.Accounts.ControllerUID, c.Accounts.ControllerGID, c.BackupRepositoryID, preview.CatalogVersion, c.MinimumCatalogVersion)
+	if string(env.Data) != expected || env.UID != 0 || env.GID != 0 || env.Mode != 0600 || preview.BackupDriveUUID != c.BackupDriveUUID {
+		t.Fatal("worker environment mismatched", string(env.Data))
+	}
+	for _, uuid := range []string{"", "../sda", "abcd\nSECRET=evil", "abcd${VALUE}", "abcd%specifier"} {
+		c.BackupDriveUUID = uuid
+		if _, err := ConfigurationPlan(c, now); err == nil {
+			t.Fatal("unsafe UUID accepted", uuid)
+		}
+	}
+	c.BackupDriveUUID = "abcd-1234"
+	c.BackupRelease = ""
+	if _, err := ConfigurationPlan(c, now); err == nil {
+		t.Fatal("drive without release accepted")
 	}
 }

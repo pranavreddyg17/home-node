@@ -58,6 +58,7 @@ var files = map[string]bool{
 	"etc/homenode/update-root.json":               true,
 	"etc/homenode/update-provenance.json":         true,
 	"etc/homenode/update-repository.json":         true,
+	"etc/homenode/backup.env":                     true,
 	"etc/homenode/services.env":                   true, "etc/homenode/runtime-policy.json": true,
 	"etc/homenode/catalog.pub": true, "etc/homenode/catalog-floor": true, "var/lib/homenode/catalog/catalog.json": true,
 	"etc/systemd/system/homenode-app-maintenance.socket":   true,
