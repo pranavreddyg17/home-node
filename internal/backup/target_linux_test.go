@@ -61,3 +61,24 @@ func TestTargetDescriptorMountIdentity(t *testing.T) {
 		}
 	}
 }
+
+func TestTargetDirectoryOpenRejectsSymlinkParentAndMagicLink(t *testing.T) {
+	base := t.TempDir()
+	real := filepath.Join(base, "real")
+	if err := os.MkdirAll(filepath.Join(real, "target"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "parent")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{filepath.Join(link, "target"), "/proc/self/root" + filepath.Join(real, "target")} {
+		file, err := openTargetDirectory(path)
+		if err == nil || file != nil {
+			if file != nil {
+				file.Close()
+			}
+			t.Fatal("symlink path resolved", path)
+		}
+	}
+}

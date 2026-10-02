@@ -76,9 +76,10 @@ func OpenTarget(t Target) (*os.File, error) {
 	return directory, nil
 }
 
-// Open the final component atomically without following a replacement symlink.
+// Resolve every component without symlinks, including proc-style magic links.
+// Supported Linux hosts must provide openat2; no weaker fallback is permitted.
 func openTargetDirectory(path string) (*os.File, error) {
-	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	fd, err := unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{Flags: uint64(unix.O_RDONLY | unix.O_DIRECTORY | unix.O_NOFOLLOW | unix.O_CLOEXEC), Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
 	if err != nil {
 		return nil, err
 	}
