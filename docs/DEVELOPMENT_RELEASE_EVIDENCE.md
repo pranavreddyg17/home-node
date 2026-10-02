@@ -9,9 +9,10 @@
 | `.deb.sbom.json` | CycloneDX 1.6 package binding and staged file inventory |
 | `.deb.gomodules.json` | Build information from the six actual packaged Go binaries |
 | `.deb.go-notices.json` | Collected Go module root notice sources and hashes, marked incomplete |
+| `.deb.go-notices.txt` | Readable Go notice source collection, marked incomplete |
 | `.deb.frontend.json` | Emitted asset hashes and bundled npm package lock identities |
 | `.deb.frontend-notices.txt` | Readable collected npm license/notice sources, marked incomplete |
-| `.deb.evidence.sha256` | Relative-path checksums for all five evidence artifacts |
+| `.deb.evidence.sha256` | Relative-path checksums for all six evidence artifacts |
 
 The module record includes executable SHA256, embedded Go version, main module,
 dependencies, replacement modules and build settings. It reads binary build
@@ -36,11 +37,12 @@ This detects cache changes against Go's downloaded module records. It does not
 authenticate those records independently or exclude a concurrent writer that
 changes and restores cache contents between checks. Build hosts must isolate
 their source cache from untrusted writers. Nested notices, full license review,
-readable Go notices and license approval remain unfinished. CI independently
+license approval remains unfinished. CI independently
 compares the notice sidecar with compiled identities regenerated from extracted
 executables and source notice bytes, checking cache integrity before and after.
 The verifier shares bounded input parsing helpers, but reconstructs the source
-notice inventory without invoking the collector.
+notice inventory without invoking the collector. It also requires the readable
+Go notice artifact to exactly match the source-verified records.
 
 For review, first verify downloaded artifact checksums. These detect corruption;
 they do not authenticate a publisher when downloaded alongside untrusted bytes.

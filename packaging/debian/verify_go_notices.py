@@ -11,7 +11,7 @@ from verify_frontend import manifest_bytes
 from verify_sbom import unique
 
 
-def verify(compiled_path, sources_path, notices_path):
+def verify(compiled_path, sources_path, notices_path, readable_path=None):
     compiled = json.loads(manifest_bytes(compiled_path, 8 * 1024 * 1024), object_pairs_hook=unique)
     claims = json.loads(manifest_bytes(notices_path, 8 * 1024 * 1024), object_pairs_hook=unique)
     if (not isinstance(compiled, dict) or type(compiled.get('schema')) is not int
@@ -64,9 +64,19 @@ def verify(compiled_path, sources_path, notices_path):
             raise ValueError('module notice source mismatch')
     if seen != set(expected):
         raise ValueError('missing compiled module notices')
+    if readable_path is not None:
+        text = 'HomeNode development Go notices\nIncomplete source collection; license review remains required.\n'
+        for module in sorted(claims['modules'], key=lambda value: (value['module'], value['version'])):
+            text += '\n%s@%s\nSource sum: %s\n' % (module['module'], module['version'], module['sum'])
+            if not module['licenseFiles']:
+                text += 'No matched module-root notice files collected.\n'
+            for notice in module['licenseFiles']:
+                text += 'Source: %s\nSHA256: %s\n%s\n' % (notice['path'], notice['sha256'], notice['text'])
+        if manifest_bytes(readable_path, 8 * 1024 * 1024) != text.encode('utf-8'):
+            raise ValueError('readable Go notices differ from verified sources')
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 4:
-        raise ValueError('usage: verify_go_notices.py COMPILED_EVIDENCE SOURCE_STREAM NOTICES')
+    if len(sys.argv) not in (4, 5):
+        raise ValueError('usage: verify_go_notices.py COMPILED_EVIDENCE SOURCE_STREAM NOTICES [READABLE_NOTICES]')
     verify(*sys.argv[1:])

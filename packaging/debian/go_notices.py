@@ -30,14 +30,31 @@ def read_sources(path):
     return sources
 
 
+def render_notices(result):
+    parts = ['HomeNode development Go notices\nIncomplete source collection; license review remains required.\n']
+    for module in result['modules']:
+        parts.append('\n' + module['module'] + '@' + module['version'] + '\nSource sum: ' + module['sum'] + '\n')
+        if not module['licenseFiles']:
+            parts.append('No matched module-root notice files collected.\n')
+        for notice in module['licenseFiles']:
+            parts.append('Source: ' + notice['path'] + '\nSHA256: ' + notice['sha256'] + '\n' + notice['text'] + '\n')
+    data = ''.join(parts).encode('utf-8')
+    if len(data) > LIMIT:
+        raise ValueError('readable module notices exceed limit')
+    return data
+
+
 def run(arguments, output):
-    if len(arguments) != 2:
-        raise ValueError('usage: go_notices.py COMPILED_EVIDENCE MODULE_SOURCE_STREAM')
+    if len(arguments) not in (2, 3):
+        raise ValueError('usage: go_notices.py COMPILED_EVIDENCE MODULE_SOURCE_STREAM [READABLE_NOTICES]')
     evidence = json.loads(manifest_bytes(arguments[0], LIMIT), object_pairs_hook=unique)
     result = collect(evidence, read_sources(arguments[1]))
     encoded = (json.dumps(result, ensure_ascii=False, sort_keys=True) + '\n').encode('utf-8')
     if len(encoded) > LIMIT:
         raise ValueError('module notice output exceeds limit')
+    readable = render_notices(result)
+    if len(arguments) == 3:
+        pathlib.Path(arguments[2]).write_bytes(readable)
     if output.write(encoded) != len(encoded):
         raise OSError('short module notice output write')
 

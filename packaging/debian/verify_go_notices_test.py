@@ -5,7 +5,8 @@ import pathlib
 import tempfile
 import unittest
 
-from go_notices import collect
+from go_notices import collect, run
+import io
 from verify_go_notices import verify
 
 
@@ -24,6 +25,13 @@ class GoNoticeVerificationTests(unittest.TestCase):
             notices = collect(compiled, sources)
             paths[2].write_text(json.dumps(notices))
             verify(*paths)
+            readable = root / 'notices.txt'
+            run([paths[0], paths[1], readable], io.BytesIO())
+            verify(*paths, readable)
+            self.assertIn('reviewed fixture notice', readable.read_text())
+            readable.write_text(readable.read_text().replace('reviewed fixture notice', 'foreign notice'))
+            with self.assertRaises(ValueError):
+                verify(*paths, readable)
             mutations = []
             for field in ['module', 'version', 'sum']:
                 changed = copy.deepcopy(notices)

@@ -57,10 +57,11 @@ go run ./packaging/debian/modules "$root" go.sum > "$archive.gomodules.json"
 # Metadata/checksums alone do not qualify the files in the source directory.
 go mod verify
 go list -m -json all > "$staging/go-source-modules.json"
-PYTHONDONTWRITEBYTECODE=1 python3 packaging/debian/go_notices.py "$archive.gomodules.json" "$staging/go-source-modules.json" > "$staging/go-notices.json"
+PYTHONDONTWRITEBYTECODE=1 python3 packaging/debian/go_notices.py "$archive.gomodules.json" "$staging/go-source-modules.json" "$staging/go-notices.txt" > "$staging/go-notices.json"
 go mod verify
 cp "$staging/go-notices.json" "$archive.go-notices.json"
+cp "$staging/go-notices.txt" "$archive.go-notices.txt"
 cp web/build-evidence/dependencies.json "$archive.frontend.json"
 cp web/build-evidence/frontend-notices.txt "$archive.frontend-notices.txt"
-(cd "$output" && sha256sum "homenode_${version}_amd64.deb.sbom.json" "homenode_${version}_amd64.deb.gomodules.json" "homenode_${version}_amd64.deb.go-notices.json" "homenode_${version}_amd64.deb.frontend.json" "homenode_${version}_amd64.deb.frontend-notices.txt" > "homenode_${version}_amd64.deb.evidence.sha256")
+(cd "$output" && sha256sum "homenode_${version}_amd64.deb.sbom.json" "homenode_${version}_amd64.deb.gomodules.json" "homenode_${version}_amd64.deb.go-notices.json" "homenode_${version}_amd64.deb.go-notices.txt" "homenode_${version}_amd64.deb.frontend.json" "homenode_${version}_amd64.deb.frontend-notices.txt" > "homenode_${version}_amd64.deb.evidence.sha256")
 printf '%s\n' "$archive"
