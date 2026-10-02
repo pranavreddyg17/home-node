@@ -324,6 +324,48 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	if err := stage.verifyRecordedExecutionCompletionOwned(ctx, parent, captured, factory); err != nil || calls != 3 {
 		t.Fatal("restored recorded completion refused", err, calls)
 	}
+	if err := os.Chmod(executionPath, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.verifyRecordedExecutionCompletionOwned(ctx, parent, captured, factory); err == nil || calls != 3 {
+		t.Fatal("public execution record reached manager", err, calls)
+	}
+	if err := os.Chmod(executionPath, 0600); err != nil {
+		t.Fatal(err)
+	}
+	executionRetained := filepath.Join(parentPath, "inspection.execution.retained")
+	if err := os.Rename(executionPath, executionRetained); err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"missing", "symlink", "hardlink", "fifo", "directory"} {
+		switch kind {
+		case "symlink":
+			err = os.Symlink(executionRetained, executionPath)
+		case "hardlink":
+			err = os.Link(executionRetained, executionPath)
+		case "fifo":
+			err = unix.Mkfifo(executionPath, 0600)
+		case "directory":
+			err = os.Mkdir(executionPath, 0700)
+		}
+		if err != nil {
+			t.Fatal(kind, err)
+		}
+		if err := stage.verifyRecordedExecutionCompletionOwned(ctx, parent, captured, factory); err == nil || calls != 3 {
+			t.Fatal("unsafe execution record reached manager", kind, err, calls)
+		}
+		if kind != "missing" {
+			if err := os.Remove(executionPath); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := os.Rename(executionRetained, executionPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.verifyRecordedExecutionCompletionOwned(ctx, parent, captured, factory); err != nil || calls != 4 {
+		t.Fatal("restored private execution inode refused", err, calls)
+	}
 	packagePath := filepath.Join(parentPath, "inspection/package.deb")
 	retainedPath := filepath.Join(parentPath, "inspection/package.retained")
 	if err := os.Rename(packagePath, retainedPath); err != nil {
