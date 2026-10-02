@@ -68,10 +68,46 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await expect(page.getByLabel('Repository password')).toHaveValue('')
   expect(backupRequests).toBe(1)
   await page.evaluate(() => Reflect.deleteProperty(navigator.credentials, 'get'))
+  const resumeJob = 'A'.repeat(24)
+  let resumeAccepted = false, resumeRequests = 0, resumeKey = ''
+  await page.route('**/api/v1/backups/outcomes', route => route.fulfill({ json: {
+    schema: 1, current: { status: 'published', publishedAt: 10 }, lastPublished: { status: 'published', publishedAt: 10 }, workerCompletion: 'complete', resumeJobId: resumeAccepted ? '' : resumeJob,
+  } }))
+  await page.route(`**/api/v1/backups/${resumeJob}/resume/approval`, async route => {
+    expect(route.request().postData()).toBe('{}')
+    resumeKey = route.request().headers()['idempotency-key']
+    await route.fulfill({ json: { options: { publicKey: { challenge: 'YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo', rpId: 'localhost', userVerification: 'required', timeout: 10000 } }, challengeToken: 'backup-fixture-challenge' } })
+  })
+  await page.route(`**/api/v1/backups/${resumeJob}/resume`, async route => {
+    resumeRequests++
+    expect(route.request().postData()).toBe('{}')
+    expect(route.request().headers()['idempotency-key']).toBe(resumeKey)
+    expect(route.request().headers()['x-action-approval']).toBe('backup-fixture-grant')
+    expect(route.request().headers()['content-type']).toBe('application/json')
+    resumeAccepted = true
+    await route.fulfill({ status: 202, json: { jobId: resumeJob, status: 'restoring' } })
+  })
+  await page.getByRole('button', { name: 'Refresh backup status' }).click()
+  await page.evaluate(() => Object.defineProperty(navigator.credentials, 'get', { configurable: true, value: async () => { throw new DOMException('Resume cancelled', 'NotAllowedError') } }))
+  await page.getByRole('button', { name: 'Verify passkey and resume workloads' }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'Resume cancelled' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Verify passkey and resume workloads' })).toBeEnabled()
+  expect(resumeRequests).toBe(0)
+  await page.evaluate(() => Reflect.deleteProperty(navigator.credentials, 'get'))
+  await page.getByRole('button', { name: 'Verify passkey and resume workloads' }).click()
+  await expect(page.getByText('Workload restoration started.', { exact: false })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Verify passkey and resume workloads' })).toHaveCount(0)
+  expect(resumeRequests).toBe(1)
+  await page.unroute('**/api/v1/backups/outcomes')
+  await page.unroute(`**/api/v1/backups/${resumeJob}/resume/approval`)
+  await page.unroute(`**/api/v1/backups/${resumeJob}/resume`)
   await page.unroute('**/api/v1/backups/configuration')
   await page.unroute('**/api/v1/backups/approval')
   await page.unroute('**/api/v1/auth/approval/finish')
   await page.unroute('**/api/v1/backups')
+  await page.locator('nav').getByRole('button', { name: 'Overview', exact: false }).click()
+  await page.locator('nav').getByRole('button', { name: 'Settings', exact: false }).click()
+
 
   await page.route('**/api/v1/backups/outcomes', route => route.fulfill({ json: {
     schema: 1, current: { status: 'unknown', publishedAt: 0 }, lastPublished: { status: 'published', publishedAt: 10 },
