@@ -3,8 +3,10 @@
 package updates
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -81,7 +83,47 @@ func TestNativeInspectionJournalResult(t *testing.T) {
 			t.Fatal(string(output), err)
 		}
 	}
+	awaitJournalEntries := func(execution InspectionExecution, expectedCount int) {
+		boot := strings.ReplaceAll(execution.Epoch.BootID, "-", "")
+		for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
+			bounded, stop := context.WithTimeout(ctx, 2*time.Second)
+			command := exec.CommandContext(bounded, "/usr/bin/journalctl", "--system", "--no-pager", "--quiet", "--all", "--output=json", "--lines=2", "--output-fields=MESSAGE,_SYSTEMD_UNIT,_SYSTEMD_INVOCATION_ID,_BOOT_ID,_TRANSPORT,_LINE_BREAK", "--", "_SYSTEMD_UNIT="+unit, "_SYSTEMD_INVOCATION_ID="+execution.InvocationID, "_BOOT_ID="+boot)
+			command.Env = []string{"PATH=/usr/bin:/bin", "LC_ALL=C", "SYSTEMD_COLORS=0", "SYSTEMD_PAGER=cat"}
+			output := &inspectionJournalOutput{}
+			command.Stdout = output
+			command.Stderr = io.Discard
+			command.WaitDelay = time.Second
+			err := command.Run()
+			stop()
+			if err != nil {
+				t.Fatal("native journal observation failed", err)
+			}
+			decoder := json.NewDecoder(bytes.NewReader(output.Bytes()))
+			count := 0
+			for {
+				var fields map[string]json.RawMessage
+				err := decoder.Decode(&fields)
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatal("native journal serialization", err)
+				}
+				var payload string
+				if json.Unmarshal(fields["MESSAGE"], &payload) != nil || payload != string(message) {
+					t.Fatal("native journal message differs from emitted bytes")
+				}
+				count++
+			}
+			if count == expectedCount {
+				return
+			}
+			time.Sleep(25 * time.Millisecond)
+		}
+		t.Fatal("journal did not retain expected message count", expectedCount)
+	}
 	syncJournal()
+	awaitJournalEntries(execution, 1)
 	result, err := ReadInspectionJournalResult(ctx, identity, execution)
 	if err != nil || !result.ContentValid || result.InstallAuthorized {
 		t.Fatal("native journal result refused", result, err)
@@ -110,6 +152,7 @@ func TestNativeInspectionJournalResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	syncJournal()
+	awaitJournalEntries(next, 2)
 	if _, err := ReadInspectionJournalResult(ctx, identity, next); err == nil {
 		t.Fatal("multiple native result messages accepted")
 	}
