@@ -5,6 +5,8 @@ package updates
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"os"
@@ -27,8 +29,49 @@ func TestNativeInspectionJournalResult(t *testing.T) {
 			t.Fatal("fixture refuses existing unit", base, err)
 		}
 	}
-	identity := InspectionIdentity{OperationID: "inspection-journal-fixture-0001", Release: "0.1.0", PackageSHA256: strings.Repeat("ab", 32), PackageLength: 12}
-	message, err := json.Marshal(InspectionResult{Schema: 1, OperationID: identity.OperationID, Release: identity.Release, PackageSHA256: identity.PackageSHA256, PackageLength: 12, ContentValid: true})
+	packageBytes := []byte("journal fixture package")
+	sum := sha256.Sum256(packageBytes)
+	identity := InspectionIdentity{OperationID: "inspection-journal-fixture-0001", Release: "0.1.0", PackageSHA256: hex.EncodeToString(sum[:]), PackageLength: int64(len(packageBytes))}
+	parentPath := t.TempDir()
+	if err := os.Chmod(parentPath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(parentPath, "inspection"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	parent, err := os.OpenRoot(parentPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer parent.Close()
+	staging, err := parent.OpenRoot("inspection")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer staging.Close()
+	sourcePath := filepath.Join(t.TempDir(), "package.deb")
+	if err := os.WriteFile(sourcePath, packageBytes, 0400); err != nil {
+		t.Fatal(err)
+	}
+	source, err := os.Open(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Close()
+	release := &AcquiredRelease{Package: source, PackageSHA256: identity.PackageSHA256, PackageLength: identity.PackageLength, Metadata: ReleaseMetadata{Release: identity.Release}}
+	if err := StageInspectionPackage(ctx, staging, release, identity.OperationID); err != nil {
+		t.Fatal(err)
+	}
+	stage, err := OpenInspectionStage(ctx, staging, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stage.Close()
+	if err := stage.PublishEnvironment(ctx, parent); err != nil {
+		t.Fatal(err)
+	}
+
+	message, err := json.Marshal(InspectionResult{Schema: 1, OperationID: identity.OperationID, Release: identity.Release, PackageSHA256: identity.PackageSHA256, PackageLength: identity.PackageLength, ContentValid: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,8 +111,11 @@ func TestNativeInspectionJournalResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := stage.PublishLaunchIntent(ctx, parent, epoch); err != nil {
+		t.Fatal(err)
+	}
 	manager("start", unit)
-	execution, err := CaptureInspectionExecution(ctx, epoch)
+	execution, err := stage.CaptureAndPublishExecution(ctx, parent, epoch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +181,15 @@ func TestNativeInspectionJournalResult(t *testing.T) {
 	if _, err := ReadInspectionJournalResult(ctx, wrong, execution); err == nil {
 		t.Fatal("wrong admitted package accepted")
 	}
+	retained, err := stage.CollectAndPublishInspectionResult(ctx, parent, execution)
+	if err != nil || retained != result {
+		t.Fatal("native result collection/publication failed", retained, err)
+	}
 	manager("stop", unit)
+	readback, err := stage.ReadRecordedInspectionResult(ctx, parent, execution)
+	if err != nil || readback != result {
+		t.Fatal("stopped native result readback failed", readback, err)
+	}
 	duplicate := append(append(append([]byte(nil), message...), '\n'), message...)
 	duplicate = append(duplicate, '\n')
 	if err := os.WriteFile(input, duplicate, 0600); err != nil {
