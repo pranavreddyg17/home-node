@@ -30,6 +30,7 @@ type Capacity struct {
 	FreeDiskBytes uint64
 }
 type Configuration struct {
+	UpdateProvenance      []byte
 	UpdateRepository      *updates.RepositoryConfiguration
 	UpdateBootstrap       *updates.BootstrapRoot
 	Maintenance           *MaintenanceAccount
@@ -68,6 +69,14 @@ func ConfigurationPlan(c Configuration, now time.Time) (ConfigurationPreview, er
 func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (ConfigurationPreview, error) {
 	var result ConfigurationPreview
 	var updateRootVersion int64
+	if len(c.UpdateProvenance) != 0 {
+		if c.UpdateRepository == nil || c.UpdateBootstrap == nil {
+			return result, ErrPlan
+		}
+		if _, err := updates.ParseProvenancePolicy(c.UpdateProvenance); err != nil {
+			return result, err
+		}
+	}
 	if c.UpdateRepository != nil {
 		if c.UpdateBootstrap == nil || c.UpdateRepository.MinimumCatalogVersion < c.MinimumCatalogVersion {
 			return result, ErrPlan
@@ -179,6 +188,10 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 				return result, err
 			}
 			addFile("etc/homenode/update-repository.json", 0400, append(data, '\n'))
+			if len(c.UpdateProvenance) != 0 {
+				addFile("etc/homenode/update-provenance.json", 0400, append([]byte(nil), c.UpdateProvenance...))
+			}
+
 		}
 	}
 	if c.Maintenance != nil {
