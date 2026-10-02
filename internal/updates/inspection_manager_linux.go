@@ -112,3 +112,16 @@ func VerifyInspectionResources(ctx context.Context) error {
 	}
 	return ValidateInspectionResources(properties)
 }
+
+// VerifyInspectionIsolation queries core manager-configured confinement. More
+// effective policy and live enforcement checks are required before activation.
+func VerifyInspectionIsolation(ctx context.Context) error {
+	if os.Geteuid() != 0 {
+		return ErrInspectionResult
+	}
+	properties, err := inspectionManagerQuery(ctx, "--property=NoNewPrivileges,CapabilityBoundingSet,AmbientCapabilities,ProtectSystem,ProtectHome,PrivateTmp,PrivateDevices,PrivateNetwork,ProtectKernelTunables,ProtectKernelModules,ProtectKernelLogs,ProtectControlGroups,ProtectProc,ProcSubset,RestrictSUIDSGID,RestrictRealtime,LockPersonality", exec.CommandContext)
+	if err != nil {
+		return err
+	}
+	return ValidateInspectionIsolation(properties)
+}

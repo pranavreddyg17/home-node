@@ -62,6 +62,8 @@ with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, tem
                "-test.run=^TestNativeInspectionDescriptor$", "-test.count=1", "-test.v"]
     keys = {"InvocationID", "Result", "ExecMainCode", "ExecMainStatus", "ActiveState", "SubState", "ExecMainStartTimestampMonotonic", "ExecMainExitTimestampMonotonic"}
     resource_values = {"MemoryMax": "268435456", "MemorySwapMax": "0", "CPUQuotaPerSecUSec": "500ms", "TasksMax": "32", "OOMPolicy": "kill", "KillMode": "control-group", "Restart": "no"}
+    isolation_values = {"NoNewPrivileges": "yes", "CapabilityBoundingSet": "", "AmbientCapabilities": "", "ProtectSystem": "strict", "ProtectHome": "yes", "PrivateTmp": "yes", "PrivateDevices": "yes", "PrivateNetwork": "yes", "ProtectKernelTunables": "yes", "ProtectKernelModules": "yes", "ProtectKernelLogs": "yes", "ProtectControlGroups": "yes", "ProtectProc": "invisible", "ProcSubset": "pid", "RestrictSUIDSGID": "yes", "RestrictRealtime": "yes", "LockPersonality": "yes"}
+    keys |= isolation_values.keys()
     keys |= resource_values.keys()
     invocation = None
     try:
@@ -83,6 +85,8 @@ with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, tem
                 sys.exit("Missing inspection manager evidence")
             if any(values[key] != value for key, value in resource_values.items()):
                 sys.exit("Inspection manager resource limits differ from source contract")
+            if any(values[key] != value for key, value in isolation_values.items()):
+                sys.exit("Inspection manager confinement differs from source contract")
             observed = values["InvocationID"]
             if observed:
                 if len(observed) != 32 or any(c not in "0123456789abcdef" for c in observed) or observed == "0" * 32:
