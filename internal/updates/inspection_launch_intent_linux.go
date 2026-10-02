@@ -3,9 +3,11 @@
 package updates
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 
 	"golang.org/x/sys/unix"
@@ -34,16 +36,7 @@ func (s *InspectionStage) publishLaunchIntentOwned(ctx context.Context, parent *
 	if err := VerifyInspectionLaunchEpoch(ctx, epoch); err != nil {
 		return err
 	}
-	record := struct {
-		Schema          int    `json:"schema"`
-		OperationID     string `json:"operationId"`
-		Release         string `json:"release"`
-		PackageSHA256   string `json:"packageSha256"`
-		PackageLength   int64  `json:"packageLength"`
-		BootID          string `json:"bootId"`
-		NotBeforeMicros uint64 `json:"notBeforeMicros"`
-	}{1, s.identity.OperationID, s.identity.Release, s.identity.PackageSHA256, s.identity.PackageLength, epoch.BootID, epoch.NotBeforeMicros}
-	data, err := json.Marshal(record)
+	data, err := inspectionLaunchRecord(s.identity, epoch)
 	if err != nil {
 		return err
 	}
@@ -68,4 +61,58 @@ func (s *InspectionStage) publishLaunchIntentOwned(ctx context.Context, parent *
 		return err
 	}
 	return errors.Join(directory.Sync(), ctx.Err())
+}
+
+func inspectionLaunchRecord(identity InspectionIdentity, epoch InspectionLaunchEpoch) ([]byte, error) {
+	if !validInspectionIdentity(identity) || !validInspectionBootID(epoch.BootID) || epoch.NotBeforeMicros == 0 {
+		return nil, ErrInspectionResult
+	}
+	record := struct {
+		Schema          int    `json:"schema"`
+		OperationID     string `json:"operationId"`
+		Release         string `json:"release"`
+		PackageSHA256   string `json:"packageSha256"`
+		PackageLength   int64  `json:"packageLength"`
+		BootID          string `json:"bootId"`
+		NotBeforeMicros uint64 `json:"notBeforeMicros"`
+	}{1, identity.OperationID, identity.Release, identity.PackageSHA256, identity.PackageLength, epoch.BootID, epoch.NotBeforeMicros}
+	return json.Marshal(record)
+}
+
+// VerifyLaunchIntent verifies private canonical publication against the
+// independently retained epoch and locked package. It does not recover an
+// unknown epoch from disk or authenticate execution of a manager invocation.
+func (s *InspectionStage) VerifyLaunchIntent(ctx context.Context, parent *os.Root, epoch InspectionLaunchEpoch) error {
+	if os.Geteuid() != 0 {
+		return ErrInspectionResult
+	}
+	return s.verifyLaunchIntentOwned(ctx, parent, epoch)
+}
+
+func (s *InspectionStage) verifyLaunchIntentOwned(ctx context.Context, parent *os.Root, epoch InspectionLaunchEpoch) error {
+	if s == nil || parent == nil {
+		return ErrInspectionResult
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.verifyEnvironmentLocked(ctx, parent); err != nil {
+		return err
+	}
+	if err := VerifyInspectionLaunchEpoch(ctx, epoch); err != nil {
+		return err
+	}
+	if _, err := parent.Lstat("inspection.launch.pending"); !errors.Is(err, os.ErrNotExist) {
+		return errors.Join(ErrInspectionResult, err)
+	}
+	file, err := openInspectionFile(parent, "inspection.launch", 0600)
+	if err != nil {
+		return err
+	}
+	data, readErr := io.ReadAll(io.LimitReader(file, 2049))
+	closeErr := file.Close()
+	expected, err := inspectionLaunchRecord(s.identity, epoch)
+	if err != nil || readErr != nil || closeErr != nil || !bytes.Equal(data, expected) {
+		return errors.Join(ErrInspectionResult, err, readErr, closeErr)
+	}
+	return ctx.Err()
 }

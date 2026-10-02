@@ -171,6 +171,49 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	if retained, err := os.ReadFile(launchPath); err != nil || string(retained) != string(launch) {
 		t.Fatal("launch evidence changed on retry", err)
 	}
+	if err := stage.verifyLaunchIntentOwned(ctx, parent, epoch); err != nil {
+		t.Fatal("valid launch intent refused", err)
+	}
+	otherEpoch := epoch
+	otherEpoch.NotBeforeMicros--
+	if err := stage.verifyLaunchIntentOwned(ctx, parent, otherEpoch); err == nil {
+		t.Fatal("different retained boundary admitted")
+	}
+	if err := stage.verifyLaunchIntentOwned(canceled, parent, epoch); err == nil {
+		t.Fatal("canceled launch verification admitted")
+	}
+	for _, altered := range [][]byte{append(append([]byte(nil), launch...), '\n'), []byte(`{"schema":1}`), make([]byte, 2049)} {
+		if err := os.WriteFile(launchPath, altered, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := stage.verifyLaunchIntentOwned(ctx, parent, epoch); err == nil {
+			t.Fatal("changed launch intent admitted")
+		}
+	}
+	if err := os.WriteFile(launchPath, launch, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(launchPath, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.verifyLaunchIntentOwned(ctx, parent, epoch); err == nil {
+		t.Fatal("public launch intent admitted")
+	}
+	if err := os.Chmod(launchPath, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(launchPending, []byte("conflicting"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.verifyLaunchIntentOwned(ctx, parent, epoch); err == nil {
+		t.Fatal("conflicting pending launch intent admitted")
+	}
+	if err := os.Remove(launchPending); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.verifyLaunchIntentOwned(ctx, parent, epoch); err != nil {
+		t.Fatal("explicitly restored launch intent refused", err)
+	}
 	packagePath := filepath.Join(parentPath, "inspection/package.deb")
 	retainedPath := filepath.Join(parentPath, "inspection/package.retained")
 	if err := os.Rename(packagePath, retainedPath); err != nil {
