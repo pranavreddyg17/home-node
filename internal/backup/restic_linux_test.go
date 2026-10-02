@@ -197,6 +197,15 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if err = os.Chmod(restorePath, 0700); err != nil {
 		t.Fatal(err)
 	}
+
+	cancelled, cancelRestore := context.WithCancel(context.Background())
+	cancelRestore()
+	if _, err := repository.Restore(cancelled, snapshot, restoreStage, policy); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled restore did not report cancellation", err)
+	}
+	if entries, err := os.ReadDir(restorePath); err != nil || len(entries) != 0 {
+		t.Fatal("cancelled restore wrote staging", entries, err)
+	}
 	if _, err = repository.Restore(context.Background(), snapshot, restoreStage, policy); err != nil {
 		t.Fatal("validated set restore", err)
 	}

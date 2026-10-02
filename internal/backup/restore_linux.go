@@ -37,6 +37,9 @@ func (r *Repository) dump(ctx context.Context, snapshot, name string, output io.
 func (r *Repository) Restore(ctx context.Context, snapshot string, stage *os.File, policy RestorePolicy) (manifest Manifest, resultErr error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return Manifest{}, err
+	}
 	if r.directory == nil || stage == nil || !repositoryPattern.MatchString(snapshot) {
 		return Manifest{}, ErrRepository
 	}
@@ -76,6 +79,9 @@ func (r *Repository) Restore(ctx context.Context, snapshot string, stage *os.Fil
 		}
 	}()
 	for _, entry := range manifest.Files {
+		if err := deadline.Err(); err != nil {
+			return Manifest{}, err
+		}
 		if err := requireStagingSpace(stage, entry.Bytes); err != nil {
 			return Manifest{}, err
 		}
@@ -99,6 +105,9 @@ func (r *Repository) Restore(ctx context.Context, snapshot string, stage *os.Fil
 			return Manifest{}, err
 		}
 	}
+	if err := deadline.Err(); err != nil {
+		return Manifest{}, err
+	}
 	if err := requireStagingSpace(stage, int64(len(output.data))); err != nil {
 		return Manifest{}, err
 	}
@@ -120,6 +129,9 @@ func (r *Repository) Restore(ctx context.Context, snapshot string, stage *os.Fil
 		return Manifest{}, err
 	}
 	if err = stage.Sync(); err != nil {
+		return Manifest{}, err
+	}
+	if err := deadline.Err(); err != nil {
 		return Manifest{}, err
 	}
 	return manifest, nil
