@@ -170,6 +170,21 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	if err := launch.VerifyLaunchIntent(ctx, updateParent, epoch); err == nil {
 		t.Fatal("closed admission retained launch authority")
 	}
+	execution := updates.InspectionExecution{Epoch: epoch, InvocationID: "0123456789abcdef0123456789abcdef"}
+	if result, err := engine.readRecordedUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution); err == nil || result != (updates.InspectionResult{}) {
+		t.Fatal("missing recorded execution/result accepted", result, err)
+	}
+	// Failed readback must release its stage lock for explicit repair/recovery.
+	afterReadback, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000001")
+	if err != nil {
+		t.Fatal("refused readback leaked execution lock", err)
+	}
+	if err := afterReadback.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if result, err := engine.readRecordedUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000002", execution); err == nil || result != (updates.InspectionResult{}) {
+		t.Fatal("unrelated recorded operation accepted", result, err)
+	}
 	if other, err := engine.prepareUpdateInspectionLaunchOwned(ctx, release, "inspection-fixture-000001"); err == nil {
 		other.Close()
 		t.Fatal("existing launch silently replaced")

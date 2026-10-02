@@ -101,6 +101,40 @@ func (e *Engine) openUpdateInspectionLocked(ctx context.Context, release *update
 	return stage, nil
 }
 
+// ReadRecordedUpdateInspectionResult readmits the completed installer's owned
+// package/service policy before reading retained result evidence. release and
+// execution must come from protected signed acquisition/operation state. This
+// grants no installation authority and requires the caller's prior stage closed.
+func (e *Engine) ReadRecordedUpdateInspectionResult(ctx context.Context, release *updates.AcquiredRelease, operation string, execution updates.InspectionExecution) (updates.InspectionResult, error) {
+	if os.Geteuid() != 0 || e.host.Name() != "/" {
+		return updates.InspectionResult{}, ErrConflict
+	}
+	return e.readRecordedUpdateInspectionResultOwned(ctx, release, operation, execution)
+}
+
+func (e *Engine) readRecordedUpdateInspectionResultOwned(ctx context.Context, release *updates.AcquiredRelease, operation string, execution updates.InspectionExecution) (updates.InspectionResult, error) {
+	var zero updates.InspectionResult
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	stage, err := e.openUpdateInspectionLocked(ctx, release, operation)
+	if err != nil {
+		return zero, err
+	}
+	if err := e.requireInspectionServiceLocked(); err != nil {
+		return zero, errors.Join(err, stage.Close())
+	}
+	parent, err := e.host.OpenRoot("var/lib/homenode-update")
+	if err != nil {
+		return zero, errors.Join(err, stage.Close())
+	}
+	result, readErr := stage.ReadRecordedInspectionResult(ctx, parent, execution)
+	closeErr := errors.Join(parent.Close(), stage.Close())
+	if readErr != nil || closeErr != nil {
+		return zero, errors.Join(readErr, closeErr)
+	}
+	return result, nil
+}
+
 // PrepareUpdateInspectionLaunch admits the owned package and durably publishes
 // fixed service inputs while retaining the exclusive execution lock. It does
 // not activate a service or authorize installation. Existing launch state must
