@@ -1,14 +1,50 @@
 #!/usr/bin/env python3
 """Collect Go notice sources for reviewed compiled module identities."""
 import hashlib
+import json
 import pathlib
 import re
+import sys
 
 from verify_frontend import manifest_bytes
+from verify_sbom import unique
+
+LIMIT = 8 * 1024 * 1024
+
+
+def read_sources(path):
+    """Read Go's concatenated module objects without accepting duplicate keys."""
+    data = manifest_bytes(path, LIMIT).decode('utf-8')
+    decoder = json.JSONDecoder(object_pairs_hook=unique)
+    sources, offset = [], 0
+    while offset < len(data):
+        if data[offset].isspace():
+            offset += 1
+            continue
+        source, offset = decoder.raw_decode(data, offset)
+        if not isinstance(source, dict) or len(sources) >= 4096:
+            raise ValueError('invalid or excessive module source metadata')
+        sources.append(source)
+    if not sources:
+        raise ValueError('empty module source metadata')
+    return sources
+
+
+def run(arguments, output):
+    if len(arguments) != 2:
+        raise ValueError('usage: go_notices.py COMPILED_EVIDENCE MODULE_SOURCE_STREAM')
+    evidence = json.loads(manifest_bytes(arguments[0], LIMIT), object_pairs_hook=unique)
+    result = collect(evidence, read_sources(arguments[1]))
+    encoded = (json.dumps(result, ensure_ascii=False, sort_keys=True) + '\n').encode('utf-8')
+    if len(encoded) > LIMIT:
+        raise ValueError('module notice output exceeds limit')
+    if output.write(encoded) != len(encoded):
+        raise OSError('short module notice output write')
 
 
 def collect(evidence, sources):
-    if evidence.get('schema') != 1 or evidence.get('sourceSumsVerified') is not True:
+    if (not isinstance(evidence, dict) or type(evidence.get('schema')) is not int
+            or evidence['schema'] != 1 or evidence.get('sourceSumsVerified') is not True):
         raise ValueError('compiled source sums must be qualified first')
     index = {}
     for source in sources:
@@ -47,3 +83,7 @@ def collect(evidence, sources):
                 raise ValueError('too many compiled modules')
     return {'schema': 1, 'completeness': 'incomplete',
             'modules': [retained[key] for key in sorted(retained)]}
+
+
+if __name__ == '__main__':
+    run(sys.argv[1:], sys.stdout.buffer)

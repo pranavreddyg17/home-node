@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import hashlib
+import io
+import json
 import pathlib
 import tempfile
 import unittest
 
-from go_notices import collect
+from go_notices import collect, read_sources, run
 
 
 class CompiledGoNoticeTests(unittest.TestCase):
@@ -42,6 +44,34 @@ class CompiledGoNoticeTests(unittest.TestCase):
         notice.symlink_to(self.root / 'original')
         with self.assertRaises(OSError):
             collect(self.evidence, self.sources)
+
+    def test_cli_complete_stream_and_atomic_validation(self):
+        evidence = self.root / 'compiled.json'
+        sources = self.root / 'sources.json'
+        evidence.write_text(json.dumps(self.evidence))
+        sources.write_text(json.dumps({'Main': True, 'Path': 'fixture.example/main'})
+                           + '\n' + json.dumps(self.sources[0]) + '\n')
+        output = io.BytesIO()
+        run([evidence, sources], output)
+        self.assertEqual(json.loads(output.getvalue()), collect(self.evidence, self.sources))
+        for content in ['{}\n{"Path":"a","Path":"b"}', '{} trailing', '[]', '   ']:
+            sources.write_text(content)
+            output = io.BytesIO()
+            with self.assertRaises(ValueError):
+                run([evidence, sources], output)
+            self.assertEqual(output.getvalue(), b'')
+
+    def test_source_stream_bounds_and_links(self):
+        sources = self.root / 'sources.json'
+        sources.write_text('{}\n' * 4097)
+        with self.assertRaises(ValueError):
+            read_sources(sources)
+        sources.unlink()
+        sources.symlink_to(self.root / 'LICENSE')
+        with self.assertRaises(OSError):
+            read_sources(sources)
+        with self.assertRaises(ValueError):
+            collect(dict(self.evidence, schema=True), self.sources)
 
 
 if __name__ == '__main__':
