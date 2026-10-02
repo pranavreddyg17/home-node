@@ -55,6 +55,7 @@ func serveDispatch[T any](ctx context.Context, listener net.Listener, controller
 	stop := context.AfterFunc(serving, func() { _ = listener.Close(); close(closed) })
 	var workers sync.WaitGroup
 	slot := make(chan struct{}, 1)
+	var admission sync.Mutex
 	failure := make(chan error, 1)
 	defer func() {
 		cancel()
@@ -86,16 +87,26 @@ func serveDispatch[T any](ctx context.Context, listener net.Listener, controller
 			_ = connection.Close()
 			continue
 		}
+		admission.Lock()
 		select {
 		case slot <- struct{}{}:
+			admission.Unlock()
 		default:
+			admission.Unlock()
 			_ = packet.Close()
 			continue
 		}
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
-			defer func() { <-slot }()
+			slotHeld := true
+			defer func() {
+				if slotHeld {
+					admission.Lock()
+					<-slot
+					admission.Unlock()
+				}
+			}()
 			defer packet.Close()
 			dispatch, credential, err := receive(serving, packet, controllerUID)
 			if credential != nil {
@@ -118,11 +129,27 @@ func serveDispatch[T any](ctx context.Context, listener net.Listener, controller
 					}
 				}
 				if err == nil {
+					// A peer may connect cleanup immediately after receiving this
+					// reply. Hold admission until the completed callback slot is freed.
+					admission.Lock()
 					err = complete(operation, packet, dispatch)
+					if err != nil && serving.Err() == nil {
+						select {
+						case failure <- err:
+						default:
+						}
+						cancel()
+					}
+					<-slot
+					slotHeld = false
+					admission.Unlock()
 				}
 			}
 			if err != nil && serving.Err() == nil {
-				failure <- err
+				select {
+				case failure <- err:
+				default:
+				}
 				cancel()
 			}
 		}()
