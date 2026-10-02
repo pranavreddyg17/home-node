@@ -2,6 +2,8 @@ package backup
 
 import (
 	"bytes"
+	"fmt"
+	"github.com/pranavreddyg17/home-node/internal/disktransport"
 	"strings"
 	"testing"
 	"time"
@@ -35,5 +37,22 @@ func TestSnapshotPageResponseBindsRequestAndExactMetadata(t *testing.T) {
 	page.Next = page.Snapshots[0].ID
 	if _, err := EncodeSnapshotPageResponse(request, page); err == nil {
 		t.Fatal("short page continuation admitted")
+	}
+}
+
+func TestFullSnapshotPageResponseFitsActualEnvelope(t *testing.T) {
+	request := strings.Repeat("r", 64)
+	page := SnapshotPage{Snapshots: make([]SnapshotReference, snapshotPageSize)}
+	for index := range page.Snapshots {
+		page.Snapshots[index] = SnapshotReference{ID: fmt.Sprintf("%064x", index), CreatedAt: time.Date(2025, 12, 31, 0, 0, 0, 999999999, time.FixedZone("offset", 3600))}
+	}
+	page.Next = page.Snapshots[len(page.Snapshots)-1].ID
+	raw, err := EncodeSnapshotPageResponse(request, page)
+	if err != nil || len(raw) > disktransport.MaxPacket {
+		t.Fatal("full envelope exceeds packet", len(raw), err)
+	}
+	decoded, err := DecodeSnapshotPageResponse(raw, request)
+	if err != nil || len(decoded.Snapshots) != snapshotPageSize || decoded.Next != page.Next {
+		t.Fatal(decoded, err)
 	}
 }
