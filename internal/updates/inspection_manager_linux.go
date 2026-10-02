@@ -162,6 +162,33 @@ func VerifyInspectionSyscallFilter(ctx context.Context, required []string) error
 	return verifyInspectionSyscallFilterWith(ctx, required, exec.CommandContext)
 }
 
+// VerifyInspectionConfinement checks every implemented effective-policy
+// prerequisite against the local manager. The caller must retain owned unit
+// and package locks and supply an independently qualified syscall profile.
+// Sequential observations are not an atomic manager snapshot and do not
+// authorize start or establish live kernel enforcement.
+func VerifyInspectionConfinement(ctx context.Context, required []string) error {
+	if os.Geteuid() != 0 {
+		return ErrInspectionResult
+	}
+	// Refuse missing or malformed release policy before collecting evidence.
+	if err := verifyInspectionSyscallFilterWith(ctx, required, exec.CommandContext); err != nil {
+		return err
+	}
+	for _, check := range []func(context.Context) error{
+		VerifyInspectionUnitIdentity,
+		VerifyInspectionResources,
+		VerifyInspectionIsolation,
+		VerifyInspectionProcessPolicy,
+		VerifyInspectionAccessPolicy,
+	} {
+		if err := check(ctx); err != nil {
+			return err
+		}
+	}
+	return ctx.Err()
+}
+
 func verifyInspectionSyscallFilterWith(ctx context.Context, required []string, command func(context.Context, string, ...string) *exec.Cmd) error {
 	// Validate the independent profile before contacting the manager.
 	if len(required) == 0 || len(required) > 256 {
