@@ -2667,3 +2667,7 @@ OOM fixture now waits for the harness sibling before releasing allocation, verif
 ### Inspect kernel controls before backup OOM exercise
 
 Before allocation gate release, native fixture now requires cgroup-v2 memory.max=1GiB, memory.swap.max=0, memory.oom.group=1 and pids.max=64, plus finite CPU quota equal to its period (one CPU). Primary [kernel cgroup-v2 documentation](https://docs.kernel.org/admin-guide/cgroup-v2.html) confirms quota/period and group OOM semantics; systemd hosted manual fetch returned403, so no successful hosted-manual verification is claimed. These are kernel readback assertions, not a substitute for the actual pending OOM exercise. Python syntax and diff checks passed; CI37070514721 remains active and follow-up stays local. Full application acceptance remains unfinished.
+
+### Preserve bounded OOM fixture failure evidence
+
+Disposable OOM fixture now collects selected systemd result/resource/phase properties and at most50 fixture journal entries before cleanup on failure. Each diagnostic call is bounded to10seconds and diagnostic subprocess failures do not replace the original exception. No production journal or owner data is queried. Python syntax and diff checks passed; native OOM execution remains pending. CI37070514721 remains live in package inspection; follow-up stays local. Full application acceptance remains unfinished.

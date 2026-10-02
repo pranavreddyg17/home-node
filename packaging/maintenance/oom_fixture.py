@@ -109,6 +109,18 @@ TimeoutStopSec=5
     if pathlib.Path(f"/proc/{sibling}").exists():
         raise RuntimeError("sibling survived backup OOM policy")
     print("Backup source memory ceiling caused service OOM; sibling process was terminated.")
+except Exception:
+    # Retain only disposable fixture diagnostics before its unit is removed.
+    for arguments in (
+        ("systemctl", "show", unit, "--property=Result,ActiveState,SubState,ExecMainStatus,MemoryMax,MemorySwapMax,OOMPolicy,KillMode,ControlGroup"),
+        ("journalctl", "-u", unit, "--no-pager", "-n", "50"),
+    ):
+        try:
+            diagnostic = subprocess.run(arguments, check=False, capture_output=True, text=True, timeout=10)
+            print(diagnostic.stdout, diagnostic.stderr, flush=True)
+        except subprocess.SubprocessError as diagnostic_error:
+            print(f"Fixture diagnostic unavailable: {type(diagnostic_error).__name__}", flush=True)
+    raise
 finally:
     command("systemctl", "stop", unit, check=False)
     unit_path.unlink(missing_ok=True)
