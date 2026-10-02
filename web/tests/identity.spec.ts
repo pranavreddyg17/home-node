@@ -97,7 +97,11 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
     await route.fulfill({ status: 202, json: { jobId: resumeJob, status: 'restoring' } })
   })
   await page.getByRole('button', { name: 'Refresh backup status' }).click()
-  if (refused) await expect(page.getByText('The backup repository was refused before runtime acquisition.', { exact: false })).toBeVisible()
+  if (refused) {
+    await expect(page.getByText('The backup repository was refused before runtime acquisition.', { exact: false })).toBeVisible()
+    await expect(page.getByText('The backup worker stopped before runtime acquisition.', { exact: false })).toBeVisible()
+    await expect(page.getByText('The backup worker has completed and released its runtime barrier.', { exact: false })).toHaveCount(0)
+  }
   await expect(page.getByText('Backup reminder timing is unavailable.', { exact: false })).toBeVisible()
   await expect(page.getByLabel('Backup reminder interval (days)')).toHaveValue('7')
   expect((await (await page.request.get('/api/v1/backups/outcomes')).json()).reminder.intervalDays).toBe(14)

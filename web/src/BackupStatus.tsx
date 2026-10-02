@@ -60,9 +60,9 @@ export function BackupStatus() {
       {outcomes.workerCompletion === 'uncertain' && <p role="status">Backup worker completion is uncertain. New work remains paused until reconciliation.</p>}
       {outcomes.current?.status === 'unknown' && <p role="status">The latest backup outcome is uncertain. It needs reconciliation before another backup can run.</p>}
       {outcomes.lastPublished ? <p>Last acknowledged publication: <time dateTime={new Date(outcomes.lastPublished.publishedAt * 1000).toISOString()}>{new Date(outcomes.lastPublished.publishedAt * 1000).toLocaleString()}</time>.</p> : <p>No acknowledged external backup is recorded.</p>}
-      <p>Acknowledged publication does not verify repository health or a successful restore. Restore and recovery controls are not yet available in this build.</p>
+      <p>Acknowledged publication does not verify repository health or a successful restore. Restoring backup data and replacement-host recovery are not yet available in this build.</p>
     </>}
-    {outcomes?.resumeJobId && <div><p>The backup worker has completed and released its runtime barrier. Workloads still need restoration.</p><button disabled={busy || resuming} onClick={() => void resume()}>{resuming ? 'Verifying and resuming…' : 'Verify passkey and resume workloads'}</button></div>}
+    {outcomes?.resumeJobId && <div><p>{outcomes.workerCompletion === 'refused' ? 'The backup worker stopped before runtime acquisition. Workloads still need restoration.' : 'The backup worker has completed and released its runtime barrier. Workloads still need restoration.'}</p><button disabled={busy || resuming} onClick={() => void resume()}>{resuming ? 'Verifying and resuming…' : 'Verify passkey and resume workloads'}</button></div>}
     {resumeError && <p role="alert" className="form-error">{resumeError}</p>}
     {resumeMessage && <p role="status">{resumeMessage}</p>}
     {outcomes?.reminder && <form onSubmit={e => { e.preventDefault(); void saveReminder() }}><label>Backup reminder interval (days)<input type="number" required min={1} max={90} value={reminderDays} onChange={e => setReminderDays(e.target.value)} disabled={busy} /></label><button disabled={busy}>Save reminder interval</button><p>Reminders appear here when you check status. They do not run unattended backups.</p></form>}
