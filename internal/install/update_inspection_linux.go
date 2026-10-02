@@ -147,6 +147,18 @@ func (e *Engine) withUpdateInspectionResultOwned(ctx context.Context, release *u
 		return zero, errors.Join(err, stage.Close())
 	}
 	result, readErr := collect(stage, ctx, parent, execution)
+	// Collection may wait on manager/journal processes. Recheck installer policy
+	// before exposing evidence rather than relying only on its earlier admission.
+	if readErr == nil {
+		configuration, policyErr := e.readUpdateRepositoryLocked(ctx)
+		readErr = policyErr
+		if readErr == nil && (release.Metadata.Sequence < configuration.MinimumSequence || release.Metadata.CatalogVersion < configuration.MinimumCatalogVersion) {
+			readErr = ErrConflict
+		}
+		if readErr == nil {
+			readErr = e.requireInspectionServiceLocked()
+		}
+	}
 	closeErr := errors.Join(parent.Close(), stage.Close())
 	if readErr != nil || closeErr != nil {
 		return zero, errors.Join(readErr, closeErr)

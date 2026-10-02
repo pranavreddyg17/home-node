@@ -204,6 +204,18 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	if result, err := engine.collectAndPublishUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000002", execution); err == nil || result != (updates.InspectionResult{}) {
 		t.Fatal("collection admitted unrelated operation", result, err)
 	}
+	result, err := engine.withUpdateInspectionResultOwned(ctx, release, "inspection-fixture-000001", execution, func(_ *updates.InspectionStage, _ context.Context, _ *os.Root, _ updates.InspectionExecution) (updates.InspectionResult, error) {
+		if err := os.WriteFile(servicePath, []byte("changed during collection"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		return updates.InspectionResult{Schema: 1, ContentValid: true}, nil
+	})
+	if !errors.Is(err, ErrConflict) || result != (updates.InspectionResult{}) {
+		t.Fatal("changed service during collection exposed result", result, err)
+	}
+	if err := os.WriteFile(servicePath, service, 0644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(servicePath, []byte("changed readback service"), 0644); err != nil {
 		t.Fatal(err)
 	}
