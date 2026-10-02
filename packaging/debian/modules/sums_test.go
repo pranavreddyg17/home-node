@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"runtime/debug"
+	"strings"
 	"testing"
 )
 
@@ -29,5 +30,21 @@ func TestCompiledModuleSourceSumBinding(t *testing.T) {
 	records[0].Dependencies[0].Replace.Version = "(devel)"
 	if err := verifyModuleSums(records, data); err == nil {
 		t.Fatal("local replacement admitted source sum qualification")
+	}
+}
+
+func TestCompiledModuleIdentityAmbiguityAndBounds(t *testing.T) {
+	sum := "h1:" + base64.StdEncoding.EncodeToString(make([]byte, 32))
+	data := []byte("fixture.example/dep v1.0.0 " + sum + "\n")
+	cases := [][]*debug.Module{
+		{nil},
+		{{Path: "fixture.example/dep", Version: "v1.0.0", Sum: sum}, {Path: "fixture.example/dep", Version: "v1.0.0", Sum: sum}},
+		{{Path: "fixture.example/dep", Version: "v1.0.0", Sum: "h1:" + strings.Repeat("A", 10000)}},
+		{{Path: "fixture.example/dep", Replace: &debug.Module{Path: "fixture.example/dep", Version: "v1.0.0", Sum: sum, Replace: &debug.Module{Path: "foreign"}}}},
+	}
+	for _, dependencies := range cases {
+		if err := verifyModuleSums([]binaryRecord{{Dependencies: dependencies}}, data); err == nil {
+			t.Fatal("ambiguous or unbounded compiled identity accepted")
+		}
 	}
 }

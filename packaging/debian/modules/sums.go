@@ -12,7 +12,10 @@ func verifyModuleSums(records []binaryRecord, data []byte) error {
 		return fmt.Errorf("oversized module sum inventory")
 	}
 	trusted := map[string]string{}
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.Lines(string(data)) {
+		if len(line) > 8192 || len(trusted) >= 65536 {
+			return fmt.Errorf("module sum inventory structure limit")
+		}
 		fields := strings.Fields(line)
 		if len(fields) == 0 {
 			continue
@@ -27,18 +30,29 @@ func verifyModuleSums(records []binaryRecord, data []byte) error {
 		trusted[key] = fields[2]
 	}
 	for _, binary := range records {
+		if len(binary.Dependencies) > 4096 {
+			return fmt.Errorf("oversized compiled module inventory")
+		}
+		seen := map[string]bool{}
 		for _, original := range binary.Dependencies {
 			if original == nil {
 				return fmt.Errorf("missing compiled module identity")
 			}
+			if original.Path == "" || len(original.Path) > 2048 || seen[original.Path] {
+				return fmt.Errorf("ambiguous compiled module identity")
+			}
+			seen[original.Path] = true
 			module := original
 			if module.Replace != nil {
 				module = module.Replace
 			}
+			if module.Replace != nil || len(module.Path) > 2048 || len(module.Version) > 256 {
+				return fmt.Errorf("invalid compiled replacement identity")
+			}
 			if module.Path == "" || module.Version == "" || module.Version == "(devel)" {
 				return fmt.Errorf("unversioned compiled dependency")
 			}
-			if !strings.HasPrefix(module.Sum, "h1:") {
+			if len(module.Sum) != 47 || !strings.HasPrefix(module.Sum, "h1:") {
 				return fmt.Errorf("missing compiled module source sum")
 			}
 			digest, err := base64.StdEncoding.Strict().DecodeString(strings.TrimPrefix(module.Sum, "h1:"))
