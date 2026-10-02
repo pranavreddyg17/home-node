@@ -32,7 +32,35 @@ an exact comparison. The development package artifact upload retains these files
 for 14 days. Passing these checks proves the checked identities and inventories;
 it does not make the build a production release.
 
-Frontend evidence records packages represented in emitted chunks and compares installed names/versions with lock entries. CI separately compares recorded asset hashes and exact file set with the extracted package, and dependency identities with the reviewed npm lockfile. This does not independently reconstruct bundler reachability or authenticate installed npm package contents.
+Frontend evidence records packages represented in emitted chunks, compares installed
+names/versions with lock entries, and hashes the installed package manifests used
+to obtain identity and declared licenses. The collector and verifier read regular
+manifests through bounded no-follow descriptors and refuse size/mtime changes.
+These checks protect the final opened file; they do not establish trusted parent
+directory ownership. CI separately compares asset hashes and exact file set with
+the extracted package, dependency identities with the reviewed npm lockfile, and
+manifest hashes with the review/build installation. It does not independently
+reconstruct bundler reachability or authenticate complete npm archive contents.
+Declared licenses are evidence for review, not an approval or complete notices set.
+
+To reproduce frontend evidence checks on a development checkout with installed
+locked dependencies:
+
+```sh
+npm --prefix web run test:evidence
+npm --prefix web run build
+PYTHONDONTWRITEBYTECODE=1 python3 packaging/debian/verify_frontend_test.py
+PYTHONDONTWRITEBYTECODE=1 python3 packaging/debian/verify_frontend.py \
+  web/dist web/build-evidence/dependencies.json web/package-lock.json
+```
+
+For extracted package review, replace `web/dist` in the last command with
+`EXTRACTED_ROOT/usr/share/homenode/web` and use the package's `.deb.frontend.json`.
+Retain the independently reviewed lockfile and matching installed npm tree beside
+it: verification checks those manifest bytes. Downloaded evidence alone cannot
+supply trusted dependency identities. CI also runs the file SBOM and compiled
+module tests; all checks must pass for the scope of development evidence claimed.
+
 
 The file SBOM, module and frontend evidence explicitly remain incomplete. Frontend bundle
 and host/guest system dependencies, licenses/notices, vulnerability assessment,
