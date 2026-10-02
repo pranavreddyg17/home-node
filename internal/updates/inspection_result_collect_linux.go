@@ -51,6 +51,11 @@ func (s *InspectionStage) collectInspectionResultLocked(ctx context.Context, par
 	if err := verifyInspectionExecutionCompletionWith(bounded, execution, command); err != nil {
 		return zero, err
 	}
+	// The last manager query is itself an interval during which fixed disk state
+	// may change. Rebind to the admitted package/records before returning bytes.
+	if err := s.verifyExecutionRecordLocked(bounded, parent, execution); err != nil {
+		return zero, err
+	}
 	if err := bounded.Err(); err != nil {
 		return zero, err
 	}

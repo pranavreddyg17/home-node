@@ -541,6 +541,38 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	if recorded, err := stage.readRecordedInspectionResultOwned(ctx, parent, captured); err != nil || recorded != collected {
 		t.Fatal("restored private result inode refused", recorded, err)
 	}
+	packageForMutation := filepath.Join(parentPath, "inspection/package.deb")
+	writePackageFixture := func(bytes []byte) {
+		if err := os.Chmod(packageForMutation, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(packageForMutation, bytes, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(packageForMutation, 0400); err != nil {
+			t.Fatal(err)
+		}
+	}
+	managerQueries = 0
+	changedDuringFinalQuery := func(ctx context.Context, path string, args ...string) *exec.Cmd {
+		if path == "/usr/bin/journalctl" {
+			return exec.CommandContext(ctx, "/usr/bin/printf", "%s", string(validJournalPayload))
+		}
+		managerQueries++
+		if managerQueries == 2 {
+			changed := append([]byte(nil), data...)
+			changed[0] ^= 1
+			writePackageFixture(changed)
+		}
+		return factory(ctx, path, args...)
+	}
+	if accepted, err := stage.collectInspectionResultOwned(ctx, parent, captured, changedDuringFinalQuery); err == nil || accepted != (InspectionResult{}) || managerQueries != 2 {
+		t.Fatal("final-query package mutation exposed result", accepted, err, managerQueries)
+	}
+	writePackageFixture(data)
+	if accepted, err := stage.collectInspectionResultOwned(ctx, parent, captured, collectionFactory); err != nil || accepted != collected {
+		t.Fatal("explicitly restored package refused collection", accepted, err)
+	}
 	packagePath := filepath.Join(parentPath, "inspection/package.deb")
 	retainedPath := filepath.Join(parentPath, "inspection/package.retained")
 	if err := os.Rename(packagePath, retainedPath); err != nil {
