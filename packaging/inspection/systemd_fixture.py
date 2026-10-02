@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Opt-in disposable Linux service fixture for package inspection."""
 import os
+import ipaddress
 from pathlib import Path
 import shutil
 import socket
@@ -65,6 +66,7 @@ with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, tem
     isolation_values = {"NoNewPrivileges": "yes", "CapabilityBoundingSet": "", "AmbientCapabilities": "", "ProtectSystem": "strict", "ProtectHome": "yes", "PrivateTmp": "yes", "PrivateDevices": "yes", "PrivateNetwork": "yes", "ProtectKernelTunables": "yes", "ProtectKernelModules": "yes", "ProtectKernelLogs": "yes", "ProtectControlGroups": "yes", "ProtectProc": "invisible", "ProcSubset": "pid", "RestrictSUIDSGID": "yes", "RestrictRealtime": "yes", "LockPersonality": "yes", "UMask": "0077", "SupplementaryGroups": ""}
     process_values = {"RestrictNamespaces": "yes", "RestrictAddressFamilies": "AF_UNIX", "SystemCallArchitectures": "native"}
     keys |= process_values.keys()
+    keys |= {"IPAddressDeny", "IPAddressAllow", "InaccessiblePaths"}
     keys |= isolation_values.keys()
     keys |= resource_values.keys()
     invocation = None
@@ -91,6 +93,17 @@ with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, tem
                 sys.exit("Inspection manager confinement differs from source contract")
             if any(values[key] != value for key, value in process_values.items()):
                 sys.exit("Inspection manager process policy differs from source contract")
+            deny_tokens = values["IPAddressDeny"].split()
+            try:
+                deny = [ipaddress.ip_network(value, strict=True) for value in deny_tokens]
+            except ValueError:
+                sys.exit("Noncanonical inspection IP deny policy")
+            if values["IPAddressAllow"] or len(deny) != 2 or set(deny) != {ipaddress.ip_network("0.0.0.0/0"), ipaddress.ip_network("::/0")}:
+                sys.exit("Inspection IP policy permits host network access")
+            protected = {"/etc/homenode", "/var/lib/homenode", "/var/lib/homenode-update", "/var/lib/homenode-backup", "/run/homenode", "/run/homenode-transfer"}
+            paths = [value.removeprefix("-") for value in values["InaccessiblePaths"].split()]
+            if len(paths) != len(protected) or set(paths) != protected:
+                sys.exit("Inspection protected path policy differs from source contract")
             observed = values["InvocationID"]
             if observed:
                 if len(observed) != 32 or any(c not in "0123456789abcdef" for c in observed) or observed == "0" * 32:
