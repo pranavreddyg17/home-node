@@ -8,6 +8,7 @@ case "$version" in
 esac
 case "$version" in [0-9]*) ;; *) echo 'Version must begin with a digit' >&2; exit 2 ;; esac
 command -v dpkg-deb >/dev/null
+command -v python3 >/dev/null
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 output="$repo/artifacts"
 mkdir -p "$output"
@@ -49,4 +50,6 @@ chmod 0755 "$root/usr/bin/homenode" "$root/usr/lib/homenode/homenode-supervisor"
 archive="$output/homenode_${version}_amd64.deb"
 dpkg-deb --root-owner-group --build "$root" "$archive"
 sha256sum "$archive" > "$archive.sha256"
+# External evidence avoids a package/SBOM hash cycle; inventory is incomplete.
+python3 packaging/debian/sbom.py "$root" "$archive" "$version" > "$archive.sbom.json"
 printf '%s\n' "$archive"

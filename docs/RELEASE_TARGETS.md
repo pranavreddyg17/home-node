@@ -291,3 +291,11 @@ after result collection. A missing or mismatched primary component refuses.
 This is a package-binding gate, not full CycloneDX schema validation or proof of
 dependency completeness, licensing or vulnerability status. Production SBOM
 generation and those remaining semantic gates still require integration.
+
+Development Debian builds emit an external `<package>.sbom.json` CycloneDX 1.6
+artifact binding the final archive hash/version and listing staged `usr` files
+with SHA256. Keeping it outside the package avoids a circular package/SBOM hash.
+Its composition explicitly declares `incomplete`: file hashes are not a complete
+third-party dependency/license inventory, and the output is unsigned development
+evidence. Actual archive-to-inventory comparison and production promotion remain
+required before treating it as qualified release evidence.
