@@ -82,3 +82,32 @@ func TestTargetDirectoryOpenRejectsSymlinkParentAndMagicLink(t *testing.T) {
 		}
 	}
 }
+
+func TestObservedTargetRejectsSameFilesystemDirectoryReplacement(t *testing.T) {
+	base := t.TempDir()
+	target := filepath.Join(base, "target")
+	if err := os.Mkdir(target, 0700); err != nil {
+		t.Fatal(err)
+	}
+	expected, err := os.Lstat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinned, err := openObservedTargetDirectory(target, expected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinned.Close()
+	if err := os.Rename(target, filepath.Join(base, "old")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(target, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if file, err := openObservedTargetDirectory(target, expected); err == nil || file != nil {
+		if file != nil {
+			file.Close()
+		}
+		t.Fatal("same filesystem replacement admitted")
+	}
+}

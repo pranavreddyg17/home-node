@@ -50,14 +50,14 @@ func OpenTarget(t Target) (*os.File, error) {
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return nil, ErrTarget
 	}
-	directory, err := openTargetDirectory(t.MountPath)
+	directory, err := openObservedTargetDirectory(t.MountPath, info)
 	if err != nil {
 		return nil, ErrTarget
 	}
 	info, err = directory.Stat()
 	if err != nil {
 		_ = directory.Close()
-		return nil, err
+		return nil, ErrTarget
 	}
 	stat, ok = info.Sys().(*syscall.Stat_t)
 	if !ok || !info.IsDir() || (Device{unix.Major(uint64(stat.Dev)), unix.Minor(uint64(stat.Dev))}) != registered {
@@ -95,4 +95,20 @@ func requireTargetMountID(directory *os.File, expected uint64) error {
 		return ErrTarget
 	}
 	return nil
+}
+
+func openObservedTargetDirectory(path string, expected os.FileInfo) (*os.File, error) {
+	if expected == nil || !expected.IsDir() {
+		return nil, ErrTarget
+	}
+	file, err := openTargetDirectory(path)
+	if err != nil {
+		return nil, ErrTarget
+	}
+	observed, err := file.Stat()
+	if err != nil || !os.SameFile(expected, observed) {
+		file.Close()
+		return nil, ErrTarget
+	}
+	return file, nil
 }
