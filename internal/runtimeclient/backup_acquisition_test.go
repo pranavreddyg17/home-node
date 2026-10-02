@@ -3,6 +3,7 @@ package runtimeclient
 import (
 	"context"
 	"errors"
+	"github.com/pranavreddyg17/home-node/internal/backup"
 	"github.com/pranavreddyg17/home-node/internal/state"
 	"reflect"
 	"testing"
@@ -74,5 +75,19 @@ func TestBackupRuntimeAcquisitionRetainsUncertainAttachment(t *testing.T) {
 	cancel()
 	if root, err := AcquireOwnedBackupRuntime(ctx, f, f, f.token, f.job, f.device); !errors.Is(err, context.Canceled) || root != "" || len(f.steps) != 0 {
 		t.Fatal("cancelled acquisition had effects", root, err, f.steps)
+	}
+}
+
+func TestPreliminaryLaunchRetainsAcquiredDispatchOnCheckpointUncertainty(t *testing.T) {
+	f := &acquisitionFixture{fail: "attach", root: state.Random(), job: state.Random(), token: state.Random(), device: state.Random()}
+	launch := backup.Launch{Version: 2, JobID: f.job, DeviceID: f.device, ManagementToken: f.token, Release: "0.1.0", CatalogVersion: 1}
+	dispatch, err := AcquireLaunchedBackupRuntime(context.Background(), launch, f, f)
+	if !errors.Is(err, ErrMaintenance) || dispatch.RuntimeToken != f.root || dispatch.JobID != launch.JobID || dispatch.ManagementToken != launch.ManagementToken {
+		t.Fatal("uncertain acquisition state lost", dispatch, err)
+	}
+	f.steps = nil
+	launch.Version = 1
+	if dispatch, err := AcquireLaunchedBackupRuntime(context.Background(), launch, f, f); err == nil || dispatch != (backup.Dispatch{}) || len(f.steps) != 0 {
+		t.Fatal("foreign protocol reached acquisition", dispatch, err, f.steps)
 	}
 }

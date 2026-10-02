@@ -35,3 +35,21 @@ func AcquireOwnedBackupRuntime(ctx context.Context, management BackupAcquisition
 	}
 	return rootToken, nil
 }
+
+// AcquireLaunchedBackupRuntime converts only a qualified preliminary launch
+// after worker-owned acquisition. A dispatch returned with an error is retained
+// reconciliation state, never permission to proceed with backup publication.
+func AcquireLaunchedBackupRuntime(ctx context.Context, launch backup.Launch, management BackupAcquisitionManagement, root backup.MaintenanceRoot) (backup.Dispatch, error) {
+	if _, err := backup.EncodeLaunch(launch); err != nil {
+		return backup.Dispatch{}, err
+	}
+	token, err := AcquireOwnedBackupRuntime(ctx, management, root, launch.ManagementToken, launch.JobID, launch.DeviceID)
+	if token == "" {
+		return backup.Dispatch{}, err
+	}
+	dispatch, conversionErr := launch.AcquiredDispatch(token)
+	if conversionErr != nil {
+		return backup.Dispatch{}, conversionErr
+	}
+	return dispatch, err
+}

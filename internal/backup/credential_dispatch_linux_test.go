@@ -134,3 +134,44 @@ func TestActivatedCredentialSenderRefusesUnprivilegedCreator(t *testing.T) {
 		t.Fatal("refused activated sender exposed packet", n, err)
 	}
 }
+
+func TestPreliminaryCredentialLaunchIsSeparateFromDispatch(t *testing.T) {
+	uid := uint32(os.Geteuid())
+	if uid == 0 {
+		t.Skip("private peers must be unprivileged")
+	}
+	launch := Launch{Version: 2, JobID: state.Random(), DeviceID: state.Random(), ManagementToken: state.Random(), Release: "0.1.0", CatalogVersion: 1}
+	raw, err := EncodeLaunch(launch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := CreateRepositoryPassword([]byte("fixture-launch-secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Close()
+	sender, receiver := dispatchPair(t)
+	if err := sendCredentialPayload(context.Background(), sender, uid, raw, source); err != nil {
+		t.Fatal(err)
+	}
+	got, credential, err := ReceiveCredentialLaunch(context.Background(), receiver, uid)
+	if err != nil || got != launch || credential == nil {
+		t.Fatal("launch handoff lost", got, err)
+	}
+	secret, err := ReadRepositoryPassword(context.Background(), credential)
+	if err != nil || string(secret) != "fixture-launch-secret" {
+		t.Fatal("launch credential lost", err)
+	}
+	clear(secret)
+	credential.Close()
+	sender2, receiver2 := dispatchPair(t)
+	if err := sendCredentialPayload(context.Background(), sender2, uid, raw, source); err != nil {
+		t.Fatal(err)
+	}
+	if dispatch, credential, err := ReceiveCredentialDispatch(context.Background(), receiver2, uid); err == nil || dispatch != (Dispatch{}) || credential != nil {
+		t.Fatal("preliminary launch accepted as acquired dispatch")
+	}
+	if _, err := source.Stat(); err != nil {
+		t.Fatal("receiver closed caller credential", err)
+	}
+}
