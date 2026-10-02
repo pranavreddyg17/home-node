@@ -4,9 +4,13 @@ package updates
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestInspectionManagerPreflightAndOutputBound(t *testing.T) {
@@ -36,7 +40,7 @@ func TestInspectionManagerCommandUsesFixedLocalScope(t *testing.T) {
 	properties := "InvocationID=" + invocation + "\nResult=success\nExecMainCode=1\nExecMainStatus=0\nActiveState=inactive\nSubState=dead\nExecMainStartTimestampMonotonic=200\nExecMainExitTimestampMonotonic=300\n"
 	var launched *exec.Cmd
 	factory := func(ctx context.Context, path string, args ...string) *exec.Cmd {
-		if path != "/usr/bin/systemctl" || len(args) != 5 || args[0] != "--system" || args[1] != "--no-pager" || args[2] != "show" || args[4] != "homenode-inspect.service" {
+		if path != "/usr/bin/systemctl" || len(args) != 5 || args[0] != "--system" || args[1] != "--no-pager" || args[2] != "show" || args[3] != "--property=InvocationID,Result,ExecMainCode,ExecMainStatus,ActiveState,SubState,ExecMainStartTimestampMonotonic,ExecMainExitTimestampMonotonic" || args[4] != "homenode-inspect.service" {
 			t.Fatal("unexpected manager scope", path, args)
 		}
 		launched = exec.CommandContext(ctx, "/usr/bin/printf", "%s", properties)
@@ -47,5 +51,49 @@ func TestInspectionManagerCommandUsesFixedLocalScope(t *testing.T) {
 	}
 	if strings.Join(launched.Env, "\n") != "PATH=/usr/bin:/bin\nLC_ALL=C\nSYSTEMD_COLORS=0\nSYSTEMD_PAGER=cat" {
 		t.Fatal("inherited manager environment", launched.Env)
+	}
+}
+
+func TestInspectionManagerProcessHelper(t *testing.T) {
+	if len(os.Args) < 3 || os.Args[len(os.Args)-2] != "inspection-manager-helper" {
+		return
+	}
+	switch os.Args[len(os.Args)-1] {
+	case "failed":
+		fmt.Print("InvocationID=" + strings.Repeat("a", 32) + "\nResult=success\nExecMainCode=1\nExecMainStatus=0\nActiveState=inactive\nSubState=dead\nExecMainStartTimestampMonotonic=200\nExecMainExitTimestampMonotonic=300\n")
+		os.Exit(3)
+	case "oversized":
+		fmt.Print(strings.Repeat("x", 4096))
+		os.Exit(0)
+	case "malformed":
+		fmt.Print("Result=success\n")
+		os.Exit(0)
+	case "blocked":
+		time.Sleep(time.Minute)
+		os.Exit(0)
+	}
+	os.Exit(4)
+}
+
+func TestInspectionManagerRejectsFailedOversizedMalformedAndCanceledProcesses(t *testing.T) {
+	for _, mode := range []string{"failed", "oversized", "malformed", "blocked"} {
+		t.Run(mode, func(t *testing.T) {
+			ctx := context.Background()
+			if mode == "blocked" {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, 100*time.Millisecond)
+				defer cancel()
+			}
+			factory := func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+				return exec.CommandContext(ctx, os.Args[0], "-test.run=^TestInspectionManagerProcessHelper$", "--", "inspection-manager-helper", mode)
+			}
+			err := verifyInspectionServiceCompletionWith(ctx, strings.Repeat("a", 32), 100, factory)
+			if err == nil {
+				t.Fatal("unsafe manager process accepted")
+			}
+			if mode == "blocked" && !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatal("deadline identity lost", err)
+			}
+		})
 	}
 }
