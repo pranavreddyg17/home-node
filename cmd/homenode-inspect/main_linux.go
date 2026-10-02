@@ -19,6 +19,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+var workerOperation = regexp.MustCompile(updates.InspectionOperationPattern)
+var workerRelease = regexp.MustCompile(`^[0-9][a-zA-Z0-9.+~-]{0,63}$`)
+
+func validWorkerArguments(operation, release string) bool {
+	return len(operation) >= 20 && len(operation) <= 64 && len(release) >= 1 && len(release) <= 64 && workerOperation.MatchString(operation) && workerRelease.MatchString(release)
+}
+
 func run(ctx context.Context, args []string, output io.Writer) error {
 	flags := flag.NewFlagSet("homenode-inspect", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -27,8 +34,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	validOperation, _ := regexp.MatchString(updates.InspectionOperationPattern, *operation)
-	if flags.NArg() != 0 || *release == "" || !validOperation {
+	if flags.NArg() != 0 || !validWorkerArguments(*operation, *release) {
 		return errors.New("expected release is required")
 	}
 	if os.Geteuid() == 0 || os.Getegid() == 0 || os.Getuid() != os.Geteuid() || os.Getgid() != os.Getegid() {
