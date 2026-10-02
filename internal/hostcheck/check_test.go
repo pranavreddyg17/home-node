@@ -65,3 +65,20 @@ func TestPreparationDefersOnlyStorageFloor(t *testing.T) {
 		t.Fatal("non-storage failure bypassed")
 	}
 }
+
+func TestPreparationNeverDefersRequiredKernelBoundaries(t *testing.T) {
+	for _, missing := range []string{"safe-path-resolution", "mount-identity"} {
+		t.Run(missing, func(t *testing.T) {
+			facts := Facts{OS: "linux", Architecture: "amd64", Distribution: "ubuntu", DistributionVersion: "24.04", SafePathResolution: true, MountIdentity: true, KVMUsable: true, AppArmorEnforcing: true, LibvirtReachable: true, MemoryBytes: 16 * gib, AvailableDiskBytes: 8 * gib, DiskProbePath: "/var/lib"}
+			if missing == "safe-path-resolution" {
+				facts.SafePathResolution = false
+			} else {
+				facts.MountIdentity = false
+			}
+			report := Evaluate(facts, time.Now())
+			if report.PrerequisitesMet || report.PreparationPrerequisitesMet() {
+				t.Fatal("kernel boundary deferred with storage floor", report)
+			}
+		})
+	}
+}
