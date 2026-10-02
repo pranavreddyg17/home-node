@@ -98,6 +98,20 @@ func TestApprovedBackupResumeHTTPCompletesReleasedEmptyWorkloadJob(t *testing.T)
 	if err = s.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "restoring", "requires-action"); err != nil {
 		t.Fatal(err)
 	}
+	statusResponse := request(s, "GET", "http://localhost:8787/api/v1/backups/outcomes", "", session, "")
+	if statusResponse.Code != 200 || !strings.Contains(statusResponse.Body.String(), `"resumeJobId":"`+job.ID+`"`) || strings.Contains(statusResponse.Body.String(), token) {
+		t.Fatal("eligible resume status invalid", statusResponse.Code, statusResponse.Body.String())
+	}
+	s.backupTasks.mu.Lock()
+	s.backupTasks.active = true
+	s.backupTasks.mu.Unlock()
+	busyStatus := request(s, "GET", "http://localhost:8787/api/v1/backups/outcomes", "", session, "")
+	if busyStatus.Code != 200 || !strings.Contains(busyStatus.Body.String(), `"resumeJobId":""`) {
+		t.Fatal("active task offered recovery", busyStatus.Body.String())
+	}
+	s.backupTasks.mu.Lock()
+	s.backupTasks.active = false
+	s.backupTasks.mu.Unlock()
 	body := `{}`
 	key := "resume-request-1234567890"
 	grant := state.Random()
