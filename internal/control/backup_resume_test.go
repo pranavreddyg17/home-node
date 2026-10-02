@@ -180,3 +180,31 @@ func TestApprovedBackupResumeHTTPCompletesReleasedEmptyWorkloadJob(t *testing.T)
 		t.Fatal("resume task replay accepted")
 	}
 }
+
+func TestStoppedRefusalStatusOffersOnlyOwnedRecoveryWithoutPublication(t *testing.T) {
+	s := testServer(t)
+	s.config.Runtime = fileBackend{}
+	session := seedBackupSession(t, s)
+	ctx := context.Background()
+	actor, err := s.Identity.Authenticate(ctx, session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, job, err := s.Store.BeginMaintenanceJob(ctx, actor.Device.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "draining", "freezing"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.ClaimBackupLaunch(ctx, token, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.RecordBackupLaunchRefused(ctx, token, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	response := request(s, "GET", "http://localhost:8787/api/v1/backups/outcomes", "", session, "http://localhost:8787")
+	if response.Code != 200 || !strings.Contains(response.Body.String(), `"resumeJobId":"`+job.ID+`"`) || !strings.Contains(response.Body.String(), `"workerCompletion":"refused"`) || !strings.Contains(response.Body.String(), `"current":null`) || strings.Contains(response.Body.String(), token) {
+		t.Fatal(response.Code, response.Body.String())
+	}
+}

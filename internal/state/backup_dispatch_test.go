@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 )
 
@@ -84,8 +85,39 @@ func TestBackupDispatchIntentSurvivesRestartAndBlocksCleanup(t *testing.T) {
 	if err = store.CompleteMaintenanceJob(ctx, token, job.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err = store.BeginMaintenanceJob(ctx, device); err != nil {
+	prior := job
+	token, job, err = store.BeginMaintenanceJob(ctx, device)
+	if err != nil {
 		t.Fatal("completion retained obsolete dispatch marker", err)
+	}
+	if err := store.AdvanceMaintenanceJob(ctx, token, job.ID, "draining", "freezing"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ClaimBackupLaunch(ctx, token, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordBackupLaunchRefused(ctx, token, job.ID); err != nil {
+		t.Fatal("valid prior publication blocked refusal", err)
+	}
+	if err := store.Transaction(ctx, func(tx *sql.Tx) error {
+		authority, owned, err := AuthorizeReleasedBackupRecoveryTx(tx, device, job.ID)
+		if err == nil && (authority != token || owned.ID != job.ID) {
+			t.Fatal("wrong refusal authority")
+		}
+		return err
+	}); err != nil {
+		t.Fatal("prior publication blocked approved recovery", err)
+	}
+	observation, err := store.InspectBackupObservation(ctx)
+	if err != nil || observation.WorkerCompletion != "refused" || observation.Current == nil || observation.Current.JobID != prior.ID || observation.LastPublished == nil || observation.LastPublished.JobID != prior.ID {
+		t.Fatal("refusal altered history", observation, err)
+	}
+	if err := store.CompleteMaintenanceJob(ctx, token, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	observation, err = store.InspectBackupObservation(ctx)
+	if err != nil || observation.WorkerCompletion != "none" || observation.LastPublished == nil || observation.LastPublished.JobID != prior.ID {
+		t.Fatal("completion altered history", observation, err)
 	}
 }
 

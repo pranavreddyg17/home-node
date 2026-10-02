@@ -39,3 +39,16 @@ func AuthorizeReleasedBackupRecoveryTx(tx *sql.Tx, device, id string) (string, M
 	}
 	return token, job, nil
 }
+
+// AuthorizeCurrentReleasedBackupRecoveryTx qualifies the current journal rather
+// than deriving a recovery job from an earlier publication retained in history.
+func AuthorizeCurrentReleasedBackupRecoveryTx(tx *sql.Tx, device string) (string, MaintenanceJob, error) {
+	if tx == nil {
+		return "", MaintenanceJob{}, ErrMaintenanceOwner
+	}
+	job, err := readMaintenanceJob(tx)
+	if err != nil {
+		return "", MaintenanceJob{}, err
+	}
+	return AuthorizeReleasedBackupRecoveryTx(tx, device, job.ID)
+}

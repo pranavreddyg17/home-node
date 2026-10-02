@@ -21,13 +21,13 @@ func (s *Server) backupOutcomes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resumeJobID := ""
-	if observation.WorkerCompletion == "complete" && observation.Current != nil && s.config.Runtime != nil && s.backupTasks != nil {
+	if (observation.WorkerCompletion == "complete" || observation.WorkerCompletion == "refused") && s.config.Runtime != nil && s.backupTasks != nil {
 		s.backupTasks.mu.Lock()
 		available := !s.backupTasks.active && !s.backupTasks.stopping
 		s.backupTasks.mu.Unlock()
 		if available {
 			qualificationErr := s.Store.Transaction(r.Context(), func(tx *sql.Tx) error {
-				_, job, err := state.AuthorizeReleasedBackupRecoveryTx(tx, actor(r).Device.ID, observation.Current.JobID)
+				_, job, err := state.AuthorizeCurrentReleasedBackupRecoveryTx(tx, actor(r).Device.ID)
 				if err == nil {
 					resumeJobID = job.ID
 				}

@@ -4,7 +4,7 @@ import { BackupStart } from './BackupStart'
 import { approvedAction } from './approvals'
 
 type Outcome = { status: 'unknown' | 'published'; publishedAt: number }
-type Outcomes = { schema: number; current: Outcome | null; lastPublished: Outcome | null; workerCompletion: 'none' | 'uncertain' | 'complete'; resumeJobId?: string; reminder?: { state: 'never-published' | 'current' | 'overdue' | 'unavailable'; intervalDays: number; dueAt?: number } }
+type Outcomes = { schema: number; current: Outcome | null; lastPublished: Outcome | null; workerCompletion: 'none' | 'uncertain' | 'complete' | 'refused'; resumeJobId?: string; reminder?: { state: 'never-published' | 'current' | 'overdue' | 'unavailable'; intervalDays: number; dueAt?: number } }
 
 export function BackupStatus() {
   const [outcomes, setOutcomes] = useState<Outcomes | null>(null)
@@ -56,6 +56,7 @@ export function BackupStatus() {
       {outcomes.reminder?.state === 'overdue' && <p role="status">Backup reminder: the last acknowledged publication is at least {outcomes.reminder.intervalDays} days old.</p>}
       {outcomes.reminder?.state === 'current' && outcomes.reminder.dueAt && <p>Next backup reminder: <time dateTime={new Date(outcomes.reminder.dueAt * 1000).toISOString()}>{new Date(outcomes.reminder.dueAt * 1000).toLocaleString()}</time>.</p>}
       {outcomes.reminder?.state === 'unavailable' && <p>Backup reminder timing is unavailable. Check backup status before relying on it.</p>}
+      {outcomes.workerCompletion === 'refused' && <p role="status">The backup repository was refused before runtime acquisition. Workload restoration remains paused; no new snapshot was published.</p>}
       {outcomes.workerCompletion === 'uncertain' && <p role="status">Backup worker completion is uncertain. New work remains paused until reconciliation.</p>}
       {outcomes.current?.status === 'unknown' && <p role="status">The latest backup outcome is uncertain. It needs reconciliation before another backup can run.</p>}
       {outcomes.lastPublished ? <p>Last acknowledged publication: <time dateTime={new Date(outcomes.lastPublished.publishedAt * 1000).toISOString()}>{new Date(outcomes.lastPublished.publishedAt * 1000).toLocaleString()}</time>.</p> : <p>No acknowledged external backup is recorded.</p>}
