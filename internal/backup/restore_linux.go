@@ -13,23 +13,6 @@ import (
 	"time"
 )
 
-type restoreWriter struct {
-	stage       *os.File
-	destination io.Writer
-	remaining   int64
-}
-
-func (w *restoreWriter) Write(data []byte) (int, error) {
-	if int64(len(data)) > w.remaining {
-		return 0, ErrManifest
-	}
-	if err := requireStagingSpace(w.stage, w.remaining); err != nil {
-		return 0, err
-	}
-	n, err := w.destination.Write(data)
-	w.remaining -= int64(n)
-	return n, err
-}
 func (r *Repository) dump(ctx context.Context, snapshot, name string, output io.Writer) error {
 	args := []string{"--repo", "/proc/self/fd/3", "--password-file", "/proc/self/fd/4", "--no-cache", "dump", snapshot, "/proc/self/fd/5/" + name}
 	return resticProcess(ctx, args, []*os.File{r.directory, r.secret}, output)
@@ -99,7 +82,7 @@ func (r *Repository) Restore(ctx context.Context, snapshot string, stage *os.Fil
 		}
 		created[entry.Name] = info
 		hash := sha256.New()
-		writer := &restoreWriter{stage: stage, destination: io.MultiWriter(file, hash), remaining: entry.Bytes}
+		writer := &restoreWriter{ctx: deadline, stage: stage, destination: io.MultiWriter(file, hash), remaining: entry.Bytes}
 		err = r.dump(deadline, snapshot, entry.Name, writer)
 		if err == nil && (writer.remaining != 0 || hex.EncodeToString(hash.Sum(nil)) != entry.SHA256) {
 			err = ErrManifest
