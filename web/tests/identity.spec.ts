@@ -25,15 +25,18 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await expect(page.locator('.recovery-codes code')).toHaveCount(8)
   await page.getByRole('button', { name: 'I saved my recovery codes' }).click()
   await expect(page.getByRole('heading', { name: 'Your home server' })).toBeVisible()
-  await expect(page.locator('.check-row')).toHaveCount(8)
+  await expect(page.locator('.check-row')).toHaveCount(10)
+  await expect(page.getByText('Kernel safe path resolution',{exact:true})).toBeVisible()
+  await expect(page.getByText('Kernel mount identity',{exact:true})).toBeVisible()
   await expect(page.getByRole('heading', { name: 'External backup', exact: true })).toBeVisible()
   await expect(page.getByText('No acknowledged external backup is recorded.')).toBeVisible()
   await expect(page.getByText('Weekly backup reminder: create your first external backup.')).toBeVisible()
   // Transport/UI fixture: mocked backup operations do not prove disk backup.
   const repositoryId = 'a'.repeat(64)
   let approvalBody = '', approvalKey = '', backupRequests = 0
-  let backupPaused = false
-  await page.route('**/api/v1/backups/configuration', route => route.fulfill({ json: { enabled: true, repositoryId, availability: backupPaused ? 'paused' : 'available' } }))
+  let backupPaused = false, configurationFailed = false
+  let backupUnavailable = false
+  await page.route('**/api/v1/backups/configuration', route => configurationFailed ? route.fulfill({status:503,json:{error:{code:'UNAVAILABLE',message:'Fixture availability unavailable'}}}) : route.fulfill({ json: { enabled: true, repositoryId, availability: backupUnavailable ? 'unavailable' : backupPaused ? 'paused' : 'available' } }))
   await page.route('**/api/v1/backups/approval', async route => {
     approvalBody = route.request().postData()!; approvalKey = route.request().headers()['idempotency-key']
     expect(JSON.parse(approvalBody)).toEqual({ repositoryId })
@@ -86,6 +89,23 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.getByRole('button', {name:'Check backup availability'}).click()
   await expect(page.getByLabel('Repository password')).toHaveValue('')
   expect(backupRequests).toBe(1)
+  await page.getByLabel('Repository password').fill('unavailable-cleared-secret')
+  backupUnavailable = true
+  await page.getByRole('button', {name:'Check backup availability'}).click()
+  await expect(page.getByText('Backup availability could not be verified.',{exact:false})).toBeVisible()
+  await expect(page.getByLabel('Repository password')).toHaveCount(0)
+  backupUnavailable = false
+  await page.getByRole('button', {name:'Check backup availability'}).click()
+  await expect(page.getByLabel('Repository password')).toHaveValue('')
+  await page.getByLabel('Repository password').fill('failed-check-cleared-secret')
+  configurationFailed = true
+  await page.getByRole('button', {name:'Check backup availability'}).click()
+  await expect(page.getByRole('alert').filter({hasText:'Fixture availability unavailable'})).toBeVisible()
+  await expect(page.getByLabel('Repository password')).toHaveCount(0)
+  expect(backupRequests).toBe(1)
+  configurationFailed = false
+  await page.getByRole('button', {name:'Check backup availability'}).click()
+  await expect(page.getByLabel('Repository password')).toHaveValue('')
   for (const refused of [false, true]) {
   const resumeJob = (refused ? 'B' : 'A').repeat(24)
   let resumeAccepted = false, resumeRequests = 0, resumeKey = ''
