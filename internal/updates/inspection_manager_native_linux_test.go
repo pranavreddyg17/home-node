@@ -53,9 +53,6 @@ func TestNativeInspectionManagerCompletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output, err := manager("start", "--no-block", unit); err != nil {
-		t.Fatal(string(output), err)
-	}
 	// The seam changes only the disposable unit; executable, scope, environment,
 	// bounded output and completion parsing follow the production manager path.
 	factory := func(ctx context.Context, path string, args ...string) *exec.Cmd {
@@ -65,6 +62,12 @@ func TestNativeInspectionManagerCompletion(t *testing.T) {
 		}
 		copied[len(copied)-1] = unit
 		return exec.CommandContext(ctx, path, copied...)
+	}
+	if err := verifyInspectionDormantWith(ctx, factory); err != nil {
+		t.Fatal("fresh loaded fixture was not dormant", err)
+	}
+	if output, err := manager("start", "--no-block", unit); err != nil {
+		t.Fatal(string(output), err)
 	}
 	var invocation string
 	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
@@ -93,6 +96,9 @@ func TestNativeInspectionManagerCompletion(t *testing.T) {
 		output, _ := manager("show", unit)
 		t.Fatal("completed invocation refused", completionErr, string(output))
 	}
+	if err := verifyInspectionDormantWith(ctx, factory); err == nil {
+		t.Fatal("retained completed invocation admitted as dormant")
+	}
 	if err := verifyInspectionServiceCompletionWith(ctx, strings.Repeat("b", 32), boundary, factory); err == nil {
 		t.Fatal("unrelated invocation accepted")
 	}
@@ -100,6 +106,9 @@ func TestNativeInspectionManagerCompletion(t *testing.T) {
 	// A new invocation ID is insufficient when the manager reports failure.
 	if output, err := manager("stop", unit); err != nil {
 		t.Fatal(string(output), err)
+	}
+	if err := verifyInspectionDormantWith(ctx, factory); err != nil {
+		t.Fatal("explicitly stopped fixture was not dormant", err)
 	}
 	failedUnit := "[Unit]\nDescription=Disposable failed inspection completion fixture\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/bin/false\n"
 	if err := os.WriteFile(path, []byte(failedUnit), 0644); err != nil {
@@ -125,6 +134,9 @@ func TestNativeInspectionManagerCompletion(t *testing.T) {
 	}
 	if err := verifyInspectionServiceCompletionWith(ctx, failedInvocation, failedBoundary, factory); err == nil {
 		t.Fatal("failed real invocation accepted")
+	}
+	if err := verifyInspectionDormantWith(ctx, factory); err == nil {
+		t.Fatal("failed invocation admitted as dormant")
 	}
 
 }

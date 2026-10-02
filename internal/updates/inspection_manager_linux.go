@@ -58,6 +58,23 @@ func inspectionServiceProperties(ctx context.Context, command func(context.Conte
 	return inspectionManagerQuery(ctx, "--property=InvocationID,Result,ExecMainCode,ExecMainStatus,ActiveState,SubState,ExecMainStartTimestampMonotonic,ExecMainExitTimestampMonotonic", command)
 }
 
+// VerifyInspectionDormant refuses reuse of retained or unfinished invocations.
+// This observation does not reserve the manager unit or authorize activation.
+func VerifyInspectionDormant(ctx context.Context) error {
+	if os.Geteuid() != 0 {
+		return ErrInspectionResult
+	}
+	return verifyInspectionDormantWith(ctx, exec.CommandContext)
+}
+
+func verifyInspectionDormantWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd) error {
+	properties, err := inspectionManagerQuery(ctx, "--property=LoadState,ActiveState,SubState", command)
+	if err != nil {
+		return err
+	}
+	return ValidateInspectionDormant(properties)
+}
+
 // VerifyInspectionUnitIdentity checks manager load identity for the owned unit;
 // it is not a complete effective-confinement check or activation authorization.
 func VerifyInspectionUnitIdentity(ctx context.Context) error {
