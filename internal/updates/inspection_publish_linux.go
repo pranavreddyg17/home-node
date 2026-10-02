@@ -102,6 +102,11 @@ func (s *InspectionStage) verifyEnvironmentOwned(ctx context.Context, parent *os
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.verifyEnvironmentLocked(ctx, parent)
+}
+
+// Called with the stage mutex held, including during durable launch admission.
+func (s *InspectionStage) verifyEnvironmentLocked(ctx context.Context, parent *os.Root) (resultErr error) {
 	if s.closed || s.packageFile == nil || s.directory == nil {
 		return ErrInspectionResult
 	}

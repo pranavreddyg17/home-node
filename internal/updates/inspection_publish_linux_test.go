@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -110,6 +111,65 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	}
 	if err := stage.verifyEnvironmentOwned(ctx, parent); err != nil {
 		t.Fatal("published configuration refused", err)
+	}
+	epoch, err := CaptureInspectionLaunchEpoch(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.publishLaunchIntentOwned(canceled, parent, epoch); err == nil {
+		t.Fatal("canceled launch intent published")
+	}
+	if err := stage.publishLaunchIntentOwned(ctx, unrelated, epoch); err == nil {
+		t.Fatal("unrelated parent received launch intent")
+	}
+	wrong := epoch
+	wrong.NotBeforeMicros = ^uint64(0)
+	if err := stage.publishLaunchIntentOwned(ctx, parent, wrong); err == nil {
+		t.Fatal("future launch intent published")
+	}
+	launchPath := filepath.Join(parentPath, "inspection.launch")
+	if _, err := os.Lstat(launchPath); !os.IsNotExist(err) {
+		t.Fatal("rejected launch admission changed state", err)
+	}
+	launchPending := filepath.Join(parentPath, "inspection.launch.pending")
+	if err := os.WriteFile(launchPending, []byte("interrupted"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.publishLaunchIntentOwned(ctx, parent, epoch); err == nil {
+		t.Fatal("interrupted launch intent overwritten")
+	}
+	if retained, err := os.ReadFile(launchPending); err != nil || string(retained) != "interrupted" {
+		t.Fatal("interrupted evidence changed", err)
+	}
+	if err := os.Remove(launchPending); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.publishLaunchIntentOwned(ctx, parent, epoch); err != nil {
+		t.Fatal(err)
+	}
+	launch, err := os.ReadFile(launchPath)
+	if err != nil || len(launch) == 0 {
+		t.Fatal("launch intent missing", err)
+	}
+	var recorded map[string]json.RawMessage
+	wanted := map[string]any{"schema": 1, "operationId": identity.OperationID, "release": identity.Release, "packageSha256": identity.PackageSHA256, "packageLength": identity.PackageLength, "bootId": epoch.BootID, "notBeforeMicros": epoch.NotBeforeMicros}
+	if err := json.Unmarshal(launch, &recorded); err != nil || len(recorded) != len(wanted) {
+		t.Fatal("launch record shape", err)
+	}
+	for key, value := range wanted {
+		encoded, err := json.Marshal(value)
+		if err != nil || string(recorded[key]) != string(encoded) {
+			t.Fatal("launch record identity mismatch", key, err)
+		}
+	}
+	if info, err := os.Lstat(launchPath); err != nil || info.Mode().Perm() != 0600 {
+		t.Fatal("launch intent permissions", err)
+	}
+	if err := stage.publishLaunchIntentOwned(ctx, parent, epoch); err == nil {
+		t.Fatal("existing launch intent overwritten")
+	}
+	if retained, err := os.ReadFile(launchPath); err != nil || string(retained) != string(launch) {
+		t.Fatal("launch evidence changed on retry", err)
 	}
 	packagePath := filepath.Join(parentPath, "inspection/package.deb")
 	retainedPath := filepath.Join(parentPath, "inspection/package.retained")
