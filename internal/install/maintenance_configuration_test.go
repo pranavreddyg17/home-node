@@ -197,3 +197,26 @@ func TestPreparedStagingRequiresJournalBoundIdentity(t *testing.T) {
 		t.Fatal("backup paths adopted without maintenance identity")
 	}
 }
+
+func TestRegisteredBackupApprovalConfiguration(t *testing.T) {
+	c, _, _, now := configurationFixture(t)
+	c.BackupRepositoryID = strings.Repeat("a", 64)
+	if _, err := ConfigurationPlan(c, now); err == nil {
+		t.Fatal("repository without isolated maintenance identity accepted")
+	}
+	c.Maintenance = &MaintenanceAccount{UID: 803, GID: 803}
+	preview, err := ConfigurationPlan(c, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit := findConfiguration(t, preview.Plan, "etc/systemd/system/homenode-control.service")
+	if !strings.Contains(string(unit.Data), "--maintenance-uid 803 --maintenance-gid 803 --backup-repository-id "+c.BackupRepositoryID+"\n") || preview.BackupRepositoryID != c.BackupRepositoryID || unit.UID != 0 || unit.Mode != 0644 {
+		t.Fatal("registered approval configuration omitted", string(unit.Data))
+	}
+	for _, invalid := range []string{"foreign", strings.Repeat("A", 64), strings.Repeat("a", 63), "value\nExecStart=evil"} {
+		c.BackupRepositoryID = invalid
+		if _, err := ConfigurationPlan(c, now); err == nil {
+			t.Fatal("unsafe repository identity accepted")
+		}
+	}
+}

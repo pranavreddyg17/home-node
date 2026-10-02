@@ -84,3 +84,12 @@ func validateMaintenanceStaging(config journal, identity *MaintenanceAccount) er
 	}
 	return nil
 }
+
+func backupApprovalControlUnit(data []byte, identity MaintenanceAccount, repository string) ([]byte, error) {
+	line := []byte(fmt.Sprintf(" --maintenance-uid %d --maintenance-gid %d\n", identity.UID, identity.GID))
+	if bytes.Count(data, line) != 1 {
+		return nil, ErrPlan
+	}
+	replacement := []byte(fmt.Sprintf(" --maintenance-uid %d --maintenance-gid %d --backup-repository-id %s\n", identity.UID, identity.GID, repository))
+	return bytes.Replace(data, line, replacement, 1), nil
+}

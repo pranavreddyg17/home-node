@@ -30,6 +30,7 @@ type Capacity struct {
 	FreeDiskBytes uint64
 }
 type Configuration struct {
+	BackupRepositoryID    string
 	UpdateProvenance      []byte
 	UpdateRepository      *updates.RepositoryConfiguration
 	UpdateBootstrap       *updates.BootstrapRoot
@@ -43,6 +44,7 @@ type Configuration struct {
 	Capacity              Capacity
 }
 type ConfigurationPreview struct {
+	BackupRepositoryID     string              `json:"backupRepositoryId,omitempty"`
 	UpdateBootstrapSHA256  string              `json:"updateBootstrapSha256,omitempty"`
 	UpdateBootstrapVersion int64               `json:"updateBootstrapVersion,omitempty"`
 	Maintenance            *MaintenanceAccount `json:"maintenance,omitempty"`
@@ -115,6 +117,12 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 	if c.Maintenance != nil {
 		b := *c.Maintenance
 		if b.UID < 100 || b.UID >= 1000 || b.UID == a.ControllerUID || b.UID == a.TransferUID || b.GID < 100 || b.GID >= 1000 || seen[b.GID] {
+			return result, ErrPlan
+		}
+	}
+	if c.BackupRepositoryID != "" {
+		digest, err := hex.DecodeString(c.BackupRepositoryID)
+		if c.Maintenance == nil || err != nil || len(digest) != 32 || hex.EncodeToString(digest) != c.BackupRepositoryID {
 			return result, ErrPlan
 		}
 	}
@@ -224,6 +232,12 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 			if err != nil {
 				return result, err
 			}
+			if c.BackupRepositoryID != "" {
+				data, err = backupApprovalControlUnit(data, *c.Maintenance, c.BackupRepositoryID)
+				if err != nil {
+					return result, err
+				}
+			}
 		}
 		addFile("etc/systemd/system/"+name, 0644, data)
 	}
@@ -249,7 +263,7 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 	if _, _, err = planRecords(plan, 0); err != nil {
 		return result, err
 	}
-	result = ConfigurationPreview{Maintenance: c.Maintenance, Network: c.Network, RuntimePolicy: c.Policy, Accounts: c.Accounts, ProvidedCapacity: c.Capacity, Plan: plan, CatalogVersion: m.Version, PublisherKeyID: catalog.KeyID(c.Publisher), RequiredDiskBytes: required, VerifiedImageBytes: imageCredit, RequiredFreeDiskBytes: required - imageCredit, Pending: []string{"verify actual service account memberships", "verify supported host enforcement and measured VM overhead", "place and verify immutable guest images", "verify live Tailscale and protected HTTPS identity", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
+	result = ConfigurationPreview{BackupRepositoryID: c.BackupRepositoryID, Maintenance: c.Maintenance, Network: c.Network, RuntimePolicy: c.Policy, Accounts: c.Accounts, ProvidedCapacity: c.Capacity, Plan: plan, CatalogVersion: m.Version, PublisherKeyID: catalog.KeyID(c.Publisher), RequiredDiskBytes: required, VerifiedImageBytes: imageCredit, RequiredFreeDiskBytes: required - imageCredit, Pending: []string{"verify actual service account memberships", "verify supported host enforcement and measured VM overhead", "place and verify immutable guest images", "verify live Tailscale and protected HTTPS identity", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
 	if c.Maintenance != nil {
 		result.Pending = append(result.Pending, "register and qualify an external backup repository", "generate trusted backup launch configuration and qualify worker activation")
 	}
