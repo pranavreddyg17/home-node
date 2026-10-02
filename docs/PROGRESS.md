@@ -2663,3 +2663,7 @@ Added explicitly gated disposable Linux/root systemd fixture and ordered CI step
 ### Observe live sibling before OOM pressure
 
 OOM fixture now waits for the harness sibling before releasing allocation, verifies its live proc entry and cgroup-v2 membership against systemd service ControlGroup, and checks loaded1GiB memory ceiling. Harness waits on bounded root-controlled allocation gate. Cleanup removes both known marker files. This prevents an already-failed sibling/harness from masquerading as OOM group shutdown evidence. Python syntax and diff checks passed; native execution remains pending. CI37070514721 remains active; follow-up stays local. Full application acceptance remains unfinished.
+
+### Inspect kernel controls before backup OOM exercise
+
+Before allocation gate release, native fixture now requires cgroup-v2 memory.max=1GiB, memory.swap.max=0, memory.oom.group=1 and pids.max=64, plus finite CPU quota equal to its period (one CPU). Primary [kernel cgroup-v2 documentation](https://docs.kernel.org/admin-guide/cgroup-v2.html) confirms quota/period and group OOM semantics; systemd hosted manual fetch returned403, so no successful hosted-manual verification is claimed. These are kernel readback assertions, not a substitute for the actual pending OOM exercise. Python syntax and diff checks passed; CI37070514721 remains active and follow-up stays local. Full application acceptance remains unfinished.

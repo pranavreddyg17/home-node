@@ -84,6 +84,13 @@ TimeoutStopSec=5
         raise RuntimeError("sibling did not inherit service cgroup")
     if command("systemctl", "show", unit, "--property=MemoryMax", "--value").stdout.strip() != "1073741824":
         raise RuntimeError("test service memory ceiling was not loaded")
+    kernel_group = pathlib.Path("/sys/fs/cgroup") / cgroup.lstrip("/")
+    for name, expected in {"memory.max": "1073741824", "memory.swap.max": "0", "memory.oom.group": "1", "pids.max": "64"}.items():
+        if (kernel_group / name).read_text().strip() != expected:
+            raise RuntimeError(f"kernel resource control {name} was not applied")
+    quota, period = (kernel_group / "cpu.max").read_text().split()
+    if quota == "max" or int(quota) <= 0 or int(quota) != int(period):
+        raise RuntimeError("kernel CPU quota did not bound service to one CPU")
     (runtime / "allocate").write_text("go")
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
