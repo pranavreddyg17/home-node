@@ -66,7 +66,7 @@ func (e *Engine) acquireUpdateReleaseOwned(ctx context.Context, target string, c
 	if err != nil {
 		return nil, err
 	}
-	if err := e.verifyUpdateReleaseProvenanceLocked(ctx, release); err != nil {
+	if err := e.verifyUpdateReleaseEvidenceLocked(ctx, release); err != nil {
 		return nil, errors.Join(err, release.Close())
 	}
 	return release, nil

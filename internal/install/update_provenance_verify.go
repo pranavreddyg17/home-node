@@ -70,3 +70,15 @@ func (e *Engine) verifyUpdateReleaseProvenanceLocked(ctx context.Context, releas
 	}
 	return ctx.Err()
 }
+
+// verifyUpdateReleaseEvidenceLocked applies package binding to both retained
+// evidence documents. Full inventory/vulnerability qualification remains required.
+func (e *Engine) verifyUpdateReleaseEvidenceLocked(ctx context.Context, release *updates.AcquiredRelease) error {
+	if err := e.verifyUpdateReleaseProvenanceLocked(ctx, release); err != nil {
+		return err
+	}
+	if err := updates.ValidateSBOMBinding(release.SBOM, release.PackageSHA256, release.Metadata.Release); err != nil {
+		return err
+	}
+	return ctx.Err()
+}

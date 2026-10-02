@@ -32,7 +32,7 @@ func (e *Engine) stageUpdateInspectionOwned(ctx context.Context, release *update
 	if release == nil || release.Metadata.Platform != "ubuntu-24.04-amd64" || release.Metadata.Sequence < configuration.MinimumSequence || release.Metadata.CatalogVersion < configuration.MinimumCatalogVersion {
 		return ErrConflict
 	}
-	if err := e.verifyUpdateReleaseProvenanceLocked(ctx, release); err != nil {
+	if err := e.verifyUpdateReleaseEvidenceLocked(ctx, release); err != nil {
 		return err
 	}
 	staging, err := e.openInspectionDirectoryLocked()
@@ -88,7 +88,7 @@ func (e *Engine) openUpdateInspectionLocked(ctx context.Context, release *update
 	if release == nil || release.Metadata.Platform != "ubuntu-24.04-amd64" || release.Metadata.Sequence < configuration.MinimumSequence || release.Metadata.CatalogVersion < configuration.MinimumCatalogVersion {
 		return nil, ErrConflict
 	}
-	if err := e.verifyUpdateReleaseProvenanceLocked(ctx, release); err != nil {
+	if err := e.verifyUpdateReleaseEvidenceLocked(ctx, release); err != nil {
 		return nil, err
 	}
 	staging, err := e.openInspectionDirectoryLocked()
@@ -166,7 +166,7 @@ func (e *Engine) withUpdateInspectionResultOwned(ctx context.Context, release *u
 			readErr = ErrConflict
 		}
 		if readErr == nil {
-			readErr = e.verifyUpdateReleaseProvenanceLocked(ctx, release)
+			readErr = e.verifyUpdateReleaseEvidenceLocked(ctx, release)
 		}
 		if readErr == nil {
 			readErr = e.requireInspectionServiceLocked()

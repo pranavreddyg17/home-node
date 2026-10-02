@@ -281,3 +281,13 @@ is retained for explicit recovery, with no automatic adoption/resume yet.
 Linux tests compile for success, mismatched identity, existing intent, public
 staging and cancellation; native execution awaits CI. This primitive remains
 unconnected to installer-owned staging, service launch and completion journals.
+
+Installer-owned acquisition and inspection admission additionally require a
+CycloneDX 1.6 SBOM primary component (`metadata.component`) with type
+`application`, name `homenode`, the retained signed release version, and exactly
+one matching `SHA-256` package hash. This binding runs alongside protected
+provenance checks before acquisition returns, before staging/reopening, and
+after result collection. A missing or mismatched primary component refuses.
+This is a package-binding gate, not full CycloneDX schema validation or proof of
+dependency completeness, licensing or vulnerability status. Production SBOM
+generation and those remaining semantic gates still require integration.

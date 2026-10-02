@@ -154,6 +154,14 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	if err := engine.verifyUpdateReleaseProvenanceOwned(ctx, release); err != nil {
 		t.Fatal("restored owned acquired provenance refused", err)
 	}
+	if err := engine.stageUpdateInspectionOwned(ctx, release, "inspection-fixture-000001"); !errors.Is(err, updates.ErrSBOMBinding) {
+		t.Fatal("missing SBOM bypassed staging admission", err)
+	}
+	entries, err = os.ReadDir(stagePath)
+	if err != nil || len(entries) != 0 {
+		t.Fatal("SBOM refusal mutated staging", err)
+	}
+	release.SBOM = []byte(`{"bomFormat":"CycloneDX","specVersion":"1.6","metadata":{"component":{"type":"application","name":"homenode","version":"0.1.0","hashes":[{"alg":"SHA-256","content":"` + release.PackageSHA256 + `"}]}}}`)
 	if err := engine.stageUpdateInspectionOwned(ctx, release, "inspection-fixture-000001"); err != nil {
 		t.Fatal("owned inspection staging failed", err)
 	}
@@ -298,10 +306,11 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	if err := os.WriteFile(servicePath, service, 0644); err != nil {
 		t.Fatal(err)
 	}
-	for _, mutation := range []string{"repository", "sequence", "catalog", "platform", "release", "hash", "length", "provenance", "cancellation"} {
+	for _, mutation := range []string{"repository", "sequence", "catalog", "platform", "release", "hash", "length", "provenance", "sbom", "cancellation"} {
 		collectionCtx, cancel := context.WithCancel(ctx)
 		metadata, packageHash, packageLength := release.Metadata, release.PackageSHA256, release.PackageLength
 		provenanceEvidence := release.Provenance
+		sbomEvidence := release.SBOM
 		policyPath := filepath.Join(host, "etc/homenode/update-repository.json")
 		result, err := engine.withUpdateInspectionResultOwned(collectionCtx, release, "inspection-fixture-000001", execution, func(_ *updates.InspectionStage, _ context.Context, _ *os.Root, _ updates.InspectionExecution) (updates.InspectionResult, error) {
 			switch mutation {
@@ -321,6 +330,8 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 				release.PackageSHA256 = "changed"
 			case "length":
 				release.PackageLength++
+			case "sbom":
+				release.SBOM = nil
 			case "provenance":
 				release.Provenance = nil
 			case "cancellation":
@@ -330,6 +341,9 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 		})
 		cancel()
 		want := ErrConflict
+		if mutation == "sbom" {
+			want = updates.ErrSBOMBinding
+		}
 		if mutation == "provenance" {
 			want = updates.ErrProvenanceBinding
 		}
@@ -341,6 +355,7 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 		}
 		release.Metadata, release.PackageSHA256, release.PackageLength = metadata, packageHash, packageLength
 		release.Provenance = provenanceEvidence
+		release.SBOM = sbomEvidence
 		if err := os.WriteFile(policyPath, repository, 0400); err != nil {
 			t.Fatal(err)
 		}
