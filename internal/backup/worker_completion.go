@@ -71,10 +71,10 @@ func waitLaunchCompletion(ctx context.Context, connection *net.UnixConn, launch 
 	if err != nil {
 		return err
 	}
-	if !bytes.Equal(raw, launchCompletionPacket(launch)) {
-		return ErrManifest
+	if err := bounded.Err(); err != nil {
+		return err
 	}
-	return bounded.Err()
+	return parseLaunchCompletionPacket(raw, launch)
 }
 
 func cleanupCompletionPacket(cleanup Cleanup) []byte {
