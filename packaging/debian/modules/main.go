@@ -7,7 +7,10 @@ import (
 	"debug/buildinfo"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+
 	"fmt"
+	"golang.org/x/sys/unix"
 	"io"
 	"os"
 	"runtime/debug"
@@ -58,8 +61,8 @@ func inspect(root *os.Root, name string) (binaryRecord, error) {
 }
 
 func run(args []string, output io.Writer) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: modules STAGED_ROOT")
+	if len(args) != 1 && len(args) != 2 {
+		return fmt.Errorf("usage: modules STAGED_ROOT [REVIEWED_GO_SUM]")
 	}
 	root, err := os.OpenRoot(args[0])
 	if err != nil {
@@ -74,11 +77,47 @@ func run(args []string, output io.Writer) error {
 		}
 		records = append(records, record)
 	}
+	verified, sumsHash := false, ""
+	if len(args) == 2 {
+		data, err := readReviewedSums(args[1])
+		if err != nil {
+			return err
+		}
+		if err := verifyModuleSums(records, data); err != nil {
+			return err
+		}
+		digest := sha256.Sum256(data)
+		sumsHash = hex.EncodeToString(digest[:])
+		verified = true
+	}
 	return json.NewEncoder(output).Encode(struct {
-		Schema       int            `json:"schema"`
-		Completeness string         `json:"completeness"`
-		Binaries     []binaryRecord `json:"binaries"`
-	}{1, "incomplete", records})
+		Schema             int            `json:"schema"`
+		Completeness       string         `json:"completeness"`
+		Binaries           []binaryRecord `json:"binaries"`
+		SourceSumsVerified bool           `json:"sourceSumsVerified"`
+		SourceSumsSHA256   string         `json:"sourceSumsSHA256"`
+	}{1, "incomplete", records, verified, sumsHash})
+}
+
+func readReviewedSums(name string) ([]byte, error) {
+	file, err := os.OpenFile(name, os.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	before, err := file.Stat()
+	if err != nil || !before.Mode().IsRegular() || before.Size() < 1 || before.Size() > 8<<20 {
+		return nil, errors.Join(fmt.Errorf("invalid reviewed sum file"), err, file.Close())
+	}
+	data, readErr := io.ReadAll(io.LimitReader(file, (8<<20)+1))
+	after, statErr := file.Stat()
+	closeErr := file.Close()
+	if err := errors.Join(readErr, statErr, closeErr); err != nil {
+		return nil, err
+	}
+	if int64(len(data)) != before.Size() || len(data) > 8<<20 || after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime()) {
+		return nil, fmt.Errorf("changed reviewed sum file")
+	}
+	return data, nil
 }
 
 func main() {
