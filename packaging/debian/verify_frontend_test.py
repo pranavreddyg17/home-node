@@ -3,8 +3,10 @@ import copy
 import hashlib
 import json
 import pathlib
+import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from verify_frontend import verify
 
@@ -95,6 +97,40 @@ class FrontendEvidenceTests(unittest.TestCase):
     def test_changed_manifest_with_retained_version(self):
         self.manifest.write_bytes(b'{"name":"react","version":"1.0.0","extra":true}')
         with self.assertRaises(ValueError):
+            self.check()
+
+    def test_manifest_link_and_oversize_refusal(self):
+        self.manifest.unlink()
+        self.manifest.symlink_to(self.lock)
+        with self.assertRaises(ValueError):
+            self.check()
+        self.manifest.unlink()
+        self.manifest.write_bytes(b' ' * (1024 * 1024 + 1))
+        with self.assertRaises(ValueError):
+            self.check()
+
+    def test_changed_manifest_during_descriptor_read(self):
+        original_read = os.read
+        before = self.manifest.stat()
+        changed = False
+
+        def mutate(fd, size):
+            nonlocal changed
+            data = original_read(fd, size)
+            if data and not changed:
+                changed = True
+                self.manifest.write_bytes(b'x' * before.st_size)
+                os.utime(self.manifest, ns=(before.st_atime_ns, before.st_mtime_ns + 1000000))
+            return data
+
+        with patch('verify_frontend.os.read', side_effect=mutate):
+            with self.assertRaisesRegex(ValueError, 'changed installed package manifest'):
+                self.check()
+        self.assertTrue(changed)
+
+    def test_short_descriptor_reads_preserve_exact_identity(self):
+        original_read = os.read
+        with patch('verify_frontend.os.read', side_effect=lambda fd, size: original_read(fd, min(size, 3))):
             self.check()
 
     def test_duplicate_json_key(self):
