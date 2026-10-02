@@ -3,9 +3,31 @@
 import hashlib
 import json
 import pathlib
+import os
+import stat
 import sys
 
 from verify_sbom import unique
+
+
+def manifest_digest(path):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode) or not 1 <= before.st_size <= 1024 * 1024:
+            raise ValueError('invalid installed package manifest')
+        data = bytearray()
+        while len(data) <= 1024 * 1024:
+            chunk = os.read(fd, min(65536, 1024 * 1024 + 1 - len(data)))
+            if not chunk:
+                break
+            data.extend(chunk)
+        after = os.fstat(fd)
+        if len(data) != before.st_size or after.st_size != before.st_size or after.st_mtime_ns != before.st_mtime_ns:
+            raise ValueError('changed installed package manifest')
+        return hashlib.sha256(data).hexdigest()
+    finally:
+        os.close(fd)
 
 
 def verify(web_root, evidence, lockfile):
@@ -61,7 +83,7 @@ def verify(web_root, evidence, lockfile):
         manifest = lockfile.parent / key / 'package.json'
         if manifest.is_symlink() or not manifest.is_file() or manifest.stat().st_size > 1024 * 1024:
             raise ValueError('invalid installed package manifest')
-        if dependency.get('manifestSHA256') != hashlib.sha256(manifest.read_bytes()).hexdigest():
+        if dependency.get('manifestSHA256') != manifest_digest(manifest):
             raise ValueError('installed package manifest mismatch')
         name = key.rsplit('node_modules/', 1)[1]
         if dependency.get('name') != name or not entry.get('version') or dependency.get('version') != entry['version'] or dependency.get('integrity') != entry.get('integrity') or dependency.get('resolved') != entry.get('resolved'):

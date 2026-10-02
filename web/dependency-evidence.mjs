@@ -1,6 +1,30 @@
 import { createHash } from 'node:crypto'
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { readFileSync, mkdirSync, writeFileSync, openSync, closeSync, fstatSync, readSync, constants } from 'node:fs'
 import path from 'node:path'
+
+function readManifest(filename) {
+  const fd = openSync(filename, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+  try {
+    const before = fstatSync(fd)
+    if (!before.isFile() || before.size < 1 || before.size > 1024 * 1024) {
+      throw new Error('Invalid dependency manifest size/type')
+    }
+    const buffer = Buffer.alloc(1024 * 1024 + 1)
+    let count = 0
+    while (count < buffer.length) {
+      const read = readSync(fd, buffer, count, buffer.length - count, null)
+      if (!read) break
+      count += read
+    }
+    const after = fstatSync(fd)
+    if (count !== before.size || count > 1024 * 1024 || after.size !== before.size || after.mtimeMs !== before.mtimeMs) {
+      throw new Error('Changed or oversized dependency manifest')
+    }
+    return buffer.subarray(0, count)
+  } finally {
+    closeSync(fd)
+  }
+}
 
 // Build-graph evidence is incomplete until dependency/license review qualifies it.
 export function dependencyEvidence() {
@@ -30,8 +54,8 @@ export function dependencyEvidence() {
           const directory = id.slice(0, marker + '/node_modules/'.length) + name
           const key = path.relative(root, directory).split(path.sep).join('/')
           const locked = packages[key]
-          const manifest = readFileSync(path.join(directory, 'package.json'))
-          const installed = JSON.parse(manifest.toString('utf8'))
+          const manifest = readManifest(path.join(directory, 'package.json'))
+          const installed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(manifest))
           if (!locked || !locked.version || installed.name !== name || installed.version !== locked.version) {
             throw new Error(`Bundled dependency differs from lockfile: ${name}`)
           }

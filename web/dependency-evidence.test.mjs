@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, renameSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
@@ -51,4 +51,20 @@ test('empty emitted dependency graph refuses', t => {
   const { plugin, evidence } = fixture(t)
   assert.throws(() => plugin.writeBundle({}, { 'app.js': { type: 'chunk', code: '', modules: {} } }), /Empty bundled dependency/)
   assert.equal(existsSync(evidence), false)
+})
+
+
+test('symlink and oversized package manifests refuse before publication', t => {
+  for (const mutation of ['link', 'oversize']) {
+    const { root, plugin, bundle, evidence } = fixture(t)
+    const manifest = path.join(root, 'node_modules/@fixture/package/package.json')
+    if (mutation === 'link') {
+      renameSync(manifest, manifest + '.target')
+      symlinkSync(manifest + '.target', manifest)
+    } else {
+      writeFileSync(manifest, Buffer.alloc(1024 * 1024 + 1, 32))
+    }
+    assert.throws(() => plugin.writeBundle({}, bundle))
+    assert.equal(existsSync(evidence), false)
+  }
 })
