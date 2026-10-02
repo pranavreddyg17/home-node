@@ -408,8 +408,13 @@ func TestBackupApprovalAndMaintenanceAdmissionCommitTogether(t *testing.T) {
 	s := testService(t)
 	actor, _ := testDevice(t, s, AllCapabilities)
 	ctx := context.Background()
-	body := []byte(`{"repository":"registered"}`)
-	resources := []string{"registered"}
+	repository := strings.Repeat("a", 64)
+	key := "backup-request-1234567890"
+	body := []byte(`{"repositoryId":"` + repository + `"}`)
+	resources, err := BackupApprovalResources(body, repository, key)
+	if err != nil {
+		t.Fatal(err)
+	}
 	binding, err := newApprovalBinding(actor, "backup.create", resources, body, 1, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
@@ -421,12 +426,11 @@ func TestBackupApprovalAndMaintenanceAdmissionCommitTogether(t *testing.T) {
 	}
 	var token string
 	var job state.MaintenanceJob
-	admit := func(tx *sql.Tx) error {
+	consume := func() error {
 		var err error
-		token, job, err = state.BeginMaintenanceJobTx(tx, actor.Device.ID)
+		token, job, err = s.AdmitBackupApproved(ctx, actor, grant, body, repository, key, 1)
 		return err
 	}
-	consume := func() error { return s.ConsumeApproval(ctx, actor, grant, "backup.create", resources, body, 1, admit) }
 	if _, err = s.Store.DB.Exec("CREATE TRIGGER fixture_backup_admission BEFORE INSERT ON settings WHEN NEW.key='host.maintenance-job.phase' BEGIN SELECT RAISE(ABORT,'admission failure'); END"); err != nil {
 		t.Fatal(err)
 	}
