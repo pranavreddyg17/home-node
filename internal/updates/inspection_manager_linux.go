@@ -138,3 +138,15 @@ func VerifyInspectionProcessPolicy(ctx context.Context) error {
 	}
 	return ValidateInspectionProcessPolicy(properties)
 }
+
+// VerifyInspectionAccessPolicy checks configured IP/host-path restrictions.
+func VerifyInspectionAccessPolicy(ctx context.Context) error {
+	if os.Geteuid() != 0 {
+		return ErrInspectionResult
+	}
+	properties, err := inspectionManagerQuery(ctx, "--property=IPAddressDeny,IPAddressAllow,InaccessiblePaths", exec.CommandContext)
+	if err != nil {
+		return err
+	}
+	return ValidateInspectionAccessPolicy(properties)
+}
