@@ -26,6 +26,26 @@ sudo homenode install-prepare \
   --memory-mib 4096 --cpus 2 --instances 3
 ```
 
+For update acquisition, append the independently reviewed update trust inputs:
+
+```sh
+  --update-root /path/to/release/root.json \
+  --update-root-sha256 '<independently verified root SHA256>' \
+  --update-metadata-url https://updates.example/metadata/ \
+  --update-targets-url https://updates.example/targets/ \
+  --update-sequence-floor 5 \
+  --update-provenance /path/to/release/provenance-policy.json \
+  --update-provenance-sha256 '<independently verified policy SHA256>'
+```
+
+These are continuation arguments for the preceding command. Replace the example
+repository with the reviewed release repository; metadata and target scopes must
+use HTTPS on the same host. Each file/pin pair is mandatory when supplied.
+Provenance policy requires repository configuration and pinned TUF bootstrap.
+See [the protected provenance policy contract](PROVENANCE_POLICY.md).
+Acquisition refuses absent provenance policy even if older preparation completed
+without it. Preparation alone does not activate updates or authorize installation.
+
 Use the server's own Tailscale IPv4 address and canonical HTTPS origin. The
 runtime budget reserves separate host capacity and must fit every release
 profile, including concurrent Files/video execution and storage headroom. The

@@ -23,13 +23,13 @@ Platform is currently fixed to the product's initial Ubuntu 24.04 amd64 candidat
 
 Package paths are relative canonical `.deb` target names. Acquisition requires SHA256, verifies any SHA512 too, rejects unsupported hashes and caps package bytes at 512 MiB. SBOM and provenance paths are distinct relative canonical JSON target names. Both must resolve through verified TUF metadata, declare SHA256 and have lengths from one byte through 8 MiB before package acquisition starts.
 
-The current code acquires both evidence documents, verifies their exact TUF length/hashes and JSON syntax, and returns their bytes with the verified read-only package for later review. It does not establish SBOM completeness, vulnerability status, an authorized build identity or release promotion approval. Semantic evidence review, install journals, migrations, permitted rollback, trusted launch configuration and owner approval remain separate required gates before a release can be installed or claimed qualified.
+The lower-level acquisition library acquires both evidence documents and verifies their exact TUF length/hashes and bounded, duplicate-free JSON object syntax. Installer-owned acquisition additionally verifies authenticated provenance against its protected policy before returning the read-only package. Neither path establishes SBOM completeness, vulnerability status, builder qualification or release promotion approval. Semantic evidence review, install journals, migrations, permitted rollback, trusted launch configuration and owner approval remain separate required gates before a release can be installed or claimed qualified.
 
 ## Installer trust bootstrap
 
 `install-prepare` accepts optional paired `--update-root <local-root.json>` and `--update-root-sha256 <independently-verified-digest>` flags. The pin must come from independently trusted release setup, not a digest downloaded beside an untrusted root. Input is bounded, must satisfy upstream TUF root signature verification, uses a root role threshold of at least two, and keeps keys distinct across the four top-level roles.
 
-Preparation journals an immutable root-owned 0400 `/etc/homenode/update-root.json` and root-owned 0700 update, metadata and download directories under `/var/lib/homenode-update`. It does not journal `metadata/root.json` as immutable configuration, initialize a current cache root, download packages, or activate updates. The current cache bootstrap/rotation ownership lifecycle and trusted release-policy configuration still require implementation.
+Preparation journals an immutable root-owned 0400 `/etc/homenode/update-root.json` and root-owned 0700 update, metadata and download directories under `/var/lib/homenode-update`. It does not journal `metadata/root.json` as immutable configuration, initialize a current cache root, download packages, or activate updates. Cache initialization is journaled and resumable as described below. Production trust rotation and recovery still require qualification.
 
 After preparation has completed with update bootstrap configuration, run `sudo homenode update-trust-initialize` locally. This command requires Linux/root and an existing completed ownership journal. It accepts only an optional canonical `--journal-dir`; root bytes and pins come from journaled configuration, never from this command's request. It verifies all owned configuration before initializing current trust with recorded resumable intent. It does not activate updates, acquire a release, or install a package. A changed bootstrap or missing previously initialized cache root is refused for explicit recovery.
 
@@ -50,8 +50,8 @@ checks, evidence downloads, and the verified read-only package under one cache
 lock. It rejects invalid repository configuration before changing the cache and
 closes the package if final session cleanup or cancellation fails. It does not
 install a package or establish vulnerability, provenance-identity, migration,
-or owner-approval qualification. Protected repository policy loading, updating
-persistent release floors after successful installation, and approved service
+or owner-approval qualification. Updating
+persistent release floors after successful installation and approved service
 activation remain required before enabling product updates.
 
 `install.Engine.ReadUpdateRepository` provides the privileged policy-loading
@@ -64,8 +64,8 @@ This loader does not activate an updater or authorize installing a release.
 
 The Linux `install.Engine.AcquireUpdateRelease` method keeps installer ownership
 locked while loading repository policy, checking the observed schema,
-initializing or resuming the protected cache, and acquiring the release through
-its owned download directory. It accepts neither repository URL nor bootstrap
+initializing or resuming the protected cache, acquiring the release through
+its owned download directory, and verifying provenance against owned policy. It accepts neither repository URL nor bootstrap
 bytes from its caller. Returned bytes still have no install authority; this
 method is not yet connected to a maintenance command or owner-approved updater
 service. The actual signed repository acquisition fixture tests the underlying
