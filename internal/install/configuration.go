@@ -214,6 +214,13 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 		}
 		addFile("etc/systemd/system/"+name, 0644, data)
 	}
+	if c.UpdateRepository != nil {
+		data, err := servicetemplates.Unit("homenode-inspect.service")
+		if err != nil {
+			return result, err
+		}
+		addFile("etc/systemd/system/homenode-inspect.service", 0644, data)
+	}
 	if c.Maintenance != nil {
 		addFile("etc/systemd/system/homenode-app-maintenance.socket", 0644, maintenanceSocketUnit())
 		for _, name := range []string{"homenode-backup.service", "homenode-backup-credential.socket"} {

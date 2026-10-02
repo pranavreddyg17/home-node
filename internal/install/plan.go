@@ -54,9 +54,10 @@ var directories = map[string]bool{
 	"var/lib/homenode-backup": true, "var/lib/homenode-backup/staging": true,
 }
 var files = map[string]bool{
-	"etc/homenode/update-root.json":       true,
-	"etc/homenode/update-repository.json": true,
-	"etc/homenode/services.env":           true, "etc/homenode/runtime-policy.json": true,
+	"etc/systemd/system/homenode-inspect.service": true,
+	"etc/homenode/update-root.json":               true,
+	"etc/homenode/update-repository.json":         true,
+	"etc/homenode/services.env":                   true, "etc/homenode/runtime-policy.json": true,
 	"etc/homenode/catalog.pub": true, "etc/homenode/catalog-floor": true, "var/lib/homenode/catalog/catalog.json": true,
 	"etc/systemd/system/homenode-app-maintenance.socket":   true,
 	"etc/systemd/system/homenode-backup-credential.socket": true,

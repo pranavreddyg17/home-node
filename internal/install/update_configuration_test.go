@@ -1,6 +1,7 @@
 package install
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/updates"
+	servicetemplates "github.com/pranavreddyg17/home-node/packaging/systemd"
 	"github.com/sigstore/sigstore/pkg/signature"
 	"github.com/theupdateframework/go-tuf/v2/metadata"
 )
@@ -111,10 +113,27 @@ func TestConfigurationOwnsRepositoryPolicyAndRequiresBootstrap(t *testing.T) {
 	c, _, _, now := configurationFixture(t)
 	c.UpdateBootstrap = updateBootstrapFixture(t, 2)
 	c.Maintenance = &MaintenanceAccount{UID: 803, GID: 803}
+	withoutRepository, err := ConfigurationPlan(c, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range withoutRepository.Plan.Items {
+		if item.Path == "etc/systemd/system/homenode-inspect.service" {
+			t.Fatal("inspection service provisioned without repository policy")
+		}
+	}
 	c.UpdateRepository = &updates.RepositoryConfiguration{Schema: 1, MetadataURL: "https://updates.example/metadata/", TargetsURL: "https://updates.example/targets/", MinimumSequence: 1, MinimumCatalogVersion: c.MinimumCatalogVersion}
 	preview, err := ConfigurationPlan(c, now)
 	if err != nil {
 		t.Fatal(err)
+	}
+	unit := findConfiguration(t, preview.Plan, "etc/systemd/system/homenode-inspect.service")
+	reviewed, err := servicetemplates.Unit("homenode-inspect.service")
+	if err != nil || !bytes.Equal(unit.Data, reviewed) || unit.Mode != 0644 || unit.UID != 0 || unit.GID != 0 || unit.Directory {
+		t.Fatal("inspection service ownership differs from reviewed source", err)
+	}
+	if bytes.Contains(unit.Data, []byte("[Install]")) {
+		t.Fatal("inspection unit gains automatic enablement")
 	}
 	staging := findConfiguration(t, preview.Plan, "var/lib/homenode-update/inspection")
 	if !staging.Directory || staging.Mode != 0700 || staging.UID != 0 || staging.GID != 0 {
