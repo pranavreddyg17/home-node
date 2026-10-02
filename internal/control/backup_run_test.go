@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/backup"
 	"github.com/pranavreddyg17/home-node/internal/state"
@@ -14,7 +15,7 @@ func TestApprovedBackupPreflightRefusesBeforeAdmission(t *testing.T) {
 	s := testServer(t)
 	s.config.BackupRepositoryID = strings.Repeat("a", 64)
 	s.config.Runtime = fileBackend{}
-	session := seedSession(t, s, `["admin"]`)
+	session := seedBackupSession(t, s)
 	actor, err := s.Identity.Authenticate(context.Background(), session)
 	if err != nil {
 		t.Fatal(err)
@@ -49,7 +50,7 @@ func TestApprovedBackupPasswordClearsOwnedInputOnRefusal(t *testing.T) {
 	s := testServer(t)
 	s.config.BackupRepositoryID = strings.Repeat("a", 64)
 	s.config.Runtime = fileBackend{}
-	session := seedSession(t, s, `["admin"]`)
+	session := seedBackupSession(t, s)
 	actor, err := s.Identity.Authenticate(context.Background(), session)
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +102,7 @@ func TestApprovedBackupRequiresBothWorkerOperationsBeforeAdmission(t *testing.T)
 	s := testServer(t)
 	s.config.BackupRepositoryID = strings.Repeat("a", 64)
 	s.config.Runtime = fileBackend{}
-	actor, err := s.Identity.Authenticate(context.Background(), seedSession(t, s, `["admin"]`))
+	actor, err := s.Identity.Authenticate(context.Background(), seedBackupSession(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +137,7 @@ func TestApprovedBackupRequiresBothWorkerOperationsBeforeAdmission(t *testing.T)
 
 func TestAsyncApprovedBackupClearsPasswordOnRefusal(t *testing.T) {
 	s := testServer(t)
-	actor, err := s.Identity.Authenticate(context.Background(), seedSession(t, s, `["admin"]`))
+	actor, err := s.Identity.Authenticate(context.Background(), seedBackupSession(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,4 +188,17 @@ func TestAdmittedBackupTaskClosesCredentialOnFailure(t *testing.T) {
 	if _, err = credential.Stat(); err == nil {
 		t.Fatal("task retained owned descriptor")
 	}
+}
+
+func seedBackupSession(t *testing.T, s *Server) string {
+	t.Helper()
+	session, device := state.Random(), state.Random()
+	now := time.Now().Unix()
+	if _, err := s.Store.DB.Exec("INSERT INTO devices(id,name,capabilities,created_at) VALUES(?,'owner','[\"admin\"]',?)", device, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.DB.Exec("INSERT INTO sessions VALUES(?,?,1,?,?,?,?)", state.Hash(session), device, now, now, now, now+3600); err != nil {
+		t.Fatal(err)
+	}
+	return session
 }
