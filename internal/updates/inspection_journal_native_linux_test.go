@@ -226,6 +226,12 @@ func TestNativeInspectionJournalResult(t *testing.T) {
 	if _, err := ReadInspectionJournalResult(ctx, identity, next); err == nil {
 		t.Fatal("multiple native result messages accepted")
 	}
+	if result, err := reopened.CollectInspectionResult(ctx, parent, execution); err == nil || result != (InspectionResult{}) {
+		t.Fatal("later manager invocation satisfied prior live collection", result, err)
+	}
+	if result, err := reopened.CollectInspectionResult(ctx, parent, next); err == nil || result != (InspectionResult{}) {
+		t.Fatal("unrecorded later execution satisfied collection", result, err)
+	}
 	if result, err := reopened.ReadRecordedInspectionResult(ctx, parent, next); err == nil || result != (InspectionResult{}) {
 		t.Fatal("fresh invocation substituted retained execution", result, err)
 	}

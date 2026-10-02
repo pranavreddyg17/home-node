@@ -133,6 +133,11 @@ func (s *InspectionStage) readRecordedInspectionResultOwned(ctx context.Context,
 	if err != nil || readErr != nil || closeErr != nil || !bytes.Equal(data, canonical) {
 		return zero, errors.Join(ErrInspectionResult, err, readErr, closeErr)
 	}
+	// Reading retained result bytes is another verification interval. Rebind the
+	// fixed package, launch inputs and recorded execution before exposing evidence.
+	if err := s.verifyExecutionRecordLocked(ctx, parent, execution); err != nil {
+		return zero, err
+	}
 	if err := ctx.Err(); err != nil {
 		return zero, err
 	}
