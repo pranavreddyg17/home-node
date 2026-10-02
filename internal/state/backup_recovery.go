@@ -17,12 +17,18 @@ func AuthorizeReleasedBackupRecoveryTx(tx *sql.Tx, device, id string) (string, M
 		return "", MaintenanceJob{}, err
 	}
 	var completion string
-	if err = tx.QueryRow("SELECT value FROM settings WHERE key=?", backupDispatchKey).Scan(&completion); err != nil || completion != "complete:"+id {
+	if err = tx.QueryRow("SELECT value FROM settings WHERE key=?", backupDispatchKey).Scan(&completion); err != nil || (completion != "complete:"+id && completion != "refused:"+id) {
 		return "", MaintenanceJob{}, ErrMaintenanceOwner
 	}
-	outcome, err := readBackupOutcome(tx, backupOutcomeKey)
-	if err != nil || outcome.JobID != id || outcome.Status != "published" {
-		return "", MaintenanceJob{}, ErrBackupPublication
+	if completion == "complete:"+id {
+		outcome, err := readBackupOutcome(tx, backupOutcomeKey)
+		if err != nil || outcome.JobID != id || outcome.Status != "published" {
+			return "", MaintenanceJob{}, ErrBackupPublication
+		}
+	} else {
+		if err := requireNoBackupPublicationForJob(tx, id); err != nil {
+			return "", MaintenanceJob{}, err
+		}
 	}
 	var token string
 	if err = tx.QueryRow("SELECT value FROM settings WHERE key=?", maintenanceKey).Scan(&token); err != nil {

@@ -157,3 +157,77 @@ func (a *cancelledRestorationApps) RestoreMaintenanceApps(ctx context.Context, t
 	a.coordinatorApps.RestoreMaintenanceApps(ctx, token, device)
 	return ctx.Err()
 }
+
+func TestStoppedRepositoryRefusalRecoveryPreservesNoPublication(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		t.Run(map[bool]string{false: "restored", true: "failed"}[fail], func(t *testing.T) {
+			ctx := context.Background()
+			store, err := state.Open(filepath.Join(t.TempDir(), "management"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer store.Close()
+			device := state.Random()
+			if _, err := store.DB.Exec("INSERT INTO devices(id,name,capabilities,created_at) VALUES(?,'owner','[\"admin\"]',1)", device); err != nil {
+				t.Fatal(err)
+			}
+			token, job, err := store.BeginMaintenanceJob(ctx, device)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := store.AdvanceMaintenanceJob(ctx, token, job.ID, "draining", "freezing"); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.ClaimBackupLaunch(ctx, token, job.ID); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.RecordBackupLaunchRefused(ctx, token, job.ID); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.AdvanceMaintenanceJob(ctx, token, job.ID, "restoring", "requires-action"); err != nil {
+				t.Fatal(err)
+			}
+			// A contradictory publication claim must not qualify rootless refusal.
+			if _, err := store.DB.Exec("INSERT INTO settings(key,value) VALUES('host.backup-publication',?)", job.ID); err != nil {
+				t.Fatal(err)
+			}
+			blocked := &coordinatorApps{}
+			if err := RecoverReleasedBackupMaintenance(ctx, store, token, job.ID, device, blocked); err == nil || blocked.restored {
+				t.Fatal("contradictory refusal restored apps", err)
+			}
+			if _, err := store.DB.Exec("DELETE FROM settings WHERE key='host.backup-publication'"); err != nil {
+				t.Fatal(err)
+			}
+			apps := &coordinatorApps{}
+			if fail {
+				apps.restoreErr = errors.New("fixture restoration failure")
+			}
+			err = RecoverReleasedBackupMaintenance(ctx, store, token, job.ID, device, apps)
+			if !apps.restored || !apps.contextLive {
+				t.Fatal("restoration not attempted")
+			}
+			if fail {
+				if !errors.Is(err, apps.restoreErr) {
+					t.Fatal(err)
+				}
+				owned, e := store.InspectMaintenanceJob(ctx, token)
+				if e != nil || owned.Phase != "requires-action" || owned.RootToken != "" {
+					t.Fatal(owned, e)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			observation, e := store.InspectBackupObservation(ctx)
+			if e != nil || observation.Current != nil || observation.LastPublished != nil {
+				t.Fatal("refusal invented publication", observation, e)
+			}
+			expected := "none"
+			if fail {
+				expected = "refused"
+			}
+			if observation.WorkerCompletion != expected {
+				t.Fatal(observation)
+			}
+		})
+	}
+}

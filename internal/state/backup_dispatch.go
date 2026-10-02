@@ -191,12 +191,8 @@ func (s *Store) RecordBackupLaunchRefused(ctx context.Context, token, id string)
 		if err != nil || inventory != (MaintenanceInventory{}) {
 			return ErrMaintenanceOwner
 		}
-		var claims int
-		if err := tx.QueryRow("SELECT count(*) FROM settings WHERE key=?", backupPublicationKey).Scan(&claims); err != nil {
+		if err := requireNoBackupPublicationForJob(tx, id); err != nil {
 			return err
-		}
-		if claims != 0 {
-			return ErrBackupPublication
 		}
 		result, err := tx.Exec("UPDATE settings SET value=? WHERE key=? AND value=?", "refused:"+id, backupDispatchKey, "uncertain:"+id)
 		if err != nil {
@@ -212,4 +208,16 @@ func (s *Store) RecordBackupLaunchRefused(ctx context.Context, token, id string)
 		_, err = tx.Exec("UPDATE settings SET value='restoring' WHERE key=?", maintenanceJobPrefix+"phase")
 		return err
 	})
+}
+
+// A previous successful publication is retained across backup attempts.
+func requireNoBackupPublicationForJob(tx *sql.Tx, id string) error {
+	var current, last *BackupOutcome
+	if err := readBackupOutcomes(tx, &current, &last); err != nil {
+		return err
+	}
+	if current != nil && (current.JobID == id || current.Status != "published") {
+		return ErrBackupPublication
+	}
+	return nil
 }

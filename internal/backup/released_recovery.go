@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 
@@ -9,7 +10,8 @@ import (
 )
 
 // RecoverReleasedBackupMaintenance retries app restoration only after durable
-// publication, worker completion and backup-peer runtime release. It cannot
+// publication, worker completion and backup-peer runtime release, or an owned
+// stopped pre-acquisition repository refusal. It cannot
 // acquire authority or replay uncertain worker cleanup/publication.
 func RecoverReleasedBackupMaintenance(ctx context.Context, store *state.Store, token, id, device string, apps MaintenanceApps) (resultErr error) {
 	if store == nil || apps == nil {
@@ -35,8 +37,20 @@ func RecoverReleasedBackupMaintenance(ctx context.Context, store *state.Store, t
 	}
 	observation, err := store.InspectBackupObservation(ctx)
 	outcome := observation.Current
-	if err != nil || observation.WorkerCompletion != "complete" || outcome == nil || outcome.JobID != id || outcome.Status != "published" {
+	if err != nil || (observation.WorkerCompletion != "refused" && (observation.WorkerCompletion != "complete" || outcome == nil || outcome.JobID != id || outcome.Status != "published")) {
 		return errors.Join(ErrBackupPublicationEvidence, err)
+	}
+	if err := store.Transaction(ctx, func(tx *sql.Tx) error {
+		authority, current, err := state.AuthorizeReleasedBackupRecoveryTx(tx, device, id)
+		if err != nil {
+			return err
+		}
+		if authority != token || current != job {
+			return state.ErrMaintenanceOwner
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 	// Record a failed/cancelled restoration independently of the work context.
 	// It retains admission and exact completed-worker/released-root evidence.
