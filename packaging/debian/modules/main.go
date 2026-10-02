@@ -90,13 +90,32 @@ func run(args []string, output io.Writer) error {
 		sumsHash = hex.EncodeToString(digest[:])
 		verified = true
 	}
-	return json.NewEncoder(output).Encode(struct {
+	return writeEvidence(output, struct {
 		Schema             int            `json:"schema"`
 		Completeness       string         `json:"completeness"`
 		Binaries           []binaryRecord `json:"binaries"`
 		SourceSumsVerified bool           `json:"sourceSumsVerified"`
 		SourceSumsSHA256   string         `json:"sourceSumsSHA256"`
 	}{1, "incomplete", records, verified, sumsHash})
+}
+
+func writeEvidence(output io.Writer, record any) error {
+	data, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	if len(data) > 8<<20 {
+		return fmt.Errorf("oversized module evidence")
+	}
+	count, err := output.Write(data)
+	if err != nil {
+		return err
+	}
+	if count != len(data) {
+		return io.ErrShortWrite
+	}
+	return nil
 }
 
 func readReviewedSums(name string) ([]byte, error) {
