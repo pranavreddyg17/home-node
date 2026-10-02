@@ -108,3 +108,12 @@ source and package build contexts, not every platform/build-tag combination, npm
 distribution/guest image and model dependency inventory. Module-only findings
 remain visible for review; a zero reachable-symbol result is not release approval.
 See [official govulncheck documentation](https://pkg.go.dev/golang.org/x/vuln@v1.8.0/cmd/govulncheck).
+
+After locked frontend installation, CI runs `npm --prefix web audit
+--audit-level=high --json` across runtime and build dependencies with a five-minute
+limit. Pipeline failure blocks high/critical findings and audit errors. The JSON
+report, exact package-lock SHA256 and Node/npm versions are retained14days, also
+on failure. Lower-severity findings remain visible and need reviewed disposition
+before release. This queries registry advisory metadata; it does not prove bundle
+reachability, package authenticity or absence of unreported vulnerabilities.
+See [npm audit documentation](https://docs.npmjs.com/cli/audit/).

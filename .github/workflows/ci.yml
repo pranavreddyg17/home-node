@@ -91,6 +91,23 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm --prefix web ci
+      - name: Check frontend dependency vulnerabilities
+        timeout-minutes: 5
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/frontend-vulnerability-scan"
+          node --version > "$RUNNER_TEMP/frontend-vulnerability-scan/node-version.txt"
+          npm --version > "$RUNNER_TEMP/frontend-vulnerability-scan/npm-version.txt"
+          sha256sum web/package-lock.json > "$RUNNER_TEMP/frontend-vulnerability-scan/package-lock.sha256"
+          npm --prefix web audit --audit-level=high --json | tee "$RUNNER_TEMP/frontend-vulnerability-scan/audit.json"
+      - name: Retain frontend vulnerability scan
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: frontend-vulnerability-scan
+          path: ${{ runner.temp }}/frontend-vulnerability-scan/
+          if-no-files-found: ignore
+          retention-days: 14
       - run: npm --prefix web run test:evidence
       - run: npm --prefix web run build
       - name: Build and inspect development Debian package
