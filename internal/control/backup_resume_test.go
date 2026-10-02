@@ -46,6 +46,11 @@ func TestBackupResumeRoutesRequireAdministratorAndExactBody(t *testing.T) {
 }
 
 func TestApprovedBackupResumeHTTPCompletesReleasedEmptyWorkloadJob(t *testing.T) {
+	for _, refused := range []bool{false, true} {
+		t.Run(map[bool]string{false: "published", true: "refused"}[refused], func(t *testing.T) { approvedBackupResumeHTTPFixture(t, refused) })
+	}
+}
+func approvedBackupResumeHTTPFixture(t *testing.T, refused bool) {
 	s := testServer(t)
 	s.config.Runtime = fileBackend{}
 	s.config.PolicyGeneration = 1
@@ -74,26 +79,32 @@ func TestApprovedBackupResumeHTTPCompletesReleasedEmptyWorkloadJob(t *testing.T)
 	if err = s.Store.ClaimBackupLaunch(ctx, token, job.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.Store.AttachMaintenanceRoot(ctx, token, job.ID, state.Random()); err != nil {
-		t.Fatal(err)
-	}
-	if err = s.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "staging", "publishing"); err != nil {
-		t.Fatal(err)
-	}
-	if err = s.Store.ClaimBackupPublication(ctx, token, job.ID, actor.Device.ID); err != nil {
-		t.Fatal(err)
-	}
-	if err = s.Store.RecordBackupPublished(ctx, token, job.ID, actor.Device.ID, state.Hash("snapshot")); err != nil {
-		t.Fatal(err)
-	}
-	if err = s.Store.RecordBackupWorkerCompleted(ctx, token, job.ID); err != nil {
-		t.Fatal(err)
-	}
-	if err = s.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "publishing", "restoring"); err != nil {
-		t.Fatal(err)
-	}
-	if err = s.Store.ReleaseMaintenanceRoot(ctx, token, job.ID, func(context.Context, string) error { return nil }); err != nil {
-		t.Fatal(err)
+	if refused {
+		if err = s.Store.RecordBackupLaunchRefused(ctx, token, job.ID); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		if err = s.Store.AttachMaintenanceRoot(ctx, token, job.ID, state.Random()); err != nil {
+			t.Fatal(err)
+		}
+		if err = s.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "staging", "publishing"); err != nil {
+			t.Fatal(err)
+		}
+		if err = s.Store.ClaimBackupPublication(ctx, token, job.ID, actor.Device.ID); err != nil {
+			t.Fatal(err)
+		}
+		if err = s.Store.RecordBackupPublished(ctx, token, job.ID, actor.Device.ID, state.Hash("snapshot")); err != nil {
+			t.Fatal(err)
+		}
+		if err = s.Store.RecordBackupWorkerCompleted(ctx, token, job.ID); err != nil {
+			t.Fatal(err)
+		}
+		if err = s.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "publishing", "restoring"); err != nil {
+			t.Fatal(err)
+		}
+		if err = s.Store.ReleaseMaintenanceRoot(ctx, token, job.ID, func(context.Context, string) error { return nil }); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err = s.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "restoring", "requires-action"); err != nil {
 		t.Fatal(err)

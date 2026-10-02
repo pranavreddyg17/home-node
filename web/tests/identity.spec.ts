@@ -76,10 +76,11 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await expect(page.getByLabel('Repository password')).toHaveValue('')
   expect(backupRequests).toBe(1)
   await page.evaluate(() => Reflect.deleteProperty(navigator.credentials, 'get'))
-  const resumeJob = 'A'.repeat(24)
+  for (const refused of [false, true]) {
+  const resumeJob = (refused ? 'B' : 'A').repeat(24)
   let resumeAccepted = false, resumeRequests = 0, resumeKey = ''
   await page.route('**/api/v1/backups/outcomes', route => route.fulfill({ json: {
-    schema: 1, current: { status: 'published', publishedAt: 10 }, lastPublished: { status: 'published', publishedAt: 10 }, workerCompletion: 'complete', resumeJobId: resumeAccepted ? '' : resumeJob, reminder: { state: 'unavailable', intervalDays: 0 },
+    schema: 1, current: refused ? null : { status: 'published', publishedAt: 10 }, lastPublished: { status: 'published', publishedAt: 10 }, workerCompletion: refused && !resumeAccepted ? 'refused' : 'complete', resumeJobId: resumeAccepted ? '' : resumeJob, reminder: { state: 'unavailable', intervalDays: 0 },
   } }))
   await page.route(`**/api/v1/backups/${resumeJob}/resume/approval`, async route => {
     expect(route.request().postData()).toBe('{}')
@@ -96,6 +97,7 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
     await route.fulfill({ status: 202, json: { jobId: resumeJob, status: 'restoring' } })
   })
   await page.getByRole('button', { name: 'Refresh backup status' }).click()
+  if (refused) await expect(page.getByText('The backup repository was refused before runtime acquisition.', { exact: false })).toBeVisible()
   await expect(page.getByText('Backup reminder timing is unavailable.', { exact: false })).toBeVisible()
   await expect(page.getByLabel('Backup reminder interval (days)')).toHaveValue('7')
   expect((await (await page.request.get('/api/v1/backups/outcomes')).json()).reminder.intervalDays).toBe(14)
@@ -112,6 +114,7 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.unroute('**/api/v1/backups/outcomes')
   await page.unroute(`**/api/v1/backups/${resumeJob}/resume/approval`)
   await page.unroute(`**/api/v1/backups/${resumeJob}/resume`)
+  }
   await page.unroute('**/api/v1/backups/configuration')
   await page.unroute('**/api/v1/backups/approval')
   await page.unroute('**/api/v1/auth/approval/finish')
