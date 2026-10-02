@@ -2555,3 +2555,7 @@ CI37043553434 at9b02c8d completed successfully, including native refused-launch 
 ### Describe refusal recovery without claiming runtime release
 
 UI audit found shared resume text claimed released runtime barrier for rootless repository refusal. Resume explanation now distinguishes stopped-before-acquisition refusal from published/released worker completion. General limitation text distinguishes unavailable backup-data/replacement-host restore from available workload resumption. Browser fixture requires correct refusal explanation and absence of release claim. Frontend TypeScript/build, full browser regression and diff checks passed. Initial build invocation used repository root instead of web directory and failed module lookup; rerun from web succeeded. CI37067528058 remains active; follow-up stays local. Full application acceptance remains unfinished.
+
+### Serialize visible backup controls during approved workload recovery
+
+Status audit confirmed request sequence guards already discard superseded refresh results and backend requalifies recovery. Refresh and reminder editing/saving are now disabled during passkey/resume work, and resume handler refuses while status/reminder work is busy, keeping the visible workflow stable during approval. Frontend TypeScript/build, full browser regression and diff checks passed. CI37067528058 remains live in Go/Linux adapters test step; no overlapping push. Full application acceptance remains unfinished.

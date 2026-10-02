@@ -37,7 +37,7 @@ export function BackupStatus() {
   }
   const resume = async () => {
     const id = outcomes?.resumeJobId
-    if (!id || resuming) return
+    if (!id || resuming || busy) return
     setResuming(true); setResumeError(''); setResumeMessage('')
     try {
       await approvedAction(`/backups/${encodeURIComponent(id)}/resume`, {}, { 'Idempotency-Key': crypto.randomUUID() })
@@ -48,7 +48,7 @@ export function BackupStatus() {
   }
   useEffect(() => { void refresh(); return () => { requestId.current++ } }, [])
   return <section className="panel" aria-labelledby="backup-status-heading">
-    <div className="section-heading"><h2 id="backup-status-heading">External backup</h2><button disabled={busy} onClick={() => void refresh()}>Refresh backup status</button></div>
+    <div className="section-heading"><h2 id="backup-status-heading">External backup</h2><button disabled={busy || resuming} onClick={() => void refresh()}>Refresh backup status</button></div>
     {busy && <p role="status">Checking backup publication status…</p>}
     {error && <p className="form-error" role="alert">Backup status is unavailable. {error}</p>}
     {outcomes && <>
@@ -65,7 +65,7 @@ export function BackupStatus() {
     {outcomes?.resumeJobId && <div><p>{outcomes.workerCompletion === 'refused' ? 'The backup worker stopped before runtime acquisition. Workloads still need restoration.' : 'The backup worker has completed and released its runtime barrier. Workloads still need restoration.'}</p><button disabled={busy || resuming} onClick={() => void resume()}>{resuming ? 'Verifying and resuming…' : 'Verify passkey and resume workloads'}</button></div>}
     {resumeError && <p role="alert" className="form-error">{resumeError}</p>}
     {resumeMessage && <p role="status">{resumeMessage}</p>}
-    {outcomes?.reminder && <form onSubmit={e => { e.preventDefault(); void saveReminder() }}><label>Backup reminder interval (days)<input type="number" required min={1} max={90} value={reminderDays} onChange={e => setReminderDays(e.target.value)} disabled={busy} /></label><button disabled={busy}>Save reminder interval</button><p>Reminders appear here when you check status. They do not run unattended backups.</p></form>}
+    {outcomes?.reminder && <form onSubmit={e => { e.preventDefault(); void saveReminder() }}><label>Backup reminder interval (days)<input type="number" required min={1} max={90} value={reminderDays} onChange={e => setReminderDays(e.target.value)} disabled={busy || resuming} /></label><button disabled={busy || resuming}>Save reminder interval</button><p>Reminders appear here when you check status. They do not run unattended backups.</p></form>}
     {reminderError && <p role="alert" className="form-error">{reminderError}</p>}
     {reminderSaved && <p role="status">Backup reminder interval saved.</p>}
     <BackupStart />
