@@ -50,6 +50,9 @@ func ValidateSBOMBinding(data []byte, packageSHA256, release string) error {
 	matched := 0
 	for _, raw := range hashes {
 		hash := object(raw)
+		if len(hash) != 2 || text(hash["alg"]) == "" || text(hash["content"]) == "" {
+			return ErrSBOMBinding
+		}
 		if text(hash["alg"]) == "SHA-256" {
 			if text(hash["content"]) != packageSHA256 {
 				return ErrSBOMBinding

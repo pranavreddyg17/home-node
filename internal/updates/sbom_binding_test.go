@@ -11,7 +11,16 @@ func TestSBOMPrimaryComponentBinding(t *testing.T) {
 	if err := ValidateSBOMBinding([]byte(valid), hash, "0.1.0"); err != nil {
 		t.Fatal(err)
 	}
+	withAdditionalHash := strings.Replace(valid, `"hashes":[`, `"hashes":[{"alg":"SHA-512","content":"`+strings.Repeat("cd", 64)+`"},`, 1)
+	if err := ValidateSBOMBinding([]byte(withAdditionalHash), hash, "0.1.0"); err != nil {
+		t.Fatal("additional hash refused", err)
+	}
 	for _, bad := range []string{
+		strings.Replace(valid, `"hashes":[`, `"hashes":[null,`, 1),
+		strings.Replace(valid, `"hashes":[`, `"hashes":[{},`, 1),
+		strings.Replace(valid, `"hashes":[`, `"hashes":[{"alg":"SHA-512","content":null},`, 1),
+		strings.Replace(valid, `"hashes":[`, `"hashes":[{"alg":12,"content":"ignored"},`, 1),
+		strings.Replace(valid, `"alg":"SHA-256"`, `"alg":"SHA-256","extra":true`, 1),
 		strings.Replace(valid, hash, strings.Repeat("cd", 32), 1),
 		strings.Replace(valid, "0.1.0", "0.2.0", 1),
 		strings.Replace(valid, "homenode", "foreign", 1),
