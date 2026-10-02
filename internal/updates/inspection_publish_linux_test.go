@@ -366,6 +366,31 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	if err := stage.verifyRecordedExecutionCompletionOwned(ctx, parent, captured, factory); err != nil || calls != 4 {
 		t.Fatal("restored private execution inode refused", err, calls)
 	}
+	// Correct persisted bytes cannot substitute for a successful current manager
+	// observation. Failures here retain all admitted operation evidence.
+	for _, output := range []string{
+		fmt.Sprintf("InvocationID=%s\nResult=exit-code\nExecMainCode=1\nExecMainStatus=1\nActiveState=failed\nSubState=failed\nExecMainStartTimestampMonotonic=%d\nExecMainExitTimestampMonotonic=%d\n", invocation, epoch.NotBeforeMicros, epoch.NotBeforeMicros+1),
+		fmt.Sprintf("InvocationID=%s\nResult=success\nExecMainCode=1\nExecMainStatus=0\nActiveState=active\nSubState=exited\nExecMainStartTimestampMonotonic=%d\nExecMainExitTimestampMonotonic=%d\n", "fedcba9876543210fedcba9876543210", epoch.NotBeforeMicros, epoch.NotBeforeMicros+1),
+	} {
+		failedObservation := func(ctx context.Context, path string, args ...string) *exec.Cmd {
+			return exec.CommandContext(ctx, "/usr/bin/printf", "%s", output)
+		}
+		if err := stage.verifyRecordedExecutionCompletionOwned(ctx, parent, captured, failedObservation); err == nil {
+			t.Fatal("persisted evidence overrode failed or different manager invocation")
+		}
+	}
+	failedProcess := func(ctx context.Context, path string, args ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "/usr/bin/false")
+	}
+	if err := stage.verifyRecordedExecutionCompletionOwned(ctx, parent, captured, failedProcess); err == nil {
+		t.Fatal("manager process failure accepted")
+	}
+	if err := stage.verifyRecordedExecutionCompletionOwned(canceled, parent, captured, factory); err == nil || calls != 4 {
+		t.Fatal("canceled recorded completion reached manager", err, calls)
+	}
+	if retained, err := os.ReadFile(executionPath); err != nil || string(retained) != string(executionData) {
+		t.Fatal("completion refusal altered execution evidence", err)
+	}
 	packagePath := filepath.Join(parentPath, "inspection/package.deb")
 	retainedPath := filepath.Join(parentPath, "inspection/package.retained")
 	if err := os.Rename(packagePath, retainedPath); err != nil {
