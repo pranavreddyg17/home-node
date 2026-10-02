@@ -2161,3 +2161,7 @@ Added five portable Python unittest cases exercising matching archive/payload ev
 ### Development SBOM generation/verification bounds
 
 Aligned development generator and extracted-package verifier with4096-file and240-byte UTF8 path limits. Generator encodes and checks the8MiB evidence limit before writing output. Both independently refuse a symlinked/non-directory usr payload root, avoiding enumeration of a substituted tree. Added real4097-file, overlong-path and symlink-root refusal regressions; all eight Python tests and diff checks passed. Native generation/comparison remains pending publication. CI 36996402338 remains live for earlier evidence qualification, so tooling follow-ups remain local. Dependency/license/vulnerability and full product acceptance remain unfinished.
+
+### Development evidence shape and completeness refusal
+
+The independent development SBOM verifier now explicitly rejects non-object BOM/metadata/file claims and non-string file names with ValueError instead of incidental attribute/hashability exceptions. It also requires the emitted incomplete composition, refusing false complete/missing declarations from file-only evidence. Added malformed-shape/completeness subcases; all nine portable Python tests and diff checks passed. CI 36996402338 at59ddff9 completed successfully for owned provenance/SBOM binding and native mutation fixtures. Development generation/archive comparison tooling is being published for native qualification. Dependency/license/vulnerability and full product acceptance remain unfinished.

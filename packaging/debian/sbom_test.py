@@ -96,6 +96,22 @@ class PackageEvidenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.check()
 
+    def test_malformed_objects_and_false_completeness(self):
+        variants = [None, [], {"metadata": None}]
+        for claim in (None, [], {"name": []}, {"name": {}}):
+            bom = copy.deepcopy(self.bom)
+            bom['components'] = [claim]
+            variants.append(bom)
+        for composition in (None, [], [{"aggregate": "complete"}]):
+            bom = copy.deepcopy(self.bom)
+            bom['compositions'] = composition
+            variants.append(bom)
+        for bom in variants:
+            with self.subTest(bom=bom):
+                self.write(bom)
+                with self.assertRaises(ValueError):
+                    self.check()
+
     def test_duplicate_json_key(self):
         self.evidence.write_text('{"bomFormat":"CycloneDX",' + self.evidence.read_text()[1:])
         with self.assertRaises(ValueError):

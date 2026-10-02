@@ -25,6 +25,10 @@ def verify(root, archive, version, evidence):
     if evidence.is_symlink() or not evidence.is_file() or evidence.stat().st_size > 8 * 1024 * 1024:
         raise ValueError("invalid evidence file")
     bom = json.loads(evidence.read_bytes(), object_pairs_hook=unique)
+    if not isinstance(bom, dict) or not isinstance(bom.get("metadata"), dict):
+        raise ValueError("invalid BOM object")
+    if bom.get("compositions") != [{"aggregate": "incomplete", "assemblies": ["homenode-package"]}]:
+        raise ValueError("development inventory must declare incomplete composition")
     expected = {"type": "application", "bom-ref": "homenode-package", "name": "homenode",
                 "version": version, "hashes": [{"alg": "SHA-256", "content": sha256(archive)}]}
     if bom.get("bomFormat") != "CycloneDX" or bom.get("specVersion") != "1.6" or bom.get("metadata", {}).get("component") != expected:
@@ -48,7 +52,9 @@ def verify(root, archive, version, evidence):
         actual[relative] = sha256(path)
     retained = set()
     for claim in claims:
-        name = claim.get("name")
+        if not isinstance(claim, dict) or not isinstance(claim.get("name"), str):
+            raise ValueError("invalid file claim")
+        name = claim["name"]
         if name in retained or name not in actual:
             raise ValueError("duplicate or foreign file claim")
         retained.add(name)
