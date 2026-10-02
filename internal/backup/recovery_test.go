@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -93,5 +94,23 @@ func TestRecoveryRejectsRestoredAuthorityAndUnexpectedSchema(t *testing.T) {
 				t.Fatal("restored authority/schema accepted")
 			}
 		})
+	}
+}
+
+func TestRecoveryDiskQualificationRejectsChecksummedNonFilesystem(t *testing.T) {
+	root, manifest, policy, directory := recoverySet(t)
+	before, err := os.ReadFile(filepath.Join(directory, "files.raw"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateRecoverySet(context.Background(), root, manifest, policy); err != nil {
+		t.Fatal("metadata fixture refused", err)
+	}
+	if err := QualifyRecoveryDisks(context.Background(), root, manifest, policy); err == nil {
+		t.Fatal("checksummed non-filesystem qualified")
+	}
+	after, err := os.ReadFile(filepath.Join(directory, "files.raw"))
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("qualification changed restored disk", err)
 	}
 }

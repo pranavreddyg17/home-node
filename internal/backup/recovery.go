@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"errors"
 	"os"
 	"time"
 
@@ -46,4 +47,43 @@ func ValidateRecoverySet(ctx context.Context, root *os.Root, manifest Manifest, 
 		return ErrManifest
 	}
 	return nil
+}
+
+// QualifyRecoveryDisks checks restored filesystems after payload and authority
+// validation. The caller must retain exclusive ownership of staging throughout
+// checking and installation. This does not reconstruct policy, enroll devices,
+// establish application consistency, or authorize runtime activation.
+func QualifyRecoveryDisks(ctx context.Context, root *os.Root, manifest Manifest, policy RestorePolicy) error {
+	if err := ValidateRecoverySet(ctx, root, manifest, policy); err != nil {
+		return err
+	}
+	for _, entry := range manifest.Files {
+		if entry.Workload == "management" {
+			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		expected, err := root.Lstat(entry.Name)
+		if err != nil || !expected.Mode().IsRegular() {
+			return ErrManifest
+		}
+		disk, err := root.Open(entry.Name)
+		if err != nil {
+			return ErrManifest
+		}
+		info, statErr := disk.Stat()
+		if statErr != nil || !os.SameFile(expected, info) {
+			return errors.Join(ErrManifest, disk.Close())
+		}
+		checkErr := QualifyExt4Disk(ctx, disk)
+		current, pathErr := root.Lstat(entry.Name)
+		if pathErr != nil || !current.Mode().IsRegular() || !os.SameFile(info, current) {
+			checkErr = errors.Join(checkErr, ErrManifest)
+		}
+		if err := errors.Join(checkErr, disk.Close()); err != nil {
+			return err
+		}
+	}
+	return ctx.Err()
 }

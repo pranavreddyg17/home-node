@@ -19,7 +19,8 @@ func (r *Repository) dump(ctx context.Context, snapshot, name string, output io.
 }
 
 // Restore retrieves only fixed recovery-set filenames into empty private staging.
-// It verifies bytes, schema and removed authority before reporting success. It
+// It verifies bytes, schema, removed authority and read-only guest filesystem
+// integrity before reporting success. It
 // does not install disks, configure identity, or activate recovered applications.
 func (r *Repository) Restore(ctx context.Context, snapshot string, stage *os.File, policy RestorePolicy) (manifest Manifest, resultErr error) {
 	r.mu.Lock()
@@ -112,7 +113,7 @@ func (r *Repository) Restore(ctx context.Context, snapshot string, stage *os.Fil
 	if err != nil {
 		return Manifest{}, err
 	}
-	if err = ValidateRecoverySet(deadline, root, manifest, policy); err != nil {
+	if err = QualifyRecoveryDisks(deadline, root, manifest, policy); err != nil {
 		return Manifest{}, err
 	}
 	if err = stage.Sync(); err != nil {

@@ -5,10 +5,13 @@ package backup
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -152,6 +155,33 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	}
 	defer repository.Close()
 	_, manifest, policy, path := recoverySet(t)
+
+	diskPath := filepath.Join(path, "files.raw")
+	disk, err := os.OpenFile(diskPath, os.O_RDWR, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := disk.Truncate(16 << 20); err != nil {
+		disk.Close()
+		t.Fatal(err)
+	}
+	if err := disk.Close(); err != nil {
+		t.Fatal(err)
+	}
+	formatCtx, cancelFormat := context.WithTimeout(context.Background(), time.Minute)
+	format := exec.CommandContext(formatCtx, "/usr/sbin/mkfs.ext4", "-q", "-F", "-m", "0", "-E", "nodiscard,lazy_itable_init=0,lazy_journal_init=0", diskPath)
+	output, formatErr := format.CombinedOutput()
+	cancelFormat()
+	if formatErr != nil {
+		t.Fatalf("format recovery disk: %v: %s", formatErr, output)
+	}
+	diskBytes, err := os.ReadFile(diskPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(diskBytes)
+	manifest.Files[1].Bytes = int64(len(diskBytes))
+	manifest.Files[1].SHA256 = hex.EncodeToString(digest[:])
 	stage, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
