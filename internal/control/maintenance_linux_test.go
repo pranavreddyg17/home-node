@@ -99,16 +99,25 @@ func TestControllerMaintenanceKernelPeerAndOwnedJob(t *testing.T) {
 	if err = bridge.ClaimPublication(ctx, token, device); err == nil {
 		t.Fatal("draining publication claim accepted")
 	}
+	if err = bridge.ConfirmFreezing(ctx, token, job.ID, device); err == nil {
+		t.Fatal("draining job qualified for runtime acquisition")
+	}
 	rootCheckpoint := request
 	rootCheckpoint.RootToken = state.Random()
 	call("/v1/maintenance/attach-root", rootCheckpoint, 409)
 	if err = server.Store.AdvanceMaintenanceJob(ctx, token, job.ID, "draining", "freezing"); err != nil {
 		t.Fatal(err)
 	}
+	if err = bridge.ConfirmFreezing(ctx, token, job.ID, device); err != nil {
+		t.Fatal("owned freezing preflight", err)
+	}
 	if err = bridge.AttachRuntimeRoot(ctx, token, device, rootCheckpoint.RootToken); err != nil {
 		t.Fatal("owned root checkpoint client", err)
 	}
 	call("/v1/maintenance/attach-root", rootCheckpoint, 409)
+	if err = bridge.ConfirmFreezing(ctx, token, job.ID, device); err == nil {
+		t.Fatal("staging job qualified for fresh acquisition")
+	}
 	snapshotDirectory := t.TempDir()
 	if err = os.Chmod(snapshotDirectory, 0700); err != nil {
 		t.Fatal(err)

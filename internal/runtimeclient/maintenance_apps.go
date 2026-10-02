@@ -184,3 +184,15 @@ func (c *MaintenanceAppsClient) AttachRuntimeRoot(ctx context.Context, token, de
 	}
 	return c.callFields(ctx, "/v1/maintenance/attach-root", token, device, "", rootToken)
 }
+
+// ConfirmFreezing requires a drained owned job awaiting runtime acquisition.
+func (c *MaintenanceAppsClient) ConfirmFreezing(ctx context.Context, token, jobID, device string) error {
+	if c == nil || c.inspect == nil || !maintenanceID.MatchString(jobID) {
+		return ErrMaintenance
+	}
+	job, err := c.inspect(ctx, token)
+	if err != nil || job.ID != jobID || job.Device != device {
+		return ErrMaintenance
+	}
+	return c.call(ctx, "/v1/maintenance/verify-freezing", token, device)
+}
