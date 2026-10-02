@@ -1897,3 +1897,5 @@ The ABI resolver now reads at most 16KiB plus one refusal byte and pins the exac
 ### Candidate refusal before native effects
 
 Added portable process/library-spy fixtures proving altered syscall names with unchanged source claims, semantically equivalent re-encoding, oversized candidate input and duplicate-field injection all refuse before any dpkg-query subprocess or native FFI loading. All four tests passed locally, and the normal Linux workflow now executes them before privileged fixtures. These tests cover source candidate admission, not native resolution or manager equality; the real source-service qualification remains necessary. Diff checks passed. CI 36967312726 remains the published run and has not been assumed terminal.
+
+CI 36967312726 at df13e8e has now completed successfully, executing durable launch-intent publication/verification/filesystem refusals, the public owned-root installer integration and inspection identity allocation bounds alongside existing native/package/browser qualification. The independent syscall resolver and complete denyset comparison are newer and remain unexecuted until the next publication.
