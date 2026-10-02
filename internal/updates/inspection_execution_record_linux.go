@@ -45,6 +45,11 @@ func (s *InspectionStage) captureAndPublishExecutionOwned(ctx context.Context, p
 	if err != nil {
 		return zero, err
 	}
+	// Manager capture can wait. Rebind protected launch inputs and package before
+	// recording the captured invocation against that admission.
+	if err := s.verifyLaunchIntentLocked(ctx, parent, epoch); err != nil {
+		return zero, err
+	}
 	data, err := inspectionExecutionRecord(s.identity, captured)
 	if err != nil {
 		return zero, err

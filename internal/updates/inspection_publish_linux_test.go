@@ -274,6 +274,29 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	if err := os.Remove(executionPending); err != nil {
 		t.Fatal(err)
 	}
+	environmentPath := filepath.Join(parentPath, "inspection.env")
+	retainedEnvironment, err := os.ReadFile(environmentPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changedDuringCapture := func(ctx context.Context, path string, args ...string) *exec.Cmd {
+		if err := os.WriteFile(environmentPath, []byte("changed during capture"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		return factory(ctx, path, args...)
+	}
+	if observed, err := stage.captureAndPublishExecutionOwned(ctx, parent, epoch, changedDuringCapture); err == nil || observed != (InspectionExecution{}) || calls != 1 {
+		t.Fatal("capture published execution against changed launch inputs", observed, err, calls)
+	}
+	for _, name := range []string{"inspection.execution", "inspection.execution.pending"} {
+		if _, err := parent.Lstat(name); !os.IsNotExist(err) {
+			t.Fatal("refused capture retained execution", name, err)
+		}
+	}
+	if err := os.WriteFile(environmentPath, retainedEnvironment, 0600); err != nil {
+		t.Fatal(err)
+	}
+	calls = 0
 	captured, err := stage.captureAndPublishExecutionOwned(ctx, parent, epoch, factory)
 	if err != nil || captured.Epoch != epoch || captured.InvocationID != invocation || calls != 1 {
 		t.Fatal("execution publication failed", captured, err, calls)
