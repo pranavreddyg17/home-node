@@ -186,7 +186,15 @@ func TestNativeInspectionJournalResult(t *testing.T) {
 		t.Fatal("native result collection/publication failed", retained, err)
 	}
 	manager("stop", unit)
-	readback, err := stage.ReadRecordedInspectionResult(ctx, parent, execution)
+	if err := stage.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := OpenInspectionStage(ctx, staging, identity)
+	if err != nil {
+		t.Fatal("stopped native stage could not reopen", err)
+	}
+	defer reopened.Close()
+	readback, err := reopened.ReadRecordedInspectionResult(ctx, parent, execution)
 	if err != nil || readback != result {
 		t.Fatal("stopped native result readback failed", readback, err)
 	}
@@ -211,5 +219,11 @@ func TestNativeInspectionJournalResult(t *testing.T) {
 	awaitJournalEntries(next, 2)
 	if _, err := ReadInspectionJournalResult(ctx, identity, next); err == nil {
 		t.Fatal("multiple native result messages accepted")
+	}
+	if result, err := reopened.ReadRecordedInspectionResult(ctx, parent, next); err == nil || result != (InspectionResult{}) {
+		t.Fatal("fresh invocation substituted retained execution", result, err)
+	}
+	if readback, err := reopened.ReadRecordedInspectionResult(ctx, parent, execution); err != nil || readback != retained {
+		t.Fatal("later invocation invalidated independently retained result", readback, err)
 	}
 }
