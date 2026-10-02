@@ -32,7 +32,8 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   // Transport/UI fixture: mocked backup operations do not prove disk backup.
   const repositoryId = 'a'.repeat(64)
   let approvalBody = '', approvalKey = '', backupRequests = 0
-  await page.route('**/api/v1/backups/configuration', route => route.fulfill({ json: { enabled: true, repositoryId } }))
+  let backupPaused = false
+  await page.route('**/api/v1/backups/configuration', route => route.fulfill({ json: { enabled: true, repositoryId, availability: backupPaused ? 'paused' : 'available' } }))
   await page.route('**/api/v1/backups/approval', async route => {
     approvalBody = route.request().postData()!; approvalKey = route.request().headers()['idempotency-key']
     expect(JSON.parse(approvalBody)).toEqual({ repositoryId })
@@ -76,6 +77,15 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await expect(page.getByLabel('Repository password')).toHaveValue('')
   expect(backupRequests).toBe(1)
   await page.evaluate(() => Reflect.deleteProperty(navigator.credentials, 'get'))
+  await page.getByLabel('Repository password').fill('refresh-cleared-secret')
+  backupPaused = true
+  await page.getByRole('button', {name:'Check backup availability'}).click()
+  await expect(page.getByText('New backups are paused while work or maintenance is active.',{exact:false})).toBeVisible()
+  await expect(page.getByLabel('Repository password')).toHaveCount(0)
+  backupPaused = false
+  await page.getByRole('button', {name:'Check backup availability'}).click()
+  await expect(page.getByLabel('Repository password')).toHaveValue('')
+  expect(backupRequests).toBe(1)
   for (const refused of [false, true]) {
   const resumeJob = (refused ? 'B' : 'A').repeat(24)
   let resumeAccepted = false, resumeRequests = 0, resumeKey = ''
