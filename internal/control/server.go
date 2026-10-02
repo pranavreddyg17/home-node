@@ -36,18 +36,19 @@ type Config struct {
 	Report             func() hostcheck.Report
 }
 type Server struct {
-	backupTasks *backupTasks
-	Workloads   *workload.Service
-	config      Config
-	Identity    *identity.Service
-	Store       *state.Store
-	mux         *http.ServeMux
-	host        string
-	cookie      string
-	slots       chan struct{}
-	rateMu      sync.Mutex
-	authCount   int
-	authWindow  time.Time
+	snapshotRequests snapshotRequests
+	backupTasks      *backupTasks
+	Workloads        *workload.Service
+	config           Config
+	Identity         *identity.Service
+	Store            *state.Store
+	mux              *http.ServeMux
+	host             string
+	cookie           string
+	slots            chan struct{}
+	rateMu           sync.Mutex
+	authCount        int
+	authWindow       time.Time
 }
 type sessionKey struct{}
 
