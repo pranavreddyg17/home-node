@@ -25,12 +25,14 @@ import (
 )
 
 type Config struct {
-	Runtime          workload.Backend
-	PolicyGeneration int64
-	Origin           string
-	Development      bool
-	UI               fs.FS
-	Report           func() hostcheck.Report
+	// BackupRepositoryID is supplied by trusted host provisioning, never a request.
+	BackupRepositoryID string
+	Runtime            workload.Backend
+	PolicyGeneration   int64
+	Origin             string
+	Development        bool
+	UI                 fs.FS
+	Report             func() hostcheck.Report
 }
 type Server struct {
 	Workloads  *workload.Service

@@ -11,11 +11,34 @@ import (
 )
 
 func (s *Server) approvalRoutes() {
+	s.mux.Handle("POST /api/v1/backups/approval", s.require("admin", false, http.HandlerFunc(s.backupApproval)))
 	s.mux.Handle("POST /api/v1/ai/conversations/{id}/delete/approval", s.require("ai", false, http.HandlerFunc(s.conversationDeleteApproval)))
 	s.mux.Handle("POST /api/v1/apps/{workload}/actions/approval", s.require("admin", false, http.HandlerFunc(s.appApproval)))
 	s.mux.Handle("POST /api/v1/devices/pair/approval", s.require("admin", false, http.HandlerFunc(s.pairApproval)))
 	s.mux.Handle("POST /api/v1/devices/{id}/revoke/approval", s.require("admin", false, http.HandlerFunc(s.revokeApproval)))
 	s.mux.Handle("POST /api/v1/auth/approval/finish", s.require("", false, http.HandlerFunc(s.approvalFinish)))
+}
+
+func (s *Server) backupApproval(w http.ResponseWriter, r *http.Request) {
+	body, ok := approvalBody(w, r)
+	if !ok {
+		return
+	}
+	if s.config.BackupRepositoryID == "" {
+		fail(w, http.StatusServiceUnavailable, "BACKUP_UNAVAILABLE", "A trusted backup repository has not been configured.")
+		return
+	}
+	resources, err := identity.BackupApprovalResources(body, s.config.BackupRepositoryID, r.Header.Get("Idempotency-Key"))
+	if err != nil {
+		s.authError(w, err)
+		return
+	}
+	options, token, binding, err := s.Identity.BeginApproval(r.Context(), actor(r), "backup.create", resources, body, s.config.PolicyGeneration)
+	if err != nil {
+		s.authError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"options": options, "challengeToken": token, "expiresAt": binding.ExpiresAt})
 }
 
 func approvalBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
