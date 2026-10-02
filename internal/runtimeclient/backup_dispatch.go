@@ -23,11 +23,19 @@ func (d ActivatedBackupDispatcher) Deliver(ctx context.Context, job backup.Dispa
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if !filepath.IsAbs(d.Socket) || filepath.Clean(d.Socket) != d.Socket || d.ControllerGID < 100 || d.ControllerGID > 999 || credential == nil {
-		return backup.ErrManifest
-	}
 	if _, err := backup.EncodeDispatch(job); err != nil {
 		return err
+	}
+	return d.deliver(ctx, credential, func(connection *net.UnixConn) error {
+		return backup.SendActivatedCredentialDispatchAndWait(ctx, connection, job, credential)
+	})
+}
+func (d ActivatedBackupDispatcher) deliver(ctx context.Context, credential *os.File, send func(*net.UnixConn) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !filepath.IsAbs(d.Socket) || filepath.Clean(d.Socket) != d.Socket || d.ControllerGID < 100 || d.ControllerGID > 999 || credential == nil || send == nil {
+		return backup.ErrManifest
 	}
 	if err := validateBackupCredentialSocket(d.Socket, d.ControllerGID); err != nil {
 		return err
@@ -41,5 +49,28 @@ func (d ActivatedBackupDispatcher) Deliver(ctx context.Context, job backup.Dispa
 	if !ok {
 		return backup.ErrManifest
 	}
-	return backup.SendActivatedCredentialDispatchAndWait(ctx, packet, job, credential)
+	return send(packet)
+}
+
+func (d ActivatedBackupDispatcher) DeliverLaunch(ctx context.Context, launch backup.Launch, credential *os.File) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if _, err := backup.EncodeLaunch(launch); err != nil {
+		return err
+	}
+	return d.deliver(ctx, credential, func(connection *net.UnixConn) error {
+		return backup.SendActivatedCredentialLaunchAndWait(ctx, connection, launch, credential)
+	})
+}
+func (d ActivatedBackupDispatcher) DeliverCleanup(ctx context.Context, cleanup backup.Cleanup, credential *os.File) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if _, err := backup.EncodeCleanup(cleanup); err != nil {
+		return err
+	}
+	return d.deliver(ctx, credential, func(connection *net.UnixConn) error {
+		return backup.SendActivatedCredentialCleanupAndWait(ctx, connection, cleanup, credential)
+	})
 }

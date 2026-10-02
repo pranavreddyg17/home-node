@@ -117,7 +117,7 @@ func (s *Store) InspectBackupObservation(ctx context.Context) (observation Backu
 		}
 		switch raw {
 		case "uncertain:" + job.ID:
-			if job.RootToken == "" || (job.Phase != "staging" && job.Phase != "publishing" && job.Phase != "requires-action") {
+			if (job.Phase != "freezing" && job.Phase != "staging" && job.Phase != "publishing" && job.Phase != "requires-action") || (job.RootToken == "" && job.Phase != "freezing" && job.Phase != "requires-action") || (job.RootToken != "" && job.Phase == "freezing") {
 				return ErrMaintenance
 			}
 			observation.WorkerCompletion = "uncertain"
@@ -135,4 +135,27 @@ func (s *Store) InspectBackupObservation(ctx context.Context) (observation Backu
 		return BackupObservation{}, resultErr
 	}
 	return
+}
+
+// ClaimBackupLaunch durably records uncertainty before any preliminary worker
+// handoff/runtime acquisition. It does not claim that a root token exists yet.
+func (s *Store) ClaimBackupLaunch(ctx context.Context, token, id string) error {
+	return s.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := RequireMaintenanceOwner(tx, token); err != nil {
+			return err
+		}
+		job, err := readMaintenanceJob(tx)
+		if err != nil || job.ID != id || job.Phase != "freezing" || job.RootToken != "" {
+			return ErrMaintenanceOwner
+		}
+		if err := maintenanceDevice(tx, job.Device); err != nil {
+			return err
+		}
+		inventory, err := readMaintenanceInventory(tx)
+		if err != nil || inventory != (MaintenanceInventory{}) {
+			return ErrMaintenanceOwner
+		}
+		_, err = tx.Exec("INSERT INTO settings(key,value) VALUES(?,?)", backupDispatchKey, "uncertain:"+id)
+		return err
+	})
 }

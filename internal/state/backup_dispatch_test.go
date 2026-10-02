@@ -129,3 +129,48 @@ func TestOrphanDispatchRefusesGeneralAdmissionAndLegacyRelease(t *testing.T) {
 		})
 	}
 }
+
+func TestPreliminaryLaunchIntentSurvivesRestartAndBlocksCleanup(t *testing.T) {
+	store, device, directory := maintenanceJobFixture(t)
+	defer func() { store.Close() }()
+	ctx := context.Background()
+	token, job, err := store.BeginMaintenanceJob(ctx, device)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.ClaimBackupLaunch(ctx, token, job.ID); err == nil {
+		t.Fatal("draining launch admitted")
+	}
+	if err = store.AdvanceMaintenanceJob(ctx, token, job.ID, "draining", "freezing"); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.ClaimBackupLaunch(ctx, token, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.ClaimBackupLaunch(ctx, token, job.ID); err == nil {
+		t.Fatal("launch replay admitted")
+	}
+	if err = store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = Open(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.RequireBackupWorkerStopped(ctx, token, job.ID); err == nil {
+		t.Fatal("restart lost launch uncertainty")
+	}
+	observation, err := store.InspectBackupObservation(ctx)
+	if err != nil || observation.WorkerCompletion != "uncertain" {
+		t.Fatal("pre-acquisition launch status unavailable", observation, err)
+	}
+	if err = store.AttachMaintenanceRoot(ctx, token, job.ID, Random()); err != nil {
+		t.Fatal("worker acquisition checkpoint refused", err)
+	}
+	if err = store.AdvanceMaintenanceJob(ctx, token, job.ID, "staging", "restoring"); err == nil {
+		t.Fatal("active preliminary worker allowed restoration")
+	}
+	if err = store.RecordBackupWorkerCompleted(ctx, token, job.ID); err == nil {
+		t.Fatal("unpublished worker completion admitted")
+	}
+}
