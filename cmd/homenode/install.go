@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -31,6 +32,8 @@ func parsePreparation(args []string, now time.Time) (preparation, error) {
 	flags := flag.NewFlagSet("install-prepare", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	key := flags.String("publisher-key", "", "independently verified publisher Ed25519 public key, hex")
+	provenanceFile := flags.String("update-provenance", "", "independently reviewed provenance trust policy file")
+	provenancePin := flags.String("update-provenance-sha256", "", "independently verified provenance policy SHA256")
 	updateRoot := flags.String("update-root", "", "independently trusted TUF bootstrap root file")
 	updatePin := flags.String("update-root-sha256", "", "independently verified bootstrap root SHA256; required with update-root")
 	updateMetadata := flags.String("update-metadata-url", "", "trusted HTTPS TUF metadata repository")
@@ -77,6 +80,19 @@ func parsePreparation(args []string, now time.Time) (preparation, error) {
 			return p, err
 		}
 		p.configuration.UpdateRepository = repository
+	}
+	if (*provenanceFile == "") != (*provenancePin == "") {
+		return p, install.ErrPlan
+	}
+	if *provenanceFile != "" {
+		if p.configuration.UpdateRepository == nil {
+			return p, install.ErrPlan
+		}
+		data, err := readPinnedProvenancePolicy(*provenanceFile, *provenancePin)
+		if err != nil {
+			return p, err
+		}
+		p.configuration.UpdateProvenance = data
 	}
 	pub, err := hex.DecodeString(*key)
 	if err != nil || len(pub) != ed25519.PublicKeySize {
@@ -195,4 +211,30 @@ func checkReleaseSources(directory string, manifest catalog.Manifest) error {
 		}
 	}
 	return nil
+}
+
+func readPinnedProvenancePolicy(name, pin string) ([]byte, error) {
+	if len(pin) != 64 {
+		return nil, install.ErrPlan
+	}
+	file, err := os.OpenFile(name, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() < 1 || info.Size() > 16384 {
+		return nil, errors.Join(install.ErrPlan, err, file.Close())
+	}
+	data, readErr := io.ReadAll(io.LimitReader(file, 16385))
+	if err := errors.Join(readErr, file.Close()); err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(data)
+	if len(data) > 16384 || hex.EncodeToString(sum[:]) != pin {
+		return nil, install.ErrPlan
+	}
+	if _, err := updates.ParseProvenancePolicy(data); err != nil {
+		return nil, err
+	}
+	return data, nil
 }
