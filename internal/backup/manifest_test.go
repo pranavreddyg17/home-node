@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -164,5 +165,26 @@ func TestPublishedManifestSchemaRoundTripAcrossSupportedWorkloads(t *testing.T) 
 	invalid, _ := json.Marshal(object)
 	if _, err := DecodeManifest(invalid); err == nil {
 		t.Fatal("null published inventory admitted")
+	}
+}
+
+func TestPayloadVerificationCancellationIsNotIntegritySuccess(t *testing.T) {
+	manifest, policy, data := manifestFixture()
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "snapshot.db"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := VerifyPayload(ctx, root, manifest, policy); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled verification accepted", err)
+	}
+	if err := VerifyPayload(context.Background(), root, manifest, policy); err != nil {
+		t.Fatal("valid retry rejected", err)
 	}
 }

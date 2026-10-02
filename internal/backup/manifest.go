@@ -145,6 +145,9 @@ func (m Manifest) Validate(policy RestorePolicy, now time.Time) error {
 // A verified payload still needs SQLite identity sanitization, disconnected guest
 // restore, filesystem ownership checks and fresh enrollment before activation.
 func VerifyPayload(ctx context.Context, root *os.Root, manifest Manifest, policy RestorePolicy) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if root == nil || manifest.Validate(policy, time.Now()) != nil {
 		return ErrManifest
 	}
@@ -156,17 +159,21 @@ func VerifyPayload(ctx context.Context, root *os.Root, manifest Manifest, policy
 	return nil
 }
 func verifyBackupFile(ctx context.Context, root *os.Root, entry BackupFile) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	info, err := root.Lstat(entry.Name)
 	if err != nil || !info.Mode().IsRegular() {
 		return ErrManifest
 	}
+	expected := info
 	file, err := root.Open(entry.Name)
 	if err != nil {
 		return ErrManifest
 	}
 	defer file.Close()
 	info, err = file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Size() != entry.Bytes {
+	if err != nil || !os.SameFile(expected, info) || !info.Mode().IsRegular() || info.Size() != entry.Bytes {
 		return ErrManifest
 	}
 	hash := sha256.New()
@@ -191,7 +198,12 @@ func verifyBackupFile(ctx context.Context, root *os.Root, entry BackupFile) erro
 	if hex.EncodeToString(hash.Sum(nil)) != entry.SHA256 {
 		return ErrManifest
 	}
-	return nil
+	// The name must still identify this regular descriptor after verification.
+	current, err := root.Lstat(entry.Name)
+	if err != nil || !current.Mode().IsRegular() || !os.SameFile(info, current) || current.Size() != entry.Bytes {
+		return ErrManifest
+	}
+	return ctx.Err()
 }
 
 func exactManifestObject(raw []byte, required []string, optional string) (map[string]json.RawMessage, error) {
