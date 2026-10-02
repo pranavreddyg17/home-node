@@ -293,6 +293,37 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	if captured, err := stage.captureAndPublishExecutionOwned(ctx, parent, epoch, factory); err == nil || captured != (InspectionExecution{}) || calls != 1 {
 		t.Fatal("existing execution record replaced or queried manager", captured, err, calls)
 	}
+	if err := stage.verifyRecordedExecutionCompletionOwned(ctx, parent, captured, factory); err != nil || calls != 2 {
+		t.Fatal("recorded completion refused", err, calls)
+	}
+	wrongExecution := captured
+	wrongExecution.InvocationID = "fedcba9876543210fedcba9876543210"
+	if err := stage.verifyRecordedExecutionCompletionOwned(ctx, parent, wrongExecution, factory); err == nil || calls != 2 {
+		t.Fatal("different persisted invocation reached manager", err, calls)
+	}
+	for _, altered := range [][]byte{[]byte(`{"schema":1}`), append(append([]byte(nil), executionData...), '\n'), make([]byte, 2049)} {
+		if err := os.WriteFile(executionPath, altered, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := stage.verifyRecordedExecutionCompletionOwned(ctx, parent, captured, factory); err == nil || calls != 2 {
+			t.Fatal("altered execution evidence reached manager", err, calls)
+		}
+	}
+	if err := os.WriteFile(executionPath, executionData, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(executionPending, []byte("conflicting"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.verifyRecordedExecutionCompletionOwned(ctx, parent, captured, factory); err == nil || calls != 2 {
+		t.Fatal("conflicting execution evidence reached manager", err, calls)
+	}
+	if err := os.Remove(executionPending); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.verifyRecordedExecutionCompletionOwned(ctx, parent, captured, factory); err != nil || calls != 3 {
+		t.Fatal("restored recorded completion refused", err, calls)
+	}
 	packagePath := filepath.Join(parentPath, "inspection/package.deb")
 	retainedPath := filepath.Join(parentPath, "inspection/package.retained")
 	if err := os.Rename(packagePath, retainedPath); err != nil {

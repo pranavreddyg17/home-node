@@ -3,9 +3,11 @@
 package updates
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 
@@ -43,15 +45,7 @@ func (s *InspectionStage) captureAndPublishExecutionOwned(ctx context.Context, p
 	if err != nil {
 		return zero, err
 	}
-	launch, err := inspectionLaunchRecord(s.identity, epoch)
-	if err != nil {
-		return zero, err
-	}
-	data, err := json.Marshal(struct {
-		Schema       int             `json:"schema"`
-		Launch       json.RawMessage `json:"launch"`
-		InvocationID string          `json:"invocationId"`
-	}{1, launch, captured.InvocationID})
+	data, err := inspectionExecutionRecord(s.identity, captured)
 	if err != nil {
 		return zero, err
 	}
@@ -81,4 +75,64 @@ func (s *InspectionStage) captureAndPublishExecutionOwned(ctx context.Context, p
 		return zero, err
 	}
 	return captured, nil
+}
+
+func inspectionExecutionRecord(identity InspectionIdentity, execution InspectionExecution) ([]byte, error) {
+	if !validInspectionInvocation(execution.InvocationID) {
+		return nil, ErrInspectionResult
+	}
+	launch, err := inspectionLaunchRecord(identity, execution.Epoch)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(struct {
+		Schema       int             `json:"schema"`
+		Launch       json.RawMessage `json:"launch"`
+		InvocationID string          `json:"invocationId"`
+	}{1, launch, execution.InvocationID})
+}
+
+// VerifyRecordedExecutionCompletion binds completion evidence to the private
+// persisted invocation and admitted launch/package under the stage lock.
+// It does not authenticate worker output or grant installation authority.
+func (s *InspectionStage) VerifyRecordedExecutionCompletion(ctx context.Context, parent *os.Root, execution InspectionExecution) error {
+	if os.Geteuid() != 0 {
+		return ErrInspectionResult
+	}
+	return s.verifyRecordedExecutionCompletionOwned(ctx, parent, execution, exec.CommandContext)
+}
+
+func (s *InspectionStage) verifyRecordedExecutionCompletionOwned(ctx context.Context, parent *os.Root, execution InspectionExecution, command func(context.Context, string, ...string) *exec.Cmd) error {
+	if s == nil || parent == nil {
+		return ErrInspectionResult
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.verifyExecutionRecordLocked(ctx, parent, execution); err != nil {
+		return err
+	}
+	return verifyInspectionExecutionCompletionWith(ctx, execution, command)
+}
+
+func (s *InspectionStage) verifyExecutionRecordLocked(ctx context.Context, parent *os.Root, execution InspectionExecution) error {
+	if !validInspectionInvocation(execution.InvocationID) {
+		return ErrInspectionResult
+	}
+	if err := s.verifyLaunchIntentLocked(ctx, parent, execution.Epoch); err != nil {
+		return err
+	}
+	if _, err := parent.Lstat("inspection.execution.pending"); !errors.Is(err, os.ErrNotExist) {
+		return errors.Join(ErrInspectionResult, err)
+	}
+	file, err := openInspectionFile(parent, "inspection.execution", 0600)
+	if err != nil {
+		return err
+	}
+	data, readErr := io.ReadAll(io.LimitReader(file, 2049))
+	closeErr := file.Close()
+	expected, err := inspectionExecutionRecord(s.identity, execution)
+	if err != nil || readErr != nil || closeErr != nil || !bytes.Equal(data, expected) {
+		return errors.Join(ErrInspectionResult, err, readErr, closeErr)
+	}
+	return ctx.Err()
 }
