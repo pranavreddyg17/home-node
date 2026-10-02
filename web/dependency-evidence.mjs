@@ -59,7 +59,9 @@ export function dependencyEvidence() {
           if (!locked || !locked.version || installed.name !== name || installed.version !== locked.version) {
             throw new Error(`Bundled dependency differs from lockfile: ${name}`)
           }
-          const licenseFiles = readdirSync(directory).filter(name => /^(LICENSE|COPYING|NOTICE)(\..*)?$/i.test(name)).sort().map(name => {
+          const noticeNames = readdirSync(directory).filter(name => /^(LICENSE|COPYING|NOTICE)(\..*)?$/i.test(name)).sort()
+          if (noticeNames.length > 16) throw new Error('Too many package license/notice files')
+          const licenseFiles = noticeNames.map(name => {
             const data = readManifest(path.join(directory, name))
             return { path: name, sha256: createHash('sha256').update(data).digest('hex'),
               text: new TextDecoder('utf-8', { fatal: true }).decode(data) }

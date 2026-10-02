@@ -70,3 +70,24 @@ test('symlink and oversized package manifests refuse before publication', t => {
     assert.equal(existsSync(evidence), false)
   }
 })
+
+
+test('unsafe and excessive notice files refuse before publication', t => {
+  for (const mutation of ['link', 'oversize', 'utf8', 'count']) {
+    const { root, plugin, bundle, evidence } = fixture(t)
+    const directory = path.join(root, 'node_modules/@fixture/package')
+    const notice = path.join(directory, 'LICENSE')
+    if (mutation === 'link') {
+      renameSync(notice, path.join(directory, 'original'))
+      symlinkSync(path.join(directory, 'original'), notice)
+    } else if (mutation === 'oversize') {
+      writeFileSync(notice, Buffer.alloc(1024 * 1024 + 1, 32))
+    } else if (mutation === 'utf8') {
+      writeFileSync(notice, Buffer.from([255]))
+    } else {
+      for (let i = 0; i < 17; i++) writeFileSync(path.join(directory, `NOTICE.${i}`), 'notice')
+    }
+    assert.throws(() => plugin.writeBundle({}, bundle))
+    assert.equal(existsSync(evidence), false)
+  }
+})

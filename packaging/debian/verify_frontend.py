@@ -91,6 +91,8 @@ def verify(web_root, evidence, lockfile):
         for notice in sorted(manifest.parent.iterdir()):
             if not re.fullmatch(r'(LICENSE|COPYING|NOTICE)(\..*)?', notice.name, re.IGNORECASE):
                 continue
+            if len(expected_notices) >= 16:
+                raise ValueError('too many package license/notice files')
             notice_data = manifest_bytes(notice)
             expected_notices.append({'path': notice.name,
                 'sha256': hashlib.sha256(notice_data).hexdigest(),

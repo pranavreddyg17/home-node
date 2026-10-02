@@ -167,6 +167,24 @@ class FrontendEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'license/notice file mismatch'):
             self.check()
 
+    def test_unsafe_notice_files_refuse(self):
+        notice = self.manifest.parent / 'LICENSE'
+        for mutation in ('link', 'oversize', 'utf8'):
+            with self.subTest(mutation=mutation):
+                if mutation == 'link':
+                    notice.symlink_to(self.manifest)
+                elif mutation == 'oversize':
+                    notice.write_bytes(b' ' * (1024 * 1024 + 1))
+                else:
+                    notice.write_bytes(b'\xff')
+                with self.assertRaises((ValueError, OSError, UnicodeError)):
+                    self.check()
+                notice.unlink()
+        for number in range(17):
+            (self.manifest.parent / ('NOTICE.' + str(number))).write_bytes(b'notice')
+        with self.assertRaisesRegex(ValueError, 'too many package license/notice files'):
+            self.check()
+
     def test_duplicate_json_key(self):
         self.evidence.write_text('{"schema":1,' + self.evidence.read_text()[1:])
         with self.assertRaises(ValueError):
