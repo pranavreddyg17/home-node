@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,5 +113,27 @@ func TestRecoveryDiskQualificationRejectsChecksummedNonFilesystem(t *testing.T) 
 	after, err := os.ReadFile(filepath.Join(directory, "files.raw"))
 	if err != nil || !bytes.Equal(before, after) {
 		t.Fatal("qualification changed restored disk", err)
+	}
+}
+
+func TestRecoveryValidationCancellationDoesNotCertifyOrModifyStaging(t *testing.T) {
+	root, manifest, policy, directory := recoverySet(t)
+	before, err := os.ReadFile(filepath.Join(directory, "snapshot.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, validate := range []func(context.Context, *os.Root, Manifest, RestorePolicy) error{ValidateRecoverySet, QualifyRecoveryDisks} {
+		if err := validate(ctx, root, manifest, policy); !errors.Is(err, context.Canceled) {
+			t.Fatal("cancelled validation did not preserve cancellation", err)
+		}
+	}
+	after, err := os.ReadFile(filepath.Join(directory, "snapshot.db"))
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("cancelled validation modified recovery metadata", err)
+	}
+	if err := ValidateRecoverySet(context.Background(), root, manifest, policy); err != nil {
+		t.Fatal("independent retry refused", err)
 	}
 }

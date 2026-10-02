@@ -12,6 +12,9 @@ import (
 // ValidateRecoverySet adds database authority/inventory checks to payload
 // verification. It does not install disks, enroll clients or start workloads.
 func ValidateRecoverySet(ctx context.Context, root *os.Root, manifest Manifest, policy RestorePolicy) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if root == nil {
 		return ErrManifest
 	}
@@ -29,6 +32,9 @@ func ValidateRecoverySet(ctx context.Context, root *os.Root, manifest Manifest, 
 	defer snapshot.Close()
 	apps, err := state.ValidateRecoverySnapshot(ctx, snapshot)
 	if err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
 		return ErrManifest
 	}
 	declared := map[string]bool{}
@@ -46,7 +52,7 @@ func ValidateRecoverySet(ctx context.Context, root *os.Root, manifest Manifest, 
 	if len(declared) != 0 || manifest.Validate(policy, time.Now()) != nil {
 		return ErrManifest
 	}
-	return nil
+	return ctx.Err()
 }
 
 // QualifyRecoveryDisks checks restored filesystems after payload and authority

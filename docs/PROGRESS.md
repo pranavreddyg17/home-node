@@ -2643,3 +2643,7 @@ Extended Linux real-restic fixture to corrupt an ext4 root inode while retaining
 ### Combined regression for restored filesystem qualification
 
 Full backup/runtimeclient/state race suites passed on current source after adding recovered-filesystem qualification and encrypted-corruption fixtures. Owner backup guide now explains implemented read-only ext4 gate and its limits without presenting absent owner-facing restore/new-host activation as available. Diff checks passed. Linux native fixtures remain unexecuted for local8f9d5c5/2f35780 while CI37070514721 remains active at guest tool installation; no overlapping push. Full application acceptance remains unfinished.
+
+### Preserve caller cancellation through recovery-set validation
+
+ValidateRecoverySet now refuses observed cancellation before filesystem inspection, preserves caller cancellation if management snapshot validation fails during interruption, and checks it again before certifying the set. Filesystem qualification inherits those checks. Fixture verifies cancelled metadata/filesystem qualification returns context.Canceled, leaves recovery metadata unchanged and permits independent uncancelled metadata retry. Focused recovery/writer race tests, Linux backup fixture compilation and diff checks passed. Internal validation timeouts and native filesystem/process behavior remain separate evidence; no owner-facing restore workflow is inferred. CI37070514721 remains active; follow-up stays local. Full application acceptance remains unfinished.
