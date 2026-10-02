@@ -8,3 +8,4 @@ bin/
 artifacts/
 playwright-report/
 test-results/
+web/build-evidence/

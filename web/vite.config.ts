@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { dependencyEvidence } from './dependency-evidence.mjs'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), dependencyEvidence()],
   server: {
     host: '127.0.0.1',
     proxy: {
