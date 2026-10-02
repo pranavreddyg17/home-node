@@ -12,6 +12,9 @@ export function BackupStatus() {
   const [busy, setBusy] = useState(false)
   const [resuming, setResuming] = useState(false)
   const [resumeError, setResumeError] = useState('')
+  const [reminderDays,setReminderDays]=useState('7')
+  const [reminderError,setReminderError]=useState('')
+  const [reminderSaved,setReminderSaved]=useState(false)
   const [resumeMessage, setResumeMessage] = useState('')
   const [observedAt, setObservedAt] = useState<Date | null>(null)
   const requestId = useRef(0)
@@ -24,6 +27,13 @@ export function BackupStatus() {
       setOutcomes(result); setObservedAt(new Date())
     } catch (e) { if (id === requestId.current) setError(message(e)) }
     finally { if (id === requestId.current) setBusy(false) }
+  }
+  useEffect(() => { if (outcomes?.reminder) setReminderDays(String(outcomes.reminder.intervalDays)) }, [outcomes?.reminder?.intervalDays])
+  const saveReminder = async () => {
+    setBusy(true); setReminderError(''); setReminderSaved(false)
+    try { await api('/backups/reminder', { intervalDays: Number(reminderDays) }); setReminderSaved(true); await refresh() }
+    catch (e) { setReminderError(message(e)) }
+    finally { setBusy(false) }
   }
   const resume = async () => {
     const id = outcomes?.resumeJobId
@@ -42,9 +52,9 @@ export function BackupStatus() {
     {busy && <p role="status">Checking backup publication status…</p>}
     {error && <p className="form-error" role="alert">Backup status is unavailable. {error}</p>}
     {outcomes && <>
-      {outcomes.reminder?.state === 'never-published' && <p role="status">Weekly backup reminder: create your first external backup.</p>}
-      {outcomes.reminder?.state === 'overdue' && <p role="status">Weekly backup reminder: the last acknowledged publication is at least seven days old.</p>}
-      {outcomes.reminder?.state === 'current' && outcomes.reminder.dueAt && <p>Next weekly backup reminder: <time dateTime={new Date(outcomes.reminder.dueAt * 1000).toISOString()}>{new Date(outcomes.reminder.dueAt * 1000).toLocaleString()}</time>.</p>}
+      {outcomes.reminder?.state === 'never-published' && <p role="status">{outcomes.reminder.intervalDays === 7 ? 'Weekly backup reminder' : 'Backup reminder'}: create your first external backup.</p>}
+      {outcomes.reminder?.state === 'overdue' && <p role="status">Backup reminder: the last acknowledged publication is at least {outcomes.reminder.intervalDays} days old.</p>}
+      {outcomes.reminder?.state === 'current' && outcomes.reminder.dueAt && <p>Next backup reminder: <time dateTime={new Date(outcomes.reminder.dueAt * 1000).toISOString()}>{new Date(outcomes.reminder.dueAt * 1000).toLocaleString()}</time>.</p>}
       {outcomes.reminder?.state === 'unavailable' && <p>Backup reminder timing is unavailable. Check backup status before relying on it.</p>}
       {outcomes.workerCompletion === 'uncertain' && <p role="status">Backup worker completion is uncertain. New work remains paused until reconciliation.</p>}
       {outcomes.current?.status === 'unknown' && <p role="status">The latest backup outcome is uncertain. It needs reconciliation before another backup can run.</p>}
@@ -54,6 +64,9 @@ export function BackupStatus() {
     {outcomes?.resumeJobId && <div><p>The backup worker has completed and released its runtime barrier. Workloads still need restoration.</p><button disabled={busy || resuming} onClick={() => void resume()}>{resuming ? 'Verifying and resuming…' : 'Verify passkey and resume workloads'}</button></div>}
     {resumeError && <p role="alert" className="form-error">{resumeError}</p>}
     {resumeMessage && <p role="status">{resumeMessage}</p>}
+    {outcomes?.reminder && <form onSubmit={e => { e.preventDefault(); void saveReminder() }}><label>Backup reminder interval (days)<input type="number" required min={1} max={90} value={reminderDays} onChange={e => setReminderDays(e.target.value)} disabled={busy} /></label><button disabled={busy}>Save reminder interval</button><p>Reminders appear here when you check status. They do not run unattended backups.</p></form>}
+    {reminderError && <p role="alert" className="form-error">{reminderError}</p>}
+    {reminderSaved && <p role="status">Backup reminder interval saved.</p>}
     <BackupStart />
     {observedAt && <p className="timestamp">Last observed {observedAt.toLocaleTimeString()}</p>}
   </section>

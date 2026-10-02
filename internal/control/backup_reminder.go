@@ -15,19 +15,19 @@ type backupReminder struct {
 
 // Reminders use acknowledged publication, not repository/restore health.
 // Invalid/future timestamps cannot make stale backups appear current.
-func publicationBackupReminder(now int64, last *state.BackupOutcome) backupReminder {
-	result := backupReminder{State: "unavailable", IntervalDays: 7}
-	if now <= 0 {
+func publicationBackupReminder(now int64, last *state.BackupOutcome, days int) backupReminder {
+	result := backupReminder{State: "unavailable", IntervalDays: days}
+	if now <= 0 || days < 1 || days > 90 {
 		return result
 	}
 	if last == nil {
 		result.State = "never-published"
 		return result
 	}
-	if last.Status != "published" || last.PublishedAt <= 0 || last.PublishedAt > now || last.PublishedAt > math.MaxInt64-backupReminderIntervalSeconds {
+	if last.Status != "published" || last.PublishedAt <= 0 || last.PublishedAt > now || last.PublishedAt > math.MaxInt64-int64(days)*86400 {
 		return result
 	}
-	result.DueAt = last.PublishedAt + backupReminderIntervalSeconds
+	result.DueAt = last.PublishedAt + int64(days)*86400
 	result.State = "current"
 	if now >= result.DueAt {
 		result.State = "overdue"

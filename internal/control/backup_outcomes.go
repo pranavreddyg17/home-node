@@ -11,6 +11,11 @@ import (
 // backupOutcomes reports durable publication evidence only. It grants no
 // maintenance authority and makes no claim of repository or restore health.
 func (s *Server) backupOutcomes(w http.ResponseWriter, r *http.Request) {
+	days, err := s.Store.BackupReminderInterval(r.Context())
+	if err != nil {
+		writeJSON(w, 503, map[string]string{"error": "Backup reminder settings are unavailable."})
+		return
+	}
 	observation, err := s.Store.InspectBackupObservation(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Backup publication status is unavailable."})
@@ -35,5 +40,5 @@ func (s *Server) backupOutcomes(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"reminder": publicationBackupReminder(time.Now().Unix(), observation.LastPublished), "resumeJobId": resumeJobID, "schema": 1, "current": observation.Current, "lastPublished": observation.LastPublished, "workerCompletion": observation.WorkerCompletion})
+	writeJSON(w, http.StatusOK, map[string]any{"reminder": publicationBackupReminder(time.Now().Unix(), observation.LastPublished, days), "resumeJobId": resumeJobID, "schema": 1, "current": observation.Current, "lastPublished": observation.LastPublished, "workerCompletion": observation.WorkerCompletion})
 }
