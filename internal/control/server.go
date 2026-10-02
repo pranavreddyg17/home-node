@@ -50,6 +50,18 @@ type Server struct {
 type sessionKey struct{}
 
 func New(store *state.Store, config Config) (*Server, error) {
+	if config.BackupRepositoryID != "" {
+		body, err := json.Marshal(map[string]string{"repositoryId": config.BackupRepositoryID})
+		if err != nil {
+			return nil, err
+		}
+		if _, err = identity.BackupApprovalResources(body, config.BackupRepositoryID, "configuration-validation"); err != nil {
+			return nil, errors.New("invalid registered backup repository identity")
+		}
+		if config.Development {
+			return nil, errors.New("development mode cannot configure external backups")
+		}
+	}
 	origin, err := url.Parse(config.Origin)
 	if err != nil || origin.Host == "" || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || origin.Path != "" {
 		return nil, errors.New("origin must be a scheme and host without a path")

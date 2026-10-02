@@ -174,6 +174,7 @@ func serve(args []string) {
 	maintenanceUID := flags.Int("maintenance-uid", -1, "distinct backup UID; requires inherited private listener")
 	maintenanceGID := flags.Int("maintenance-gid", -1, "backup socket group")
 	maintenanceSocket := flags.String("maintenance-socket", "/run/homenode-backup/apps.sock", "inherited private app-maintenance socket")
+	backupRepository := flags.String("backup-repository-id", "", "trusted registered repository ID (requires private maintenance listener)")
 	_ = flags.Parse(args)
 	var maintenanceListener net.Listener
 	if *maintenanceUID != -1 || *maintenanceGID != -1 {
@@ -188,6 +189,9 @@ func serve(args []string) {
 		defer maintenanceListener.Close()
 	} else if os.Getenv("LISTEN_FDS") != "" || os.Getenv("LISTEN_PID") != "" || os.Getenv("LISTEN_FDNAMES") != "" || os.Getenv("LISTEN_PIDFDID") != "" {
 		fatal(errors.New("unexpected activated listener"))
+	}
+	if *backupRepository != "" && maintenanceListener == nil {
+		fatal(errors.New("backup repository requires an admitted private maintenance listener"))
 	}
 	if *port < 1 || *port > 65535 {
 		fatal(fmt.Errorf("port must be 1..65535"))
@@ -230,7 +234,7 @@ func serve(args []string) {
 		}
 		backend = runtimeclient.New(*supervisorSocket, *transferSocket)
 	}
-	handler, err := control.New(store, control.Config{Runtime: backend, PolicyGeneration: *generation, Origin: *origin, Development: *dev, UI: os.DirFS(*ui), Report: func() hostcheck.Report { return hostcheck.Inspect(*dataRoot) }})
+	handler, err := control.New(store, control.Config{BackupRepositoryID: *backupRepository, Runtime: backend, PolicyGeneration: *generation, Origin: *origin, Development: *dev, UI: os.DirFS(*ui), Report: func() hostcheck.Report { return hostcheck.Inspect(*dataRoot) }})
 	if err != nil {
 		fatal(err)
 	}

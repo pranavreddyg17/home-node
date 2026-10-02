@@ -75,3 +75,14 @@ func TestBackupApprovalRequiresTrustedTargetAndAdministrator(t *testing.T) {
 		t.Fatal("begin approval closed admission", err)
 	}
 }
+
+func TestBackupConfigurationRejectsInvalidOrDevelopmentRepository(t *testing.T) {
+	s := testServer(t)
+	for _, repository := range []string{"foreign", strings.Repeat("A", 64), strings.Repeat("a", 64)} {
+		configuration := s.config
+		configuration.BackupRepositoryID = repository
+		if _, err := New(s.Store, configuration); err == nil {
+			t.Fatal("invalid/development backup configuration accepted", repository)
+		}
+	}
+}
