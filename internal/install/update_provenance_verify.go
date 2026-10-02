@@ -2,11 +2,12 @@ package install
 
 import (
 	"context"
-	"github.com/pranavreddyg17/home-node/internal/updates"
 	"os"
 	"reflect"
 	"runtime"
 	"time"
+
+	"github.com/pranavreddyg17/home-node/internal/updates"
 )
 
 // VerifyUpdateReleaseProvenance verifies acquired package/provenance using owned
@@ -21,6 +22,11 @@ func (e *Engine) VerifyUpdateReleaseProvenance(ctx context.Context, release *upd
 func (e *Engine) verifyUpdateReleaseProvenanceOwned(ctx context.Context, release *updates.AcquiredRelease) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.verifyUpdateReleaseProvenanceLocked(ctx, release)
+}
+
+// Caller holds e.mu across acquisition and qualification.
+func (e *Engine) verifyUpdateReleaseProvenanceLocked(ctx context.Context, release *updates.AcquiredRelease) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if release == nil || release.Package == nil {

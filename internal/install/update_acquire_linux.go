@@ -14,7 +14,8 @@ import (
 // AcquireUpdateRelease uses only installer-owned trust, repository scopes and
 // staging directories. The maintenance caller supplies its protected live state
 // store; schema is observed rather than accepted as an integer argument.
-// The result still requires evidence qualification,
+// Acquisition enforces owned provenance policy before exposing package bytes.
+// The result still requires SBOM/vulnerability evidence qualification,
 // fresh owner approval and the journaled installation lifecycle.
 func (e *Engine) AcquireUpdateRelease(ctx context.Context, target string, store *state.Store) (result *updates.AcquiredRelease, resultErr error) {
 	if os.Geteuid() != 0 || e.host.Name() != "/" {
@@ -30,6 +31,10 @@ func (e *Engine) acquireUpdateReleaseOwned(ctx context.Context, target string, c
 	defer e.mu.Unlock()
 	configuration, err := e.readUpdateRepositoryLocked(ctx)
 	if err != nil {
+		return nil, err
+	}
+	// Refuse missing or altered signer policy before network acquisition.
+	if _, err := e.readUpdateProvenancePolicyLocked(ctx); err != nil {
 		return nil, err
 	}
 	policy, err := configuration.Policy(currentSchema)
@@ -57,5 +62,12 @@ func (e *Engine) acquireUpdateReleaseOwned(ctx context.Context, target string, c
 		return nil, err
 	}
 	defer func() { resultErr = errors.Join(resultErr, staging.Close(), ctx.Err()) }()
-	return updates.AcquireRelease(ctx, provisioned, staging, configuration.MetadataURL, configuration.TargetsURL, target, policy)
+	release, err := updates.AcquireRelease(ctx, provisioned, staging, configuration.MetadataURL, configuration.TargetsURL, target, policy)
+	if err != nil {
+		return nil, err
+	}
+	if err := e.verifyUpdateReleaseProvenanceLocked(ctx, release); err != nil {
+		return nil, errors.Join(err, release.Close())
+	}
+	return release, nil
 }
