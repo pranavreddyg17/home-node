@@ -49,7 +49,7 @@ func newApprovalBinding(actor Session, action string, resources []string, body [
 
 func (b ApprovalBinding) valid(now int64) bool {
 	switch b.Action {
-	case "device.pair", "device.revoke", "app.start", "app.stop", "app.restart", "app.reset", "ai.delete", "backup.create", "backup.restore", "update.install":
+	case "device.pair", "device.revoke", "app.start", "app.stop", "app.restart", "app.reset", "ai.delete", "backup.create", "backup.restore", "backup.resume", "update.install":
 	default:
 		return false
 	}

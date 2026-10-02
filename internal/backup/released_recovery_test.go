@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -67,6 +68,25 @@ func TestReleasedBackupRecoveryRequiresPublicationCompletionAndRootRelease(t *te
 				if _, err = store.DB.Exec("DELETE FROM settings WHERE key='host.backup-dispatch'"); err != nil {
 					t.Fatal(err)
 				}
+			}
+			var authorized string
+			authorizationErr := store.Transaction(ctx, func(tx *sql.Tx) error {
+				var err error
+				authorized, _, err = state.AuthorizeReleasedBackupRecoveryTx(tx, device, job.ID)
+				return err
+			})
+			eligible := scenario == "released" || scenario == "foreign-device" || scenario == "restore-failure" || scenario == "restore-cancel"
+			if eligible && (authorizationErr != nil || authorized != token) {
+				t.Fatal("eligible authority not bound", authorizationErr)
+			}
+			if !eligible && (authorizationErr == nil || authorized != "") {
+				t.Fatal("unqualified authority exposed", scenario, authorizationErr)
+			}
+			if err := store.Transaction(ctx, func(tx *sql.Tx) error {
+				_, _, err := state.AuthorizeReleasedBackupRecoveryTx(tx, state.Random(), job.ID)
+				return err
+			}); err == nil {
+				t.Fatal("foreign recovery device authorized")
 			}
 			apps := &coordinatorApps{}
 			intended := device
