@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -33,6 +34,8 @@ func (s *InspectionStage) captureAndPublishExecutionOwned(ctx context.Context, p
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	if err := s.verifyLaunchIntentLocked(ctx, parent, epoch); err != nil {
 		return zero, err
 	}
@@ -113,6 +116,8 @@ func (s *InspectionStage) verifyRecordedExecutionCompletionOwned(ctx context.Con
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	if err := s.verifyExecutionRecordLocked(ctx, parent, execution); err != nil {
 		return err
 	}

@@ -116,6 +116,8 @@ func (s *InspectionStage) readRecordedInspectionResultOwned(ctx context.Context,
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	if err := s.verifyExecutionRecordLocked(ctx, parent, execution); err != nil {
 		return zero, err
 	}
