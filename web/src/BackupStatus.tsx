@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, message } from './api'
+import { BackupStart } from './BackupStart'
 
 type Outcome = { status: 'unknown' | 'published'; publishedAt: number }
 type Outcomes = { schema: number; current: Outcome | null; lastPublished: Outcome | null; workerCompletion: 'none' | 'uncertain' | 'complete' }
@@ -29,8 +30,9 @@ export function BackupStatus() {
       {outcomes.workerCompletion === 'uncertain' && <p role="status">Backup worker completion is uncertain. New work remains paused until reconciliation.</p>}
       {outcomes.current?.status === 'unknown' && <p role="status">The latest backup outcome is uncertain. It needs reconciliation before another backup can run.</p>}
       {outcomes.lastPublished ? <p>Last acknowledged publication: <time dateTime={new Date(outcomes.lastPublished.publishedAt * 1000).toISOString()}>{new Date(outcomes.lastPublished.publishedAt * 1000).toLocaleString()}</time>.</p> : <p>No acknowledged external backup is recorded.</p>}
-      <p>Acknowledged publication does not verify repository health or a successful restore. Backup setup and recovery controls are not yet available in this build.</p>
+      <p>Acknowledged publication does not verify repository health or a successful restore. Restore and recovery controls are not yet available in this build.</p>
     </>}
+    <BackupStart />
     {observedAt && <p className="timestamp">Last observed {observedAt.toLocaleTimeString()}</p>}
   </section>
 }

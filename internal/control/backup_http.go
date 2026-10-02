@@ -60,3 +60,12 @@ func (s *Server) backupCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job, "status": "preparing"})
 }
+
+func (s *Server) backupConfiguration(w http.ResponseWriter, r *http.Request) {
+	enabled := s.config.BackupExecution != nil && s.config.BackupRepositoryID != ""
+	repository := ""
+	if enabled {
+		repository = s.config.BackupRepositoryID
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"enabled": enabled, "repositoryId": repository})
+}

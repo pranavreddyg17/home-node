@@ -95,3 +95,26 @@ func TestBackupExecutionConfigurationRequiresInstalledMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestBackupConfigurationEndpointOnlyExposesEnabledRegisteredIdentity(t *testing.T) {
+	s := testServer(t)
+	origin := "http://localhost:8787"
+	path := origin + "/api/v1/backups/configuration"
+	if got := request(s, "GET", path, "", "", ""); got.Code != 401 {
+		t.Fatal(got.Code)
+	}
+	token := seedSession(t, s, `["admin"]`)
+	got := request(s, "GET", path, "", token, "")
+	if got.Code != 200 || !strings.Contains(got.Body.String(), `"enabled":false`) || !strings.Contains(got.Body.String(), `"repositoryId":""`) {
+		t.Fatal(got.Code, got.Body.String())
+	}
+	s.config.BackupRepositoryID = strings.Repeat("a", 64)
+	s.config.BackupExecution = &BackupExecutionConfig{}
+	got = request(s, "GET", path, "", token, "")
+	if got.Code != 200 || !strings.Contains(got.Body.String(), s.config.BackupRepositoryID) || strings.Contains(got.Body.String(), "release") || strings.Contains(got.Body.String(), "socket") {
+		t.Fatal(got.Code, got.Body.String())
+	}
+	if got.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("configuration cached")
+	}
+}
