@@ -290,6 +290,9 @@ func serve(args []string) {
 		err = nil
 	}
 	stop()
+	backupShutdown, cancelBackupShutdown := context.WithTimeout(context.Background(), 3*time.Minute+10*time.Second)
+	err = errors.Join(err, handler.CloseBackupWork(backupShutdown))
+	cancelBackupShutdown()
 	if maintenanceListener != nil {
 		err = errors.Join(err, <-maintenanceDone)
 	}

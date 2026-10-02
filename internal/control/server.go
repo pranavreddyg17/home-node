@@ -35,17 +35,18 @@ type Config struct {
 	Report             func() hostcheck.Report
 }
 type Server struct {
-	Workloads  *workload.Service
-	config     Config
-	Identity   *identity.Service
-	Store      *state.Store
-	mux        *http.ServeMux
-	host       string
-	cookie     string
-	slots      chan struct{}
-	rateMu     sync.Mutex
-	authCount  int
-	authWindow time.Time
+	backupTasks *backupTasks
+	Workloads   *workload.Service
+	config      Config
+	Identity    *identity.Service
+	Store       *state.Store
+	mux         *http.ServeMux
+	host        string
+	cookie      string
+	slots       chan struct{}
+	rateMu      sync.Mutex
+	authCount   int
+	authWindow  time.Time
 }
 type sessionKey struct{}
 
@@ -89,7 +90,7 @@ func New(store *state.Store, config Config) (*Server, error) {
 	if pinned != config.Origin {
 		return nil, errors.New("origin differs from initialized identity; use its original origin or replacement-host recovery")
 	}
-	s := &Server{config: config, Identity: auth, Store: store, mux: http.NewServeMux(), host: origin.Host, cookie: "__Host-homenode", slots: make(chan struct{}, 64)}
+	s := &Server{backupTasks: newBackupTasks(), config: config, Identity: auth, Store: store, mux: http.NewServeMux(), host: origin.Host, cookie: "__Host-homenode", slots: make(chan struct{}, 64)}
 	if config.Development {
 		s.cookie = "homenode-dev"
 	}
