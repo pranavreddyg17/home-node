@@ -182,11 +182,22 @@ func TestInspectionConfinementRequiresEveryPolicy(t *testing.T) {
 		"RestrictNamespaces=yes\nRestrictAddressFamilies=AF_UNIX\nSystemCallArchitectures=native\nStandardOutput=journal\nStandardError=journal\n",
 		"IPAddressDeny=0.0.0.0/0 ::/0\nIPAddressAllow=\nInaccessiblePaths=-/etc/homenode -/var/lib/homenode -/var/lib/homenode-update -/var/lib/homenode-backup -/run/homenode -/run/homenode-transfer\n",
 	}
+	queries := []string{
+		"--property=SystemCallFilter",
+		"--property=Id,LoadState,FragmentPath,DropInPaths,NeedDaemonReload,Type,RemainAfterExit,DynamicUser,Transient",
+		"--property=MemoryMax,MemorySwapMax,CPUQuotaPerSecUSec,TasksMax,OOMPolicy,KillMode,Restart,TimeoutStartUSec,TimeoutStopUSec",
+		"--property=NoNewPrivileges,CapabilityBoundingSet,AmbientCapabilities,ProtectSystem,ProtectHome,PrivateTmp,PrivateDevices,PrivateNetwork,ProtectKernelTunables,ProtectKernelModules,ProtectKernelLogs,ProtectControlGroups,ProtectProc,ProcSubset,RestrictSUIDSGID,RestrictRealtime,LockPersonality,UMask,SupplementaryGroups",
+		"--property=RestrictNamespaces,RestrictAddressFamilies,SystemCallArchitectures,StandardOutput,StandardError",
+		"--property=IPAddressDeny,IPAddressAllow,InaccessiblePaths",
+	}
 	for refused := -1; refused < len(snapshots); refused++ {
 		calls := 0
 		factory := func(ctx context.Context, path string, args ...string) *exec.Cmd {
 			if calls >= len(snapshots) {
 				t.Fatal("unexpected extra query")
+			}
+			if path != "/usr/bin/systemctl" || len(args) != 5 || args[0] != "--system" || args[1] != "--no-pager" || args[2] != "show" || args[3] != queries[calls] || args[4] != "homenode-inspect.service" {
+				t.Fatal("unexpected confinement query scope", path, args)
 			}
 			output := snapshots[calls]
 			if calls == refused {
