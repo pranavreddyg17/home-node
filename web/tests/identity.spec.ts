@@ -28,8 +28,51 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await expect(page.locator('.check-row')).toHaveCount(8)
   await expect(page.getByRole('heading', { name: 'External backup', exact: true })).toBeVisible()
   await expect(page.getByText('No acknowledged external backup is recorded.')).toBeVisible()
+  // Transport/UI fixture: mocked backup operations do not prove disk backup.
+  const repositoryId = 'a'.repeat(64)
+  let approvalBody = '', approvalKey = '', backupRequests = 0
+  await page.route('**/api/v1/backups/configuration', route => route.fulfill({ json: { enabled: true, repositoryId } }))
+  await page.route('**/api/v1/backups/approval', async route => {
+    approvalBody = route.request().postData()!; approvalKey = route.request().headers()['idempotency-key']
+    expect(JSON.parse(approvalBody)).toEqual({ repositoryId })
+    expect(approvalBody).not.toContain('fixture-password')
+    await route.fulfill({ json: { options: { publicKey: { challenge: 'YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo', rpId: 'localhost', userVerification: 'required', timeout: 10000 } }, challengeToken: 'backup-fixture-challenge' } })
+  })
+  await page.route('**/api/v1/auth/approval/finish', async route => {
+    expect(route.request().headers()['x-approval-challenge']).toBe('backup-fixture-challenge')
+    expect(JSON.parse(route.request().postData()!).type).toBe('public-key')
+    await route.fulfill({ json: { approvalToken: 'backup-fixture-grant' } })
+  })
+  await page.route('**/api/v1/backups', async route => {
+    backupRequests++
+    const headers = route.request().headers(), bytes = route.request().postDataBuffer()!
+    expect(headers['content-type']).toBe('application/vnd.homenode.backup-credential')
+    expect(headers['idempotency-key']).toBe(approvalKey)
+    expect(headers['x-action-approval']).toBe('backup-fixture-grant')
+    const length = bytes.readUInt32BE(0)
+    expect(bytes.subarray(4, 4 + length).toString()).toBe(approvalBody)
+    expect(bytes.subarray(4 + length).toString()).toBe('fixture-password-π')
+    await route.fulfill({ status: 202, json: { jobId: 'backup-fixture-job', status: 'preparing' } })
+  })
   await page.locator('nav').getByRole('button', { name: 'Settings', exact: false }).click()
   await expect(page.getByText('No acknowledged external backup is recorded.')).toBeVisible()
+  await page.getByLabel('Repository password').fill('fixture-password-π')
+  await page.getByRole('button', { name: 'Verify passkey and start backup' }).click()
+  await expect(page.getByText('Backup job backup-fixture-job started.', { exact: false })).toBeVisible()
+  await expect(page.getByLabel('Repository password')).toHaveValue('')
+  expect(backupRequests).toBe(1)
+  await page.evaluate(() => Object.defineProperty(navigator.credentials, 'get', { configurable: true, value: async () => { throw new DOMException('Fixture cancelled', 'NotAllowedError') } }))
+  await page.getByLabel('Repository password').fill('cancelled-secret')
+  await page.getByRole('button', { name: 'Verify passkey and start backup' }).click()
+  await expect(page.getByRole('alert')).toBeVisible()
+  await expect(page.getByLabel('Repository password')).toHaveValue('')
+  expect(backupRequests).toBe(1)
+  await page.evaluate(() => Reflect.deleteProperty(navigator.credentials, 'get'))
+  await page.unroute('**/api/v1/backups/configuration')
+  await page.unroute('**/api/v1/backups/approval')
+  await page.unroute('**/api/v1/auth/approval/finish')
+  await page.unroute('**/api/v1/backups')
+
   await page.route('**/api/v1/backups/outcomes', route => route.fulfill({ json: {
     schema: 1, current: { status: 'unknown', publishedAt: 0 }, lastPublished: { status: 'published', publishedAt: 10 },
   } }))
@@ -46,7 +89,7 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.unroute('**/api/v1/backups/outcomes')
   await page.route('**/api/v1/backups/outcomes', route => route.fulfill({ status: 503, json: { error: 'unavailable' } }))
   await page.getByRole('button', { name: 'Refresh backup status' }).click()
-  await expect(page.getByRole('alert')).toContainText('Backup status is unavailable')
+  await expect(page.getByRole('alert').filter({ hasText: 'Backup status is unavailable' })).toBeVisible()
   await expect(page.getByText('Last acknowledged publication:', { exact: false })).toHaveCount(0)
   await page.unroute('**/api/v1/backups/outcomes')
   await page.locator('nav').getByRole('button', { name: 'Overview', exact: false }).click()
