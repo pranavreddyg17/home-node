@@ -34,7 +34,7 @@ class FrontendEvidenceTests(unittest.TestCase):
             'assets': [{'path': 'index.html', 'sha256': hashlib.sha256(b'frontend').hexdigest()}],
             'dependencies': [{'path': 'node_modules/react', 'name': 'react',
                 'version': '1.0.0', 'integrity': 'fixture', 'resolved': 'fixture-source',
-                'manifestSHA256': hashlib.sha256(self.manifest.read_bytes()).hexdigest()}]}
+                'license': None, 'manifestSHA256': hashlib.sha256(self.manifest.read_bytes()).hexdigest()}]}
         self.write(self.record)
 
     def write(self, record):
@@ -56,7 +56,7 @@ class FrontendEvidenceTests(unittest.TestCase):
             self.check()
 
     def test_asset_and_dependency_claim_mutations(self):
-        for mutation in ('missing', 'duplicate', 'duplicate-dependency', 'foreign', 'version', 'integrity', 'resolved', 'name', 'complete'):
+        for mutation in ('missing', 'duplicate', 'duplicate-dependency', 'foreign', 'version', 'integrity', 'resolved', 'name', 'license', 'complete', 'unknown'):
             with self.subTest(mutation=mutation):
                 record = copy.deepcopy(self.record)
                 if mutation == 'missing':
@@ -67,6 +67,8 @@ class FrontendEvidenceTests(unittest.TestCase):
                     record['dependencies'].append(copy.deepcopy(record['dependencies'][0]))
                 elif mutation == 'foreign':
                     record['dependencies'][0]['path'] = 'node_modules/foreign'
+                elif mutation == 'unknown':
+                    record['unreviewed'] = True
                 elif mutation == 'complete':
                     record['completeness'] = 'complete'
                 else:

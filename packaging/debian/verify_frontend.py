@@ -10,7 +10,7 @@ import sys
 from verify_sbom import unique
 
 
-def manifest_digest(path):
+def manifest_bytes(path):
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
         before = os.fstat(fd)
@@ -25,7 +25,7 @@ def manifest_digest(path):
         after = os.fstat(fd)
         if len(data) != before.st_size or after.st_size != before.st_size or after.st_mtime_ns != before.st_mtime_ns:
             raise ValueError('changed installed package manifest')
-        return hashlib.sha256(data).hexdigest()
+        return bytes(data)
     finally:
         os.close(fd)
 
@@ -37,7 +37,7 @@ def verify(web_root, evidence, lockfile):
     if evidence.is_symlink() or not evidence.is_file() or evidence.stat().st_size > 8 * 1024 * 1024:
         raise ValueError('invalid frontend evidence')
     record = json.loads(evidence.read_bytes(), object_pairs_hook=unique)
-    if not isinstance(record, dict) or type(record.get('schema')) is not int or record.get('schema') != 1 or record.get('completeness') != 'incomplete':
+    if not isinstance(record, dict) or set(record) != {'schema', 'completeness', 'assets', 'dependencies'} or type(record.get('schema')) is not int or record.get('schema') != 1 or record.get('completeness') != 'incomplete':
         raise ValueError('invalid frontend evidence schema')
     assets = record.get('assets')
     if not isinstance(assets, list) or not 1 <= len(assets) <= 4096:
@@ -71,7 +71,7 @@ def verify(web_root, evidence, lockfile):
         raise ValueError('invalid dependency inventory')
     seen = set()
     for dependency in dependencies:
-        if not isinstance(dependency, dict) or not isinstance(dependency.get('path'), str):
+        if not isinstance(dependency, dict) or set(dependency) != {'path', 'name', 'version', 'integrity', 'resolved', 'license', 'manifestSHA256'} or not isinstance(dependency.get('path'), str):
             raise ValueError('invalid dependency claim')
         key = dependency['path']
         entry = locked.get(key)
@@ -83,9 +83,13 @@ def verify(web_root, evidence, lockfile):
         manifest = lockfile.parent / key / 'package.json'
         if manifest.is_symlink() or not manifest.is_file() or manifest.stat().st_size > 1024 * 1024:
             raise ValueError('invalid installed package manifest')
-        if dependency.get('manifestSHA256') != manifest_digest(manifest):
+        data = manifest_bytes(manifest)
+        if dependency.get('manifestSHA256') != hashlib.sha256(data).hexdigest():
             raise ValueError('installed package manifest mismatch')
         name = key.rsplit('node_modules/', 1)[1]
+        installed = json.loads(data, object_pairs_hook=unique)
+        if not isinstance(installed, dict) or installed.get('name') != name or installed.get('version') != dependency['version'] or installed.get('license') != dependency['license']:
+            raise ValueError('installed manifest identity/license mismatch')
         if dependency.get('name') != name or not entry.get('version') or dependency.get('version') != entry['version'] or dependency.get('integrity') != entry.get('integrity') or dependency.get('resolved') != entry.get('resolved'):
             raise ValueError('dependency lock identity mismatch')
 
