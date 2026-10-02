@@ -42,7 +42,7 @@ func ServeAcknowledgedCredentialDispatch(ctx context.Context, listener net.Liste
 	return serveDispatch(ctx, listener, controllerUID, ReceiveCredentialDispatch, work, sendWorkerCompletion)
 }
 
-func serveDispatch(ctx context.Context, listener net.Listener, controllerUID uint32, receive func(context.Context, *net.UnixConn, uint32) (Dispatch, *os.File, error), work func(context.Context, Dispatch, *os.File) error, complete func(context.Context, *net.UnixConn, Dispatch) error) (resultErr error) {
+func serveDispatch[T any](ctx context.Context, listener net.Listener, controllerUID uint32, receive func(context.Context, *net.UnixConn, uint32) (T, *os.File, error), work func(context.Context, T, *os.File) error, complete func(context.Context, *net.UnixConn, T) error) (resultErr error) {
 	if listener == nil {
 		return ErrManifest
 	}
@@ -127,4 +127,10 @@ func serveDispatch(ctx context.Context, listener net.Listener, controllerUID uin
 			}
 		}()
 	}
+}
+
+// ServeAcknowledgedCredentialLaunch admits only preliminary launch messages.
+// It shares joined single-job lifecycle and closes credentials before completion.
+func ServeAcknowledgedCredentialLaunch(ctx context.Context, listener net.Listener, controllerUID uint32, work func(context.Context, Launch, *os.File) error) error {
+	return serveDispatch(ctx, listener, controllerUID, ReceiveCredentialLaunch, work, sendLaunchCompletion)
 }
