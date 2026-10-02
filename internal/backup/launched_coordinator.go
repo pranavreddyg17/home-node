@@ -43,8 +43,10 @@ func RunAdmittedLaunchedMaintenance(ctx context.Context, store *state.Store, dev
 		}
 		recovery, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
+		// Freezing without an attached root may still have an active worker
+		// acquiring authority. Preserve its attachable checkpoint and uncertainty.
 		current, inspectErr := store.InspectMaintenanceJob(recovery, token)
-		if inspectErr == nil && current.ID == jobID && current.Phase != "requires-action" {
+		if inspectErr == nil && current.ID == jobID && current.Phase != "requires-action" && current.Phase != "freezing" {
 			inspectErr = store.AdvanceMaintenanceJob(recovery, token, jobID, current.Phase, "requires-action")
 		}
 		resultErr = errors.Join(resultErr, inspectErr)

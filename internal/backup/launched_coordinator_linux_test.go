@@ -98,8 +98,15 @@ func TestLaunchedCoordinatorQualifiesWorkerBeforeCleanupAndRestore(t *testing.T)
 					t.Fatal("uncertain operation restored apps", err)
 				}
 				owned, e := store.InspectMaintenanceJob(ctx, token)
-				if e != nil || owned.Phase != "requires-action" {
+				expectedPhase := "requires-action"
+				if scenario == "lost-launch" {
+					expectedPhase = "freezing"
+				}
+				if e != nil || owned.Phase != expectedPhase {
 					t.Fatal("recovery intent lost", owned, e)
+				}
+				if e := store.RequireBackupWorkerStopped(ctx, token, job.ID); (scenario == "lost-launch" || scenario == "missing-publication" || scenario == "lost-completion") && e == nil {
+					t.Fatal("uncertain worker lost cleanup barrier")
 				}
 				if (scenario == "lost-launch" || scenario == "missing-publication" || scenario == "lost-completion") && cleanupCalled {
 					t.Fatal("uncertain worker cleanup attempted")
