@@ -27,6 +27,7 @@ import (
 type Config struct {
 	// BackupRepositoryID is supplied by trusted host provisioning, never a request.
 	BackupRepositoryID string
+	BackupExecution    *BackupExecutionConfig
 	Runtime            workload.Backend
 	PolicyGeneration   int64
 	Origin             string
@@ -51,6 +52,13 @@ type Server struct {
 type sessionKey struct{}
 
 func New(store *state.Store, config Config) (*Server, error) {
+	if err := validateBackupExecution(config); err != nil {
+		return nil, err
+	}
+	if config.BackupExecution != nil {
+		execution := *config.BackupExecution
+		config.BackupExecution = &execution
+	}
 	if config.BackupRepositoryID != "" {
 		body, err := json.Marshal(map[string]string{"repositoryId": config.BackupRepositoryID})
 		if err != nil {
@@ -116,6 +124,7 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/v1/host/report", s.require("", false, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.config.Report()) })))
 	s.mux.Handle("GET /api/v1/events", s.require("", false, http.HandlerFunc(s.events)))
 	s.mux.Handle("GET /api/v1/diagnostics", s.require("admin", false, http.HandlerFunc(s.diagnostics)))
+	s.mux.Handle("POST /api/v1/backups", s.require("admin", false, http.HandlerFunc(s.backupCreate)))
 	s.mux.Handle("GET /api/v1/backups/outcomes", s.require("admin", false, http.HandlerFunc(s.backupOutcomes)))
 	s.mux.HandleFunc("GET /api/v1/healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "alive"}) })
 	s.mux.HandleFunc("GET /", s.static)
@@ -154,8 +163,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-		if err != nil || media != "application/json" {
-			fail(w, 415, "INVALID_CONTENT_TYPE", "Send application/json.")
+		expectedMedia := "application/json"
+		if r.Method == "POST" && r.URL.Path == "/api/v1/backups" {
+			expectedMedia = backupCredentialMediaType
+		}
+		if err != nil || media != expectedMedia {
+			fail(w, 415, "INVALID_CONTENT_TYPE", "Send the required request content type.")
 			return
 		}
 	}
@@ -169,6 +182,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	limit := int64(64 << 10)
 	if strings.HasPrefix(r.URL.Path, "/api/v1/transfers/") && strings.HasSuffix(r.URL.Path, "/chunks") {
 		limit = 512 << 10
+	}
+	if r.Method == "POST" && r.URL.Path == "/api/v1/backups" {
+		limit = maxBackupCredentialRequest
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if (strings.HasPrefix(r.URL.Path, "/api/v1/auth/") || strings.HasSuffix(r.URL.Path, "/approval")) && !s.allowAuth() {
