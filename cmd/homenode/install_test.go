@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -144,6 +145,30 @@ func TestPreparationAcceptsIndependentlyPinnedThresholdUpdateRoot(t *testing.T) 
 	p, err = parsePreparation(append(trustedArgs, "--update-metadata-url", "https://updates.example/metadata/", "--update-targets-url", "https://updates.example/targets/", "--update-sequence-floor", "5"), now)
 	if err != nil || p.configuration.UpdateRepository == nil || p.configuration.UpdateRepository.MinimumSequence != 5 || p.configuration.UpdateRepository.MinimumCatalogVersion != p.configuration.MinimumCatalogVersion {
 		t.Fatal("repository policy omitted", err)
+	}
+	provenance := []byte(`{"schema":1,"threshold":2,"keys":["` + strings.Repeat("ab", 32) + `","` + strings.Repeat("cd", 32) + `"],"builderId":"fixture","buildType":"fixture","externalParameters":{},"sourceUri":"fixture","sourceCommit":"` + strings.Repeat("ef", 20) + `"}`)
+	provenancePath := filepath.Join(t.TempDir(), "provenance-policy.json")
+	if err := os.WriteFile(provenancePath, provenance, 0600); err != nil {
+		t.Fatal(err)
+	}
+	provenanceSum := sha256.Sum256(provenance)
+	provenancePin := hex.EncodeToString(provenanceSum[:])
+	repositoryArgs := append(append([]string{}, trustedArgs...), "--update-metadata-url", "https://updates.example/metadata/", "--update-targets-url", "https://updates.example/targets/", "--update-sequence-floor", "5")
+	completeArgs := append(append([]string{}, repositoryArgs...), "--update-provenance", provenancePath, "--update-provenance-sha256", provenancePin)
+	p, err = parsePreparation(completeArgs, now)
+	if err != nil || string(p.configuration.UpdateProvenance) != string(provenance) {
+		t.Fatal("reviewed provenance omitted from full preparation", err)
+	}
+	for _, incomplete := range [][]string{
+		append(append([]string{}, repositoryArgs...), "--update-provenance", provenancePath),
+		append(append([]string{}, repositoryArgs...), "--update-provenance-sha256", provenancePin),
+		append(append([]string{}, trustedArgs...), "--update-provenance", provenancePath, "--update-provenance-sha256", provenancePin),
+		append(append([]string{}, args...), "--update-provenance", provenancePath, "--update-provenance-sha256", provenancePin),
+		append(append([]string{}, repositoryArgs...), "--update-provenance", provenancePath, "--update-provenance-sha256", strings.Repeat("0", 64)),
+	} {
+		if _, err := parsePreparation(incomplete, now); err == nil {
+			t.Fatal("incomplete or unpinned provenance setup admitted")
+		}
 	}
 	for _, extra := range [][]string{
 		{"--update-metadata-url", "https://updates.example/metadata/"},
