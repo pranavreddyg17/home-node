@@ -2675,3 +2675,7 @@ Disposable OOM fixture now collects selected systemd result/resource/phase prope
 ### Require complete worker exit in OOM fixture
 
 OOM fixture success now requires observed oom-kill result followed by sibling proc disappearance, systemd MainPID=0 and failed service phase within bounded shutdown wait. Result notification alone no longer passes while a worker remains active. Python syntax and diff checks passed; actual Linux execution remains pending. CI37070514721 remains active in package inspection; follow-up stays local. Full application acceptance remains unfinished.
+
+### Publish filesystem recovery and native resource enforcement gates
+
+CI37070514721 succeeded atc8b7e88, including published real-restic capacity/cancellation and portable writer changes. Current pending fixture syntax and diff checks passed; full backup/state/runtimeclient race suites and macOS/Linux command builds previously passed for recovered-filesystem gate. Publishing recovered ext4 checks, checksummed corruption fixture, caller cancellation propagation, backup service resource limits, loaded systemd/kernel control assertions and bounded OOM sibling/main-exit exercise. These newer native assertions remain unverified until this push completes Linux CI. Requested sole author identity remains in every pending commit. Full application acceptance remains unfinished.
