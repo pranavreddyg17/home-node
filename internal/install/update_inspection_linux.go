@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/pranavreddyg17/home-node/internal/updates"
+	servicetemplates "github.com/pranavreddyg17/home-node/packaging/systemd"
 )
 
 // StageUpdateInspection uses only the staging directory in the completed
@@ -118,6 +119,9 @@ func (e *Engine) prepareUpdateInspectionLaunchOwned(ctx context.Context, release
 	if err != nil {
 		return nil, err
 	}
+	if err := e.requireInspectionServiceLocked(); err != nil {
+		return nil, errors.Join(err, stage.Close())
+	}
 	parent, err := e.host.OpenRoot("var/lib/homenode-update")
 	if err != nil {
 		return nil, errors.Join(err, stage.Close())
@@ -131,4 +135,32 @@ func (e *Engine) prepareUpdateInspectionLaunchOwned(ctx context.Context, release
 		return nil, errors.Join(publishErr, closeErr, stage.Close())
 	}
 	return stage, nil
+}
+
+func (e *Engine) requireInspectionServiceLocked() error {
+	reviewed, err := servicetemplates.Unit("homenode-inspect.service")
+	if err != nil {
+		return err
+	}
+	journal, err := e.load()
+	if err != nil {
+		return err
+	}
+	found := false
+	for _, item := range journal.Items {
+		if item.Path != "etc/systemd/system/homenode-inspect.service" {
+			continue
+		}
+		if found || item.Directory || item.Mode != 0644 || item.UID != e.owner || item.GID != 0 || item.SHA256 != digest(reviewed) || item.State != "created" && item.State != "existing" {
+			return ErrConflict
+		}
+		if err := e.matches(item); err != nil {
+			return err
+		}
+		found = true
+	}
+	if !found {
+		return ErrConflict
+	}
+	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 
 	"github.com/pranavreddyg17/home-node/internal/updates"
+	servicetemplates "github.com/pranavreddyg17/home-node/packaging/systemd"
 	"os"
 	"path/filepath"
 	"testing"
@@ -20,7 +21,12 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	host, journal := roots(t)
 	bootstrap := updateBootstrapFixture(t, 2)
 	repository := []byte(`{"schema":1,"metadataUrl":"https://updates.example/metadata/","targetsUrl":"https://updates.example/targets/","minimumSequence":5,"minimumCatalogVersion":3}`)
+	service, err := servicetemplates.Unit("homenode-inspect.service")
+	if err != nil {
+		t.Fatal(err)
+	}
 	plan := Plan{Items: []Item{
+		{Path: "etc/systemd/system/homenode-inspect.service", Mode: 0644, UID: 0, GID: 0, Data: service},
 		{Path: "etc/homenode", Directory: true, Mode: 0755, UID: 0, GID: 0},
 		{Path: "etc/homenode/update-repository.json", Mode: 0400, UID: 0, GID: 0, Data: repository},
 		{Path: "etc/homenode/update-root.json", Mode: 0400, UID: 0, GID: 0, Data: bootstrap.Data},
@@ -95,6 +101,20 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 		t.Fatal("owned inspection admission failed", err)
 	}
 	if err := stage.Close(); err != nil {
+		t.Fatal(err)
+	}
+	servicePath := filepath.Join(host, "etc/systemd/system/homenode-inspect.service")
+	if err := os.WriteFile(servicePath, []byte("changed service"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if other, err := engine.prepareUpdateInspectionLaunchOwned(ctx, release, "inspection-fixture-000001"); err == nil {
+		other.Close()
+		t.Fatal("changed service admitted launch")
+	}
+	if _, err := os.Lstat(filepath.Join(host, "var/lib/homenode-update/inspection.env")); !os.IsNotExist(err) {
+		t.Fatal("changed service published launch inputs", err)
+	}
+	if err := os.WriteFile(servicePath, service, 0644); err != nil {
 		t.Fatal(err)
 	}
 	launch, err := engine.prepareUpdateInspectionLaunchOwned(ctx, release, "inspection-fixture-000001")
