@@ -499,6 +499,48 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	if recorded, err := stage.readRecordedInspectionResultOwned(ctx, parent, captured); err != nil || recorded != collected {
 		t.Fatal("restored retained result refused", recorded, err)
 	}
+	if err := os.Chmod(resultPath, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if recorded, err := stage.readRecordedInspectionResultOwned(ctx, parent, captured); err == nil || recorded != (InspectionResult{}) {
+		t.Fatal("public retained result exposed", recorded, err)
+	}
+	if err := os.Chmod(resultPath, 0600); err != nil {
+		t.Fatal(err)
+	}
+	resultRetained := filepath.Join(parentPath, "inspection.result.retained")
+	if err := os.Rename(resultPath, resultRetained); err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"missing", "symlink", "hardlink", "fifo", "directory"} {
+		switch kind {
+		case "symlink":
+			err = os.Symlink(resultRetained, resultPath)
+		case "hardlink":
+			err = os.Link(resultRetained, resultPath)
+		case "fifo":
+			err = unix.Mkfifo(resultPath, 0600)
+		case "directory":
+			err = os.Mkdir(resultPath, 0700)
+		}
+		if err != nil {
+			t.Fatal(kind, err)
+		}
+		if recorded, err := stage.readRecordedInspectionResultOwned(ctx, parent, captured); err == nil || recorded != (InspectionResult{}) {
+			t.Fatal("unsafe retained result exposed", kind, recorded, err)
+		}
+		if kind != "missing" {
+			if err := os.Remove(resultPath); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := os.Rename(resultRetained, resultPath); err != nil {
+		t.Fatal(err)
+	}
+	if recorded, err := stage.readRecordedInspectionResultOwned(ctx, parent, captured); err != nil || recorded != collected {
+		t.Fatal("restored private result inode refused", recorded, err)
+	}
 	packagePath := filepath.Join(parentPath, "inspection/package.deb")
 	retainedPath := filepath.Join(parentPath, "inspection/package.retained")
 	if err := os.Rename(packagePath, retainedPath); err != nil {

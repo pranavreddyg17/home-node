@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"strconv"
 )
 
 // ValidateInspectionJournalEntry validates one bounded local-journal envelope.
@@ -22,7 +23,7 @@ func ValidateInspectionJournalEntry(data []byte, expected InspectionIdentity, in
 		return zero, ErrInspectionResult
 	}
 	values := map[string]string{}
-	allowed := map[string]bool{"MESSAGE": true, "_SYSTEMD_UNIT": true, "_SYSTEMD_INVOCATION_ID": true, "_BOOT_ID": true, "_TRANSPORT": true, "_LINE_BREAK": true, "__CURSOR": true, "__REALTIME_TIMESTAMP": true, "__MONOTONIC_TIMESTAMP": true}
+	allowed := map[string]bool{"MESSAGE": true, "_SYSTEMD_UNIT": true, "_SYSTEMD_INVOCATION_ID": true, "_BOOT_ID": true, "_TRANSPORT": true, "_LINE_BREAK": true, "__CURSOR": true, "__REALTIME_TIMESTAMP": true, "__MONOTONIC_TIMESTAMP": true, "__SEQNUM": true, "__SEQNUM_ID": true}
 	for decoder.More() {
 		token, err = decoder.Token()
 		name, ok := token.(string)
@@ -44,6 +45,14 @@ func ValidateInspectionJournalEntry(data []byte, expected InspectionIdentity, in
 	}
 	if decoder.Decode(new(any)) != io.EOF {
 		return zero, ErrInspectionResult
+	}
+	sequence, hasSequence := values["__SEQNUM"]
+	sequenceID, hasSequenceID := values["__SEQNUM_ID"]
+	if hasSequence || hasSequenceID {
+		number, err := strconv.ParseUint(sequence, 10, 64)
+		if !hasSequence || !hasSequenceID || err != nil || number == 0 || strconv.FormatUint(number, 10) != sequence || !validInspectionInvocation(sequenceID) {
+			return zero, ErrInspectionResult
+		}
 	}
 	if values["_SYSTEMD_UNIT"] != "homenode-inspect.service" || values["_SYSTEMD_INVOCATION_ID"] != invocation || values["_BOOT_ID"] != bootHex || values["_TRANSPORT"] != "stdout" || values["_LINE_BREAK"] != "" {
 		return zero, ErrInspectionResult

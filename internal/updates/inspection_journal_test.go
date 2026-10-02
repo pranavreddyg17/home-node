@@ -15,6 +15,26 @@ func TestInspectionJournalEnvelopeRequiresExactTrustedContext(t *testing.T) {
 	if _, err := ValidateInspectionJournalEntry(valid, identity, invocation, boot); err != nil {
 		t.Fatal(err)
 	}
+	values["__SEQNUM"] = "123"
+	values["__SEQNUM_ID"] = strings.Repeat("c", 32)
+	withSequence, _ := json.Marshal(values)
+	if _, err := ValidateInspectionJournalEntry(withSequence, identity, invocation, boot); err != nil {
+		t.Fatal("native sequence metadata refused", err)
+	}
+	for _, sequence := range []string{"", "0", "0123", "+123", "-1", "18446744073709551616"} {
+		values["__SEQNUM"] = sequence
+		data, _ := json.Marshal(values)
+		if _, err := ValidateInspectionJournalEntry(data, identity, invocation, boot); err == nil {
+			t.Fatal("invalid native sequence admitted", sequence)
+		}
+	}
+	values["__SEQNUM"] = "123"
+	delete(values, "__SEQNUM_ID")
+	incompleteSequence, _ := json.Marshal(values)
+	if _, err := ValidateInspectionJournalEntry(incompleteSequence, identity, invocation, boot); err == nil {
+		t.Fatal("incomplete sequence metadata admitted")
+	}
+	delete(values, "__SEQNUM")
 	for key, replacement := range map[string]string{"_SYSTEMD_UNIT": "other.service", "_SYSTEMD_INVOCATION_ID": boot, "_BOOT_ID": invocation, "_TRANSPORT": "journal", "_LINE_BREAK": "line-max", "MESSAGE": "{}"} {
 		changed := map[string]string{}
 		for k, v := range values {
