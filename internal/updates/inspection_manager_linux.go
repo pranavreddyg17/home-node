@@ -106,7 +106,7 @@ func VerifyInspectionResources(ctx context.Context) error {
 	if os.Geteuid() != 0 {
 		return ErrInspectionResult
 	}
-	properties, err := inspectionManagerQuery(ctx, "--property=MemoryMax,MemorySwapMax,CPUQuotaPerSecUSec,TasksMax,OOMPolicy,KillMode,Restart", exec.CommandContext)
+	properties, err := inspectionManagerQuery(ctx, "--property=MemoryMax,MemorySwapMax,CPUQuotaPerSecUSec,TasksMax,OOMPolicy,KillMode,Restart,TimeoutStartUSec,TimeoutStopUSec", exec.CommandContext)
 	if err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func VerifyInspectionIsolation(ctx context.Context) error {
 	if os.Geteuid() != 0 {
 		return ErrInspectionResult
 	}
-	properties, err := inspectionManagerQuery(ctx, "--property=NoNewPrivileges,CapabilityBoundingSet,AmbientCapabilities,ProtectSystem,ProtectHome,PrivateTmp,PrivateDevices,PrivateNetwork,ProtectKernelTunables,ProtectKernelModules,ProtectKernelLogs,ProtectControlGroups,ProtectProc,ProcSubset,RestrictSUIDSGID,RestrictRealtime,LockPersonality", exec.CommandContext)
+	properties, err := inspectionManagerQuery(ctx, "--property=NoNewPrivileges,CapabilityBoundingSet,AmbientCapabilities,ProtectSystem,ProtectHome,PrivateTmp,PrivateDevices,PrivateNetwork,ProtectKernelTunables,ProtectKernelModules,ProtectKernelLogs,ProtectControlGroups,ProtectProc,ProcSubset,RestrictSUIDSGID,RestrictRealtime,LockPersonality,UMask,SupplementaryGroups", exec.CommandContext)
 	if err != nil {
 		return err
 	}

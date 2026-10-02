@@ -6,7 +6,7 @@ import "strings"
 // cgroup enforcement must also be qualified; configured values alone do not
 // prove that the kernel controllers enforce the workload boundary.
 func ValidateInspectionResources(properties []byte) error {
-	expected := map[string]string{"MemoryMax": "268435456", "MemorySwapMax": "0", "CPUQuotaPerSecUSec": "500ms", "TasksMax": "32", "OOMPolicy": "kill", "KillMode": "control-group", "Restart": "no"}
+	expected := map[string]string{"MemoryMax": "268435456", "MemorySwapMax": "0", "CPUQuotaPerSecUSec": "500ms", "TasksMax": "32", "OOMPolicy": "kill", "KillMode": "control-group", "Restart": "no", "TimeoutStartUSec": "2min 30s", "TimeoutStopUSec": "5s"}
 	if len(properties) == 0 || len(properties) > 2048 {
 		return ErrInspectionResult
 	}

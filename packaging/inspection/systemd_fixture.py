@@ -61,8 +61,8 @@ with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, tem
                "--setenv=HOMENODE_INSPECT_DENIED_PORT=" + str(listener.getsockname()[1]), str(binary),
                "-test.run=^TestNativeInspectionDescriptor$", "-test.count=1", "-test.v"]
     keys = {"InvocationID", "Result", "ExecMainCode", "ExecMainStatus", "ActiveState", "SubState", "ExecMainStartTimestampMonotonic", "ExecMainExitTimestampMonotonic"}
-    resource_values = {"MemoryMax": "268435456", "MemorySwapMax": "0", "CPUQuotaPerSecUSec": "500ms", "TasksMax": "32", "OOMPolicy": "kill", "KillMode": "control-group", "Restart": "no"}
-    isolation_values = {"NoNewPrivileges": "yes", "CapabilityBoundingSet": "", "AmbientCapabilities": "", "ProtectSystem": "strict", "ProtectHome": "yes", "PrivateTmp": "yes", "PrivateDevices": "yes", "PrivateNetwork": "yes", "ProtectKernelTunables": "yes", "ProtectKernelModules": "yes", "ProtectKernelLogs": "yes", "ProtectControlGroups": "yes", "ProtectProc": "invisible", "ProcSubset": "pid", "RestrictSUIDSGID": "yes", "RestrictRealtime": "yes", "LockPersonality": "yes"}
+    resource_values = {"MemoryMax": "268435456", "MemorySwapMax": "0", "CPUQuotaPerSecUSec": "500ms", "TasksMax": "32", "OOMPolicy": "kill", "KillMode": "control-group", "Restart": "no", "TimeoutStartUSec": "2min 30s", "TimeoutStopUSec": "5s"}
+    isolation_values = {"NoNewPrivileges": "yes", "CapabilityBoundingSet": "", "AmbientCapabilities": "", "ProtectSystem": "strict", "ProtectHome": "yes", "PrivateTmp": "yes", "PrivateDevices": "yes", "PrivateNetwork": "yes", "ProtectKernelTunables": "yes", "ProtectKernelModules": "yes", "ProtectKernelLogs": "yes", "ProtectControlGroups": "yes", "ProtectProc": "invisible", "ProcSubset": "pid", "RestrictSUIDSGID": "yes", "RestrictRealtime": "yes", "LockPersonality": "yes", "UMask": "0077", "SupplementaryGroups": ""}
     keys |= isolation_values.keys()
     keys |= resource_values.keys()
     invocation = None

@@ -6,11 +6,11 @@ import (
 )
 
 func TestInspectionResourcesRefuseRelaxedManagerLimits(t *testing.T) {
-	properties := "MemoryMax=268435456\nMemorySwapMax=0\nCPUQuotaPerSecUSec=500ms\nTasksMax=32\nOOMPolicy=kill\nKillMode=control-group\nRestart=no\n"
+	properties := "MemoryMax=268435456\nMemorySwapMax=0\nCPUQuotaPerSecUSec=500ms\nTasksMax=32\nOOMPolicy=kill\nKillMode=control-group\nRestart=no\nTimeoutStartUSec=2min 30s\nTimeoutStopUSec=5s\n"
 	if err := ValidateInspectionResources([]byte(properties)); err != nil {
 		t.Fatal(err)
 	}
-	for _, pair := range [][2]string{{"MemoryMax=268435456", "MemoryMax=infinity"}, {"MemorySwapMax=0", "MemorySwapMax=268435456"}, {"CPUQuotaPerSecUSec=500ms", "CPUQuotaPerSecUSec=infinity"}, {"TasksMax=32", "TasksMax=512"}, {"OOMPolicy=kill", "OOMPolicy=continue"}, {"KillMode=control-group", "KillMode=process"}, {"Restart=no", "Restart=on-failure"}} {
+	for _, pair := range [][2]string{{"MemoryMax=268435456", "MemoryMax=infinity"}, {"MemorySwapMax=0", "MemorySwapMax=268435456"}, {"CPUQuotaPerSecUSec=500ms", "CPUQuotaPerSecUSec=infinity"}, {"TasksMax=32", "TasksMax=512"}, {"OOMPolicy=kill", "OOMPolicy=continue"}, {"KillMode=control-group", "KillMode=process"}, {"Restart=no", "Restart=on-failure"}, {"TimeoutStartUSec=2min 30s", "TimeoutStartUSec=infinity"}, {"TimeoutStopUSec=5s", "TimeoutStopUSec=infinity"}} {
 		if err := ValidateInspectionResources([]byte(strings.Replace(properties, pair[0], pair[1], 1))); err == nil {
 			t.Fatal("relaxed limit accepted", pair)
 		}
