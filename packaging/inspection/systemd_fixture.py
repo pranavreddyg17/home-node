@@ -29,6 +29,21 @@ syscall_observation = json.loads(resolution.stdout)
 required_syscalls = syscall_observation["requiredSyscalls"]
 if syscall_observation["status"] != "native-resolution-observation-not-qualified" or not required_syscalls or len(required_syscalls) != len(set(required_syscalls)):
     sys.exit("Missing independent syscall observation")
+manager_identity_query = subprocess.run(
+    ["/usr/bin/systemctl", "--system", "--no-pager", "show", "--property=Version,Architecture"],
+    timeout=5, check=True, capture_output=True, text=True,
+    env={"PATH": "/usr/bin:/bin", "LC_ALL": "C", "SYSTEMD_COLORS": "0", "SYSTEMD_PAGER": "cat"})
+if len(manager_identity_query.stdout) > 512:
+    sys.exit("Oversized running manager identity")
+manager_identity = {}
+for line in manager_identity_query.stdout.splitlines():
+    key, separator, value = line.partition("=")
+    if not separator or key not in {"Version", "Architecture"} or key in manager_identity or not value or len(value) > 128 or any(ord(c) < 32 or ord(c) > 126 for c in value):
+        sys.exit("Ambiguous running manager identity")
+    manager_identity[key] = value
+if manager_identity.keys() != {"Version", "Architecture"} or manager_identity["Architecture"] != "x86-64":
+    sys.exit("Unsupported running manager architecture")
+syscall_observation["runningManager"] = manager_identity
 allowed = {"Type", "RemainAfterExit", "DynamicUser", "SupplementaryGroups", "UMask", "Restart", "TimeoutStartSec", "TimeoutStopSec", "KillMode", "NoNewPrivileges", "CapabilityBoundingSet", "AmbientCapabilities", "ProtectSystem", "ProtectHome", "PrivateTmp", "PrivateDevices", "PrivateNetwork", "ProtectKernelTunables", "ProtectKernelModules", "ProtectKernelLogs", "ProtectControlGroups", "ProtectProc", "ProcSubset", "RestrictNamespaces", "RestrictSUIDSGID", "RestrictRealtime", "LockPersonality", "RestrictAddressFamilies", "IPAddressDeny", "SystemCallArchitectures", "SystemCallFilter", "InaccessiblePaths", "MemoryMax", "MemorySwapMax", "CPUQuota", "TasksMax", "OOMPolicy"}
 properties, seen, section = [], set(), ""
 for raw in source.read_text().splitlines():
@@ -144,7 +159,7 @@ with tempfile.TemporaryDirectory(prefix="hn-inspect-systemd-") as directory, tem
                 if invocation is None or values["Result"] != "success" or values["ExecMainCode"] != "1" or values["ExecMainStatus"] != "0" or start < boundary or end < start:
                     sys.exit("Inspection completion evidence refused")
                 print("Source-isolated inspection completed with retained manager identity")
-                print("Independent syscall observation: " + resolution.stdout.strip())
+                print("Independent syscall observation: " + json.dumps(syscall_observation, sort_keys=True))
                 break
             time.sleep(0.1)
         else:
