@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -53,5 +54,30 @@ func TestInspectionDescriptorRequiresReadableReadOnlyAuthority(t *testing.T) {
 		if readOnlyInspectionDescriptor(uintptr(fd)) {
 			t.Fatal("closed descriptor admitted")
 		}
+	}
+}
+
+func TestInspectionPackageRequiresExactPrivateRootInode(t *testing.T) {
+	valid := syscall.Stat_t{Uid: 0, Gid: 0, Nlink: 1, Mode: unix.S_IFREG | 0400, Size: 1}
+	if !validInspectionPackageStat(&valid) || validInspectionPackageStat(nil) {
+		t.Fatal("invalid base inode admission")
+	}
+	for _, mutate := range []func(*syscall.Stat_t){
+		func(s *syscall.Stat_t) { s.Uid = 1 }, func(s *syscall.Stat_t) { s.Gid = 1 },
+		func(s *syscall.Stat_t) { s.Nlink = 0 }, func(s *syscall.Stat_t) { s.Nlink = 2 },
+		func(s *syscall.Stat_t) { s.Mode |= unix.S_ISUID }, func(s *syscall.Stat_t) { s.Mode |= unix.S_ISGID },
+		func(s *syscall.Stat_t) { s.Mode |= unix.S_ISVTX }, func(s *syscall.Stat_t) { s.Mode |= 0040 },
+		func(s *syscall.Stat_t) { s.Mode = unix.S_IFIFO | 0400 }, func(s *syscall.Stat_t) { s.Size = 0 },
+		func(s *syscall.Stat_t) { s.Size = -1 }, func(s *syscall.Stat_t) { s.Size = (512 << 20) + 1 },
+	} {
+		altered := valid
+		mutate(&altered)
+		if validInspectionPackageStat(&altered) {
+			t.Fatal("unsafe inherited inode admitted", altered)
+		}
+	}
+	valid.Size = 512 << 20
+	if !validInspectionPackageStat(&valid) {
+		t.Fatal("maximum bounded package refused")
 	}
 }

@@ -82,7 +82,7 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 		return err
 	}
 	native, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || native.Uid != 0 || native.Nlink != 1 || !info.Mode().IsRegular() || info.Mode().Perm() != 0400 {
+	if !ok || !validInspectionPackageStat(native) {
 		return errors.New("inherited package must be private root-owned verified bytes")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -99,6 +99,10 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 		return errors.Join(errors.New("package identity changed during inspection"), err)
 	}
 	return json.NewEncoder(output).Encode(updates.InspectionResult{OperationID: *operation, Schema: 1, Release: *release, PackageSHA256: digest, PackageLength: length, ContentValid: true})
+}
+
+func validInspectionPackageStat(native *syscall.Stat_t) bool {
+	return native != nil && native.Uid == 0 && native.Gid == 0 && native.Nlink == 1 && native.Mode == unix.S_IFREG|0400 && native.Size >= 1 && native.Size <= 512<<20
 }
 
 func readOnlyInspectionDescriptor(fd uintptr) bool {
