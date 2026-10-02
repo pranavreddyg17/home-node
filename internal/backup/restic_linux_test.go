@@ -400,6 +400,15 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal("corrupt fixture summary", err)
 	}
+	// Metadata inspection is intentionally weaker than recovered filesystem
+	// qualification. It must not be presented as a successful restore test.
+	corruptPreview, err := repository.InspectSnapshot(corruptCtx, corruptID, policy)
+	if err != nil || len(corruptPreview.Files) != len(corruptManifest.Files) || corruptPreview.Files[1].SHA256 != corruptManifest.Files[1].SHA256 {
+		t.Fatal("compatible metadata preview unexpectedly certified or rejected disk contents", corruptPreview, err)
+	}
+	if entries, err := os.ReadDir(failedPath); err != nil || len(entries) != 0 {
+		t.Fatal("preview extracted recovery files", entries, err)
+	}
 	if _, err := repository.Restore(corruptCtx, corruptID, failedStage, policy); !errors.Is(err, ErrManifest) {
 		t.Fatal("checksummed corrupt filesystem restored", err)
 	}

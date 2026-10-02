@@ -2703,3 +2703,7 @@ Snapshot listing now rechecks its deadline after bounded parsing/sorting and ret
 ### Publish snapshot selection and preview prerequisites
 
 Retried GitHub observation succeeded: CI37072361478 completed successfully at901dc24, including native ext4 encrypted recovery/corruption and backup loaded-resource/kernel/OOM fixtures. Publishing bounded tagged snapshot inventory, stable redacted ordering, metadata preview and cancellation gates with native selection fixtures. Local focused inventory tests, full backup/runtimeclient/state race suites before ordering, Linux backup fixture compilation and diff checks passed; native listing/preview still needs this new CI run. No owner-facing restore wizard or replacement-host activation is claimed. Full application acceptance remains unfinished.
+
+### Distinguish selected metadata preview from recoverability
+
+Real encrypted corruption fixture now requires compatible preview of the honestly checksummed corrupt disk without extracting any recovery files, followed by actual Restore filesystem rejection and cleanup. This explicitly separates compatibility metadata evidence from recoverability instead of letting a successful preview imply a successful restore test. Linux backup fixture compilation and diff checks passed; new native boundary fixture remains unexecuted. CI37072981616 remains in progress; follow-up stays local. Full owner-facing restore workflow and application acceptance remain unfinished.
