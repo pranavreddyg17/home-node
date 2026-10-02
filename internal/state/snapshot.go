@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -84,6 +85,11 @@ func (s *Store) RecoverySnapshot(ctx context.Context, directory string) (_ strin
 	defer func() { resultErr = errors.Join(resultErr, db.Close()) }()
 	clean := &Store{DB: db}
 	err = clean.Transaction(deadline, func(tx *sql.Tx) error {
+		var epoch int64
+		var epochType string
+		if err := tx.QueryRowContext(deadline, "SELECT epoch,typeof(epoch) FROM identity WHERE singleton=1").Scan(&epoch, &epochType); err != nil || epochType != "integer" || epoch < 1 || epoch == math.MaxInt64 {
+			return ErrRecovery
+		}
 		_, err := tx.ExecContext(deadline, `DELETE FROM sessions; DELETE FROM credentials;
 DELETE FROM invitations; DELETE FROM challenges; DELETE FROM recovery_codes;
 UPDATE devices SET capabilities='[]',revoked_at=coalesce(revoked_at,unixepoch());

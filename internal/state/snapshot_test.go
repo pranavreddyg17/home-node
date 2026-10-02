@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -233,5 +234,34 @@ func TestRecoverySnapshotRejectsMalformedFreshIdentity(t *testing.T) {
 	}
 	if err := validate(); err != nil {
 		t.Fatal("valid replacement identity refused", err)
+	}
+}
+
+func TestRecoverySnapshotRefusesEpochOverflowWithoutChangingLiveIdentity(t *testing.T) {
+	for _, epoch := range []any{int64(0), float64(1.5), int64(math.MaxInt64)} {
+		store, err := Open(filepath.Join(t.TempDir(), "source"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		owner := Random()
+		if _, err := store.DB.Exec("INSERT INTO identity(singleton,owner_id,claimed,epoch) VALUES(1,?,1,?)", owner, epoch); err != nil {
+			t.Fatal(err)
+		}
+		directory := t.TempDir()
+		if err := os.Chmod(directory, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if path, err := store.RecoverySnapshot(context.Background(), directory); err == nil || path != "" {
+			t.Fatal("invalid recovery epoch emitted", path, err)
+		}
+		var retained string
+		var claimed int
+		if err := store.DB.QueryRow("SELECT owner_id,claimed FROM identity").Scan(&retained, &claimed); err != nil || retained != owner || claimed != 1 {
+			t.Fatal("failed snapshot changed source identity", err)
+		}
+		if _, err := os.Stat(filepath.Join(directory, "snapshot.db")); !os.IsNotExist(err) {
+			t.Fatal("failed snapshot retained partial database", err)
+		}
+		store.Close()
 	}
 }
