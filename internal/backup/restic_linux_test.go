@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -242,6 +243,42 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	}
 	if entries, err := os.ReadDir(failedPath); err != nil || len(entries) != 0 {
 		t.Fatal("partial restore retained files", entries, err)
+	}
+
+	// Publish a compatible manifest whose declared disk cannot fit while keeping
+	// the host reserve. No huge disk is created: the capacity check must precede
+	// retrieval, independently of the absent payload in this repository snapshot.
+	if errors.Is(requireStagingSpace(failedStage, 512<<30), ErrStagingCapacity) {
+		oversized := manifest
+		oversized.Files = append([]BackupFile(nil), manifest.Files...)
+		oversized.Files[1].Bytes = 512 << 30
+		encoded, err := json.Marshal(oversized)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(path, "manifest.json"), encoded, 0600); err != nil {
+			t.Fatal(err)
+		}
+		capacityOutput := &boundedOutput{maximum: 32768}
+		capacityCtx, cancelCapacity := context.WithTimeout(context.Background(), time.Minute)
+		defer cancelCapacity()
+		if err := resticProcess(capacityCtx, partialArgs, []*os.File{repository.directory, repository.secret, stage}, capacityOutput); err != nil {
+			t.Fatal("capacity fixture snapshot", err)
+		}
+		var capacitySummary struct {
+			ID string `json:"snapshot_id"`
+		}
+		if err := json.Unmarshal(capacityOutput.data, &capacitySummary); err != nil || !repositoryPattern.MatchString(capacitySummary.ID) {
+			t.Fatal("capacity fixture summary", err)
+		}
+		if _, err := repository.Restore(capacityCtx, capacitySummary.ID, failedStage, policy); !errors.Is(err, ErrStagingCapacity) {
+			t.Fatal("restore did not refuse capacity before disk retrieval", err)
+		}
+		if entries, err := os.ReadDir(failedPath); err != nil || len(entries) != 0 {
+			t.Fatal("capacity refusal retained partial database", entries, err)
+		}
+	} else {
+		t.Log("capacity refusal fixture requires less than 512GiB plus reserve available")
 	}
 	if err = os.WriteFile(filepath.Join(path, "files.raw"), []byte("corrupt"), 0600); err != nil {
 		t.Fatal(err)
