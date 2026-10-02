@@ -149,8 +149,26 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 		other.Close()
 		t.Fatal("prepared launch lost execution lock")
 	}
+	updateParent, err := engine.host.OpenRoot("var/lib/homenode-update")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer updateParent.Close()
+	epoch, err := updates.CaptureInspectionLaunchEpoch(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := launch.PublishLaunchIntent(ctx, updateParent, epoch); err != nil {
+		t.Fatal("owned boot-bound launch intent failed", err)
+	}
+	if err := launch.VerifyLaunchIntent(ctx, updateParent, epoch); err != nil {
+		t.Fatal("owned launch intent verification failed", err)
+	}
 	if err := launch.Close(); err != nil {
 		t.Fatal(err)
+	}
+	if err := launch.VerifyLaunchIntent(ctx, updateParent, epoch); err == nil {
+		t.Fatal("closed admission retained launch authority")
 	}
 	if other, err := engine.prepareUpdateInspectionLaunchOwned(ctx, release, "inspection-fixture-000001"); err == nil {
 		other.Close()

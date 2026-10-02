@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"golang.org/x/sys/unix"
 )
 
 func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
@@ -213,6 +215,41 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	}
 	if err := stage.verifyLaunchIntentOwned(ctx, parent, epoch); err != nil {
 		t.Fatal("explicitly restored launch intent refused", err)
+	}
+	// A correct record's bytes do not make a substituted special file or link
+	// safe. Preserve the admitted inode while testing each refusal.
+	launchRetained := filepath.Join(parentPath, "inspection.launch.retained")
+	if err := os.Rename(launchPath, launchRetained); err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"missing", "symlink", "hardlink", "fifo", "directory"} {
+		switch kind {
+		case "symlink":
+			err = os.Symlink(launchRetained, launchPath)
+		case "hardlink":
+			err = os.Link(launchRetained, launchPath)
+		case "fifo":
+			err = unix.Mkfifo(launchPath, 0600)
+		case "directory":
+			err = os.Mkdir(launchPath, 0700)
+		}
+		if err != nil {
+			t.Fatal(kind, err)
+		}
+		if err := stage.verifyLaunchIntentOwned(ctx, parent, epoch); err == nil {
+			t.Fatal("unsafe launch intent file admitted", kind)
+		}
+		if kind != "missing" {
+			if err := os.Remove(launchPath); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := os.Rename(launchRetained, launchPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := stage.verifyLaunchIntentOwned(ctx, parent, epoch); err != nil {
+		t.Fatal("restored regular launch intent refused", err)
 	}
 	packagePath := filepath.Join(parentPath, "inspection/package.deb")
 	retainedPath := filepath.Join(parentPath, "inspection/package.retained")
