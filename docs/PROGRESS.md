@@ -1767,3 +1767,7 @@ Added Linux subprocess fixtures requiring refusal of success-looking properties 
 ### Fixed-size invocation validation
 
 Completion parsing and manager-query preflight now share a fixed 32-byte lowercase hexadecimal nonzero invocation check. Oversized input is rejected before decoding/allocation; duplicate validators cannot drift. Portable fixtures cover canonical IDs, zero/uppercase/nonhex/wrong-length/control input and allocation-free refusal of a megabyte-long value. Update race tests, Linux compilation and diff checks passed. CI 36963492790 remains active; native manager/subprocess qualification and production inspection launch/result transport remain unfinished.
+
+### Failed real invocation qualification
+
+Extended the opt-in native manager fixture to reconfigure only its owned disposable unit for a failing oneshot, require systemd start failure and a distinct canonical invocation, and refuse completion for that fresh failed invocation. Cleanup now clears that fixture failed state before deleting/reloading its unit. This verifies that freshness alone cannot turn a failed service into inspection evidence. Linux compilation and diff validation passed; actual native execution remains pending with the held fixture commits. CI 36963492790 was confirmed active at go vet.

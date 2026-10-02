@@ -44,6 +44,7 @@ func TestNativeInspectionManagerCompletion(t *testing.T) {
 		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		exec.CommandContext(cleanup, "/usr/bin/systemctl", "stop", unit).Run()
+		exec.CommandContext(cleanup, "/usr/bin/systemctl", "reset-failed", unit).Run()
 		os.Remove(path)
 		exec.CommandContext(cleanup, "/usr/bin/systemctl", "daemon-reload").Run()
 	}()
@@ -101,4 +102,32 @@ func TestNativeInspectionManagerCompletion(t *testing.T) {
 	if err := verifyInspectionServiceCompletionWith(ctx, strings.Repeat("b", 32), boundary, factory); err == nil {
 		t.Fatal("unrelated invocation accepted")
 	}
+	// Reconfigure only this owned disposable fixture for a failed invocation.
+	// A new invocation ID is insufficient when the manager reports failure.
+	failedUnit := "[Unit]\nDescription=Disposable failed inspection completion fixture\n[Service]\nType=oneshot\nExecStart=/usr/bin/false\n"
+	if err := os.WriteFile(path, []byte(failedUnit), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := manager("daemon-reload"); err != nil {
+		t.Fatal(string(output), err)
+	}
+	if err := unix.ClockGettime(unix.CLOCK_MONOTONIC, &clock); err != nil {
+		t.Fatal(err)
+	}
+	failedBoundary := uint64(clock.Sec)*1_000_000 + uint64(clock.Nsec)/1000
+	if output, err := manager("start", unit); err == nil {
+		t.Fatal("failed fixture start reported success", string(output))
+	}
+	output, err := manager("show", "--property=InvocationID", "--value", unit)
+	if err != nil {
+		t.Fatal(string(output), err)
+	}
+	failedInvocation := strings.TrimSpace(string(output))
+	if !validInspectionInvocation(failedInvocation) || failedInvocation == invocation {
+		t.Fatal("failed fixture lacked fresh invocation", failedInvocation)
+	}
+	if err := verifyInspectionServiceCompletionWith(ctx, failedInvocation, failedBoundary, factory); err == nil {
+		t.Fatal("failed real invocation accepted")
+	}
+
 }
