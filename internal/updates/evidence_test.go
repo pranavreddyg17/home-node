@@ -12,11 +12,23 @@ import (
 )
 
 func TestReleaseEvidenceRequiresExactTargetBytesAndJSON(t *testing.T) {
-	for _, scenario := range []string{"valid", "corrupt", "short", "invalid-json", "traversal", "missing-sha256", "oversized"} {
+	for _, scenario := range []string{"valid", "corrupt", "short", "invalid-json", "traversal", "missing-sha256", "oversized", "duplicate", "escaped-duplicate", "nested-duplicate", "scalar", "invalid-utf8"} {
 		t.Run(scenario, func(t *testing.T) {
 			payload := []byte(`{"build":"fixture"}`)
 			if scenario == "invalid-json" {
 				payload = []byte(`not a JSON document`)
+			}
+			switch scenario {
+			case "duplicate":
+				payload = []byte(`{"build":"one","build":"two"}`)
+			case "escaped-duplicate":
+				payload = []byte(`{"build":"one","\u0062uild":"two"}`)
+			case "nested-duplicate":
+				payload = []byte(`{"nested":[{"build":"one","build":"two"}]}`)
+			case "scalar":
+				payload = []byte(`true`)
+			case "invalid-utf8":
+				payload = []byte{'{', '"', 'x', '"', ':', '"', 0xff, '"', '}'}
 			}
 			sum := sha256.Sum256(payload)
 			target := &metadata.TargetFiles{Path: "release/provenance.json", Length: int64(len(payload)), Hashes: metadata.Hashes{"sha256": sum[:]}}

@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"unicode/utf8"
 )
 
 // validEvidenceJSON rejects ambiguous evidence before later semantic review.
 // It establishes bounded object syntax, not SBOM or provenance qualification.
 func validEvidenceJSON(data []byte) bool {
-	if len(data) == 0 || len(data) > 8<<20 {
+	if len(data) == 0 || len(data) > 8<<20 || !utf8.Valid(data) {
 		return false
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -49,7 +50,7 @@ func validEvidenceJSON(data []byte) bool {
 			}
 			end, err := decoder.Token()
 			tokens++
-			return err == nil && end == json.Delim('}')
+			return err == nil && tokens <= 65536 && end == json.Delim('}')
 		case '[':
 			if root {
 				return false
@@ -61,7 +62,7 @@ func validEvidenceJSON(data []byte) bool {
 			}
 			end, err := decoder.Token()
 			tokens++
-			return err == nil && end == json.Delim(']')
+			return err == nil && tokens <= 65536 && end == json.Delim(']')
 		}
 		return false
 	}
