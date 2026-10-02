@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"golang.org/x/sys/unix"
@@ -390,6 +391,45 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	}
 	if retained, err := os.ReadFile(executionPath); err != nil || string(retained) != string(executionData) {
 		t.Fatal("completion refusal altered execution evidence", err)
+	}
+	resultPayload, err := json.Marshal(InspectionResult{OperationID: identity.OperationID, Schema: 1, Release: identity.Release, PackageSHA256: identity.PackageSHA256, PackageLength: identity.PackageLength, ContentValid: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	journalPayload, err := json.Marshal(map[string]string{"MESSAGE": string(resultPayload), "_SYSTEMD_UNIT": "homenode-inspect.service", "_SYSTEMD_INVOCATION_ID": invocation, "_BOOT_ID": strings.ReplaceAll(epoch.BootID, "-", ""), "_TRANSPORT": "stdout"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	journalCalls := 0
+	collectionFactory := func(ctx context.Context, path string, args ...string) *exec.Cmd {
+		if path == "/usr/bin/journalctl" {
+			journalCalls++
+			return exec.CommandContext(ctx, "/usr/bin/printf", "%s", string(journalPayload))
+		}
+		return factory(ctx, path, args...)
+	}
+	collected, err := stage.collectInspectionResultOwned(ctx, parent, captured, collectionFactory)
+	if err != nil || !collected.ContentValid || collected.InstallAuthorized || collected.OperationID != identity.OperationID || journalCalls != 1 || calls != 6 {
+		t.Fatal("admitted recorded result collection failed", collected, err, journalCalls, calls)
+	}
+	validJournalPayload := append([]byte(nil), journalPayload...)
+	journalPayload = []byte(`{"MESSAGE":"{}"}`)
+	if collected, err := stage.collectInspectionResultOwned(ctx, parent, captured, collectionFactory); err == nil || collected != (InspectionResult{}) || journalCalls != 2 || calls != 7 {
+		t.Fatal("invalid journal result admitted", collected, err, journalCalls, calls)
+	}
+	managerQueries := 0
+	postReadFailure := func(ctx context.Context, path string, args ...string) *exec.Cmd {
+		if path == "/usr/bin/journalctl" {
+			return exec.CommandContext(ctx, "/usr/bin/printf", "%s", string(validJournalPayload))
+		}
+		managerQueries++
+		if managerQueries == 2 {
+			return exec.CommandContext(ctx, "/usr/bin/false")
+		}
+		return factory(ctx, path, args...)
+	}
+	if collected, err := stage.collectInspectionResultOwned(ctx, parent, captured, postReadFailure); err == nil || collected != (InspectionResult{}) || managerQueries != 2 {
+		t.Fatal("valid journal bypassed post-read manager failure", collected, err, managerQueries)
 	}
 	packagePath := filepath.Join(parentPath, "inspection/package.deb")
 	retainedPath := filepath.Join(parentPath, "inspection/package.retained")
