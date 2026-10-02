@@ -28,3 +28,14 @@ func TestConfigurationProvisionsPrivateProvenancePolicy(t *testing.T) {
 		t.Fatal("incomplete trust policy provisioned")
 	}
 }
+
+func TestProvenancePolicyPlanRequiresParentBeforeFile(t *testing.T) {
+	parent := Item{Path: "etc/homenode", Directory: true, Mode: 0755, UID: 0, GID: 0}
+	file := Item{Path: "etc/homenode/update-provenance.json", Mode: 0400, UID: 0, GID: 0, Data: []byte("fixture")}
+	if _, _, err := planRecords(Plan{Items: []Item{file, parent}}, 0); err == nil {
+		t.Fatal("file before owned parent admitted")
+	}
+	if _, _, err := planRecords(Plan{Items: []Item{parent, file}}, 0); err != nil {
+		t.Fatal("correct provenance ordering refused", err)
+	}
+}

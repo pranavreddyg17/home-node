@@ -29,9 +29,9 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan := Plan{Items: []Item{
-		{Path: "etc/homenode/update-provenance.json", Mode: 0400, UID: 0, GID: 0, Data: provenance},
 		{Path: "etc/systemd/system/homenode-inspect.service", Mode: 0644, UID: 0, GID: 0, Data: service},
 		{Path: "etc/homenode", Directory: true, Mode: 0755, UID: 0, GID: 0},
+		{Path: "etc/homenode/update-provenance.json", Mode: 0400, UID: 0, GID: 0, Data: provenance},
 		{Path: "etc/homenode/update-repository.json", Mode: 0400, UID: 0, GID: 0, Data: repository},
 		{Path: "etc/homenode/update-root.json", Mode: 0400, UID: 0, GID: 0, Data: bootstrap.Data},
 		{Path: "var/lib/homenode-update", Directory: true, Mode: 0700, UID: 0, GID: 0},
