@@ -161,6 +161,24 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	if err != nil || string(published) != string(data) {
 		t.Fatal("staged package differs", err)
 	}
+	retainedProvenance := release.Provenance
+	release.Provenance = nil
+	if refused, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000001"); !errors.Is(err, updates.ErrProvenanceBinding) || refused != nil {
+		if refused != nil {
+			refused.Close()
+		}
+		t.Fatal("reopening staged package bypassed provenance", err)
+	}
+	if refused, err := engine.prepareUpdateInspectionLaunchOwned(ctx, release, "inspection-fixture-000001"); !errors.Is(err, updates.ErrProvenanceBinding) || refused != nil {
+		if refused != nil {
+			refused.Close()
+		}
+		t.Fatal("launch preparation bypassed provenance", err)
+	}
+	if _, err := os.Lstat(filepath.Join(host, "var/lib/homenode-update/inspection.env")); !os.IsNotExist(err) {
+		t.Fatal("provenance refusal published launch inputs", err)
+	}
+	release.Provenance = retainedProvenance
 	stage, err := engine.openUpdateInspectionOwned(ctx, release, "inspection-fixture-000001")
 	if err != nil {
 		t.Fatal("owned inspection admission failed", err)
