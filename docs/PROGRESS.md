@@ -2699,3 +2699,7 @@ Candidate inventories now sort newest first with lexical full-ID tie break for e
 ### Recheck snapshot selector cancellation after parsing
 
 Snapshot listing now rechecks its deadline after bounded parsing/sorting and returns no candidates if cancellation is observable before the final response. Existing pre-process and post-process checks remain. Linux backup fixture compilation and diff checks passed; deterministic cancellation-during-parse fixture has not been added. CI37072361478 was last observed queued; current GitHub read timed out at API connection, so no terminal/stopped state is inferred and no overlapping push occurred. Full application acceptance remains unfinished.
+
+### Publish snapshot selection and preview prerequisites
+
+Retried GitHub observation succeeded: CI37072361478 completed successfully at901dc24, including native ext4 encrypted recovery/corruption and backup loaded-resource/kernel/OOM fixtures. Publishing bounded tagged snapshot inventory, stable redacted ordering, metadata preview and cancellation gates with native selection fixtures. Local focused inventory tests, full backup/runtimeclient/state race suites before ordering, Linux backup fixture compilation and diff checks passed; native listing/preview still needs this new CI run. No owner-facing restore wizard or replacement-host activation is claimed. Full application acceptance remains unfinished.
