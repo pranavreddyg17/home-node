@@ -116,7 +116,10 @@ func (s *InspectionStage) verifyRecordedExecutionCompletionOwned(ctx context.Con
 	if err := s.verifyExecutionRecordLocked(ctx, parent, execution); err != nil {
 		return err
 	}
-	return verifyInspectionExecutionCompletionWith(ctx, execution, command)
+	if err := verifyInspectionExecutionCompletionWith(ctx, execution, command); err != nil {
+		return err
+	}
+	return s.verifyExecutionRecordLocked(ctx, parent, execution)
 }
 
 func (s *InspectionStage) verifyExecutionRecordLocked(ctx context.Context, parent *os.Root, execution InspectionExecution) error {

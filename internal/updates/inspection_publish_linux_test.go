@@ -320,6 +320,13 @@ func TestInspectionLaunchPublicationBindsParentAndRetainsState(t *testing.T) {
 	if err := stage.verifyRecordedExecutionCompletionOwned(ctx, parent, captured, factory); err != nil || calls != 2 {
 		t.Fatal("recorded completion refused", err, calls)
 	}
+	if err := stage.verifyRecordedExecutionCompletionOwned(ctx, parent, captured, changedDuringCapture); err == nil || calls != 3 {
+		t.Fatal("completion accepted launch inputs changed during manager query", err, calls)
+	}
+	if err := os.WriteFile(environmentPath, retainedEnvironment, 0600); err != nil {
+		t.Fatal(err)
+	}
+	calls = 2
 	wrongExecution := captured
 	wrongExecution.InvocationID = "fedcba9876543210fedcba9876543210"
 	if err := stage.verifyRecordedExecutionCompletionOwned(ctx, parent, wrongExecution, factory); err == nil || calls != 2 {

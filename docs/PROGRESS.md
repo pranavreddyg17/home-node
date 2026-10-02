@@ -2021,3 +2021,7 @@ The installer result boundary now snapshots comparable release metadata and pack
 ### Post-capture launch binding
 
 Execution capture now revalidates protected launch/environment/current epoch and fixed package admission after its manager query, before publishing the invocation record. Added a Linux fixture that alters environment bytes during otherwise valid manager capture and requires zero execution plus absence of final/pending records, then permits capture after explicit restoration. This closes a verification interval before durable execution publication. Portable update tests, Linux amd64 compilation and diff checks passed; native execution awaits publication. CI 36971939695 remains in progress; complete production activation/recovery and full product acceptance remain unfinished.
+
+### Post-completion recorded state verification
+
+Recorded completion verification now rechecks protected execution/launch/environment/current epoch and fixed package after the manager completion query. A Linux fixture alters environment bytes while returning valid completion and requires refusal; restored inputs permit subsequent verification. This aligns the standalone completion API with collection's existing post-query rebinding rather than exposing success against stale admission. Portable update tests, Linux amd64 compilation and diff checks passed; native execution awaits publication. CI 36971939695 remains in progress. Full production activation/recovery and product acceptance remain unfinished.
