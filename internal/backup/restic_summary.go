@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -32,19 +33,33 @@ func parseSnapshotSummary(data []byte) (string, error) {
 		if err = uniqueJSON(json.NewDecoder(bytes.NewReader(record)), 0); err != nil {
 			return "", ErrRepository
 		}
-		var summary struct {
-			Type string `json:"message_type"`
-			ID   string `json:"snapshot_id"`
-		}
-		if err = json.Unmarshal(record, &summary); err != nil || summary.Type == "" {
+		var fields map[string]json.RawMessage
+		if err = json.Unmarshal(record, &fields); err != nil {
 			return "", ErrRepository
 		}
-		if summary.Type == "summary" {
-			if snapshot != "" || !repositoryPattern.MatchString(summary.ID) {
+		for name := range fields {
+			if (strings.EqualFold(name, "message_type") && name != "message_type") || (strings.EqualFold(name, "snapshot_id") && name != "snapshot_id") {
 				return "", ErrRepository
 			}
-			snapshot = summary.ID
-		} else if summary.ID != "" {
+		}
+		var messageType, snapshotID string
+		if err = json.Unmarshal(fields["message_type"], &messageType); err != nil || messageType == "" {
+			return "", ErrRepository
+		}
+		if raw, present := fields["snapshot_id"]; present {
+			if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+				return "", ErrRepository
+			}
+			if err = json.Unmarshal(raw, &snapshotID); err != nil {
+				return "", ErrRepository
+			}
+		}
+		if messageType == "summary" {
+			if snapshot != "" || !repositoryPattern.MatchString(snapshotID) {
+				return "", ErrRepository
+			}
+			snapshot = snapshotID
+		} else if snapshotID != "" {
 			return "", ErrRepository
 		}
 	}

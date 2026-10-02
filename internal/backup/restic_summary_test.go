@@ -23,6 +23,12 @@ func TestSnapshotSummaryRequiresUnambiguousIdentity(t *testing.T) {
 		`{"message_type":"summary","snapshot_id":"ABC"}`,
 		`{"message_type":"status","snapshot_id":"` + id + `"}` + valid,
 		`{"message_type":"summary","snapshot_id":"` + id + `","stats":{"x":1,"x":2}}`,
+		`{"MESSAGE_TYPE":"summary","snapshot_id":"` + id + `"}`,
+		`{"message_type":"summary","SNAPSHOT_ID":"` + id + `"}`,
+		`{"message_type":"summary","snapshot_id":"` + id + `","SNAPSHOT_ID":"` + id + `"}`,
+		`{"message_type":"status","snapshot_id":null}` + valid,
+		`{"message_type":"status","snapshot_id":7}` + valid,
+		`{"message_type":null}` + valid,
 		valid + string([]byte{0xff}), strings.Repeat(" ", 32769) + valid,
 	} {
 		if got, err := parseSnapshotSummary([]byte(data)); got != "" || !errors.Is(err, ErrRepository) {
