@@ -56,6 +56,7 @@ var directories = map[string]bool{
 var files = map[string]bool{
 	"etc/systemd/system/homenode-inspect.service": true,
 	"etc/homenode/update-root.json":               true,
+	"etc/homenode/update-provenance.json":         true,
 	"etc/homenode/update-repository.json":         true,
 	"etc/homenode/services.env":                   true, "etc/homenode/runtime-policy.json": true,
 	"etc/homenode/catalog.pub": true, "etc/homenode/catalog-floor": true, "var/lib/homenode/catalog/catalog.json": true,

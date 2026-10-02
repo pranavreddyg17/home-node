@@ -12,6 +12,7 @@ import (
 	servicetemplates "github.com/pranavreddyg17/home-node/packaging/systemd"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -22,11 +23,13 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	host, journal := roots(t)
 	bootstrap := updateBootstrapFixture(t, 2)
 	repository := []byte(`{"schema":1,"metadataUrl":"https://updates.example/metadata/","targetsUrl":"https://updates.example/targets/","minimumSequence":5,"minimumCatalogVersion":3}`)
+	provenance := []byte(`{"schema":1,"threshold":2,"keys":["` + strings.Repeat("ab", 32) + `","` + strings.Repeat("cd", 32) + `"],"builderId":"fixture","buildType":"fixture","externalParameters":{},"sourceUri":"fixture","sourceCommit":"` + strings.Repeat("ef", 20) + `"}`)
 	service, err := servicetemplates.Unit("homenode-inspect.service")
 	if err != nil {
 		t.Fatal(err)
 	}
 	plan := Plan{Items: []Item{
+		{Path: "etc/homenode/update-provenance.json", Mode: 0400, UID: 0, GID: 0, Data: provenance},
 		{Path: "etc/systemd/system/homenode-inspect.service", Mode: 0644, UID: 0, GID: 0, Data: service},
 		{Path: "etc/homenode", Directory: true, Mode: 0755, UID: 0, GID: 0},
 		{Path: "etc/homenode/update-repository.json", Mode: 0400, UID: 0, GID: 0, Data: repository},
@@ -59,6 +62,19 @@ func TestNativeOwnedUpdateTrustInitialization(t *testing.T) {
 	defer engine.Close()
 	if err := engine.initializeUpdateCacheOwned(ctx); err != nil {
 		t.Fatal("restart rejected owned initialization", err)
+	}
+	if policy, err := engine.readUpdateProvenancePolicyOwned(ctx); err != nil || policy.Threshold != 2 || len(policy.Keys) != 2 {
+		t.Fatal("owned provenance policy refused", err)
+	}
+	provenancePath := filepath.Join(host, "etc/homenode/update-provenance.json")
+	if err := os.Chmod(provenancePath, 0440); err != nil {
+		t.Fatal(err)
+	}
+	if policy, err := engine.readUpdateProvenancePolicyOwned(ctx); err == nil || len(policy.Keys) != 0 {
+		t.Fatal("public provenance policy exposed trust keys", err)
+	}
+	if err := os.Chmod(provenancePath, 0400); err != nil {
+		t.Fatal(err)
 	}
 	currentPath := filepath.Join(host, "var/lib/homenode-update/metadata/root.json")
 	current, err := os.ReadFile(currentPath)
