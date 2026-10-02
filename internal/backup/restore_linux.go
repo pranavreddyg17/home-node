@@ -76,6 +76,9 @@ func (r *Repository) Restore(ctx context.Context, snapshot string, stage *os.Fil
 		}
 	}()
 	for _, entry := range manifest.Files {
+		if err := requireStagingSpace(stage, entry.Bytes); err != nil {
+			return Manifest{}, err
+		}
 		file, err := root.OpenFile(entry.Name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 		if err != nil {
 			return Manifest{}, ErrManifest
@@ -95,6 +98,9 @@ func (r *Repository) Restore(ctx context.Context, snapshot string, stage *os.Fil
 		if err != nil {
 			return Manifest{}, err
 		}
+	}
+	if err := requireStagingSpace(stage, int64(len(output.data))); err != nil {
+		return Manifest{}, err
 	}
 	file, err := root.OpenFile("manifest.json", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
