@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -46,5 +47,27 @@ func TestSnapshotInventoryEntryLimitRejectsWholeResult(t *testing.T) {
 	excess := "[" + strings.Join(records, ",") + "]"
 	if entries, err := parseSnapshotInventory([]byte(excess), now); err == nil || entries != nil {
 		t.Fatal("oversized inventory partially admitted", len(entries), err)
+	}
+}
+
+func TestSnapshotInventoryOrderingAndRedactedSerialization(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	older := strings.Repeat("c", 64)
+	first := strings.Repeat("a", 64)
+	second := strings.Repeat("b", 64)
+	record := func(id, timestamp string) string {
+		return fmt.Sprintf(`{"id":%q,"time":%q,"tags":["homenode-v1","PRIVATE-TAG"],"paths":["/PRIVATE-PATH"],"hostname":"PRIVATE-HOST"}`, id, timestamp)
+	}
+	input := "[" + record(older, "2025-12-30T00:00:00Z") + "," + record(second, "2025-12-31T00:00:00Z") + "," + record(first, "2025-12-31T01:00:00+01:00") + "]"
+	entries, err := parseSnapshotInventory([]byte(input), now)
+	if err != nil || len(entries) != 3 {
+		t.Fatal(entries, err)
+	}
+	if entries[0].ID != first || entries[1].ID != second || entries[2].ID != older {
+		t.Fatal("unstable candidate ordering", entries)
+	}
+	encoded, err := json.Marshal(entries)
+	if err != nil || strings.Contains(string(encoded), "PRIVATE-") {
+		t.Fatal("source metadata disclosed", string(encoded), err)
 	}
 }

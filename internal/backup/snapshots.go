@@ -3,6 +3,7 @@ package backup
 import (
 	"bytes"
 	"encoding/json"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -12,6 +13,7 @@ const maxSnapshotInventoryBytes = 1 << 20
 const maxSnapshotInventoryEntries = 1000
 
 // SnapshotReference identifies a candidate, not a validated recovery set.
+// Inventories are ordered newest first, then by ID for equal timestamps.
 // Repository paths, host names and user-controlled tags are not returned.
 type SnapshotReference struct {
 	ID        string    `json:"id"`
@@ -63,5 +65,11 @@ func parseSnapshotInventory(data []byte, now time.Time) ([]SnapshotReference, er
 		seen[id] = true
 		result = append(result, SnapshotReference{ID: id, CreatedAt: created})
 	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].CreatedAt.Equal(result[j].CreatedAt) {
+			return result[i].ID < result[j].ID
+		}
+		return result[i].CreatedAt.After(result[j].CreatedAt)
+	})
 	return result, nil
 }
