@@ -16,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pranavreddyg17/home-node/internal/state"
 )
 
 func TestRepositoryDirectoryRefusesSymlink(t *testing.T) {
@@ -349,6 +351,20 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	}
 	if err = copyRecoveryManagement(context.Background(), installRoot, copyRoot, manifest, policy); !errors.Is(err, os.ErrExist) {
 		t.Fatal("occupied management stage overwritten", err)
+	}
+	if err = rebindRecoveryManagement(context.Background(), copyRoot, manifest); err != nil {
+		t.Fatal("private management stage rebinding", err)
+	}
+	reboundFile, err := copyRoot.Open(".recovery-management.stage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reboundMetadata, readReboundErr := state.ReadRecoveryMetadata(context.Background(), reboundFile)
+	if err = errors.Join(readReboundErr, reboundFile.Close()); err != nil || reboundMetadata.OwnerID != installPlan.OwnerID || reboundMetadata.Epoch != installPlan.RecoveryEpoch || len(reboundMetadata.Apps) != 1 || reboundMetadata.Apps[0].InstanceID != diskPlan.InstanceID {
+		t.Fatal("rebound management intent differs", reboundMetadata, err)
+	}
+	if err = rebindRecoveryManagement(context.Background(), copyRoot, manifest); err == nil {
+		t.Fatal("changed management stage adopted as original source")
 	}
 	changedManifest := manifest
 	changedManifest.Release = "0.1.1~dev"
