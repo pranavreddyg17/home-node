@@ -22,7 +22,7 @@ func TestRecoveryInstallPlanPersistsFreshIdentityBeforeEffects(t *testing.T) {
 	}
 	defer root.Close()
 	disk := RecoveryInstallDisk{Workload: "files", SourceName: "files.raw", Bytes: 16 << 20, SourceSHA256: strings.Repeat("a", 64), ImageSHA256: strings.Repeat("b", 64), InstanceID: state.Random()}
-	plan := recoveryInstallPlan{Version: 1, SnapshotID: strings.Repeat("c", 64), Disks: []RecoveryInstallDisk{disk}}
+	plan := recoveryInstallPlan{Version: 1, SnapshotID: strings.Repeat("c", 64), ManifestSHA256: strings.Repeat("d", 64), Disks: []RecoveryInstallDisk{disk}}
 	if err = createRecoveryInstallPlan(context.Background(), root, plan); err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,11 @@ func TestRecoveryInstallPlanPersistsFreshIdentityBeforeEffects(t *testing.T) {
 func TestRecoveryInstallPlanRequalificationRequiresFilesystem(t *testing.T) {
 	root, manifest, policy, _ := recoverySet(t)
 	entry := manifest.Files[1]
-	plan := recoveryInstallPlan{Version: 1, SnapshotID: strings.Repeat("c", 64), Disks: []RecoveryInstallDisk{{Workload: entry.Workload, SourceName: entry.Name, Bytes: entry.Bytes, SourceSHA256: entry.SHA256, ImageSHA256: entry.ImageSHA256, InstanceID: state.Random()}}}
+	digest, err := recoveryManifestDigest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := recoveryInstallPlan{Version: 1, SnapshotID: strings.Repeat("c", 64), ManifestSHA256: digest, Disks: []RecoveryInstallDisk{{Workload: entry.Workload, SourceName: entry.Name, Bytes: entry.Bytes, SourceSHA256: entry.SHA256, ImageSHA256: entry.ImageSHA256, InstanceID: state.Random()}}}
 	if err := requalifyRecoveryInstallPlan(context.Background(), root, plan, manifest, policy); err == nil {
 		t.Fatal("journaled bytes bypassed filesystem qualification")
 	}

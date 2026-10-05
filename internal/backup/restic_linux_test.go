@@ -326,7 +326,11 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer copyRoot.Close()
-	installPlan := recoveryInstallPlan{Version: 1, SnapshotID: snapshot, Disks: installInventory}
+	manifestDigest, err := recoveryManifestDigest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	installPlan := recoveryInstallPlan{Version: 1, SnapshotID: snapshot, ManifestSHA256: manifestDigest, Disks: installInventory}
 	if err = createRecoveryInstallPlan(context.Background(), copyRoot, installPlan); err != nil {
 		t.Fatal("recovery plan before disk effects", err)
 	}
@@ -336,6 +340,11 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	}
 	if err = requalifyRecoveryInstallPlan(context.Background(), installRoot, reopenedPlan, manifest, policy); err != nil {
 		t.Fatal("reopened recovery plan source qualification", err)
+	}
+	changedManifest := manifest
+	changedManifest.Release = "0.1.1~dev"
+	if err = requalifyRecoveryInstallPlan(context.Background(), installRoot, reopenedPlan, changedManifest, policy); !errors.Is(err, ErrManifest) {
+		t.Fatal("substituted recovery manifest accepted", err)
 	}
 	changedPlan := reopenedPlan
 	changedPlan.Disks = append([]RecoveryInstallDisk(nil), reopenedPlan.Disks...)

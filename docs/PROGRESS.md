@@ -2887,3 +2887,7 @@ Joined qualification, immutable plan creation/reopening, current-policy requalif
 ### Recovery source/destination separation
 
 Preparation now rejects source and destination roots identifying the same directory before journal effects, retaining restored source separately from publication state. Focused race fixture verifies this refusal; the complete portable backup race suite passed before this added guard and the focused preparation test passed afterward. CI37388435556 remains in progress at6b2d67d; subsequent journal/orchestration changes stay local until it finishes. Full installed recovery and application acceptance remain unfinished.
+
+### Full recovery manifest journal binding
+
+Immutable plans now require SHA256 of the complete deterministic manifest encoding, including management payload identity and compatibility fields. Creation records this digest; reopening requires its exact field and requalification rejects any substituted manifest before source effects. Updated native encrypted fixture rejects a changed release with identical disk mappings. Focused recovery race tests, Linux compilation and diff checks passed. CI37388435556 completed successfully at6b2d67d, verifying the published private-copy fixture. Publishing the accumulated journal/requalification/publication/orchestration changes for native execution. Installed ownership, management import, fresh-host policy/bootstrap and full application acceptance remain unfinished.

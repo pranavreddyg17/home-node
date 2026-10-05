@@ -36,7 +36,11 @@ func TestRecoveryDiskCopyIntegrityAndOccupiedTarget(t *testing.T) {
 	if name, err := publishRecoveryDisk(context.Background(), destination, disk); err == nil || name != "" {
 		t.Fatal("unjournaled stage published", name, err)
 	}
-	plan := recoveryInstallPlan{Version: 1, SnapshotID: strings.Repeat("c", 64), Disks: []RecoveryInstallDisk{disk}}
+	digest, err := recoveryManifestDigest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := recoveryInstallPlan{Version: 1, SnapshotID: strings.Repeat("c", 64), ManifestSHA256: digest, Disks: []RecoveryInstallDisk{disk}}
 	if err = createRecoveryInstallPlan(context.Background(), destination, plan); err != nil {
 		t.Fatal(err)
 	}

@@ -3,6 +3,8 @@ package backup
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -14,9 +16,19 @@ import (
 )
 
 type recoveryInstallPlan struct {
-	Version    int                   `json:"version"`
-	SnapshotID string                `json:"snapshotId"`
-	Disks      []RecoveryInstallDisk `json:"disks"`
+	Version        int                   `json:"version"`
+	SnapshotID     string                `json:"snapshotId"`
+	ManifestSHA256 string                `json:"manifestSha256"`
+	Disks          []RecoveryInstallDisk `json:"disks"`
+}
+
+func recoveryManifestDigest(manifest Manifest) (string, error) {
+	data, err := json.Marshal(manifest)
+	if err != nil || len(data) > MaxManifestBytes {
+		return "", ErrManifest
+	}
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:]), nil
 }
 
 // requalifyRecoveryInstallPlan preserves recorded target identities while
@@ -28,6 +40,10 @@ func requalifyRecoveryInstallPlan(ctx context.Context, source *os.Root, plan rec
 		return err
 	}
 	if plan.validate() != nil || manifest.Validate(policy, time.Now()) != nil {
+		return ErrManifest
+	}
+	digest, err := recoveryManifestDigest(manifest)
+	if err != nil || digest != plan.ManifestSHA256 {
 		return ErrManifest
 	}
 	entries := map[string]BackupFile{}
@@ -52,7 +68,7 @@ func decodeRecoveryInstallPlan(data []byte) (recoveryInstallPlan, error) {
 	if len(data) == 0 || len(data) > 4096 || !utf8.Valid(data) || uniqueJSON(json.NewDecoder(bytes.NewReader(data)), 0) != nil {
 		return recoveryInstallPlan{}, ErrManifest
 	}
-	fields, err := exactManifestObject(data, []string{"version", "snapshotId", "disks"}, "")
+	fields, err := exactManifestObject(data, []string{"version", "snapshotId", "manifestSha256", "disks"}, "")
 	if err != nil {
 		return recoveryInstallPlan{}, err
 	}
@@ -126,7 +142,7 @@ func loadRecoveryInstallPlan(ctx context.Context, root *os.Root) (plan recoveryI
 }
 
 func (p recoveryInstallPlan) validate() error {
-	if p.Version != 1 || !repositoryPattern.MatchString(p.SnapshotID) || p.Disks == nil || len(p.Disks) > 2 {
+	if p.Version != 1 || !repositoryPattern.MatchString(p.SnapshotID) || !repositoryPattern.MatchString(p.ManifestSHA256) || p.Disks == nil || len(p.Disks) > 2 {
 		return ErrManifest
 	}
 	workloads, identities := map[string]bool{}, map[string]bool{}
