@@ -95,6 +95,32 @@ func (s *Server) MaintenanceHandler(controllerUID, backupUID uint32) http.Handle
 			http.Error(w, "peer denied", 403)
 			return
 		}
+		if r.URL.Path == "/v1/maintenance/verify-snapshot-preview" {
+			if r.Method != "POST" || r.URL.RawQuery != "" {
+				http.NotFound(w, r)
+				return
+			}
+			data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 512))
+			if err != nil {
+				http.Error(w, "invalid request", 400)
+				return
+			}
+			request, err := backup.DecodeSnapshotPreviewRequest(data)
+			if err != nil {
+				http.Error(w, "invalid request", 400)
+				return
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			defer cancel()
+			if err := s.verifySnapshotPreviewRequest(ctx, request); err != nil {
+				http.Error(w, "snapshot request denied", 403)
+				return
+			}
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]int{"version": 1})
+			return
+		}
 		if r.URL.Path == "/v1/maintenance/verify-snapshot-page" {
 			if r.Method != "POST" || r.URL.RawQuery != "" {
 				http.NotFound(w, r)
