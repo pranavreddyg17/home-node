@@ -19,7 +19,12 @@ var recoveryInstanceID = regexp.MustCompile(`^[a-zA-Z0-9_-]{20,64}$`)
 
 type RecoveryApp struct{ Workload, InstanceID string }
 
-func schemaDigest(ctx context.Context, db *sql.DB) ([32]byte, error) {
+type recoveryDatabase interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func schemaDigest(ctx context.Context, db recoveryDatabase) ([32]byte, error) {
 	rows, err := db.QueryContext(ctx, "SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name")
 	if err != nil {
 		return [32]byte{}, err
@@ -69,6 +74,16 @@ func ValidateRecoverySnapshot(ctx context.Context, file *os.File) ([]RecoveryApp
 	}
 	defer db.Close()
 	db.SetMaxOpenConns(1)
+	return validateRecoveryDatabase(deadline, db)
+}
+
+// validateRecoveryDatabase also accepts a transaction so future import can
+// validate and rebind under one consistent database boundary. It runs only
+// compiled queries; schema identity must pass before recovery data is read.
+func validateRecoveryDatabase(deadline context.Context, db recoveryDatabase) ([]RecoveryApp, error) {
+	if err := deadline.Err(); err != nil {
+		return nil, err
+	}
 	reference, err := sql.Open("sqlite", "file:homenode-recovery-schema?mode=memory&cache=private&_pragma=foreign_keys(1)")
 	if err != nil {
 		return nil, err

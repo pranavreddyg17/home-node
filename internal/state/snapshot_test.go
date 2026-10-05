@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
@@ -336,6 +337,26 @@ func TestRecoverySnapshotRejectsNonIntegerRestoredApplicationRevision(t *testing
 	}
 	if err := validate(); err != nil {
 		t.Fatal("valid exported application refused", err)
+	}
+	tx, err := writable.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	apps, validationErr := validateRecoveryDatabase(context.Background(), tx)
+	if validationErr != nil || len(apps) != 1 || apps[0].Workload != "files" {
+		tx.Rollback()
+		t.Fatal("transaction recovery validation", apps, validationErr)
+	}
+	if _, err = tx.Exec("UPDATE identity SET claimed=1"); err != nil {
+		tx.Rollback()
+		t.Fatal(err)
+	}
+	if apps, err = validateRecoveryDatabase(context.Background(), tx); !errors.Is(err, ErrRecovery) || apps != nil {
+		tx.Rollback()
+		t.Fatal("transaction restored authority admitted", apps, err)
+	}
+	if err = tx.Rollback(); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := writable.Exec("INSERT INTO settings(key,value) VALUES('host.future-authority','retained-marker')"); err != nil {
 		t.Fatal(err)

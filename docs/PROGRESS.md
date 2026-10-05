@@ -2895,3 +2895,7 @@ Immutable plans now require SHA256 of the complete deterministic manifest encodi
 ### Recovery host-operation namespace exclusion
 
 Management recovery review found sanitation and validation enumerated current host-operation setting keys. Changed snapshot export to remove the entire host.* namespace and recovery validation to refuse any retained host.* setting, avoiding future authority markers surviving through a missed individual key. Race fixtures verify an unknown live host marker is removed on export and a restored unknown marker is rejected. Snapshot race tests and diff checks passed. Metadata import/rebinding and full replacement-host acceptance remain unfinished.
+
+### Transaction-capable recovery database validation
+
+Separated already-open recovery database validation from immutable descriptor opening. The shared compiled-query validator accepts either a database or transaction, preserving schema identity checks before recovery data reads, so import can validate/rebind in one consistent transaction. Snapshot race tests passed; an added transaction fixture verifies app inventory and rejects authority inserted within that transaction, then rolls back. Its targeted race test passed after adding the required errors import. No metadata import or identity rebinding is implemented by this refactor; replacement-host acceptance remains unfinished.
