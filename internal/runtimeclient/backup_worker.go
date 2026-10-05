@@ -151,6 +151,10 @@ func ServeRegisteredBackupWorker(ctx context.Context, listener net.Listener, con
 		authority := NewSnapshotPageAuthority(config.ManagementSocket, config.ControllerListenerUID)
 		defer authority.Close()
 		return RunCredentialedSnapshotPage(operation, request, config, credential, authority)
+	}, func(operation context.Context, request backup.SnapshotPreviewRequest, credential *os.File) (backup.SnapshotPreview, error) {
+		authority := NewSnapshotPreviewAuthority(config.ManagementSocket, config.ControllerListenerUID)
+		defer authority.Close()
+		return RunCredentialedSnapshotPreview(operation, request, config, credential, authority)
 	})
 }
 

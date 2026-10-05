@@ -31,3 +31,15 @@ func TestServiceRequestKeepsMetadataAndMaintenanceDisjoint(t *testing.T) {
 		t.Fatal("incomplete request admitted")
 	}
 }
+
+func TestServicePreviewRequestHasSeparateResponseSlot(t *testing.T) {
+	preview := SnapshotPreviewRequest{Version: 5, Kind: "snapshot-preview", RequestID: state.Random(), DeviceID: state.Random(), SnapshotID: state.Hash("selected")}
+	raw, err := EncodeSnapshotPreviewRequest(preview)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := decodeServiceRequest(raw)
+	if err != nil || request.preview == nil || *request.preview != preview || request.inspection == nil || request.maintenance != nil || request.snapshot != nil || request.page != nil {
+		t.Fatal("preview crossed operation domains", request, err)
+	}
+}
