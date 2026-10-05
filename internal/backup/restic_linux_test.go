@@ -378,6 +378,29 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if resumedName, err := publishRecoveryDisk(context.Background(), copyRoot, diskPlan); err != nil || resumedName != finalName {
 		t.Fatal("interrupted publication reconciliation", resumedName, err)
 	}
+	prepared, err := prepareRecoveryDisks(context.Background(), installRoot, copyRoot, snapshot, manifest, policy)
+	if err != nil || len(prepared) != 1 || prepared[0] != diskPlan {
+		t.Fatal("recovery orchestration changed recorded identity", prepared, err)
+	}
+	if prepared, err := prepareRecoveryDisks(context.Background(), installRoot, copyRoot, strings.Repeat("0", 64), manifest, policy); !errors.Is(err, ErrManifest) || prepared != nil {
+		t.Fatal("foreign selected snapshot adopted recovery journal", prepared, err)
+	}
+	freshPath := t.TempDir()
+	if err = os.Chmod(freshPath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	freshRoot, err := os.OpenRoot(freshPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer freshRoot.Close()
+	freshPrepared, err := prepareRecoveryDisks(context.Background(), installRoot, freshRoot, snapshot, manifest, policy)
+	if err != nil || len(freshPrepared) != 1 || freshPrepared[0].InstanceID == diskPlan.InstanceID {
+		t.Fatal("fresh recovery orchestration", freshPrepared, err)
+	}
+	if resumed, err := prepareRecoveryDisks(context.Background(), installRoot, freshRoot, snapshot, manifest, policy); err != nil || len(resumed) != 1 || resumed[0] != freshPrepared[0] {
+		t.Fatal("fresh recovery orchestration retry", resumed, err)
+	}
 	if err = copyRoot.Remove(finalName); err != nil {
 		t.Fatal(err)
 	}
