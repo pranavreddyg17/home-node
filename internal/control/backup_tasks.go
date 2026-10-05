@@ -68,4 +68,7 @@ func (tasks *backupTasks) close(ctx context.Context) error {
 
 // CloseBackupWork cancels server-owned work and waits for coordinator cleanup.
 // A timeout does not imply worker completion or permit closing active resources.
-func (s *Server) CloseBackupWork(ctx context.Context) error { return s.backupTasks.close(ctx) }
+func (s *Server) CloseBackupWork(ctx context.Context) error {
+	s.closeSnapshotRequests()
+	return s.backupTasks.close(ctx)
+}

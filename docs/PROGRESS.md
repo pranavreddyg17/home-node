@@ -2779,3 +2779,7 @@ Extended real identity/passkey browser suite with controlled snapshot transport 
 ### Snapshot browsing instructions and narrow display layout
 
 Documented reachable owner snapshot browsing, recent admin session requirement, password reentry/clearing, bounded pagination and stale cursor restart. Clarified that dates/IDs do not prove recoverability and backup-data restore is not exposed. Full snapshot IDs now use the existing wrapping checksum style so long identifiers fit narrow layouts. TypeScript, production build and diff checks passed; no new browser run was required for reuse of existing display styling. CI37382755401 remains in progress. Full application acceptance remains unfinished.
+
+### Withdraw selector authority during controller shutdown
+
+CloseBackupWork now closes snapshot request admission, cancels all pending operation contexts and removes retained authority before existing backup coordinator shutdown. Snapshot HTTP dispatch uses its registry-owned operation context, so request expiry/shutdown reaches socket work rather than only later authorization checks. Fixture proves dispatch context cancellation, request/context withdrawal and refusal of new selector admission after shutdown. Full control race suite, Linux control test compilation and diff checks passed. Cancellation does not independently prove isolated worker process termination; metadata worker acquires no runtime authority. CI37382755401 remains active. Full application acceptance remains unfinished.

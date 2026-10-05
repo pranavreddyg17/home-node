@@ -14,13 +14,15 @@ type pendingSnapshotRequest struct {
 	request backup.SnapshotPageRequest
 	actor   identity.Session
 	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
 // Pending metadata requests are process-local: controller restart withdraws
 // them. No session hash or credential crosses into the worker request.
 type snapshotRequests struct {
-	mu      sync.Mutex
-	pending map[string]*pendingSnapshotRequest
+	mu       sync.Mutex
+	pending  map[string]*pendingSnapshotRequest
+	stopping bool
 }
 
 func (s *Server) beginSnapshotRequest(ctx context.Context, actor identity.Session, cursor string) (backup.SnapshotPageRequest, func(), error) {
@@ -33,7 +35,7 @@ func (s *Server) beginSnapshotRequest(ctx context.Context, actor identity.Sessio
 	}
 	operation, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	actor.Device.Capabilities = append([]string(nil), actor.Device.Capabilities...)
-	entry := &pendingSnapshotRequest{request: request, actor: actor, ctx: operation}
+	entry := &pendingSnapshotRequest{request: request, actor: actor, ctx: operation, cancel: cancel}
 	r := &s.snapshotRequests
 	r.mu.Lock()
 	if r.pending == nil {
@@ -44,7 +46,7 @@ func (s *Server) beginSnapshotRequest(ctx context.Context, actor identity.Sessio
 			delete(r.pending, id)
 		}
 	}
-	if len(r.pending) >= 4 || operation.Err() != nil {
+	if r.stopping || len(r.pending) >= 4 || operation.Err() != nil {
 		r.mu.Unlock()
 		cancel()
 		return backup.SnapshotPageRequest{}, nil, identity.ErrDenied
@@ -60,6 +62,28 @@ func (s *Server) beginSnapshotRequest(ctx context.Context, actor identity.Sessio
 		r.mu.Unlock()
 	}
 	return request, release, nil
+}
+
+func (s *Server) snapshotOperationContext(request backup.SnapshotPageRequest) (context.Context, error) {
+	r := &s.snapshotRequests
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	entry := r.pending[request.RequestID]
+	if r.stopping || entry == nil || entry.request != request || entry.ctx.Err() != nil {
+		return nil, identity.ErrDenied
+	}
+	return entry.ctx, nil
+}
+
+func (s *Server) closeSnapshotRequests() {
+	r := &s.snapshotRequests
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.stopping = true
+	for id, entry := range r.pending {
+		entry.cancel()
+		delete(r.pending, id)
+	}
 }
 
 func (s *Server) verifySnapshotRequest(ctx context.Context, request backup.SnapshotPageRequest) error {

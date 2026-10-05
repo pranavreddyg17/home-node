@@ -85,6 +85,11 @@ func (s *Server) backupSnapshotPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release()
+	operation, err := s.snapshotOperationContext(request)
+	if err != nil {
+		s.authError(w, err)
+		return
+	}
 	credential, err := backup.CreateRepositoryPassword(password)
 	clear(password)
 	if err != nil {
@@ -92,7 +97,7 @@ func (s *Server) backupSnapshotPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer credential.Close()
-	page, err := execution.SnapshotPage(ctx, request, credential)
+	page, err := execution.SnapshotPage(operation, request, credential)
 	closeErr := credential.Close()
 	if err != nil || closeErr != nil {
 		fail(w, 503, "BACKUP_UNAVAILABLE", "The backup repository could not be listed.")

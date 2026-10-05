@@ -100,3 +100,39 @@ func TestPendingSnapshotRequestsBoundConcurrencyAndWithdraw(t *testing.T) {
 		t.Fatal("caller mutated retained capabilities", err)
 	}
 }
+
+func TestSnapshotShutdownWithdrawsRequestsAndDispatchContext(t *testing.T) {
+	s := testServer(t)
+	token := seedBackupSession(t, s)
+	if _, err := s.Store.DB.Exec("UPDATE identity SET claimed=1"); err != nil {
+		t.Fatal(err)
+	}
+	actor, err := s.Identity.Authenticate(context.Background(), token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, release, err := s.beginSnapshotRequest(context.Background(), actor, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	operation, err := s.snapshotOperationContext(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CloseBackupWork(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !errors.Is(operation.Err(), context.Canceled) {
+		t.Fatal("shutdown did not cancel dispatch", operation.Err())
+	}
+	if err := s.verifySnapshotRequest(context.Background(), request); !errors.Is(err, identity.ErrDenied) {
+		t.Fatal("shutdown retained authority", err)
+	}
+	if _, err := s.snapshotOperationContext(request); !errors.Is(err, identity.ErrDenied) {
+		t.Fatal("shutdown returned dispatch context", err)
+	}
+	if _, release, err := s.beginSnapshotRequest(context.Background(), actor, ""); !errors.Is(err, identity.ErrDenied) || release != nil {
+		t.Fatal("shutdown admitted selector", err)
+	}
+}
