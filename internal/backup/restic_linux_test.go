@@ -225,10 +225,22 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if err != nil || preview.Release != manifest.Release || !preview.CreatedAt.Equal(manifest.CreatedAt) || len(preview.Files) != len(manifest.Files) {
 		t.Fatal("selected manifest preview", preview, err)
 	}
+	compatibilitySummary, err := repository.PreviewSnapshot(context.Background(), snapshot, policy)
+	if err != nil || compatibilitySummary.SnapshotID != snapshot || compatibilitySummary.Validation != "metadata-compatible" || compatibilitySummary.Release != manifest.Release || len(compatibilitySummary.Files) != len(manifest.Files) {
+		t.Fatal("selected compatibility compatibilitySummary", compatibilitySummary, err)
+	}
+	for index, file := range compatibilitySummary.Files {
+		if file.Workload != manifest.Files[index].Workload || file.Bytes != manifest.Files[index].Bytes {
+			t.Fatal("declared workload compatibilitySummary differs", file)
+		}
+	}
 	incompatiblePreviewPolicy := policy
 	incompatiblePreviewPolicy.MinimumCatalogVersion = manifest.CatalogVersion + 1
 	if _, err := repository.InspectSnapshot(context.Background(), snapshot, incompatiblePreviewPolicy); !errors.Is(err, ErrManifest) {
 		t.Fatal("incompatible preview admitted", err)
+	}
+	if compatibilitySummary, err := repository.PreviewSnapshot(context.Background(), snapshot, incompatiblePreviewPolicy); !errors.Is(err, ErrManifest) || compatibilitySummary.Files != nil {
+		t.Fatal("incompatible compatibilitySummary admitted", compatibilitySummary, err)
 	}
 	if _, err := repository.InspectSnapshot(cancelledInventory, snapshot, policy); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancelled preview admitted", err)
@@ -419,6 +431,10 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	corruptPreview, err := repository.InspectSnapshot(corruptCtx, corruptID, policy)
 	if err != nil || len(corruptPreview.Files) != len(corruptManifest.Files) || corruptPreview.Files[1].SHA256 != corruptManifest.Files[1].SHA256 {
 		t.Fatal("compatible metadata preview unexpectedly certified or rejected disk contents", corruptPreview, err)
+	}
+	corruptSummary, err := repository.PreviewSnapshot(corruptCtx, corruptID, policy)
+	if err != nil || corruptSummary.Validation != "metadata-compatible" || corruptSummary.SnapshotID != corruptID {
+		t.Fatal("declared compatibility summary mistaken for filesystem qualification", corruptSummary, err)
 	}
 	if entries, err := os.ReadDir(failedPath); err != nil || len(entries) != 0 {
 		t.Fatal("preview extracted recovery files", entries, err)

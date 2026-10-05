@@ -2835,3 +2835,7 @@ Extended real identity/passkey browser suite with controlled preview endpoint ch
 ### Native credential service selected-preview fixture
 
 Added Linux packet service fixture exercising actual sealed credential transfer, distinct preview callback routing (listing/maintenance callbacks refuse), selected-ID response correlation and duplicate descriptor closure before reply with caller credential retained. Linux backup fixture compilation and diff checks passed; native execution remains for CI. This uses controlled metadata callback rather than real repository inspection. CI37383603183 remains active; follow-up stays local. Full application acceptance remains unfinished.
+
+### Encrypted restic compatibility summary fixture
+
+CI37383603183 completed successfully at653f05a. Real encrypted restic round trip now exercises selected redacted preview summary identity/classification/release/declared workload sizes and incompatible catalog-floor refusal. Honestly checksummed corrupt ext4 snapshot must still summarize metadata-compatible before actual Restore rejects filesystem corruption and removes extraction output. Linux backup fixture compilation passed after fixing a local variable collision; new assertions remain unexecuted natively. Publishing accumulated preview routing/API/UI/native fixtures for CI. Browser preview transport tests passed with controlled responses; real repository-to-browser and full application acceptance remain unfinished.
