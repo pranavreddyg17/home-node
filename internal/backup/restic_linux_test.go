@@ -234,6 +234,15 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 			t.Fatal("declared workload compatibilitySummary differs", file)
 		}
 	}
+	previewRequestID := "encrypted-preview-request-fixture"
+	previewWire, err := EncodeSnapshotPreviewResponse(previewRequestID, compatibilitySummary)
+	if err != nil {
+		t.Fatal("encrypted snapshot summary did not fit preview transport", err)
+	}
+	decodedPreview, err := DecodeSnapshotPreviewResponse(previewWire, previewRequestID, snapshot)
+	if err != nil || decodedPreview.Release != manifest.Release || decodedPreview.CatalogVersion != manifest.CatalogVersion || len(decodedPreview.Files) != len(manifest.Files) {
+		t.Fatal("encrypted summary wire round trip", decodedPreview, err)
+	}
 	incompatiblePreviewPolicy := policy
 	incompatiblePreviewPolicy.MinimumCatalogVersion = manifest.CatalogVersion + 1
 	if _, err := repository.InspectSnapshot(context.Background(), snapshot, incompatiblePreviewPolicy); !errors.Is(err, ErrManifest) {

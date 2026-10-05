@@ -2839,3 +2839,7 @@ Added Linux packet service fixture exercising actual sealed credential transfer,
 ### Encrypted restic compatibility summary fixture
 
 CI37383603183 completed successfully at653f05a. Real encrypted restic round trip now exercises selected redacted preview summary identity/classification/release/declared workload sizes and incompatible catalog-floor refusal. Honestly checksummed corrupt ext4 snapshot must still summarize metadata-compatible before actual Restore rejects filesystem corruption and removes extraction output. Linux backup fixture compilation passed after fixing a local variable collision; new assertions remain unexecuted natively. Publishing accumulated preview routing/API/UI/native fixtures for CI. Browser preview transport tests passed with controlled responses; real repository-to-browser and full application acceptance remain unfinished.
+
+### Encrypted preview wire round trip
+
+Real restic fixture now encodes the selected redacted compatibility summary through the4KiB response codec and decodes it under exact request/selected-ID correlation, checking release/catalog/file-count preservation. Linux backup test compilation passed after replacing an undeclared fixture identity helper with a fixed valid request ID; diff checks passed. New wire assertion remains unexecuted natively. CI37384358035 remains active; follow-up stays local. Disconnected restored-disk installation, replacement-host policy reconstruction and full application acceptance remain unfinished.
