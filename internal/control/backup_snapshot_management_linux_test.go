@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/backup"
+	"github.com/pranavreddyg17/home-node/internal/runtimeclient"
 	"github.com/pranavreddyg17/home-node/internal/state"
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
 )
@@ -71,11 +72,24 @@ func TestSnapshotManagementRequiresKernelPeerAndPendingRequest(t *testing.T) {
 	}
 	call(request, 200)
 	call(request, 200)
+	authority := runtimeclient.NewSnapshotPageAuthority(listener.Addr().String(), uid)
+	defer authority.Close()
+	if err := authority.VerifySnapshotPage(context.Background(), request); err != nil {
+		t.Fatal("authenticated worker authority client refused pending request", err)
+	}
+	foreignPeer := runtimeclient.NewSnapshotPageAuthority(listener.Addr().String(), uid+1)
+	defer foreignPeer.Close()
+	if err := foreignPeer.VerifySnapshotPage(context.Background(), request); err == nil {
+		t.Fatal("authority client trusted foreign listener creator")
+	}
 	foreign := request
 	foreign.Cursor = state.Hash("foreign")
 	call(foreign, 403)
 	release()
 	call(request, 403)
+	if err := authority.VerifySnapshotPage(context.Background(), request); err == nil {
+		t.Fatal("authority client admitted withdrawn request")
+	}
 	if err := s.Store.Transaction(context.Background(), state.RequireAdmission); err != nil {
 		t.Fatal("selector acquired maintenance", err)
 	}
