@@ -8,18 +8,59 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"os"
 	"time"
 	"unicode/utf8"
 
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
+	"github.com/pranavreddyg17/home-node/internal/state"
 )
 
 type recoveryInstallPlan struct {
 	Version        int                   `json:"version"`
 	SnapshotID     string                `json:"snapshotId"`
 	ManifestSHA256 string                `json:"manifestSha256"`
+	OwnerID        string                `json:"ownerId"`
+	RecoveryEpoch  int64                 `json:"recoveryEpoch"`
 	Disks          []RecoveryInstallDisk `json:"disks"`
+}
+
+func recoverySourceMetadata(ctx context.Context, source *os.Root) (state.RecoveryMetadata, error) {
+	if source == nil {
+		return state.RecoveryMetadata{}, ErrManifest
+	}
+	file, err := source.Open("snapshot.db")
+	if err != nil {
+		return state.RecoveryMetadata{}, err
+	}
+	metadata, err := state.ReadRecoveryMetadata(ctx, file)
+	if err = errors.Join(err, file.Close()); err != nil {
+		return state.RecoveryMetadata{}, err
+	}
+	return metadata, nil
+}
+
+func newRecoveryInstallPlan(ctx context.Context, source *os.Root, snapshotID string, manifest Manifest, disks []RecoveryInstallDisk) (recoveryInstallPlan, error) {
+	metadata, err := recoverySourceMetadata(ctx, source)
+	if err != nil {
+		return recoveryInstallPlan{}, err
+	}
+	if metadata.Epoch == math.MaxInt64 {
+		return recoveryInstallPlan{}, ErrManifest
+	}
+	digest, err := recoveryManifestDigest(manifest)
+	if err != nil {
+		return recoveryInstallPlan{}, err
+	}
+	plan := recoveryInstallPlan{Version: 1, SnapshotID: snapshotID, ManifestSHA256: digest, OwnerID: state.Random(), RecoveryEpoch: metadata.Epoch + 1, Disks: append(make([]RecoveryInstallDisk, 0, len(disks)), disks...)}
+	if plan.validate() != nil || plan.OwnerID == metadata.OwnerID {
+		return recoveryInstallPlan{}, ErrManifest
+	}
+	if err = ctx.Err(); err != nil {
+		return recoveryInstallPlan{}, err
+	}
+	return plan, nil
 }
 
 func recoveryManifestDigest(manifest Manifest) (string, error) {
@@ -46,6 +87,13 @@ func requalifyRecoveryInstallPlan(ctx context.Context, source *os.Root, plan rec
 	if err != nil || digest != plan.ManifestSHA256 {
 		return ErrManifest
 	}
+	metadata, err := recoverySourceMetadata(ctx, source)
+	if err != nil {
+		return err
+	}
+	if metadata.Epoch == math.MaxInt64 || plan.RecoveryEpoch != metadata.Epoch+1 || plan.OwnerID == metadata.OwnerID {
+		return ErrManifest
+	}
 	entries := map[string]BackupFile{}
 	for _, entry := range manifest.Files {
 		if entry.Workload != "management" {
@@ -68,7 +116,7 @@ func decodeRecoveryInstallPlan(data []byte) (recoveryInstallPlan, error) {
 	if len(data) == 0 || len(data) > 4096 || !utf8.Valid(data) || uniqueJSON(json.NewDecoder(bytes.NewReader(data)), 0) != nil {
 		return recoveryInstallPlan{}, ErrManifest
 	}
-	fields, err := exactManifestObject(data, []string{"version", "snapshotId", "manifestSha256", "disks"}, "")
+	fields, err := exactManifestObject(data, []string{"version", "snapshotId", "manifestSha256", "ownerId", "recoveryEpoch", "disks"}, "")
 	if err != nil {
 		return recoveryInstallPlan{}, err
 	}
@@ -142,7 +190,7 @@ func loadRecoveryInstallPlan(ctx context.Context, root *os.Root) (plan recoveryI
 }
 
 func (p recoveryInstallPlan) validate() error {
-	if p.Version != 1 || !repositoryPattern.MatchString(p.SnapshotID) || !repositoryPattern.MatchString(p.ManifestSHA256) || p.Disks == nil || len(p.Disks) > 2 {
+	if p.Version != 1 || !repositoryPattern.MatchString(p.SnapshotID) || !repositoryPattern.MatchString(p.ManifestSHA256) || !guestproto.ValidID(p.OwnerID) || p.RecoveryEpoch < 1 || p.Disks == nil || len(p.Disks) > 2 {
 		return ErrManifest
 	}
 	workloads, identities := map[string]bool{}, map[string]bool{}

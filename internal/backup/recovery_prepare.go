@@ -30,11 +30,10 @@ func prepareRecoveryDisks(ctx context.Context, source, destination *os.Root, sna
 		if qualificationErr != nil {
 			return nil, qualificationErr
 		}
-		digest, digestErr := recoveryManifestDigest(manifest)
-		if digestErr != nil {
-			return nil, digestErr
+		plan, err = newRecoveryInstallPlan(ctx, source, snapshotID, manifest, inventory)
+		if err != nil {
+			return nil, err
 		}
-		plan = recoveryInstallPlan{Version: 1, SnapshotID: snapshotID, ManifestSHA256: digest, Disks: inventory}
 		if err = createRecoveryInstallPlan(ctx, destination, plan); err != nil {
 			return nil, err
 		}

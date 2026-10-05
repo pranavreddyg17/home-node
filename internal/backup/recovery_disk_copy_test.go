@@ -40,7 +40,7 @@ func TestRecoveryDiskCopyIntegrityAndOccupiedTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan := recoveryInstallPlan{Version: 1, SnapshotID: strings.Repeat("c", 64), ManifestSHA256: digest, Disks: []RecoveryInstallDisk{disk}}
+	plan := recoveryInstallPlan{Version: 1, SnapshotID: strings.Repeat("c", 64), ManifestSHA256: digest, OwnerID: state.Random(), RecoveryEpoch: 3, Disks: []RecoveryInstallDisk{disk}}
 	if err = createRecoveryInstallPlan(context.Background(), destination, plan); err != nil {
 		t.Fatal(err)
 	}

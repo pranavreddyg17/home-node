@@ -326,11 +326,10 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer copyRoot.Close()
-	manifestDigest, err := recoveryManifestDigest(manifest)
+	installPlan, err := newRecoveryInstallPlan(context.Background(), installRoot, snapshot, manifest, installInventory)
 	if err != nil {
 		t.Fatal(err)
 	}
-	installPlan := recoveryInstallPlan{Version: 1, SnapshotID: snapshot, ManifestSHA256: manifestDigest, Disks: installInventory}
 	if err = createRecoveryInstallPlan(context.Background(), copyRoot, installPlan); err != nil {
 		t.Fatal("recovery plan before disk effects", err)
 	}

@@ -22,7 +22,7 @@ func TestRecoveryInstallPlanPersistsFreshIdentityBeforeEffects(t *testing.T) {
 	}
 	defer root.Close()
 	disk := RecoveryInstallDisk{Workload: "files", SourceName: "files.raw", Bytes: 16 << 20, SourceSHA256: strings.Repeat("a", 64), ImageSHA256: strings.Repeat("b", 64), InstanceID: state.Random()}
-	plan := recoveryInstallPlan{Version: 1, SnapshotID: strings.Repeat("c", 64), ManifestSHA256: strings.Repeat("d", 64), Disks: []RecoveryInstallDisk{disk}}
+	plan := recoveryInstallPlan{Version: 1, SnapshotID: strings.Repeat("c", 64), ManifestSHA256: strings.Repeat("d", 64), OwnerID: state.Random(), RecoveryEpoch: 3, Disks: []RecoveryInstallDisk{disk}}
 	if err = createRecoveryInstallPlan(context.Background(), root, plan); err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestRecoveryInstallPlanPersistsFreshIdentityBeforeEffects(t *testing.T) {
 		t.Fatal("journal changed target identity")
 	}
 	reopened, err := loadRecoveryInstallPlan(context.Background(), root)
-	if err != nil || reopened.SnapshotID != saved.SnapshotID || len(reopened.Disks) != 1 || reopened.Disks[0] != disk {
+	if err != nil || reopened.SnapshotID != saved.SnapshotID || reopened.OwnerID != saved.OwnerID || reopened.RecoveryEpoch != saved.RecoveryEpoch || len(reopened.Disks) != 1 || reopened.Disks[0] != disk {
 		t.Fatal("reopening changed durable identity", err)
 	}
 	for _, invalid := range []string{
@@ -84,7 +84,15 @@ func TestRecoveryInstallPlanRequalificationRequiresFilesystem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan := recoveryInstallPlan{Version: 1, SnapshotID: strings.Repeat("c", 64), ManifestSHA256: digest, Disks: []RecoveryInstallDisk{{Workload: entry.Workload, SourceName: entry.Name, Bytes: entry.Bytes, SourceSHA256: entry.SHA256, ImageSHA256: entry.ImageSHA256, InstanceID: state.Random()}}}
+	plan := recoveryInstallPlan{Version: 1, SnapshotID: strings.Repeat("c", 64), ManifestSHA256: digest, OwnerID: state.Random(), RecoveryEpoch: 3, Disks: []RecoveryInstallDisk{{Workload: entry.Workload, SourceName: entry.Name, Bytes: entry.Bytes, SourceSHA256: entry.SHA256, ImageSHA256: entry.ImageSHA256, InstanceID: state.Random()}}}
+	constructed, err := newRecoveryInstallPlan(context.Background(), root, plan.SnapshotID, manifest, plan.Disks)
+	if err != nil || constructed.RecoveryEpoch != 3 || constructed.OwnerID == "" || constructed.ManifestSHA256 != digest {
+		t.Fatal("replacement identity plan differs", constructed, err)
+	}
+	metadata, err := recoverySourceMetadata(context.Background(), root)
+	if err != nil || constructed.OwnerID == metadata.OwnerID {
+		t.Fatal("historical owner reused", err)
+	}
 	if err := requalifyRecoveryInstallPlan(context.Background(), root, plan, manifest, policy); err == nil {
 		t.Fatal("journaled bytes bypassed filesystem qualification")
 	}
