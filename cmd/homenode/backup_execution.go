@@ -26,5 +26,5 @@ func backupExecutionConfiguration(repository, release string, catalog int64, soc
 		return nil, err
 	}
 	dispatcher := runtimeclient.ActivatedBackupDispatcher{Socket: socket, ControllerGID: uint32(controllerGID)}
-	return &control.BackupExecutionConfig{Release: release, CatalogVersion: catalog, Launch: dispatcher.DeliverLaunch, Cleanup: dispatcher.DeliverCleanup}, nil
+	return &control.BackupExecutionConfig{Release: release, CatalogVersion: catalog, Launch: dispatcher.DeliverLaunch, Cleanup: dispatcher.DeliverCleanup, SnapshotPage: dispatcher.SnapshotPage}, nil
 }

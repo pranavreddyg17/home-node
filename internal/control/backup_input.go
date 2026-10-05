@@ -16,6 +16,13 @@ const maxBackupCredentialRequest = 4 + 4096 + 8192
 // body, URL or header. Caller owns clearing the returned password. A fixed read
 // buffer avoids leaving credential copies behind during io.ReadAll growth.
 func readBackupCredentialRequest(reader io.Reader, repository, requestKey string) (body, password []byte, resultErr error) {
+	return readBackupCredentialEnvelope(reader, func(request []byte) error {
+		_, err := identity.BackupApprovalResources(request, repository, requestKey)
+		return err
+	})
+}
+
+func readBackupCredentialEnvelope(reader io.Reader, validate func([]byte) error) (body, password []byte, resultErr error) {
 	raw := make([]byte, maxBackupCredentialRequest+1)
 	defer clear(raw)
 	n, err := io.ReadFull(reader, raw)
@@ -27,7 +34,7 @@ func readBackupCredentialRequest(reader io.Reader, repository, requestKey string
 		return nil, nil, backup.ErrRepository
 	}
 	request := raw[4 : 4+length]
-	if _, err := identity.BackupApprovalResources(request, repository, requestKey); err != nil {
+	if validate == nil || validate(request) != nil {
 		return nil, nil, backup.ErrRepository
 	}
 	secret := raw[4+length : n]

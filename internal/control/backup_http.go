@@ -19,6 +19,7 @@ type BackupExecutionConfig struct {
 	CatalogVersion int64
 	Launch         func(context.Context, backup.Launch, *os.File) error
 	Cleanup        func(context.Context, backup.Cleanup, *os.File) error
+	SnapshotPage   func(context.Context, backup.SnapshotPageRequest, *os.File) (backup.SnapshotPage, error)
 }
 
 func validateBackupExecution(config Config) error {
