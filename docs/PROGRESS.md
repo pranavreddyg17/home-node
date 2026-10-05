@@ -2791,3 +2791,7 @@ Added PreviewSnapshot over authenticated exact-ID manifest inspection, returning
 ### Exact selected-snapshot preview request
 
 Added separate version5 snapshot-preview request requiring canonical full selected snapshot ID and request/device identity. It carries no cursor, paths, commands, runtime tokens or caller-defined compatibility policy, and remains excluded from both list and maintenance decoders. Strict codec rejects duplicate/aliased/null/extra fields, ambiguous/empty selection and trailing data. Focused preview race tests and diff checks passed. Authorization registry, protected management/client/service routing and owner preview UI remain to connect. CI37382755401 remains active. Full application acceptance remains unfinished.
+
+### Request and selected-ID bound preview response
+
+Added strict4KiB preview response codec correlating both request ID and selected snapshot ID. Exact outer/preview/file fields, canonical identities, valid release/catalog/date, bounded unique known workloads and management entry are required; only metadata-compatible classification is accepted. Duplicate/alias/extra-path fields, foreign request/selection, substituted restore-tested classification and trailing data refuse. Focused preview response/request race tests and diff checks passed. Peer authorization, transport routing and owner preview UI remain to connect. CI37382755401 remains active. Full application acceptance remains unfinished.
