@@ -2863,3 +2863,7 @@ Added a private disconnected recovery copy primitive for a future journaled inst
 ### Encrypted recovered filesystem copy fixture
 
 CI37385089713 completed successfully at0e7f1c7, verifying the encrypted preview wire and qualified recovery inventory assertions natively. Extended the real encrypted restic recovery fixture to copy its recovered ext4 disk into separate private staging, verify copied payload identity, requalify the copied filesystem and refuse a repeated occupied-target copy. Linux compilation and diff checks passed; the new copy assertions require native CI execution. Publishing the copy primitive and fixture. This remains staging only: durable installation journal/publication, management-state import and replacement-host acceptance are unfinished.
+
+### Immutable recovery installation plan creation
+
+Added private journal creation for selected full snapshot ID and bounded unique workload/target identity inventory. Creation requires exclusive private storage, validates inventory and syncs the new file/directory before returning; occupied journals are refused and owned partial journals are removed on failure. Inventory now uses explicit JSON field names. Portable race tests verify retained target identities, occupied-journal preservation, duplicate refusal and cancellation. This is the initial immutable plan only; strict reopening/reconciliation, installation publication and fresh-host policy/state reconstruction remain unfinished. Full application acceptance is not achieved.

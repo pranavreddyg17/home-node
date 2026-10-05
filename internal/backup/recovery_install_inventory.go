@@ -10,12 +10,12 @@ import (
 // RecoveryInstallDisk describes a qualified disconnected data disk with a new
 // target identity. It grants no UID lease, runtime or restored device authority.
 type RecoveryInstallDisk struct {
-	Workload     string
-	SourceName   string
-	Bytes        int64
-	SourceSHA256 string
-	ImageSHA256  string
-	InstanceID   string
+	Workload     string `json:"workload"`
+	SourceName   string `json:"sourceName"`
+	Bytes        int64  `json:"bytes"`
+	SourceSHA256 string `json:"sourceSha256"`
+	ImageSHA256  string `json:"imageSha256"`
+	InstanceID   string `json:"instanceId"`
 }
 
 // RecoveryInstallInventory requires exclusive ownership of recovered staging
