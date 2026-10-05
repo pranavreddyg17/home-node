@@ -136,7 +136,7 @@ func ServeRegisteredBackupWorker(ctx context.Context, listener net.Listener, con
 		}
 		return backup.ErrManifest
 	}
-	return backup.ServeAcknowledgedCredentialWorker(ctx, listener, controllerUID, func(operation context.Context, request backup.WorkerRequest, credential *os.File) error {
+	return backup.ServeCredentialService(ctx, listener, controllerUID, func(operation context.Context, request backup.WorkerRequest, credential *os.File) error {
 		root := NewMaintenance(config.MaintenanceSocket)
 		defer root.client.CloseIdleConnections()
 		if request.Launch != nil && request.Cleanup == nil {
@@ -147,6 +147,10 @@ func ServeRegisteredBackupWorker(ctx context.Context, listener net.Listener, con
 			return RunRegisteredBackupCleanup(operation, *request.Cleanup, config, root)
 		}
 		return backup.ErrManifest
+	}, func(operation context.Context, request backup.SnapshotPageRequest, credential *os.File) (backup.SnapshotPage, error) {
+		authority := NewSnapshotPageAuthority(config.ManagementSocket, config.ControllerListenerUID)
+		defer authority.Close()
+		return RunCredentialedSnapshotPage(operation, request, config, credential, authority)
 	})
 }
 
