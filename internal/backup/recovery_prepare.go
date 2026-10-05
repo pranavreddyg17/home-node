@@ -19,6 +19,11 @@ func prepareRecoveryDisks(ctx context.Context, source, destination *os.Root, sna
 	if source == nil || destination == nil || !repositoryPattern.MatchString(snapshotID) {
 		return nil, ErrManifest
 	}
+	sourceDirectory, sourceErr := source.Stat(".")
+	destinationDirectory, destinationErr := destination.Stat(".")
+	if sourceErr != nil || destinationErr != nil || !sourceDirectory.IsDir() || !destinationDirectory.IsDir() || os.SameFile(sourceDirectory, destinationDirectory) {
+		return nil, ErrManifest
+	}
 	plan, err := loadRecoveryInstallPlan(ctx, destination)
 	if errors.Is(err, os.ErrNotExist) {
 		inventory, qualificationErr := RecoveryInstallInventory(ctx, source, manifest, policy)

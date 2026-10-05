@@ -10,6 +10,9 @@ import (
 
 func TestRecoveryPreparationRefusesBeforeJournalingUnqualifiedSource(t *testing.T) {
 	source, manifest, policy, _ := recoverySet(t)
+	if disks, err := prepareRecoveryDisks(context.Background(), source, source, strings.Repeat("c", 64), manifest, policy); !errors.Is(err, ErrManifest) || disks != nil {
+		t.Fatal("source directory used for disk publication", disks, err)
+	}
 	path := t.TempDir()
 	if err := os.Chmod(path, 0700); err != nil {
 		t.Fatal(err)

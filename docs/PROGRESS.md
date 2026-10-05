@@ -2883,3 +2883,7 @@ Added private publication requiring an exact journaled disk entry, copied payloa
 ### Disconnected disk preparation orchestration
 
 Joined qualification, immutable plan creation/reopening, current-policy requalification, bounded disk copying and same-inode publication into private preparation orchestration. It preserves journaled target identities on retry, rejects foreign selected snapshots, refuses occupied final names without staging inode proof and leaves incomplete/conflicting stages for explicit repair. Portable race tests show unqualified source refusal before journal/disk effects and cancellation. Linux compilation passed; encrypted native fixture covers both fresh preparation and recorded-identity retry but awaits CI execution. This prepares disconnected private files only; installed-layout ownership, complete partial-copy repair/checkpoints, management import, policy/bootstrap and full end-to-end application acceptance remain unfinished.
+
+### Recovery source/destination separation
+
+Preparation now rejects source and destination roots identifying the same directory before journal effects, retaining restored source separately from publication state. Focused race fixture verifies this refusal; the complete portable backup race suite passed before this added guard and the focused preparation test passed afterward. CI37388435556 remains in progress at6b2d67d; subsequent journal/orchestration changes stay local until it finishes. Full installed recovery and application acceptance remain unfinished.
