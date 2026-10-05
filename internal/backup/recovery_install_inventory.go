@@ -10,11 +10,12 @@ import (
 // RecoveryInstallDisk describes a qualified disconnected data disk with a new
 // target identity. It grants no UID lease, runtime or restored device authority.
 type RecoveryInstallDisk struct {
-	Workload    string
-	SourceName  string
-	Bytes       int64
-	ImageSHA256 string
-	InstanceID  string
+	Workload     string
+	SourceName   string
+	Bytes        int64
+	SourceSHA256 string
+	ImageSHA256  string
+	InstanceID   string
 }
 
 // RecoveryInstallInventory requires exclusive ownership of recovered staging
@@ -30,7 +31,7 @@ func RecoveryInstallInventory(ctx context.Context, root *os.Root, manifest Manif
 		if file.Workload == "management" {
 			continue
 		}
-		disks = append(disks, RecoveryInstallDisk{Workload: file.Workload, SourceName: file.Name, Bytes: file.Bytes, ImageSHA256: policy.ApprovedImages[file.Workload], InstanceID: state.Random()})
+		disks = append(disks, RecoveryInstallDisk{Workload: file.Workload, SourceName: file.Name, Bytes: file.Bytes, SourceSHA256: file.SHA256, ImageSHA256: policy.ApprovedImages[file.Workload], InstanceID: state.Random()})
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err

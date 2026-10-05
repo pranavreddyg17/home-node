@@ -309,7 +309,7 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 		t.Fatal("qualified restored disk inventory", installInventory, err)
 	}
 	diskPlan := installInventory[0]
-	if diskPlan.Workload != "files" || diskPlan.SourceName != "files.raw" || diskPlan.Bytes != manifest.Files[1].Bytes || diskPlan.ImageSHA256 != policy.ApprovedImages["files"] || diskPlan.InstanceID == "" {
+	if diskPlan.Workload != "files" || diskPlan.SourceName != "files.raw" || diskPlan.Bytes != manifest.Files[1].Bytes || diskPlan.SourceSHA256 != manifest.Files[1].SHA256 || diskPlan.ImageSHA256 != policy.ApprovedImages["files"] || diskPlan.InstanceID == "" {
 		t.Fatal("restored installation mapping differs", diskPlan)
 	}
 	replanned, err := RecoveryInstallInventory(context.Background(), installRoot, manifest, policy)
