@@ -29,6 +29,20 @@ func TestRecoveryRebindFreshIdentityAndExactRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	file, err := os.Open(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	metadata, err := ReadRecoveryMetadata(context.Background(), file)
+	if err != nil || metadata.Epoch != 8 || !recoveryInstanceID.MatchString(metadata.OwnerID) || len(metadata.Apps) != 1 || metadata.Apps[0].InstanceID != oldInstance {
+		t.Fatal("validated recovery metadata differs", metadata, err)
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if metadata, err := ReadRecoveryMetadata(cancelled, file); err == nil || metadata.OwnerID != "" || metadata.Apps != nil {
+		t.Fatal("cancelled metadata read returned identity", metadata, err)
+	}
 	db, err := sql.Open("sqlite", snapshot+"?_pragma=foreign_keys(1)&_pragma=trusted_schema(OFF)")
 	if err != nil {
 		t.Fatal(err)

@@ -19,6 +19,14 @@ var recoveryInstanceID = regexp.MustCompile(`^[a-zA-Z0-9_-]{20,64}$`)
 
 type RecoveryApp struct{ Workload, InstanceID string }
 
+// RecoveryMetadata is validated disconnected source metadata. Its owner and
+// instance identities are historical and confer no access or runtime authority.
+type RecoveryMetadata struct {
+	OwnerID string
+	Epoch   int64
+	Apps    []RecoveryApp
+}
+
 type recoveryDatabase interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 	QueryRowContext(context.Context, string, ...any) *sql.Row
@@ -52,29 +60,58 @@ func schemaDigest(ctx context.Context, db recoveryDatabase) ([32]byte, error) {
 // migrating or running any restored SQL. Its schema must match the versioned
 // schema compiled into this release. No recovered identity grants access.
 func ValidateRecoverySnapshot(ctx context.Context, file *os.File) ([]RecoveryApp, error) {
+	metadata, err := ReadRecoveryMetadata(ctx, file)
+	if err != nil {
+		return nil, err
+	}
+	return metadata.Apps, nil
+}
+
+// ReadRecoveryMetadata reads the same validated immutable descriptor for both
+// inventory and identity. The caller must retain exclusive ownership of the
+// standalone snapshot while reading; no restored SQL or migrations run here.
+func ReadRecoveryMetadata(ctx context.Context, file *os.File) (metadata RecoveryMetadata, result error) {
+	if err := ctx.Err(); err != nil {
+		return metadata, err
+	}
 	if file == nil {
-		return nil, ErrRecovery
+		return metadata, ErrRecovery
 	}
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > 256<<20 {
-		return nil, ErrRecovery
+		return metadata, ErrRecovery
 	}
 	prefix := "/proc/self/fd/"
 	if runtime.GOOS == "darwin" {
 		prefix = "/dev/fd/"
 	} else if runtime.GOOS != "linux" {
-		return nil, ErrRecovery
+		return metadata, ErrRecovery
 	}
 	deadline, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	uri := "file:" + prefix + strconv.FormatUint(uint64(file.Fd()), 10) + "?mode=ro&immutable=1&_pragma=query_only(ON)&_pragma=trusted_schema(OFF)"
 	db, err := sql.Open("sqlite", uri)
 	if err != nil {
-		return nil, ErrRecovery
+		return metadata, ErrRecovery
 	}
-	defer db.Close()
+	defer func() {
+		result = errors.Join(result, db.Close())
+		if result != nil {
+			metadata = RecoveryMetadata{}
+		}
+	}()
 	db.SetMaxOpenConns(1)
-	return validateRecoveryDatabase(deadline, db)
+	metadata.Apps, err = validateRecoveryDatabase(deadline, db)
+	if err != nil {
+		return RecoveryMetadata{}, err
+	}
+	if err = db.QueryRowContext(deadline, "SELECT owner_id,epoch FROM identity WHERE singleton=1").Scan(&metadata.OwnerID, &metadata.Epoch); err != nil {
+		return RecoveryMetadata{}, ErrRecovery
+	}
+	if err = deadline.Err(); err != nil {
+		return RecoveryMetadata{}, err
+	}
+	return metadata, nil
 }
 
 // validateRecoveryDatabase also accepts a transaction so future import can
