@@ -106,6 +106,30 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   configurationFailed = false
   await page.getByRole('button', {name:'Check backup availability'}).click()
   await expect(page.getByLabel('Repository password')).toHaveValue('')
+  const snapshotIds = Array.from({ length: 25 }, (_, index) => index.toString(16).padStart(64, '0'))
+  let snapshotRequests = 0
+  await page.route('**/api/v1/backups/snapshots', async route => {
+    const data = route.request().postDataBuffer()!
+    const length = data.readUInt32BE(0)
+    const selection = JSON.parse(data.subarray(4, 4 + length).toString())
+    expect(data.subarray(4 + length).toString()).toBe('selector-fixture-password')
+    expect(route.request().url()).not.toContain('password')
+    expect(route.request().headers()['content-type']).toBe('application/vnd.homenode.backup-credential')
+    snapshotRequests++
+    expect(selection.cursor).toBe(snapshotRequests === 1 ? '' : snapshotIds[24])
+    await route.fulfill({ json: { snapshots: snapshotRequests === 1 ? snapshotIds.map(id => ({ id, createdAt: '2026-01-01T00:00:00Z' })) : [], next: snapshotRequests === 1 ? snapshotIds[24] : '' } })
+  })
+  await page.getByLabel('Password for snapshot browsing').fill('selector-fixture-password')
+  await page.getByRole('button', { name: 'Browse newest snapshots' }).click()
+  await expect(page.getByLabel('Password for snapshot browsing')).toHaveValue('')
+  await expect(page.getByRole('button', { name: 'Load older snapshots' })).toBeVisible()
+  await expect(page.getByText(snapshotIds[0], { exact: true })).toBeVisible()
+  await page.getByLabel('Password for snapshot browsing').fill('selector-fixture-password')
+  await page.getByRole('button', { name: 'Load older snapshots' }).click()
+  await expect(page.getByText('No snapshots on this page.')).toBeVisible()
+  await expect(page.getByLabel('Password for snapshot browsing')).toHaveValue('')
+  expect(snapshotRequests).toBe(2)
+  await page.unroute('**/api/v1/backups/snapshots')
   for (const refused of [false, true]) {
   const resumeJob = (refused ? 'B' : 'A').repeat(24)
   let resumeAccepted = false, resumeRequests = 0, resumeKey = ''

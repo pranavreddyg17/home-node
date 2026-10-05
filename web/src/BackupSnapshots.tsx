@@ -29,7 +29,7 @@ export function BackupSnapshots({ repositoryId }: { repositoryId: string }) {
     <h3>Browse backup snapshots</h3>
     <p>Attach the registered drive and use a recently verified owner session. Listing dates does not verify that a snapshot can be restored.</p>
     <form onSubmit={e => { e.preventDefault(); void load('') }}>
-      <label>Snapshot repository password<input ref={password} type="password" autoComplete="off" required maxLength={8192} disabled={busy} /></label>
+      <label>Password for snapshot browsing<input ref={password} type="password" autoComplete="off" required maxLength={8192} disabled={busy} /></label>
       <button disabled={busy}>{busy ? 'Loading snapshots…' : 'Browse newest snapshots'}</button>
       {page?.next && <button type="button" disabled={busy} onClick={() => void load(page.next)}>Load older snapshots</button>}
     </form>
