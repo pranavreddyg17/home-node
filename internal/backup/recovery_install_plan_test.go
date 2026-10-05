@@ -76,3 +76,17 @@ func TestRecoveryInstallPlanPersistsFreshIdentityBeforeEffects(t *testing.T) {
 		t.Fatal("public journal returned plan", err)
 	}
 }
+
+func TestRecoveryInstallPlanRequalificationRequiresFilesystem(t *testing.T) {
+	root, manifest, policy, _ := recoverySet(t)
+	entry := manifest.Files[1]
+	plan := recoveryInstallPlan{Version: 1, SnapshotID: strings.Repeat("c", 64), Disks: []RecoveryInstallDisk{{Workload: entry.Workload, SourceName: entry.Name, Bytes: entry.Bytes, SourceSHA256: entry.SHA256, ImageSHA256: entry.ImageSHA256, InstanceID: state.Random()}}}
+	if err := requalifyRecoveryInstallPlan(context.Background(), root, plan, manifest, policy); err == nil {
+		t.Fatal("journaled bytes bypassed filesystem qualification")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := requalifyRecoveryInstallPlan(ctx, root, plan, manifest, policy); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancellation lost", err)
+	}
+}

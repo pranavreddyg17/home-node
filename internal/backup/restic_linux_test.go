@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -325,6 +326,23 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer copyRoot.Close()
+	installPlan := recoveryInstallPlan{Version: 1, SnapshotID: snapshot, Disks: installInventory}
+	if err = createRecoveryInstallPlan(context.Background(), copyRoot, installPlan); err != nil {
+		t.Fatal("recovery plan before disk effects", err)
+	}
+	reopenedPlan, err := loadRecoveryInstallPlan(context.Background(), copyRoot)
+	if err != nil || len(reopenedPlan.Disks) != 1 || reopenedPlan.Disks[0] != diskPlan {
+		t.Fatal("recovery plan reopened identity", err)
+	}
+	if err = requalifyRecoveryInstallPlan(context.Background(), installRoot, reopenedPlan, manifest, policy); err != nil {
+		t.Fatal("reopened recovery plan source qualification", err)
+	}
+	changedPlan := reopenedPlan
+	changedPlan.Disks = append([]RecoveryInstallDisk(nil), reopenedPlan.Disks...)
+	changedPlan.Disks[0].SourceSHA256 = strings.Repeat("0", 64)
+	if err = requalifyRecoveryInstallPlan(context.Background(), installRoot, changedPlan, manifest, policy); !errors.Is(err, ErrManifest) {
+		t.Fatal("changed recovery plan source accepted", err)
+	}
 	copyName := ".recovery-" + diskPlan.InstanceID + ".stage"
 	if err = copyRecoveryDisk(context.Background(), installRoot, copyRoot, diskPlan, copyName); err != nil {
 		t.Fatal("recovered disk private copy", err)

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"time"
 	"unicode/utf8"
 
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
@@ -16,6 +17,35 @@ type recoveryInstallPlan struct {
 	Version    int                   `json:"version"`
 	SnapshotID string                `json:"snapshotId"`
 	Disks      []RecoveryInstallDisk `json:"disks"`
+}
+
+// requalifyRecoveryInstallPlan preserves recorded target identities while
+// checking their source mappings against the selected restored manifest and
+// current trusted policy. Exclusive staging ownership must continue through
+// subsequent copying; this does not authorize runtime activation.
+func requalifyRecoveryInstallPlan(ctx context.Context, source *os.Root, plan recoveryInstallPlan, manifest Manifest, policy RestorePolicy) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if plan.validate() != nil || manifest.Validate(policy, time.Now()) != nil {
+		return ErrManifest
+	}
+	entries := map[string]BackupFile{}
+	for _, entry := range manifest.Files {
+		if entry.Workload != "management" {
+			entries[entry.Workload] = entry
+		}
+	}
+	if len(entries) != len(plan.Disks) {
+		return ErrManifest
+	}
+	for _, disk := range plan.Disks {
+		entry, ok := entries[disk.Workload]
+		if !ok || disk.SourceName != entry.Name || disk.Bytes != entry.Bytes || disk.SourceSHA256 != entry.SHA256 || disk.ImageSHA256 != entry.ImageSHA256 || disk.ImageSHA256 != policy.ApprovedImages[disk.Workload] {
+			return ErrManifest
+		}
+	}
+	return QualifyRecoveryDisks(ctx, source, manifest, policy)
 }
 
 func decodeRecoveryInstallPlan(data []byte) (recoveryInstallPlan, error) {
