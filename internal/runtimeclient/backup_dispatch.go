@@ -95,3 +95,24 @@ func (d ActivatedBackupDispatcher) SnapshotPage(ctx context.Context, request bac
 	}
 	return page, nil
 }
+
+// SnapshotPreview inspects only the selected snapshot metadata. Exact pending
+// request authorization must be supplied independently by the controller.
+func (d ActivatedBackupDispatcher) SnapshotPreview(ctx context.Context, request backup.SnapshotPreviewRequest, credential *os.File) (backup.SnapshotPreview, error) {
+	if err := ctx.Err(); err != nil {
+		return backup.SnapshotPreview{}, err
+	}
+	if _, err := backup.EncodeSnapshotPreviewRequest(request); err != nil {
+		return backup.SnapshotPreview{}, err
+	}
+	var preview backup.SnapshotPreview
+	err := d.deliver(ctx, credential, func(connection *net.UnixConn) error {
+		var err error
+		preview, err = backup.SendActivatedCredentialSnapshotPreviewAndWait(ctx, connection, request, credential)
+		return err
+	})
+	if err != nil {
+		return backup.SnapshotPreview{}, err
+	}
+	return preview, nil
+}
