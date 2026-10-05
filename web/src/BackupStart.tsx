@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, message } from './api'
 import { startBackup } from './backup'
+import { BackupSnapshots } from './BackupSnapshots'
 
 type Configuration = { enabled: boolean; repositoryId: string; availability: 'available' | 'paused' | 'not-configured' | 'unavailable' }
 export function BackupStart() {
@@ -42,6 +43,7 @@ export function BackupStart() {
       <p>A connected writable backup drive remains vulnerable to host compromise. Safely disconnect it after backup completes.</p>
     </form> : configuration && <p>{configuration.enabled ? (configuration.availability === 'paused' ? "New backups are paused while work or maintenance is active. Check availability after it finishes." : "Backup availability could not be verified. Check again before entering the repository password.") : "External backup execution has not been configured on this server."}</p>}
     {job && <p role="status">Backup job {job} started. Refresh backup status to check its outcome.</p>}
+    {configuration?.enabled && configuration.availability === 'available' && <BackupSnapshots key={configuration.repositoryId} repositoryId={configuration.repositoryId} />}
     {error && <p role="alert" className="form-error">{error}</p>}
   </div>
 }
