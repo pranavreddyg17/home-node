@@ -340,6 +340,16 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if err = requalifyRecoveryInstallPlan(context.Background(), installRoot, reopenedPlan, manifest, policy); err != nil {
 		t.Fatal("reopened recovery plan source qualification", err)
 	}
+	if err = copyRecoveryManagement(context.Background(), installRoot, copyRoot, manifest, policy); err != nil {
+		t.Fatal("disconnected management database copy", err)
+	}
+	copiedManagement, err := copyRoot.ReadFile(".recovery-management.stage")
+	if err != nil || !bytes.Equal(copiedManagement, original) {
+		t.Fatal("management copy changed source bytes", err)
+	}
+	if err = copyRecoveryManagement(context.Background(), installRoot, copyRoot, manifest, policy); !errors.Is(err, os.ErrExist) {
+		t.Fatal("occupied management stage overwritten", err)
+	}
 	changedManifest := manifest
 	changedManifest.Release = "0.1.1~dev"
 	if err = requalifyRecoveryInstallPlan(context.Background(), installRoot, reopenedPlan, changedManifest, policy); !errors.Is(err, ErrManifest) {

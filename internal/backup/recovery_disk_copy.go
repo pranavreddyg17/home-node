@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path"
 
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
 )
@@ -22,17 +23,29 @@ func copyRecoveryDisk(ctx context.Context, source, destination *os.Root, disk Re
 	if source == nil || destination == nil || (disk.Workload != "files" && disk.Workload != "ai") || disk.SourceName != disk.Workload+".raw" || disk.Bytes <= 0 || disk.Bytes > 512<<30 || !repositoryPattern.MatchString(disk.SourceSHA256) || target != ".recovery-"+disk.InstanceID+".stage" || !guestproto.ValidID(disk.InstanceID) {
 		return ErrManifest
 	}
+	return copyRecoveryPayload(ctx, source, destination, BackupFile{Name: disk.SourceName, Bytes: disk.Bytes, SHA256: disk.SourceSHA256}, target)
+}
+
+// copyRecoveryPayload is shared byte copying only, without compatibility,
+// filesystem or runtime authority. Callers validate the typed source and target.
+func copyRecoveryPayload(ctx context.Context, source, destination *os.Root, entry BackupFile, target string) (result error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if source == nil || destination == nil || entry.Name == "" || path.Base(entry.Name) != entry.Name || entry.Name == "." || entry.Name == ".." || target == "" || path.Base(target) != target || target == "." || target == ".." || entry.Bytes <= 0 || entry.Bytes > 512<<30 || !repositoryPattern.MatchString(entry.SHA256) {
+		return ErrManifest
+	}
 	for _, root := range []*os.Root{source, destination} {
 		info, err := root.Stat(".")
 		if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
 			return ErrManifest
 		}
 	}
-	expected, err := source.Lstat(disk.SourceName)
-	if err != nil || !expected.Mode().IsRegular() || expected.Size() != disk.Bytes {
+	expected, err := source.Lstat(entry.Name)
+	if err != nil || !expected.Mode().IsRegular() || expected.Size() != entry.Bytes {
 		return ErrManifest
 	}
-	input, err := source.Open(disk.SourceName)
+	input, err := source.Open(entry.Name)
 	if err != nil {
 		return err
 	}
@@ -46,7 +59,7 @@ func copyRecoveryDisk(ctx context.Context, source, destination *os.Root, disk Re
 		return err
 	}
 	defer func() { result = errors.Join(result, directory.Close()) }()
-	if err = requireStagingSpace(directory, disk.Bytes); err != nil {
+	if err = requireStagingSpace(directory, entry.Bytes); err != nil {
 		return err
 	}
 	output, err := destination.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
@@ -64,16 +77,16 @@ func copyRecoveryDisk(ctx context.Context, source, destination *os.Root, disk Re
 		}
 	}()
 	hash := sha256.New()
-	writer := &restoreWriter{ctx: ctx, stage: directory, destination: io.MultiWriter(output, hash), remaining: disk.Bytes}
-	if _, err = io.CopyBuffer(writer, io.LimitReader(input, disk.Bytes), make([]byte, 1<<20)); err != nil {
+	writer := &restoreWriter{ctx: ctx, stage: directory, destination: io.MultiWriter(output, hash), remaining: entry.Bytes}
+	if _, err = io.CopyBuffer(writer, io.LimitReader(input, entry.Bytes), make([]byte, 1<<20)); err != nil {
 		return err
 	}
 	var extra [1]byte
-	if n, readErr := input.Read(extra[:]); writer.remaining != 0 || n != 0 || readErr != io.EOF || hex.EncodeToString(hash.Sum(nil)) != disk.SourceSHA256 {
+	if n, readErr := input.Read(extra[:]); writer.remaining != 0 || n != 0 || readErr != io.EOF || hex.EncodeToString(hash.Sum(nil)) != entry.SHA256 {
 		return ErrManifest
 	}
-	current, err := source.Lstat(disk.SourceName)
-	if err != nil || !os.SameFile(info, current) || current.Size() != disk.Bytes {
+	current, err := source.Lstat(entry.Name)
+	if err != nil || !os.SameFile(info, current) || current.Size() != entry.Bytes {
 		return ErrManifest
 	}
 	if err = ctx.Err(); err != nil {
