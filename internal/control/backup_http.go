@@ -15,11 +15,12 @@ const backupCredentialMediaType = "application/vnd.homenode.backup-credential"
 // BackupExecutionConfig is installed host configuration, never request input.
 // Callbacks use the protected activated worker socket and await exact completion.
 type BackupExecutionConfig struct {
-	Release        string
-	CatalogVersion int64
-	Launch         func(context.Context, backup.Launch, *os.File) error
-	Cleanup        func(context.Context, backup.Cleanup, *os.File) error
-	SnapshotPage   func(context.Context, backup.SnapshotPageRequest, *os.File) (backup.SnapshotPage, error)
+	Release         string
+	CatalogVersion  int64
+	Launch          func(context.Context, backup.Launch, *os.File) error
+	Cleanup         func(context.Context, backup.Cleanup, *os.File) error
+	SnapshotPage    func(context.Context, backup.SnapshotPageRequest, *os.File) (backup.SnapshotPage, error)
+	SnapshotPreview func(context.Context, backup.SnapshotPreviewRequest, *os.File) (backup.SnapshotPreview, error)
 }
 
 func validateBackupExecution(config Config) error {

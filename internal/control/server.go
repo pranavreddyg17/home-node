@@ -129,6 +129,7 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/v1/backups/configuration", s.require("admin", false, http.HandlerFunc(s.backupConfiguration)))
 	s.mux.Handle("POST /api/v1/backups", s.require("admin", false, http.HandlerFunc(s.backupCreate)))
 	s.mux.Handle("POST /api/v1/backups/snapshots", s.require("admin", false, http.HandlerFunc(s.backupSnapshotPage)))
+	s.mux.Handle("POST /api/v1/backups/preview", s.require("admin", false, http.HandlerFunc(s.backupSnapshotPreview)))
 	s.mux.Handle("GET /api/v1/backups/outcomes", s.require("admin", false, http.HandlerFunc(s.backupOutcomes)))
 	s.mux.HandleFunc("GET /api/v1/healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "alive"}) })
 	s.mux.HandleFunc("GET /", s.static)
@@ -168,7 +169,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		expectedMedia := "application/json"
-		if r.Method == "POST" && (r.URL.Path == "/api/v1/backups" || r.URL.Path == "/api/v1/backups/snapshots") {
+		if r.Method == "POST" && (r.URL.Path == "/api/v1/backups" || r.URL.Path == "/api/v1/backups/snapshots" || r.URL.Path == "/api/v1/backups/preview") {
 			expectedMedia = backupCredentialMediaType
 		}
 		if err != nil || media != expectedMedia {
