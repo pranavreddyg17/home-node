@@ -316,6 +316,35 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if err != nil || len(replanned) != 1 || replanned[0].InstanceID == diskPlan.InstanceID {
 		t.Fatal("transient plans reused target identity", replanned, err)
 	}
+	copyPath := t.TempDir()
+	if err = os.Chmod(copyPath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	copyRoot, err := os.OpenRoot(copyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer copyRoot.Close()
+	copyName := ".recovery-" + diskPlan.InstanceID + ".stage"
+	if err = copyRecoveryDisk(context.Background(), installRoot, copyRoot, diskPlan, copyName); err != nil {
+		t.Fatal("recovered disk private copy", err)
+	}
+	copyEntry := manifest.Files[1]
+	copyEntry.Name = copyName
+	if err = verifyBackupFile(context.Background(), copyRoot, copyEntry); err != nil {
+		t.Fatal("copied recovered payload identity", err)
+	}
+	copiedDisk, err := copyRoot.Open(copyName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkCopyErr := QualifyExt4Disk(context.Background(), copiedDisk)
+	if err = errors.Join(checkCopyErr, copiedDisk.Close()); err != nil {
+		t.Fatal("copied recovered filesystem", err)
+	}
+	if err = copyRecoveryDisk(context.Background(), installRoot, copyRoot, diskPlan, copyName); !errors.Is(err, os.ErrExist) {
+		t.Fatal("recovered staging copy overwritten", err)
+	}
 	restoredDatabase, err := os.ReadFile(filepath.Join(restorePath, "snapshot.db"))
 	if err != nil || !bytes.Equal(restoredDatabase, original) {
 		t.Fatal("restored database mismatch", err)
