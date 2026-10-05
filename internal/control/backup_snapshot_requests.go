@@ -11,6 +11,7 @@ import (
 )
 
 type pendingSnapshotRequest struct {
+	preview backup.SnapshotPreviewRequest
 	request backup.SnapshotPageRequest
 	actor   identity.Session
 	ctx     context.Context
