@@ -23,6 +23,7 @@ func TestRecoveryDiskCopyIntegrityAndOccupiedTarget(t *testing.T) {
 	defer destination.Close()
 	entry := manifest.Files[1]
 	disk := RecoveryInstallDisk{Workload: entry.Workload, SourceName: entry.Name, Bytes: entry.Bytes, SourceSHA256: entry.SHA256, InstanceID: state.Random()}
+	disk.ImageSHA256 = entry.ImageSHA256
 	target := ".recovery-" + disk.InstanceID + ".stage"
 	if err = copyRecoveryDisk(context.Background(), source, destination, disk, target); err != nil {
 		t.Fatal(err)
@@ -31,6 +32,19 @@ func TestRecoveryDiskCopyIntegrityAndOccupiedTarget(t *testing.T) {
 	actual, err := destination.ReadFile(target)
 	if err != nil || string(actual) != string(expected) {
 		t.Fatal("copy differs", err)
+	}
+	if name, err := publishRecoveryDisk(context.Background(), destination, disk); err == nil || name != "" {
+		t.Fatal("unjournaled stage published", name, err)
+	}
+	plan := recoveryInstallPlan{Version: 1, SnapshotID: strings.Repeat("c", 64), Disks: []RecoveryInstallDisk{disk}}
+	if err = createRecoveryInstallPlan(context.Background(), destination, plan); err != nil {
+		t.Fatal(err)
+	}
+	if name, err := publishRecoveryDisk(context.Background(), destination, disk); err == nil || name != "" {
+		t.Fatal("journaled nonfilesystem stage published", name, err)
+	}
+	if _, err = destination.Lstat(disk.InstanceID + ".raw"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("refused publication created final disk", err)
 	}
 	if err = copyRecoveryDisk(context.Background(), source, destination, disk, target); !errors.Is(err, os.ErrExist) {
 		t.Fatal("occupied target adopted", err)

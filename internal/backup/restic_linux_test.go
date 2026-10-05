@@ -363,6 +363,30 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if err = copyRecoveryDisk(context.Background(), installRoot, copyRoot, diskPlan, copyName); !errors.Is(err, os.ErrExist) {
 		t.Fatal("recovered staging copy overwritten", err)
 	}
+	finalName, err := publishRecoveryDisk(context.Background(), copyRoot, diskPlan)
+	if err != nil || finalName != diskPlan.InstanceID+".raw" {
+		t.Fatal("disconnected recovered disk publication", finalName, err)
+	}
+	stageInfo, err := copyRoot.Lstat(copyName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finalInfo, err := copyRoot.Lstat(finalName)
+	if err != nil || !os.SameFile(stageInfo, finalInfo) {
+		t.Fatal("publication lost staging inode proof", err)
+	}
+	if resumedName, err := publishRecoveryDisk(context.Background(), copyRoot, diskPlan); err != nil || resumedName != finalName {
+		t.Fatal("interrupted publication reconciliation", resumedName, err)
+	}
+	if err = copyRoot.Remove(finalName); err != nil {
+		t.Fatal(err)
+	}
+	if err = copyRoot.WriteFile(finalName, []byte("foreign occupied disk"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if name, err := publishRecoveryDisk(context.Background(), copyRoot, diskPlan); !errors.Is(err, ErrManifest) || name != "" {
+		t.Fatal("foreign published disk adopted", name, err)
+	}
 	restoredDatabase, err := os.ReadFile(filepath.Join(restorePath, "snapshot.db"))
 	if err != nil || !bytes.Equal(restoredDatabase, original) {
 		t.Fatal("restored database mismatch", err)
