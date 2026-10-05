@@ -366,6 +366,10 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if err = rebindRecoveryManagement(context.Background(), copyRoot, manifest); err == nil {
 		t.Fatal("changed management stage adopted as original source")
 	}
+	managementOutput, err := inspectReboundRecoveryManagement(context.Background(), copyRoot)
+	if err != nil || !repositoryPattern.MatchString(managementOutput.SHA256) || !repositoryPattern.MatchString(managementOutput.PlanSHA256) || managementOutput.Bytes <= 0 || managementOutput.SHA256 == manifest.Files[0].SHA256 {
+		t.Fatal("rebound database output identity", managementOutput, err)
+	}
 	changedManifest := manifest
 	changedManifest.Release = "0.1.1~dev"
 	if err = requalifyRecoveryInstallPlan(context.Background(), installRoot, reopenedPlan, changedManifest, policy); !errors.Is(err, ErrManifest) {
