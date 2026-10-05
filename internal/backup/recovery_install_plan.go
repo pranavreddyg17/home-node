@@ -1,10 +1,13 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
+	"unicode/utf8"
 
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
 )
@@ -13,6 +16,83 @@ type recoveryInstallPlan struct {
 	Version    int                   `json:"version"`
 	SnapshotID string                `json:"snapshotId"`
 	Disks      []RecoveryInstallDisk `json:"disks"`
+}
+
+func decodeRecoveryInstallPlan(data []byte) (recoveryInstallPlan, error) {
+	if len(data) == 0 || len(data) > 4096 || !utf8.Valid(data) || uniqueJSON(json.NewDecoder(bytes.NewReader(data)), 0) != nil {
+		return recoveryInstallPlan{}, ErrManifest
+	}
+	fields, err := exactManifestObject(data, []string{"version", "snapshotId", "disks"}, "")
+	if err != nil {
+		return recoveryInstallPlan{}, err
+	}
+	var disks []json.RawMessage
+	if json.Unmarshal(fields["disks"], &disks) != nil || disks == nil || len(disks) > 2 {
+		return recoveryInstallPlan{}, ErrManifest
+	}
+	for _, disk := range disks {
+		if _, err = exactManifestObject(disk, []string{"workload", "sourceName", "bytes", "sourceSha256", "imageSha256", "instanceId"}, ""); err != nil {
+			return recoveryInstallPlan{}, err
+		}
+	}
+	var plan recoveryInstallPlan
+	if json.Unmarshal(data, &plan) != nil || plan.validate() != nil {
+		return recoveryInstallPlan{}, ErrManifest
+	}
+	return plan, nil
+}
+
+// loadRecoveryInstallPlan only reopens the recorded immutable plan. Exclusive
+// ownership of the private journal root is required; callers must separately
+// requalify source data against current trusted policy before any disk effects.
+func loadRecoveryInstallPlan(ctx context.Context, root *os.Root) (plan recoveryInstallPlan, result error) {
+	if err := ctx.Err(); err != nil {
+		return plan, err
+	}
+	if root == nil {
+		return plan, ErrManifest
+	}
+	info, err := root.Stat(".")
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+		return plan, ErrManifest
+	}
+	expected, err := root.Lstat("recovery-install.json")
+	if err != nil {
+		return plan, err
+	}
+	if !expected.Mode().IsRegular() || expected.Mode().Perm() != 0600 || expected.Size() <= 0 || expected.Size() > 4096 {
+		return plan, ErrManifest
+	}
+	file, err := root.Open("recovery-install.json")
+	if err != nil {
+		return plan, err
+	}
+	defer func() {
+		result = errors.Join(result, file.Close())
+		if result != nil {
+			plan = recoveryInstallPlan{}
+		}
+	}()
+	opened, err := file.Stat()
+	if err != nil || !os.SameFile(expected, opened) {
+		return plan, ErrManifest
+	}
+	data, err := io.ReadAll(io.LimitReader(file, 4097))
+	if err != nil {
+		return plan, err
+	}
+	plan, err = decodeRecoveryInstallPlan(data)
+	if err != nil {
+		return recoveryInstallPlan{}, err
+	}
+	current, err := root.Lstat("recovery-install.json")
+	if err != nil || !current.Mode().IsRegular() || !os.SameFile(opened, current) || current.Mode().Perm() != 0600 || current.Size() != int64(len(data)) {
+		return recoveryInstallPlan{}, ErrManifest
+	}
+	if err = ctx.Err(); err != nil {
+		return recoveryInstallPlan{}, err
+	}
+	return plan, nil
 }
 
 func (p recoveryInstallPlan) validate() error {

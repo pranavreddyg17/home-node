@@ -34,6 +34,21 @@ func TestRecoveryInstallPlanPersistsFreshIdentityBeforeEffects(t *testing.T) {
 	if json.Unmarshal(data, &saved) != nil || saved.validate() != nil || len(saved.Disks) != 1 || saved.Disks[0] != disk {
 		t.Fatal("journal changed target identity")
 	}
+	reopened, err := loadRecoveryInstallPlan(context.Background(), root)
+	if err != nil || reopened.SnapshotID != saved.SnapshotID || len(reopened.Disks) != 1 || reopened.Disks[0] != disk {
+		t.Fatal("reopening changed durable identity", err)
+	}
+	for _, invalid := range []string{
+		strings.Replace(string(data), `"version":1`, `"version":1,"Version":1`, 1),
+		strings.Replace(string(data), `"workload":"files"`, `"workload":"files","workload":"ai"`, 1),
+		strings.Replace(string(data), `"sourceName":"files.raw"`, `"sourceName":"../files.raw"`, 1),
+		strings.Replace(string(data), `"bytes":16777216`, `"bytes":null`, 1),
+		string(data) + `{}`,
+	} {
+		if plan, decodeErr := decodeRecoveryInstallPlan([]byte(invalid)); decodeErr == nil || plan.Disks != nil {
+			t.Fatal("ambiguous journal returned plan", invalid, decodeErr)
+		}
+	}
 	plan.Disks[0].InstanceID = state.Random()
 	if err = createRecoveryInstallPlan(context.Background(), root, plan); !errors.Is(err, os.ErrExist) {
 		t.Fatal("occupied journal adopted", err)
@@ -50,5 +65,14 @@ func TestRecoveryInstallPlanPersistsFreshIdentityBeforeEffects(t *testing.T) {
 	cancel()
 	if err = createRecoveryInstallPlan(ctx, root, plan); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancellation lost", err)
+	}
+	if reopened, err := loadRecoveryInstallPlan(ctx, root); !errors.Is(err, context.Canceled) || reopened.Disks != nil {
+		t.Fatal("cancelled reopening returned plan", err)
+	}
+	if err = os.Chmod(path+"/recovery-install.json", 0644); err != nil {
+		t.Fatal(err)
+	}
+	if reopened, err := loadRecoveryInstallPlan(context.Background(), root); !errors.Is(err, ErrManifest) || reopened.Disks != nil {
+		t.Fatal("public journal returned plan", err)
 	}
 }

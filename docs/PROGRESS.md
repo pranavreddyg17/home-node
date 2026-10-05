@@ -2867,3 +2867,7 @@ CI37385089713 completed successfully at0e7f1c7, verifying the encrypted preview 
 ### Immutable recovery installation plan creation
 
 Added private journal creation for selected full snapshot ID and bounded unique workload/target identity inventory. Creation requires exclusive private storage, validates inventory and syncs the new file/directory before returning; occupied journals are refused and owned partial journals are removed on failure. Inventory now uses explicit JSON field names. Portable race tests verify retained target identities, occupied-journal preservation, duplicate refusal and cancellation. This is the initial immutable plan only; strict reopening/reconciliation, installation publication and fresh-host policy/state reconstruction remain unfinished. Full application acceptance is not achieved.
+
+### Strict recovery plan reopening
+
+Added bounded private regular-file journal reopening with descriptor/name identity checks, cancellation handling and zero result on failure. Decoder requires exact nonnull outer/nested fields, valid UTF8, unique JSON keys, full snapshot IDs and unique bounded disk mappings; alternate-case aliases, unknown fields, traversal source names and trailing objects are refused. Race tests verify retained disk identities after reopening, malformed/ambiguous input rejection, cancellation and insecure journal permissions. Reopening supplies recorded intent only; trusted source requalification, crash reconciliation, disk publication and replacement-host policy/bootstrap remain unfinished.
