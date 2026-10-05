@@ -2775,3 +2775,7 @@ Added snapshot browser beneath available backup configuration with dates/full sn
 ### Snapshot browser interaction evidence
 
 Extended real identity/passkey browser suite with controlled snapshot transport verifying UTF8 credential frame/media, no password URL, full25-candidate page, exact continuation cursor, terminal empty page and input clearing after each request. Snapshot input label now stays distinct from backup creation input. Rebuilt ARM backend after host toolchain change, then full Playwright identity suite passed (one scenario), TypeScript/production build and diff checks passed. Snapshot transport is mocked and does not prove installed drive-to-browser operation. Initial browser launch raced the backend rebuild and found the prior incompatible binary; retry after successful same build passed. Native HTTP/service fixtures and full application acceptance remain unfinished.
+
+### Snapshot browsing instructions and narrow display layout
+
+Documented reachable owner snapshot browsing, recent admin session requirement, password reentry/clearing, bounded pagination and stale cursor restart. Clarified that dates/IDs do not prove recoverability and backup-data restore is not exposed. Full snapshot IDs now use the existing wrapping checksum style so long identifiers fit narrow layouts. TypeScript, production build and diff checks passed; no new browser run was required for reuse of existing display styling. CI37382755401 remains in progress. Full application acceptance remains unfinished.

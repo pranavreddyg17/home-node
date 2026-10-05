@@ -34,7 +34,7 @@ export function BackupSnapshots({ repositoryId }: { repositoryId: string }) {
       {page?.next && <button type="button" disabled={busy} onClick={() => void load(page.next)}>Load older snapshots</button>}
     </form>
     <p>Enter the password again for each page. It is cleared after each request.</p>
-    {page && (page.snapshots.length ? <ul>{page.snapshots.map(snapshot => <li key={snapshot.id}><time dateTime={snapshot.createdAt}>{new Date(snapshot.createdAt).toLocaleString()}</time><br /><code>{snapshot.id}</code></li>)}</ul> : <p role="status">No snapshots on this page.</p>)}
+    {page && (page.snapshots.length ? <ul>{page.snapshots.map(snapshot => <li key={snapshot.id}><time dateTime={snapshot.createdAt}>{new Date(snapshot.createdAt).toLocaleString()}</time><br /><code className="checksum">{snapshot.id}</code></li>)}</ul> : <p role="status">No snapshots on this page.</p>)}
     {error && <p role="alert" className="form-error">{error}</p>}
   </section>
 }

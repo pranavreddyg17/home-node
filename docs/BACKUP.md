@@ -64,6 +64,24 @@ repeat publication. A started recovery remains distinct from successful workload
 restoration; refresh status afterward. If no recovery action is offered, do not
 manually remove maintenance records or infer recovery from an empty runtime token.
 
+## Browse snapshot dates
+
+In Settings, check backup availability, then use **Browse backup snapshots**.
+Attach the registered drive and enter its repository password in **Password for
+snapshot browsing**. The server requires a recently verified admin session; if
+verification has expired, sign in again before retrying.
+
+The browser shows up to 25 snapshots per page, newest first, with their full
+identifiers. Enter the password again to **Load older snapshots**. Refreshing
+backup availability clears the browser and its password field. The password is
+cleared after each request and is not included in URLs or approval metadata.
+
+Listing authenticates the registered repository but does not stop workloads or
+restore files. A listed date and identifier do not prove that a snapshot can be
+restored successfully. There is no backup-data restore button in this build.
+If the repository changes and an older-page cursor is refused, browse the newest
+page again rather than inferring that the missing page was empty.
+
 ## Reminders and restore limitations
 
 The administrator can save a reminder interval of 1–90 days; the default is seven.
