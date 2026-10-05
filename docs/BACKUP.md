@@ -76,6 +76,12 @@ identifiers. Enter the password again to **Load older snapshots**. Refreshing
 backup availability clears the browser and its password field. The password is
 cleared after each request and is not included in URLs or approval metadata.
 
+To inspect a listed snapshot, reenter the password and choose **Inspect
+compatibility** beside its identifier. The preview shows the backup release,
+catalog version and declared workload sizes only after validation against the
+installed policy. It does not extract files, verify payloads or test application
+health. A preview for a different identifier is rejected.
+
 Listing authenticates the registered repository but does not stop workloads or
 restore files. A listed date and identifier do not prove that a snapshot can be
 restored successfully. There is no backup-data restore button in this build.

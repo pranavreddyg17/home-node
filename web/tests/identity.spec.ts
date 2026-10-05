@@ -124,6 +124,29 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await expect(page.getByLabel('Password for snapshot browsing')).toHaveValue('')
   await expect(page.getByRole('button', { name: 'Load older snapshots' })).toBeVisible()
   await expect(page.getByText(snapshotIds[0], { exact: true })).toBeVisible()
+  let foreignPreview = false, previewRequests = 0
+  await page.route('**/api/v1/backups/preview', async route => {
+    const data = route.request().postDataBuffer()!
+    const length = data.readUInt32BE(0)
+    const selection = JSON.parse(data.subarray(4, 4 + length).toString())
+    expect(selection.snapshotId).toBe(snapshotIds[0])
+    expect(data.subarray(4 + length).toString()).toBe('preview-fixture-password')
+    previewRequests++
+    await route.fulfill({ json: { snapshotId: foreignPreview ? snapshotIds[1] : snapshotIds[0], createdAt: '2026-01-01T00:00:00Z', release: '0.1.0', catalogVersion: 3, validation: 'metadata-compatible', files: [{ workload: 'management', bytes: 1024 }] } })
+  })
+  await page.getByLabel('Password for snapshot browsing').fill('preview-fixture-password')
+  await page.getByRole('button', { name: 'Inspect compatibility' }).first().click()
+  await expect(page.getByRole('heading', { name: 'Compatible metadata' })).toBeVisible()
+  await expect(page.getByText('Payload integrity and application recovery have not been tested by this preview. No files were restored.')).toBeVisible()
+  await expect(page.getByLabel('Password for snapshot browsing')).toHaveValue('')
+  foreignPreview = true
+  await page.getByLabel('Password for snapshot browsing').fill('preview-fixture-password')
+  await page.getByRole('button', { name: 'Inspect compatibility' }).first().click()
+  await expect(page.getByRole('alert').filter({ hasText: 'The compatibility preview could not be verified.' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Compatible metadata' })).toHaveCount(0)
+  await expect(page.getByLabel('Password for snapshot browsing')).toHaveValue('')
+  expect(previewRequests).toBe(2)
+  await page.unroute('**/api/v1/backups/preview')
   await page.getByLabel('Password for snapshot browsing').fill('selector-fixture-password')
   await page.getByRole('button', { name: 'Load older snapshots' }).click()
   await expect(page.getByText('No snapshots on this page.')).toBeVisible()
