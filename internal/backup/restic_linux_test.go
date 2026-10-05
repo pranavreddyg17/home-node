@@ -299,6 +299,23 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if _, err = repository.Restore(context.Background(), snapshot, restoreStage, policy); err != nil {
 		t.Fatal("validated set restore", err)
 	}
+	installRoot, err := os.OpenRoot(restorePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer installRoot.Close()
+	installInventory, err := RecoveryInstallInventory(context.Background(), installRoot, manifest, policy)
+	if err != nil || len(installInventory) != 1 {
+		t.Fatal("qualified restored disk inventory", installInventory, err)
+	}
+	diskPlan := installInventory[0]
+	if diskPlan.Workload != "files" || diskPlan.SourceName != "files.raw" || diskPlan.Bytes != manifest.Files[1].Bytes || diskPlan.ImageSHA256 != policy.ApprovedImages["files"] || diskPlan.InstanceID == "" {
+		t.Fatal("restored installation mapping differs", diskPlan)
+	}
+	replanned, err := RecoveryInstallInventory(context.Background(), installRoot, manifest, policy)
+	if err != nil || len(replanned) != 1 || replanned[0].InstanceID == diskPlan.InstanceID {
+		t.Fatal("transient plans reused target identity", replanned, err)
+	}
 	restoredDatabase, err := os.ReadFile(filepath.Join(restorePath, "snapshot.db"))
 	if err != nil || !bytes.Equal(restoredDatabase, original) {
 		t.Fatal("restored database mismatch", err)
