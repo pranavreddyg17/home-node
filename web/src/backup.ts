@@ -46,3 +46,27 @@ export async function listBackupSnapshots(repositoryId: string, cursor: string, 
     return value as SnapshotPage
   } finally { password.fill(0); frame?.fill(0) }
 }
+
+export type SnapshotPreview = { snapshotId: string; createdAt: string; release: string; catalogVersion: number; validation: 'metadata-compatible'; files: { workload: string; bytes: number }[] }
+
+export async function previewBackupSnapshot(repositoryId: string, snapshotId: string, password: Uint8Array, signal: AbortSignal): Promise<SnapshotPreview> {
+  let frame: Uint8Array | undefined
+  try {
+    if (!/^[a-f0-9]{64}$/.test(repositoryId) || !/^[a-f0-9]{64}$/.test(snapshotId) || password.length < 1 || password.length > 8192 || password.some(byte => byte === 0 || byte === 10 || byte === 13)) throw new Error('Enter a valid repository password (up to 8192 UTF-8 bytes).')
+    const metadata = new TextEncoder().encode(JSON.stringify({ repositoryId, snapshotId }))
+    frame = new Uint8Array(4 + metadata.length + password.length)
+    new DataView(frame.buffer).setUint32(0, metadata.length, false)
+    frame.set(metadata, 4); frame.set(password, 4 + metadata.length); password.fill(0)
+    const response = await fetch('/api/v1/backups/preview', { method: 'POST', credentials: 'same-origin', cache: 'no-store', signal, headers: { 'Content-Type': 'application/vnd.homenode.backup-credential' }, body: frame.buffer as ArrayBuffer })
+    const value = await response.json()
+    if (!response.ok) throw new APIError(response.status, value.error?.code ?? 'REQUEST_FAILED', value.error?.message ?? 'The snapshot could not be inspected.')
+    if (value.snapshotId !== snapshotId || value.validation !== 'metadata-compatible' || typeof value.createdAt !== 'string' || !Number.isFinite(Date.parse(value.createdAt)) || typeof value.release !== 'string' || !/^[0-9][a-zA-Z0-9.+~-]{0,63}$/.test(value.release) || !Number.isSafeInteger(value.catalogVersion) || value.catalogVersion < 1 || !Array.isArray(value.files) || value.files.length < 1 || value.files.length > 3) throw new Error('The compatibility preview could not be verified.')
+    const seen = new Set<string>()
+    for (const file of value.files) {
+      if (!file || !['management', 'files', 'ai'].includes(file.workload) || seen.has(file.workload) || !Number.isSafeInteger(file.bytes) || file.bytes <= 0 || file.bytes > (file.workload === 'management' ? 256 * 2 ** 20 : 512 * 2 ** 30)) throw new Error('The compatibility preview could not be verified.')
+      seen.add(file.workload)
+    }
+    if (!seen.has('management')) throw new Error('The compatibility preview could not be verified.')
+    return value as SnapshotPreview
+  } finally { password.fill(0); frame?.fill(0) }
+}
