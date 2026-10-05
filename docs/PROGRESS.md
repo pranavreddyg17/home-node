@@ -2787,3 +2787,7 @@ CloseBackupWork now closes snapshot request admission, cancels all pending opera
 ### Redacted selected-snapshot compatibility preview
 
 Added PreviewSnapshot over authenticated exact-ID manifest inspection, returning only selected ID/date/release/catalog and declared workload sizes with explicit metadata-compatible classification. It performs no extraction or payload/app certification and omits filenames, hashes and host details. Portable race fixture verifies declared summary, redaction, catalog-floor refusal and ambiguous selection refusal. Focused preview race test and diff checks passed. The preview is not yet exposed through isolated worker/owner UI; replacement-host restore and full application acceptance remain unfinished. CI37382755401 remains active.
+
+### Exact selected-snapshot preview request
+
+Added separate version5 snapshot-preview request requiring canonical full selected snapshot ID and request/device identity. It carries no cursor, paths, commands, runtime tokens or caller-defined compatibility policy, and remains excluded from both list and maintenance decoders. Strict codec rejects duplicate/aliased/null/extra fields, ambiguous/empty selection and trailing data. Focused preview race tests and diff checks passed. Authorization registry, protected management/client/service routing and owner preview UI remain to connect. CI37382755401 remains active. Full application acceptance remains unfinished.
