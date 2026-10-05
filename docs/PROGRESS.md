@@ -2851,3 +2851,7 @@ Added RecoveryInstallInventory requiring recovered payload/database authority va
 ### Restored encrypted disk inventory native fixture
 
 Real restic recovery fixture now builds installation inventory from restored validated ext4 staging, checks fixed workload/source filename/size and installed approved image mapping, and requires distinct fresh instance IDs across repeated transient planning. Linux backup compilation passed after correcting the fixture to open private staging as os.Root. Native execution remains pending; no installed disk or runtime activation is claimed. CI37384358035 remains active; follow-up stays local. Actual installation/policy reconstruction and full application acceptance remain unfinished.
+
+### Recovery payload identity and native preview verification
+
+Recovered-disk inventory now retains the validated payload SHA256 separately from its approved boot-image SHA256 so later journaled publication can verify the recovered bytes. The real encrypted recovery fixture checks that mapping. Backup race tests and Linux fixture compilation passed. CI37384358035 completed successfully at4f86dbf, verifying the published native preview fixtures; the later encrypted preview wire and recovered inventory assertions are being published for native execution. Actual disconnected disk installation, fresh management-state import, policy reconstruction and replacement-host acceptance remain unfinished.
