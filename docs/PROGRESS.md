@@ -2831,3 +2831,7 @@ Snapshot browser now offers per-ID compatibility inspection with credential reen
 ### Selected-preview browser verification
 
 Extended real identity/passkey browser suite with controlled preview endpoint checking selected snapshot and credential frame, metadata-compatible display/explanation, credential clearing and foreign selected-ID response refusal with stale preview removed. Rebuilt current backend; full Playwright scenario, TypeScript and diff checks passed. Documented reachable compatibility inspection and distinction from extraction/integrity/app health. Preview transport remains mocked in browser test and real repository-to-browser acceptance remains unverified. CI37383603183 remains active; follow-up stays local. Full application acceptance remains unfinished.
+
+### Native credential service selected-preview fixture
+
+Added Linux packet service fixture exercising actual sealed credential transfer, distinct preview callback routing (listing/maintenance callbacks refuse), selected-ID response correlation and duplicate descriptor closure before reply with caller credential retained. Linux backup fixture compilation and diff checks passed; native execution remains for CI. This uses controlled metadata callback rather than real repository inspection. CI37383603183 remains active; follow-up stays local. Full application acceptance remains unfinished.
