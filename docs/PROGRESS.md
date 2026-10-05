@@ -2783,3 +2783,7 @@ Documented reachable owner snapshot browsing, recent admin session requirement, 
 ### Withdraw selector authority during controller shutdown
 
 CloseBackupWork now closes snapshot request admission, cancels all pending operation contexts and removes retained authority before existing backup coordinator shutdown. Snapshot HTTP dispatch uses its registry-owned operation context, so request expiry/shutdown reaches socket work rather than only later authorization checks. Fixture proves dispatch context cancellation, request/context withdrawal and refusal of new selector admission after shutdown. Full control race suite, Linux control test compilation and diff checks passed. Cancellation does not independently prove isolated worker process termination; metadata worker acquires no runtime authority. CI37382755401 remains active. Full application acceptance remains unfinished.
+
+### Redacted selected-snapshot compatibility preview
+
+Added PreviewSnapshot over authenticated exact-ID manifest inspection, returning only selected ID/date/release/catalog and declared workload sizes with explicit metadata-compatible classification. It performs no extraction or payload/app certification and omits filenames, hashes and host details. Portable race fixture verifies declared summary, redaction, catalog-floor refusal and ambiguous selection refusal. Focused preview race test and diff checks passed. The preview is not yet exposed through isolated worker/owner UI; replacement-host restore and full application acceptance remain unfinished. CI37382755401 remains active.
