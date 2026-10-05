@@ -2891,3 +2891,7 @@ Preparation now rejects source and destination roots identifying the same direct
 ### Full recovery manifest journal binding
 
 Immutable plans now require SHA256 of the complete deterministic manifest encoding, including management payload identity and compatibility fields. Creation records this digest; reopening requires its exact field and requalification rejects any substituted manifest before source effects. Updated native encrypted fixture rejects a changed release with identical disk mappings. Focused recovery race tests, Linux compilation and diff checks passed. CI37388435556 completed successfully at6b2d67d, verifying the published private-copy fixture. Publishing the accumulated journal/requalification/publication/orchestration changes for native execution. Installed ownership, management import, fresh-host policy/bootstrap and full application acceptance remain unfinished.
+
+### Recovery host-operation namespace exclusion
+
+Management recovery review found sanitation and validation enumerated current host-operation setting keys. Changed snapshot export to remove the entire host.* namespace and recovery validation to refuse any retained host.* setting, avoiding future authority markers surviving through a missed individual key. Race fixtures verify an unknown live host marker is removed on export and a restored unknown marker is rejected. Snapshot race tests and diff checks passed. Metadata import/rebinding and full replacement-host acceptance remain unfinished.

@@ -303,6 +303,9 @@ func TestRecoverySnapshotRejectsNonIntegerRestoredApplicationRevision(t *testing
 		t.Fatal(err)
 	}
 	defer store.Close()
+	if _, err := store.DB.Exec("INSERT INTO settings(key,value) VALUES('host.future-authority','live-marker')"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := store.DB.Exec("INSERT INTO identity(singleton,owner_id,claimed,epoch) VALUES(1,?,1,1)", Random()); err != nil {
 		t.Fatal(err)
 	}
@@ -333,6 +336,15 @@ func TestRecoverySnapshotRejectsNonIntegerRestoredApplicationRevision(t *testing
 	}
 	if err := validate(); err != nil {
 		t.Fatal("valid exported application refused", err)
+	}
+	if _, err := writable.Exec("INSERT INTO settings(key,value) VALUES('host.future-authority','retained-marker')"); err != nil {
+		t.Fatal(err)
+	}
+	if err := validate(); err == nil {
+		t.Fatal("unknown restored host authority admitted")
+	}
+	if _, err := writable.Exec("DELETE FROM settings WHERE key='host.future-authority'"); err != nil {
+		t.Fatal(err)
 	}
 	for _, revision := range []any{float64(1.5), int64(-1)} {
 		if _, err := writable.Exec("UPDATE apps SET revision=?", revision); err != nil {
