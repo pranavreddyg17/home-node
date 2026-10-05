@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/pranavreddyg17/home-node/internal/backup"
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
 	"github.com/pranavreddyg17/home-node/internal/state"
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
@@ -92,6 +93,32 @@ func (s *Server) MaintenanceHandler(controllerUID, backupUID uint32) http.Handle
 		uid, ok := supervisor.RequestPeerUID(r)
 		if !ok || controllerUID == 0 || backupUID == 0 || backupUID == controllerUID || uid != backupUID {
 			http.Error(w, "peer denied", 403)
+			return
+		}
+		if r.URL.Path == "/v1/maintenance/verify-snapshot-page" {
+			if r.Method != "POST" || r.URL.RawQuery != "" {
+				http.NotFound(w, r)
+				return
+			}
+			data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 512))
+			if err != nil {
+				http.Error(w, "invalid request", 400)
+				return
+			}
+			request, err := backup.DecodeSnapshotPageRequest(data)
+			if err != nil {
+				http.Error(w, "invalid request", 400)
+				return
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			defer cancel()
+			if err := s.verifySnapshotRequest(ctx, request); err != nil {
+				http.Error(w, "snapshot request denied", 403)
+				return
+			}
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]int{"version": 1})
 			return
 		}
 		if r.Method != "POST" || r.URL.RawQuery != "" || (r.URL.Path != "/v1/maintenance/verify-restoring" && r.URL.Path != "/v1/maintenance/ack-root-release" && r.URL.Path != "/v1/maintenance/verify-freezing" && r.URL.Path != "/v1/maintenance/attach-root" && r.URL.Path != "/v1/maintenance/drain" && r.URL.Path != "/v1/maintenance/restore" && r.URL.Path != "/v1/maintenance/snapshot" && r.URL.Path != "/v1/maintenance/verify-stage" && r.URL.Path != "/v1/maintenance/begin-publish" && r.URL.Path != "/v1/maintenance/verify-publish" && r.URL.Path != "/v1/maintenance/claim-publish" && r.URL.Path != "/v1/maintenance/ack-publish") {

@@ -95,3 +95,14 @@ func TestMaintenanceRootCheckpointIsSeparateStrictPayload(t *testing.T) {
 		}
 	}
 }
+
+func TestSnapshotManagementCannotUseHTTPPeerClaims(t *testing.T) {
+	server := testServer(t)
+	request := httptest.NewRequest("POST", "/v1/maintenance/verify-snapshot-page", strings.NewReader(`{"version":4}`))
+	request.Header.Set("X-Peer-UID", "1003")
+	response := httptest.NewRecorder()
+	server.MaintenanceHandler(1001, 1003).ServeHTTP(response, request)
+	if response.Code != 403 {
+		t.Fatal("snapshot selector trusted HTTP peer claim", response.Code)
+	}
+}
