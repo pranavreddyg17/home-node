@@ -19,8 +19,12 @@ func TestMaintenanceConfigurationUsesObservedDistinctIdentity(t *testing.T) {
 	}
 	parent := findConfiguration(t, preview.Plan, "var/lib/homenode-backup")
 	staging := findConfiguration(t, preview.Plan, "var/lib/homenode-backup/staging")
+	recovery := findConfiguration(t, preview.Plan, "var/lib/homenode-backup/recovery")
 	if !parent.Directory || parent.UID != 0 || parent.GID != 0 || parent.Mode != 0755 || !staging.Directory || staging.UID != 803 || staging.GID != 803 || staging.Mode != 0700 {
 		t.Fatal("backup staging ownership is not isolated", parent, staging)
+	}
+	if !recovery.Directory || recovery.Mode != 0700 || recovery.UID != 803 || recovery.GID != 803 {
+		t.Fatal("recovery staging ownership is not isolated", recovery)
 	}
 	unit := string(findConfiguration(t, preview.Plan, "etc/systemd/system/homenode-supervisor.service").Data)
 	if !strings.Contains(unit, "--maintenance-uid 803 --maintenance-gid 803\n") {
@@ -45,25 +49,27 @@ func TestMaintenanceConfigurationUsesObservedDistinctIdentity(t *testing.T) {
 }
 
 func TestBackupStagingPlanAdmissionIsPrivateAndBounded(t *testing.T) {
-	valid := record{Path: "var/lib/homenode-backup/staging", Directory: true, Mode: 0700, UID: 803, GID: 803}
-	if !validRecord(valid, 0) {
-		t.Fatal("private staging refused")
-	}
-	for _, change := range []func(*record){
-		func(r *record) { r.Mode = 0755 },
-		func(r *record) { r.Mode = 0770 },
-		func(r *record) { r.UID = 0 },
-		func(r *record) { r.UID = 1000 },
-		func(r *record) { r.GID = 0 },
-		func(r *record) { r.GID = 1000 },
-		func(r *record) { r.Path += "/child" },
-		func(r *record) { r.SHA256 = strings.Repeat("a", 64) },
-		func(r *record) { r.Directory = false },
-	} {
-		candidate := valid
-		change(&candidate)
-		if validRecord(candidate, 0) {
-			t.Fatal("unsafe staging record admitted", candidate)
+	for _, name := range []string{"var/lib/homenode-backup/staging", "var/lib/homenode-backup/recovery"} {
+		valid := record{Path: name, Directory: true, Mode: 0700, UID: 803, GID: 803}
+		if !validRecord(valid, 0) {
+			t.Fatal("private staging refused")
+		}
+		for _, change := range []func(*record){
+			func(r *record) { r.Mode = 0755 },
+			func(r *record) { r.Mode = 0770 },
+			func(r *record) { r.UID = 0 },
+			func(r *record) { r.UID = 1000 },
+			func(r *record) { r.GID = 0 },
+			func(r *record) { r.GID = 1000 },
+			func(r *record) { r.Path += "/child" },
+			func(r *record) { r.SHA256 = strings.Repeat("a", 64) },
+			func(r *record) { r.Directory = false },
+		} {
+			candidate := valid
+			change(&candidate)
+			if validRecord(candidate, 0) {
+				t.Fatal("unsafe staging record admitted", candidate)
+			}
 		}
 	}
 	c, _, _, now := configurationFixture(t)
@@ -181,6 +187,18 @@ func TestPreparedStagingRequiresJournalBoundIdentity(t *testing.T) {
 	identity := &MaintenanceAccount{UID: 803, GID: 803}
 	parent := record{Path: "var/lib/homenode-backup", Directory: true, Mode: 0755}
 	staging := record{Path: "var/lib/homenode-backup/staging", Directory: true, Mode: 0700, UID: 803, GID: 803}
+	recovery := staging
+	recovery.Path = "var/lib/homenode-backup/recovery"
+	if err := validateMaintenanceStaging(journal{Items: []record{parent, staging, recovery}}, identity); err != nil {
+		t.Fatal(err)
+	}
+	wrongRecovery := recovery
+	wrongRecovery.UID = 804
+	for _, items := range [][]record{{parent, staging, wrongRecovery}, {parent, staging, recovery, recovery}} {
+		if err := validateMaintenanceStaging(journal{Items: items}, identity); err == nil {
+			t.Fatal("foreign/duplicated recovery staging adopted", items)
+		}
+	}
 	if err := validateMaintenanceStaging(journal{Items: []record{parent, staging}}, identity); err != nil {
 		t.Fatal(err)
 	}

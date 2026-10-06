@@ -52,6 +52,7 @@ var directories = map[string]bool{
 	"var/lib/homenode/supervisor": true, "var/lib/homenode/catalog": true,
 	"var/lib/homenode/images": true, "var/lib/homenode/volumes": true,
 	"var/lib/homenode-backup": true, "var/lib/homenode-backup/staging": true,
+	"var/lib/homenode-backup/recovery": true,
 }
 var files = map[string]bool{
 	"etc/systemd/system/homenode-inspect.service": true,
@@ -79,7 +80,7 @@ func validRecord(r record, owner int) bool {
 		if r.Path == "var/lib/homenode-update/inspection" || r.Path == "var/lib/homenode-update" || r.Path == "var/lib/homenode-update/metadata" || r.Path == "var/lib/homenode-update/downloads" {
 			return r.SHA256 == "" && r.UID == owner && r.GID == 0 && r.Mode == 0700
 		}
-		if r.Path == "var/lib/homenode-backup/staging" {
+		if r.Path == "var/lib/homenode-backup/staging" || r.Path == "var/lib/homenode-backup/recovery" {
 			return r.SHA256 == "" && r.Mode == 0700 && r.UID >= 100 && r.UID < 1000 && r.GID >= 100 && r.GID < 1000
 		}
 		return directories[r.Path] && r.SHA256 == "" && r.Mode&0700 == 0700 && (r.UID == owner || r.Path == "var/lib/homenode/control")

@@ -2967,3 +2967,7 @@ Added Linux RestoreAndPreparePrivateRecovery joining exact encrypted Repository.
 ### Recovery staging operation lifetime guard
 
 JobStaging now serializes owned operations with Close, preventing concurrent closure from dropping the parent lease/root during joined recovery. A competing operation refuses immediately and closed staging refuses future operations; the restore/preparation entry point retains this guard through handle cleanup. Race fixture verifies retained root access/parent overlap exclusion while Close waits, release afterward and closed-object refusal. Full portable backup race suite, Linux compilation and diff checks passed. Root() callers still must retain ordinary staging lifetime; installed recovery/bootstrap/policy and complete acceptance remain unfinished.
+
+### Installer-provisioned private recovery destination parent
+
+Maintenance configuration now provisions a separate var/lib/homenode-backup/recovery parent with0700 and the observed distinct maintenance UID/GID. Plan admission and journal validation apply the same strict private system-account bounds as backup staging and reject duplicate/foreign recovery ownership. Existing journals without the newly generated path remain readable; they do not gain a recovery directory implicitly. Installer race suite and diff checks passed, including generated ownership/admission fixtures. This provisions private preparation storage only; recovery service authority, installed data handoff/bootstrap/policy and full application acceptance remain unfinished.

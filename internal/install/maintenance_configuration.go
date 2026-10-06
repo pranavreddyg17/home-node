@@ -64,7 +64,7 @@ func maintenanceSocketUnit() []byte {
 }
 
 func validateMaintenanceStaging(config journal, identity *MaintenanceAccount) error {
-	parent, staging := false, false
+	parent, staging, recovery := false, false, false
 	for _, item := range config.Items {
 		switch item.Path {
 		case "var/lib/homenode-backup":
@@ -77,6 +77,11 @@ func validateMaintenanceStaging(config journal, identity *MaintenanceAccount) er
 				return ErrPlan
 			}
 			staging = true
+		case "var/lib/homenode-backup/recovery":
+			if recovery || identity == nil || !item.Directory || item.UID != int(identity.UID) || item.GID != identity.GID || item.Mode != 0700 {
+				return ErrPlan
+			}
+			recovery = true
 		}
 	}
 	if identity != nil && (!parent || !staging) {
