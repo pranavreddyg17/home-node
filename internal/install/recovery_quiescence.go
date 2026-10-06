@@ -11,8 +11,9 @@ import (
 )
 
 // ObserveRecoveryQuiescence validates owned activation-conditioned units and
-// observes current service dormancy. It neither stops units nor proves empty
-// guest cgroups/queued jobs, and must not alone authorize publication.
+// observes current service dormancy and guest cgroup emptiness. It neither
+// stops units nor excludes queued/future activation, and must not alone
+// authorize publication.
 func (e *Engine) ObserveRecoveryQuiescence(ctx context.Context) error {
 	if runtime.GOOS != "linux" || os.Geteuid() != 0 || e.host.Name() != "/" {
 		return ErrConflict
@@ -21,7 +22,12 @@ func (e *Engine) ObserveRecoveryQuiescence(ctx context.Context) error {
 		return ErrConflict
 	}
 	defer e.mu.Unlock()
-	return e.observeRecoveryQuiescence(ctx, ObserveRecoveryServicesDormant)
+	return e.observeRecoveryQuiescence(ctx, func(ctx context.Context) error {
+		if err := ObserveRecoveryServicesDormant(ctx); err != nil {
+			return err
+		}
+		return ObserveRecoveryGuestsEmpty(ctx)
+	})
 }
 
 func (e *Engine) observeRecoveryQuiescence(ctx context.Context, observe func(context.Context) error) (result error) {

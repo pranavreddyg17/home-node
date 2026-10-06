@@ -3107,3 +3107,7 @@ Temporary root recovery preflight fixture now replaces owned control unit bytes 
 ### Installation journal identity drift fixture
 
 Temporary root preflight fixture now changes the valid installation journal ID during injected manager observation and requires refusal despite unchanged owned file bytes. It restores original journal bytes before the marker replacement case. Linux compilation and diff checks passed; native execution remains pending publication. CI37422229911 remains live. Live manager/cgroup/queued-job exclusion, installed publication/ownership/bootstrap/runtime reconstruction and complete acceptance remain unfinished.
+
+### Fixed kernel guest-cgroup emptiness observation
+
+Added root-only Linux ObserveRecoveryGuestsEmpty reading bounded cgroup.events beneath fixed homenode.slice, checking actual cgroup-v2 filesystem magic and a regular no-follow descriptor. Strict parser requires populated0/frozen0 and refuses unknown/duplicate/incomplete/malformed state. Production preflight now observes services/socket first then kernel guest hierarchy before final owned configuration/marker rechecks. Missing hierarchy and unsupported hosts refuse. Installer race suite, Linux compilation and diff checks passed; actual kernel observation remains unexecuted natively and needs disposable fixture coverage. An empty snapshot does not exclude queued/future activation or establish retained publication authority. Installed publication/ownership/bootstrap/runtime reconstruction and complete application acceptance remain unfinished.
