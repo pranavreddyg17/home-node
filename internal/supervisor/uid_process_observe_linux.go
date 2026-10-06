@@ -5,12 +5,13 @@ package supervisor
 import (
 	"context"
 	"errors"
-	"golang.org/x/sys/unix"
 	"io"
 	"os"
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // ObserveGuestUIDProcessConflicts is a bounded current procfs observation, not
@@ -54,7 +55,7 @@ func ObserveGuestUIDProcessConflicts(ctx context.Context, pool GuestUIDPool) (ob
 			observed.Blocked[uid] = true
 		}
 	}
-	count := 0
+	count, processes := 0, 0
 	for {
 		if err = ctx.Err(); err != nil {
 			return GuestUIDPool{}, err
@@ -68,23 +69,12 @@ func ObserveGuestUIDProcessConflicts(ctx context.Context, pool GuestUIDPool) (ob
 			if name == "" || strings.Trim(name, "0123456789") != "" {
 				continue
 			}
-			count++
-			if count > 65536 {
+			processes++
+			if processes > 65536 {
 				return GuestUIDPool{}, ErrPolicy
 			}
-			status, exists, err := readGuestUIDProcessStatus(ctx, root, name)
-			if err != nil {
+			if err = observeGuestUIDTaskConflicts(ctx, root, name, observed, &count); err != nil {
 				return GuestUIDPool{}, err
-			}
-			if !exists {
-				continue
-			}
-			conflicts, err := processGuestUIDConflicts(ctx, GuestUIDPool{First: pool.First, Last: pool.Last}, status)
-			if err != nil {
-				return GuestUIDPool{}, err
-			}
-			for uid := range conflicts.Blocked {
-				observed.Blocked[uid] = true
 			}
 		}
 		if errors.Is(readErr, io.EOF) {
@@ -132,4 +122,62 @@ func readGuestUIDProcessStatus(ctx context.Context, root *os.Root, pid string) (
 		return nil, false, err
 	}
 	return data, true, nil
+}
+
+// Linux tasks can hold distinct credentials. Enumerating leaders alone would
+// miss such authority. A retained process with an unreadable task directory is
+// ambiguous and must be refused, including leader-exit races.
+func observeGuestUIDTaskConflicts(ctx context.Context, root *os.Root, pid string, pool GuestUIDPool, count *int) (result error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	process, err := root.OpenRoot(pid)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, process.Close()) }()
+	tasks, err := process.OpenFile("task", os.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, tasks.Close()) }()
+	for {
+		if err = ctx.Err(); err != nil {
+			return err
+		}
+		entries, readErr := tasks.ReadDir(256)
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			return readErr
+		}
+		for _, entry := range entries {
+			name := entry.Name()
+			if name == "" || strings.Trim(name, "0123456789") != "" {
+				continue
+			}
+			*count++
+			if *count > 65536 {
+				return ErrPolicy
+			}
+			status, exists, err := readGuestUIDProcessStatus(ctx, process, "task/"+name)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				continue
+			}
+			conflicts, err := processGuestUIDConflicts(ctx, GuestUIDPool{First: pool.First, Last: pool.Last}, status)
+			if err != nil {
+				return err
+			}
+			for uid := range conflicts.Blocked {
+				pool.Blocked[uid] = true
+			}
+		}
+		if errors.Is(readErr, io.EOF) {
+			return ctx.Err()
+		}
+	}
 }
