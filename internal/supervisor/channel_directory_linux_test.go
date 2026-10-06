@@ -49,6 +49,25 @@ func TestNativeGuestChannelDirectoryOwnership(t *testing.T) {
 	if err != nil || !ok || owner != 0 || info.Mode().Perm() != 0700 {
 		t.Fatal("target changed", err)
 	}
+	occupied := filepath.Join(parent, "occupied")
+	if err := os.Mkdir(occupied, 0700); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(occupied, "secret")
+	if err := os.WriteFile(sentinel, []byte("retained"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareGuestChannelDirectory(context.Background(), occupied, 1000000000, 64055); !errors.Is(err, ErrPolicy) {
+		t.Fatal("occupied root directory transferred", err)
+	}
+	info, err = os.Lstat(occupied)
+	owner, ok = openedSysUID(info)
+	if err != nil || !ok || owner != 0 || info.Mode().Perm() != 0700 {
+		t.Fatal("refused directory changed", err)
+	}
+	if data, err := os.ReadFile(sentinel); err != nil || string(data) != "retained" {
+		t.Fatal("sentinel changed", err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if err := prepareGuestChannelDirectory(ctx, filepath.Join(parent, "cancelled"), 1000000000, 64055); !errors.Is(err, context.Canceled) {

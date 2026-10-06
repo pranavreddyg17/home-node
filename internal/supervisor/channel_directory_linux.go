@@ -5,6 +5,7 @@ package supervisor
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -56,6 +57,19 @@ func prepareGuestChannelDirectory(ctx context.Context, path string, uid, gid int
 	var native unix.Stat_t
 	if unix.Fstat(int(child.Fd()), &native) != nil || (native.Uid != 0 && native.Uid != uint32(uid)) || (native.Uid == 0 && native.Gid != 0) || (native.Uid == uint32(uid) && native.Gid != uint32(gid)) {
 		return ErrPolicy
+	}
+	entries, readErr := child.ReadDir(2)
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
+		return readErr
+	}
+	if len(entries) > 1 || (native.Uid == 0 && len(entries) != 0) {
+		return ErrPolicy
+	}
+	for _, entry := range entries {
+		var socket unix.Stat_t
+		if entry.Name() != "adapter.sock" || unix.Fstatat(int(child.Fd()), entry.Name(), &socket, unix.AT_SYMLINK_NOFOLLOW) != nil || socket.Mode&unix.S_IFMT != unix.S_IFSOCK || socket.Uid != uint32(uid) || socket.Nlink != 1 {
+			return ErrPolicy
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return err

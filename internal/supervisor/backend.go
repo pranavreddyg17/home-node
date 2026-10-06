@@ -123,7 +123,7 @@ func (b LinuxBackend) Prepare(ctx context.Context, d Domain) error {
 	if d.GuestUID != 0 || d.GuestGID != 0 {
 		return ErrPolicy
 	}
-	if !guestproto.ValidID(d.ID) || filepath.Base(d.DataPath) != d.ID+".raw" || d.DiskReserveBytes < 4<<30 {
+	if !guestproto.ValidID(d.ID) || filepath.Base(d.DataPath) != d.ID+".raw" || !filepath.IsAbs(d.ChannelPath) || filepath.Clean(d.ChannelPath) != d.ChannelPath || filepath.Base(d.ChannelPath) != "adapter.sock" || filepath.Base(filepath.Dir(d.ChannelPath)) != d.ID || d.DiskReserveBytes < 4<<30 {
 		return ErrPolicy
 	}
 	qemu, err := user.Lookup("libvirt-qemu")
