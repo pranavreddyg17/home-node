@@ -133,12 +133,21 @@ func publishDataVolume(root *os.Root, file *os.File, stage, name string, size in
 }
 
 func admitVolume(file *os.File, size int64) error {
+	return admitVolumeForUID(file, size, 0)
+}
+
+// admitVolumeForUID requires the independently reserved guest identity; it
+// neither changes ownership nor proves runtime or restoration authority.
+func admitVolumeForUID(file *os.File, size int64, uid uint32) error {
+	if file == nil || (uid != 0 && (uid < 65536 || uid > 1<<31-1)) {
+		return ErrPolicy
+	}
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || info.Size() != size {
 		return ErrPolicy
 	}
 	var native unix.Stat_t
-	if unix.Fstat(int(file.Fd()), &native) != nil || native.Uid != 0 || native.Nlink != 1 {
+	if unix.Fstat(int(file.Fd()), &native) != nil || native.Uid != uid || native.Nlink != 1 {
 		return ErrPolicy
 	}
 	return nil
