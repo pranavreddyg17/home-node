@@ -3211,3 +3211,7 @@ Added a supervisor lease regression that reserves a UID, closes the state databa
 ### Corrected private reopen fixture passes
 
 The UID lease reopen fixture now uses a fresh child directory that state.Open creates with private permissions. Its targeted race test passed after that correction, proving clean close/reopen retry identity, uniqueness and exhaustion behavior. The earlier failed fixture/result is recorded above; this does not establish process-kill or power-loss durability. Full production UID ownership wiring and installed recovery remain unfinished.
+
+### UID reservations account for all four process credentials
+
+Added bounded process-status credential parsing that blocks real, effective, saved and filesystem UIDs in the guest pool, preserving prior host conflicts without mutating the caller's map. Missing/duplicate Uid lines, malformed/overflow numeric fields, incorrect credential counts, CRLF/NUL and oversized status are refused. The test joins those four credential conflicts to durable reservation and requires the sole remaining UID; targeted race test passed. This is a parser for supplied kernel observations, not yet a protected procfs scan or proof of process absence/future exclusion. CI37501792533 remains verified running at0927164. NSS eligibility, exclusive pool provisioning, process scanning, lease/domain ownership wiring and full installed recovery remain unfinished.
