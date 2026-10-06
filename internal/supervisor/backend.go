@@ -135,13 +135,7 @@ func (b LinuxBackend) Prepare(ctx context.Context, d Domain) error {
 		return err
 	}
 	channelDir := filepath.Dir(d.ChannelPath)
-	if err = os.MkdirAll(channelDir, 0710); err != nil {
-		return err
-	}
-	if err = os.Chown(channelDir, uid, b.TransferGID); err != nil {
-		return err
-	}
-	if err = os.Chmod(channelDir, 0710); err != nil {
+	if err = prepareGuestChannelDirectory(ctx, channelDir, uid, b.TransferGID); err != nil {
 		return err
 	}
 	if err := b.CleanupPreparation(ctx, filepath.Dir(d.DataPath), d.ID, d.Image.DataBytes); err != nil {
