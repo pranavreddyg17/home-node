@@ -260,3 +260,49 @@ func TestRunningInspectionRefusesDamagedGuestIdentityAndAuditStops(t *testing.T)
 		})
 	}
 }
+
+// Losing launch identity authority must deny data access without disabling teardown.
+func TestExplicitTeardownSurvivesMissingGuestIdentity(t *testing.T) {
+	for _, action := range []string{"stop", "shutdown", "manager-shutdown"} {
+		t.Run(action, func(t *testing.T) {
+			m, original := newManager(t)
+			backend := &shutdownFixtureBackend{fakeBackend: original}
+			m.Backend = backend
+			pool := GuestUIDPool{First: 200000, Last: 200001}
+			m.GuestUIDPool, m.GuestGID = &pool, 64055
+			ctx := context.Background()
+			request := startRequest()
+			if _, err := m.Apply(ctx, request); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := m.Store.DB.Exec("DELETE FROM runtime_uid_leases WHERE instance_id=?", request.InstanceID); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := m.Inspect(ctx, request.InstanceID); err == nil {
+				t.Fatal("damaged identity admitted")
+			}
+			if action == "manager-shutdown" {
+				if err := m.Shutdown(ctx); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				request.Action = action
+				request.OperationID = state.Random()
+				request.Revision++
+				if _, err := m.Apply(ctx, request); err != nil {
+					t.Fatal("identity loss prevented teardown", err)
+				}
+			}
+			instance, err := m.Inspect(ctx, request.InstanceID)
+			if err != nil || instance.Desired != "stopped" || original.running {
+				t.Fatal("guest remained active", instance, err)
+			}
+			if action == "shutdown" && backend.shutdowns != 1 {
+				t.Fatal("cooperative shutdown not requested", backend.shutdowns)
+			}
+			if action != "shutdown" && original.stops != 1 {
+				t.Fatal("forced stop not requested", original.stops)
+			}
+		})
+	}
+}
