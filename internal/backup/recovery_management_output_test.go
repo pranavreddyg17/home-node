@@ -81,6 +81,30 @@ func TestManagementOutputRequiresReboundJournalIdentity(t *testing.T) {
 	if reopened, err := reconcileRecoveryManagementOutput(context.Background(), root); err != nil || reopened != receipt {
 		t.Fatal("receipt reconciliation differs", reopened, err)
 	}
+	final, err := publishRecoveryManagement(context.Background(), root)
+	if err != nil || final != "management.db" {
+		t.Fatal("private management publication", final, err)
+	}
+	stageInfo, err := root.Lstat(".recovery-management.stage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	finalInfo, err := root.Lstat(final)
+	if err != nil || !os.SameFile(stageInfo, finalInfo) {
+		t.Fatal("management publication lost inode proof", err)
+	}
+	if repeated, err := publishRecoveryManagement(context.Background(), root); err != nil || repeated != final {
+		t.Fatal("management publication retry", repeated, err)
+	}
+	if err = root.Remove(final); err != nil {
+		t.Fatal(err)
+	}
+	if err = root.WriteFile(final, []byte("foreign occupied database"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if name, err := publishRecoveryManagement(context.Background(), root); !errors.Is(err, ErrManifest) || name != "" {
+		t.Fatal("foreign management database adopted", name, err)
+	}
 	if err = recordRecoveryManagementOutput(context.Background(), root); !errors.Is(err, os.ErrExist) {
 		t.Fatal("occupied management receipt adopted", err)
 	}

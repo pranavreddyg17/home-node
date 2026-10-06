@@ -376,6 +376,9 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if receipt, err := reconcileRecoveryManagementOutput(context.Background(), copyRoot); err != nil || receipt.Output != managementOutput {
 		t.Fatal("native output receipt reconciliation", receipt, err)
 	}
+	if final, err := publishRecoveryManagement(context.Background(), copyRoot); err != nil || final != "management.db" {
+		t.Fatal("native private management publication", final, err)
+	}
 	changedManifest := manifest
 	changedManifest.Release = "0.1.1~dev"
 	if err = requalifyRecoveryInstallPlan(context.Background(), installRoot, reopenedPlan, changedManifest, policy); !errors.Is(err, ErrManifest) {
