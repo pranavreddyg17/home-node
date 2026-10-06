@@ -36,4 +36,21 @@ func TestRecoveryDormantQueriesOnlyFixedServices(t *testing.T) {
 	if _, err := output.Write(make([]byte, 1025)); !errors.Is(err, ErrConflict) || output.Len() != 0 {
 		t.Fatal("unbounded manager output", err)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	units = nil
+	if err := observeRecoveryServicesWith(ctx, command); !errors.Is(err, context.Canceled) || len(units) != 0 {
+		t.Fatal("cancelled observation launched query", units, err)
+	}
+	queries := 0
+	failure := func(ctx context.Context, path string, args ...string) *exec.Cmd {
+		queries++
+		return exec.CommandContext(ctx, "/bin/sh", "-c", "exit 1")
+	}
+	if err := observeRecoveryServicesWith(context.Background(), failure); !errors.Is(err, ErrConflict) || queries != 1 {
+		t.Fatal("failed manager query continued", queries, err)
+	}
+	if err := observeRecoveryServicesWith(context.Background(), nil); !errors.Is(err, ErrPlan) {
+		t.Fatal("missing manager adapter admitted", err)
+	}
 }

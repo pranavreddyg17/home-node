@@ -3051,3 +3051,7 @@ Added root-only Linux ObserveRecoveryServicesDormant querying fixed control/tran
 ### Dormancy bound to installed manager unit identity
 
 Native recovery queries now require exact fixed unit ID, /etc/systemd/system fragment, empty drop-in list, no pending daemon reload and non-transient state in addition to loaded/inactive/dead/zero-process observations. Parser refuses foreign IDs/paths/overrides and arbitrary unit selection. Command fixture includes these identity fields and fixed property argument. Installer race suite, Linux compilation and diff checks passed; Linux command execution remains pending publication. This still observes state only: activation exclusion, effective unit/cgroup enforcement and installed publication/bootstrap/runtime reconstruction remain unfinished. CI37421253738 remains live; full application acceptance is not complete.
+
+### Recovery manager observation cancellation/failure boundaries
+
+Native observation loop now checks its shared deadline before constructing every fixed-unit query. Linux command fixture requires pre-cancelled observation to launch zero queries, command failure to short-circuit after one, and missing adapter refusal. Linux compilation and diff checks passed; these Linux assertions remain pending publication/execution. Retained activation barrier, cgroup reconciliation, installed publication/ownership/bootstrap/runtime reconstruction and complete application acceptance remain unfinished.
