@@ -3039,3 +3039,7 @@ Portable immutable-record regression now removes staging receipt and requires re
 ### Whole installer recovery staging deadline and native publication
 
 Joined installer staging now shares one two-hour deadline across configuration/intent qualification, scoped source inspection/copy, descriptor cleanup, completion receipt and final current-byte reconciliation. Repeated phases no longer receive independently reset full deadlines. Installer race suite, Linux compilation and diff checks passed. CI37420643271 completed successfully at38f4529, verifying earlier scoped handoff/intent/copy staging changes; publishing accumulated completion receipt, current configuration/byte reconciliation and joined interruption fixtures for native execution. Full installed publication/ownership/bootstrap/runtime reconstruction and complete application acceptance remain unfinished.
+
+### Strict recovery service dormancy observation parser
+
+Added bounded UTF8 exact-property parser requiring loaded/inactive/dead service state and zero main/control process IDs. It refuses missing, duplicate, unknown, oversized, carriage-return ambiguous, active/stopping or live-process observations. Installer race suite and diff checks passed. This is an observation parser only: native manager querying, activation exclusion, guest/cgroup reconciliation and retained publication barrier remain unfinished; it does not grant ownership/publication authority. CI37421253738 remains active. Full installed recovery/bootstrap/runtime reconstruction and application acceptance remain unfinished.
