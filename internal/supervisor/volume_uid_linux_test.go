@@ -24,6 +24,9 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	if err = file.Truncate(size); err != nil {
 		t.Fatal(err)
 	}
+	if err = transferVolumeToGuest(context.Background(), file, size, 200000, 0); !errors.Is(err, ErrPolicy) {
+		t.Fatal("root guest group accepted", err)
+	}
 	if err = transferVolumeToGuest(context.Background(), file, size, 200000, 200000); err != nil {
 		t.Fatal(err)
 	}
@@ -32,6 +35,12 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	}
 	if err = transferVolumeToGuest(context.Background(), file, size, 200001, 200001); !errors.Is(err, ErrPolicy) {
 		t.Fatal("another guest took ownership", err)
+	}
+	if err = transferVolumeToGuest(context.Background(), file, size, 200000, 200001); !errors.Is(err, ErrPolicy) {
+		t.Fatal("changed guest group accepted", err)
+	}
+	if err = transferVolumeToGuest(context.Background(), file, size, 200000, 200000); err != nil {
+		t.Fatal("refused group change modified ownership", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
