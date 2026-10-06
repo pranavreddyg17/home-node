@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"os/user"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -29,6 +31,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, "requires Linux, an unprivileged transfer identity, and explicit controller policy")
 		os.Exit(1)
 	}
+	account, err := user.Lookup("libvirt-qemu")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "guest service identity unavailable")
+		os.Exit(1)
+	}
+	guestUID, err := strconv.ParseUint(account.Uid, 10, 32)
+	if err != nil || guestUID == 0 || guestUID > 1<<31-1 || guestUID == uint64(*uid) || guestUID == uint64(os.Geteuid()) {
+		fmt.Fprintln(os.Stderr, "invalid guest service identity")
+		os.Exit(1)
+	}
 	listener, err := net.Listen("unix", *socket)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -44,6 +56,7 @@ func main() {
 		os.Exit(1)
 	}
 	handler := transfer.New(runtimeclient.New(*runtimeSocket, ""), *channels, uint32(*uid), *generation)
+	handler.SharedGuestUID = uint32(guestUID)
 	server := &http.Server{Handler: handler, ConnContext: supervisor.PeerContext, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 25 * time.Second, IdleTimeout: 10 * time.Second, MaxHeaderBytes: 8192}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

@@ -80,8 +80,12 @@ func TestManagerLaunchAndAuditUseSameGuestIdentity(t *testing.T) {
 	m.GuestUIDPool, m.GuestGID = &pool, 64055
 	backend := &identityBackend{fakeBackend: b}
 	m.Backend = backend
-	if _, err := m.Apply(context.Background(), startRequest()); err != nil {
+	instance, err := m.Apply(context.Background(), startRequest())
+	if err != nil {
 		t.Fatal(err)
+	}
+	if instance.GuestUID != pool.First {
+		t.Fatal("runtime inspection omitted reserved guest UID", instance)
 	}
 	if err := m.Audit(context.Background()); err != nil {
 		t.Fatal(err)

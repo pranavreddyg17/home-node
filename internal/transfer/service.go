@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"hash/fnv"
 	"io"
 	"net"
@@ -24,6 +25,7 @@ type Inspector interface {
 	Apply(context.Context, supervisor.Request) (supervisor.Instance, error)
 }
 type Service struct {
+	SharedGuestUID   uint32
 	Runtime          Inspector
 	Channels         string
 	ControllerUID    uint32
@@ -92,6 +94,16 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.connections[index] = conn
 		s.instanceIDs[index] = request.InstanceID
 	}
+	expectedUID := instance.GuestUID
+	if expectedUID == 0 {
+		expectedUID = s.SharedGuestUID
+	}
+	if err := authenticateGuestConnection(conn, expectedUID); err != nil {
+		_ = conn.Close()
+		s.connections[index] = nil
+		http.Error(w, "guest identity denied", 503)
+		return
+	}
 	healthy := false
 	defer func() {
 		if !healthy {
@@ -120,4 +132,22 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	healthy = true
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
+}
+
+func authenticateGuestConnection(connection net.Conn, expectedUID uint32) error {
+	if expectedUID == 0 || expectedUID > 1<<31-1 {
+		return supervisor.ErrPolicy
+	}
+	unixConnection, ok := connection.(*net.UnixConn)
+	if !ok || unixConnection == nil {
+		return supervisor.ErrPolicy
+	}
+	uid, err := supervisor.PeerUID(unixConnection)
+	if err != nil {
+		return errors.Join(supervisor.ErrPolicy, err)
+	}
+	if uid != expectedUID {
+		return supervisor.ErrPolicy
+	}
+	return nil
 }

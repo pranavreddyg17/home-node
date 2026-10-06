@@ -49,6 +49,7 @@ type Request struct {
 	PolicyGeneration int64  `json:"policyGeneration"`
 }
 type Instance struct {
+	GuestUID    uint32 `json:"guestUid,omitempty"`
 	Revision    int64  `json:"revision"`
 	CreatedAt   int64  `json:"createdAt"`
 	ID          string `json:"id"`
@@ -148,7 +149,7 @@ func (m *Manager) Initialize(ctx context.Context) error {
 }
 func (m *Manager) Inspect(ctx context.Context, id string) (Instance, error) {
 	var i Instance
-	err := m.Store.DB.QueryRowContext(ctx, "SELECT id,workload,state,desired,image_sha256,memory_mib,vcpus,data_bytes,created_at,revision FROM runtime_instances WHERE id=?", id).Scan(&i.ID, &i.Workload, &i.State, &i.Desired, &i.ImageSHA256, &i.MemoryMiB, &i.VCPUs, &i.DataBytes, &i.CreatedAt, &i.Revision)
+	err := m.Store.DB.QueryRowContext(ctx, "SELECT r.id,r.workload,r.state,r.desired,r.image_sha256,r.memory_mib,r.vcpus,r.data_bytes,r.created_at,r.revision,coalesce(u.uid,0) FROM runtime_instances r LEFT JOIN runtime_uid_leases u ON u.instance_id=r.id WHERE r.id=?", id).Scan(&i.ID, &i.Workload, &i.State, &i.Desired, &i.ImageSHA256, &i.MemoryMiB, &i.VCPUs, &i.DataBytes, &i.CreatedAt, &i.Revision, &i.GuestUID)
 	return i, err
 }
 func (m *Manager) Apply(ctx context.Context, r Request) (Instance, error) {
