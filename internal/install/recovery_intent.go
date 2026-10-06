@@ -96,6 +96,11 @@ func (e *Engine) commitRecoveryIntent(ctx context.Context, data []byte) (result 
 		if err = ctx.Err(); err != nil {
 			return err
 		}
+		// Exact bytes can survive in cache after an interrupted initial write.
+		// Complete both durability boundaries before accepting the retry.
+		if err = file.Sync(); err != nil {
+			return err
+		}
 		return syncDirectory(e.journalRoot, ".")
 	}
 	if err != nil {
