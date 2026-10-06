@@ -115,6 +115,14 @@ func cpuBound(directory string, vcpus int64) error {
 	return nil
 }
 func (b LinuxBackend) Prepare(ctx context.Context, d Domain) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// Reserved DAC domains need coordinated volume and channel ownership.
+	// Refuse before shared-account preparation until that lifecycle is wired.
+	if d.GuestUID != 0 || d.GuestGID != 0 {
+		return ErrPolicy
+	}
 	if !guestproto.ValidID(d.ID) || filepath.Base(d.DataPath) != d.ID+".raw" || d.DiskReserveBytes < 4<<30 {
 		return ErrPolicy
 	}
