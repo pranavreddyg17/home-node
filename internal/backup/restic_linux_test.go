@@ -507,6 +507,20 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 						t.Fatal("refusal published database/receipt", name, err)
 					}
 				}
+				quarantine, err := quarantineRecoveryManagementStage(context.Background(), boundaryRoot, manifest)
+				if err != nil {
+					t.Fatal("explicit uncertain stage quarantine", err)
+				}
+				if name, err := prepareRecoveryManagement(context.Background(), installRoot, boundaryRoot, snapshot, manifest, policy); err != nil || name != "management.db" {
+					t.Fatal("preparation after preserved quarantine", name, err)
+				}
+				preserved, err := boundaryRoot.ReadFile(quarantine)
+				if err != nil || string(preserved) != "interrupted incomplete copy" {
+					t.Fatal("repair discarded quarantined bytes", err)
+				}
+				if _, err = reconcileRecoveryManagementOutput(context.Background(), boundaryRoot); err != nil {
+					t.Fatal("repaired output receipt", err)
+				}
 			} else {
 				if prepareErr != nil || name != "management.db" {
 					t.Fatal("completed boundary did not resume", name, prepareErr)

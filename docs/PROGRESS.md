@@ -2951,3 +2951,7 @@ Added private repair quarantine preserving uncertain stage bytes via a durable h
 ### Frontend dependency advisory remediation
 
 CI37418019043 failed at the frontend vulnerability gate for source-map-js1.2.1 (GHSA-68fv-2mgg-jv7q), rather than establishing a successful complete run. Updated only that transitive lockfile entry to1.2.2, the patched release identified by the GitHub advisory. npm audit now reports zero vulnerabilities; TypeScript, production build, six dependency-evidence tests and diff checks passed. Publishing the remediation with accumulated recovery publication/orchestration/quarantine changes for another native CI run. Full installed recovery and application acceptance remain unfinished.
+
+### Restart after preserved management quarantine fixture
+
+Encrypted native partial-copy fixture now selects quarantine explicitly, reruns joined disk/management preparation from validated restored source, reconciles the repaired output receipt and verifies quarantined uncertain bytes remain intact. Immutable journal identities must remain unchanged through refusal/quarantine/restart. Linux compilation and diff checks passed; the new assertion remains unexecuted natively. CI37418510830 is active at ecda02d. Guided owner repair UI, hot-journal/power-loss recovery, installed bootstrap/policy and complete acceptance remain unfinished.
