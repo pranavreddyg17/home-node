@@ -1,0 +1,112 @@
+package install
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"os"
+	"syscall"
+	"time"
+
+	"github.com/pranavreddyg17/home-node/internal/backup"
+)
+
+type recoveryIntent struct {
+	Version             int                              `json:"version"`
+	ConfigurationID     string                           `json:"configurationId"`
+	ConfigurationDigest string                           `json:"configurationDigest"`
+	Recovery            backup.PreparedRecoveryInventory `json:"recovery"`
+}
+
+// prepareRecoveryIntent commits immutable disconnected recovery intent before
+// later data effects. It requires an exact installed replacement configuration;
+// production orchestration must independently observe accounts and capacity.
+// It neither transfers data nor starts a controller.
+func (e *Engine) prepareRecoveryIntent(ctx context.Context, prepared *backup.PreparedRecoveryLease, source backup.Manifest, c Configuration, now time.Time) (RecoveryConfigurationPreview, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return RecoveryConfigurationPreview{}, err
+	}
+	installed, err := e.load()
+	if err != nil || installed.Phase != "installed" {
+		return RecoveryConfigurationPreview{}, errors.Join(ErrConflict, err)
+	}
+	configuration, err := ConfigurationPlan(c, now)
+	if err != nil {
+		return RecoveryConfigurationPreview{}, err
+	}
+	_, expected, err := planRecords(configuration.Plan, e.owner)
+	if err != nil || expected != installed.Digest {
+		return RecoveryConfigurationPreview{}, ErrConflict
+	}
+	for _, record := range installed.Items {
+		if err = e.matches(record); err != nil {
+			return RecoveryConfigurationPreview{}, ErrConflict
+		}
+	}
+	preview, err := RecoveryConfigurationPlan(ctx, prepared, source, c, now)
+	if err != nil {
+		return RecoveryConfigurationPreview{}, err
+	}
+	data, err := json.Marshal(recoveryIntent{Version: 1, ConfigurationID: installed.ID, ConfigurationDigest: installed.Digest, Recovery: preview.Recovery})
+	if err != nil {
+		return RecoveryConfigurationPreview{}, err
+	}
+	if err = e.commitRecoveryIntent(ctx, data); err != nil {
+		return RecoveryConfigurationPreview{}, err
+	}
+	return preview, nil
+}
+
+// Exact canonical bytes are the retry proof. Existing ambiguous, truncated or
+// foreign intent is preserved and refused rather than parsed/adopted.
+func (e *Engine) commitRecoveryIntent(ctx context.Context, data []byte) (result error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if len(data) == 0 || len(data) > 8192 {
+		return ErrPlan
+	}
+	file, err := e.journalRoot.OpenFile("recovery.json", os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0600)
+	if errors.Is(err, os.ErrExist) {
+		file, err = e.journalRoot.OpenFile("recovery.json", os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+		if err != nil {
+			return err
+		}
+		defer func() { result = errors.Join(result, file.Close()) }()
+		info, err := file.Stat()
+		if err != nil || !info.Mode().IsRegular() || !owned(info, e.owner) || info.Mode().Perm() != 0600 || info.Size() != int64(len(data)) {
+			return ErrConflict
+		}
+		actual, err := io.ReadAll(io.LimitReader(file, 8193))
+		if err != nil || !bytes.Equal(actual, data) {
+			return ErrConflict
+		}
+		current, err := e.journalRoot.Lstat("recovery.json")
+		if err != nil || !os.SameFile(info, current) {
+			return ErrConflict
+		}
+		if err = ctx.Err(); err != nil {
+			return err
+		}
+		return syncDirectory(e.journalRoot, ".")
+	}
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, file.Close()) }()
+	// Preserve uncertain writes. They block handoff until explicit repair.
+	if n, err := file.Write(data); err != nil || n != len(data) {
+		return errors.Join(io.ErrShortWrite, err)
+	}
+	if err = file.Sync(); err != nil {
+		return err
+	}
+	if err = syncDirectory(e.journalRoot, "."); err != nil {
+		return err
+	}
+	return ctx.Err()
+}
