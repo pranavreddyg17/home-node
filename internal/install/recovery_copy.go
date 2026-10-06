@@ -22,8 +22,7 @@ func copyRecoveryFile(ctx context.Context, output *os.Root, stage string, source
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	id := strings.TrimSuffix(strings.TrimPrefix(stage, ".recovery-"), ".copy")
-	if output == nil || source.File == nil || source.Bytes <= 0 || source.Bytes > 512<<30 || len(source.SHA256) != 64 || (stage != ".recovery-management.copy" && (stage != ".recovery-"+id+".copy" || !guestproto.ValidID(id))) {
+	if output == nil || source.File == nil || source.Bytes <= 0 || source.Bytes > 512<<30 || len(source.SHA256) != 64 || !validRecoveryCopyStage(stage) {
 		return ErrPlan
 	}
 	if decoded, err := hex.DecodeString(source.SHA256); err != nil || len(decoded) != 32 {
@@ -102,4 +101,12 @@ func (w *recoveryCopyWriter) Write(data []byte) (int, error) {
 	n, err := w.file.Write(data)
 	w.remaining -= int64(n)
 	return n, err
+}
+
+func validRecoveryCopyStage(stage string) bool {
+	if stage == ".recovery-management.copy" {
+		return true
+	}
+	id := strings.TrimSuffix(strings.TrimPrefix(stage, ".recovery-"), ".copy")
+	return stage == ".recovery-"+id+".copy" && guestproto.ValidID(id)
 }

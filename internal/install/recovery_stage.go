@@ -1,0 +1,67 @@
+package install
+
+import (
+	"bytes"
+	"context"
+	"crypto/ed25519"
+	"encoding/json"
+	"errors"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/pranavreddyg17/home-node/internal/backup"
+	"github.com/pranavreddyg17/home-node/internal/catalog"
+)
+
+// stageRecoveryCopies keeps installer exclusion through immutable intent,
+// scoped source qualification, copying and retry reconciliation. Files remain
+// disconnected under installer ownership in the private journal directory.
+func (e *Engine) stageRecoveryCopies(ctx context.Context, prepared *backup.PreparedRecoveryLease, source backup.Manifest, c Configuration, now time.Time) (RecoveryConfigurationPreview, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	preview, err := e.prepareRecoveryIntentLocked(ctx, prepared, source, c, now)
+	if err != nil {
+		return RecoveryConfigurationPreview{}, err
+	}
+	manifest, err := catalog.Verify(c.Catalog, map[string]ed25519.PublicKey{catalog.KeyID(c.Publisher): c.Publisher}, c.MinimumCatalogVersion, now)
+	if err != nil {
+		return RecoveryConfigurationPreview{}, err
+	}
+	approved := make(map[string]string, 2)
+	for _, workload := range []string{"files", "ai"} {
+		image, err := manifest.Image(workload)
+		if err != nil {
+			return RecoveryConfigurationPreview{}, err
+		}
+		approved[workload] = image.SHA256
+	}
+	expected, _ := json.Marshal(preview.Recovery)
+	err = prepared.WithFiles(ctx, c.Maintenance.UID, source, backup.RestorePolicy{MinimumCatalogVersion: c.MinimumCatalogVersion, ApprovedImages: approved}, func(ctx context.Context, inventory backup.PreparedRecoveryInventory, files []backup.PreparedRecoveryFile) error {
+		current, _ := json.Marshal(inventory)
+		if !bytes.Equal(expected, current) {
+			return ErrConflict
+		}
+		for _, file := range files {
+			stage := ".recovery-management.copy"
+			if file.Name != "management.db" {
+				stage = ".recovery-" + strings.TrimSuffix(file.Name, ".raw") + ".copy"
+			}
+			err := verifyRecoveryCopy(ctx, e.journalRoot, stage, file, e.owner)
+			if errors.Is(err, os.ErrNotExist) {
+				if err = copyRecoveryFile(ctx, e.journalRoot, stage, file, e.owner); err != nil {
+					return err
+				}
+				err = verifyRecoveryCopy(ctx, e.journalRoot, stage, file, e.owner)
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return ctx.Err()
+	})
+	if err != nil {
+		return RecoveryConfigurationPreview{}, err
+	}
+	return preview, nil
+}

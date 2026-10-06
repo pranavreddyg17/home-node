@@ -27,6 +27,10 @@ type recoveryIntent struct {
 func (e *Engine) prepareRecoveryIntent(ctx context.Context, prepared *backup.PreparedRecoveryLease, source backup.Manifest, c Configuration, now time.Time) (RecoveryConfigurationPreview, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.prepareRecoveryIntentLocked(ctx, prepared, source, c, now)
+}
+
+func (e *Engine) prepareRecoveryIntentLocked(ctx context.Context, prepared *backup.PreparedRecoveryLease, source backup.Manifest, c Configuration, now time.Time) (RecoveryConfigurationPreview, error) {
 	if err := ctx.Err(); err != nil {
 		return RecoveryConfigurationPreview{}, err
 	}

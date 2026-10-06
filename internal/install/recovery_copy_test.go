@@ -43,6 +43,18 @@ func TestRecoveryCopyChecksBorrowedBytesAndPreservesOccupiedStage(t *testing.T) 
 	if err != nil || string(got) != string(payload) {
 		t.Fatal("copy bytes", string(got), err)
 	}
+	if err = verifyRecoveryCopy(context.Background(), root, name, borrowed, os.Geteuid()); err != nil {
+		t.Fatal("completed copy verification", err)
+	}
+	if err = root.Chmod(name, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err = verifyRecoveryCopy(context.Background(), root, name, borrowed, os.Geteuid()); !errors.Is(err, ErrConflict) {
+		t.Fatal("permissive copy accepted", err)
+	}
+	if err = root.Chmod(name, 0600); err != nil {
+		t.Fatal(err)
+	}
 	if err = copyRecoveryFile(context.Background(), root, name, borrowed, os.Geteuid()); !errors.Is(err, os.ErrExist) {
 		t.Fatal("occupied stage overwritten", err)
 	}
@@ -52,6 +64,9 @@ func TestRecoveryCopyChecksBorrowedBytesAndPreservesOccupiedStage(t *testing.T) 
 	borrowed.SHA256 = digest([]byte("foreign bytes"))
 	if err = copyRecoveryFile(context.Background(), root, name, borrowed, os.Geteuid()); !errors.Is(err, ErrConflict) {
 		t.Fatal("checksum mismatch accepted", err)
+	}
+	if err = verifyRecoveryCopy(context.Background(), root, name, borrowed, os.Geteuid()); !errors.Is(err, ErrConflict) {
+		t.Fatal("wrong copy digest admitted", err)
 	}
 	got, err = root.ReadFile(name)
 	if err != nil || string(got) != string(payload) {
