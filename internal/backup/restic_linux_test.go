@@ -535,6 +535,33 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 			}
 		})
 	}
+	flowParent := t.TempDir()
+	if err = os.Chmod(flowParent, 0700); err != nil {
+		t.Fatal(err)
+	}
+	flowStaging, err := OpenJobStaging(context.Background(), flowParent, state.Random())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer flowStaging.Close()
+	flowDestination := t.TempDir()
+	if err = os.Chmod(flowDestination, 0700); err != nil {
+		t.Fatal(err)
+	}
+	flowRoot, err := os.OpenRoot(flowDestination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer flowRoot.Close()
+	if name, err := RestoreAndPreparePrivateRecovery(context.Background(), repository, flowStaging, flowRoot, snapshot, policy); err != nil || name != "management.db" {
+		t.Fatal("encrypted restore through private recovery preparation", name, err)
+	}
+	if _, err = reconcileRecoveryManagementOutput(context.Background(), flowRoot); err != nil {
+		t.Fatal("joined encrypted recovery output", err)
+	}
+	if name, err := PreparePrivateRecovery(context.Background(), flowStaging.Root(), flowRoot, snapshot, manifest, policy); err != nil || name != "management.db" {
+		t.Fatal("explicit prepared-source retry", name, err)
+	}
 	if err = copyRoot.Remove(finalName); err != nil {
 		t.Fatal(err)
 	}
