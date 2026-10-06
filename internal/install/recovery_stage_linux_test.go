@@ -134,6 +134,23 @@ func TestRootRecoveryManagementStagingReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	expected := recoveryIntent{Version: 1, ConfigurationID: installed.ID, ConfigurationDigest: installed.Digest, Recovery: preview.Recovery}
+	policyPath := "etc/homenode/runtime-policy.json"
+	originalPolicy, err := e.host.ReadFile(policyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = e.host.WriteFile(policyPath, []byte("changed installed runtime policy"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = e.reconcileRecoveryStaging(context.Background(), expected); !errors.Is(err, ErrConflict) {
+		t.Fatal("staging receipt masked changed host policy", err)
+	}
+	if err = e.host.WriteFile(policyPath, originalPolicy, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = e.reconcileRecoveryStaging(context.Background(), expected); err != nil {
+		t.Fatal("restored owned policy did not reconcile", err)
+	}
 	if err = e.journalRoot.WriteFile(".recovery-management.copy", []byte("changed after completion"), 0600); err != nil {
 		t.Fatal(err)
 	}

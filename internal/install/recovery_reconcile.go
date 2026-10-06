@@ -23,6 +23,13 @@ func (e *Engine) reconcileRecoveryStaging(ctx context.Context, expected recovery
 	if err != nil || installed.Phase != "installed" || expected.Version != 1 || installed.ID != expected.ConfigurationID || installed.Digest != expected.ConfigurationDigest {
 		return ErrConflict
 	}
+	// The journal identifies expected configuration; current owned files must
+	// still match before handing recovered bytes to any publication step.
+	for _, record := range installed.Items {
+		if err = e.matches(record); err != nil {
+			return ErrConflict
+		}
+	}
 	intent, err := json.Marshal(expected)
 	if err != nil {
 		return err
