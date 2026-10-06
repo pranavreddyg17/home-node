@@ -3095,3 +3095,7 @@ Recovery observation preflight now carries one thirty-second cooperative deadlin
 ### Host configuration drift during recovery observation refusal
 
 Recovery preflight now reloads installed journal after manager observation and requires unchanged ID/digest/installed phase, then revalidates every original owned record under the shared deadline before final marker check. Temporary root fixture mutates runtime-policy bytes during injected observation and requires refusal, restores them and proceeds to existing marker replacement refusal. Installer race suite, Linux compilation and diff checks passed; native root assertion remains pending publication/execution. CI37422229911 remains live. Live manager/cgroup/queued-job exclusion, installed publication/ownership/bootstrap/runtime reconstruction and complete application acceptance remain unfinished.
+
+### Manager observation failure preserves activation exclusion fixture
+
+Temporary root preflight fixture now injects unavailable manager observation, requires the original error to propagate and verifies the persistent activation marker inode remains unchanged. Linux compilation and diff checks passed; native assertion remains pending publication/execution. CI37422229911 remains confirmed live at3d5415f. Live manager/cgroup/queued-job exclusion, installed publication/ownership/bootstrap/runtime reconstruction and complete application acceptance remain unfinished.

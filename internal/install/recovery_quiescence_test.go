@@ -58,6 +58,18 @@ func TestRootRecoveryQuiescenceRejectsMarkerReplacementDuringObservation(t *test
 	if err = e.observeRecoveryQuiescence(context.Background(), func(context.Context) error { return nil }); err != nil {
 		t.Fatal("owned preflight", err)
 	}
+	observerFailure := errors.New("manager observation unavailable")
+	markerBefore, err := e.journalRoot.Lstat("recovery-blocked")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = e.observeRecoveryQuiescence(context.Background(), func(context.Context) error { return observerFailure }); !errors.Is(err, observerFailure) {
+		t.Fatal("manager failure lost", err)
+	}
+	markerAfter, err := e.journalRoot.Lstat("recovery-blocked")
+	if err != nil || !os.SameFile(markerBefore, markerAfter) {
+		t.Fatal("manager failure changed activation block", err)
+	}
 	policyPath := "etc/homenode/runtime-policy.json"
 	originalPolicy, err := e.host.ReadFile(policyPath)
 	if err != nil {
