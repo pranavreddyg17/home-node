@@ -24,6 +24,11 @@ func (e *Engine) stageRecoveryCopies(ctx context.Context, prepared *backup.Prepa
 	if err != nil {
 		return RecoveryConfigurationPreview{}, err
 	}
+	if e.checkpoint != nil {
+		if err = e.checkpoint("recovery-intent", preview.Recovery.SnapshotID); err != nil {
+			return RecoveryConfigurationPreview{}, err
+		}
+	}
 	manifest, err := catalog.Verify(c.Catalog, map[string]ed25519.PublicKey{catalog.KeyID(c.Publisher): c.Publisher}, c.MinimumCatalogVersion, now)
 	if err != nil {
 		return RecoveryConfigurationPreview{}, err
@@ -56,6 +61,11 @@ func (e *Engine) stageRecoveryCopies(ctx context.Context, prepared *backup.Prepa
 			}
 			if err != nil {
 				return err
+			}
+			if e.checkpoint != nil {
+				if err = e.checkpoint("recovery-copy", stage); err != nil {
+					return err
+				}
 			}
 		}
 		return ctx.Err()
