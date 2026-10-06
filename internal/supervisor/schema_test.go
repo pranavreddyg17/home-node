@@ -18,7 +18,7 @@ func TestDomainAgainstInstalledLibvirtSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	domain := Domain{ID: state.Random(), Image: catalog.Image{MemoryMiB: 512, VCPUs: 1}, SystemPath: "/var/lib/homenode/images/image.raw", DataPath: "/var/lib/homenode/volumes/data.raw", ChannelPath: "/run/homenode/guests/instance/adapter.sock"}
+	domain := Domain{GuestUID: 200000, GuestGID: 64055, ID: state.Random(), Image: catalog.Image{MemoryMiB: 512, VCPUs: 1}, SystemPath: "/var/lib/homenode/images/image.raw", DataPath: "/var/lib/homenode/volumes/data.raw", ChannelPath: "/run/homenode/guests/instance/adapter.sock"}
 	xml, err := domain.XML()
 	if err != nil {
 		t.Fatal(err)

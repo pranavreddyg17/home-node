@@ -12,6 +12,7 @@ import (
 )
 
 type Domain struct {
+	GuestUID, GuestGID                uint32
 	ID                                string
 	Image                             catalog.Image
 	DiskReserveBytes                  int64
@@ -22,6 +23,14 @@ func (d Domain) Name() string { return "homenode-" + d.ID }
 func (d Domain) XML() (string, error) {
 	if !guestproto.ValidID(d.ID) || d.Image.MemoryMiB < 256 || d.Image.MemoryMiB > 12288 || d.Image.VCPUs < 1 || d.Image.VCPUs > 8 {
 		return "", errors.New("invalid domain profile")
+	}
+	// A supplied DAC identity must be a reserved high host UID and non-root GID.
+	// Zero identity remains the current unconverted launch path until pool
+	// provisioning and ownership enforcement are connected by the manager.
+	if d.GuestUID != 0 || d.GuestGID != 0 {
+		if d.GuestUID < 65536 || d.GuestUID > 1<<31-1 || d.GuestGID == 0 || d.GuestGID > 1<<31-1 {
+			return "", errors.New("invalid guest DAC identity")
+		}
 	}
 	for _, path := range []string{d.SystemPath, d.DataPath, d.ChannelPath} {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path {
@@ -93,4 +102,5 @@ const domainXML = `<domain type='kvm'>
   <rng model='virtio'><rate bytes='1024' period='1000'/><backend model='random'>/dev/urandom</backend></rng>
  </devices>
  <seclabel type='dynamic' model='apparmor' relabel='yes'/>
+ {{if .GuestUID}}<seclabel type='static' model='dac' relabel='no'><label>+{{.GuestUID}}:+{{.GuestGID}}</label></seclabel>{{end}}
 </domain>`
