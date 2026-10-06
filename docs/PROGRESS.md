@@ -3103,3 +3103,7 @@ Temporary root preflight fixture now injects unavailable manager observation, re
 ### Unit-file drift during manager observation fixture
 
 Temporary root recovery preflight fixture now replaces owned control unit bytes during injected observation and requires refusal, restores exact owned bytes, then proceeds to marker replacement refusal. This exercises the final owned-record check on activation-critical unit source rather than runtime policy only. Linux compilation and diff checks passed; native execution remains pending publication. CI37422229911 remains live. Live manager/cgroup/queued-job exclusion, installed publication/ownership/bootstrap/runtime reconstruction and complete acceptance remain unfinished.
+
+### Installation journal identity drift fixture
+
+Temporary root preflight fixture now changes the valid installation journal ID during injected manager observation and requires refusal despite unchanged owned file bytes. It restores original journal bytes before the marker replacement case. Linux compilation and diff checks passed; native execution remains pending publication. CI37422229911 remains live. Live manager/cgroup/queued-job exclusion, installed publication/ownership/bootstrap/runtime reconstruction and complete acceptance remain unfinished.

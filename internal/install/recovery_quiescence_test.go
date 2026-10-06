@@ -98,6 +98,24 @@ func TestRootRecoveryQuiescenceRejectsMarkerReplacementDuringObservation(t *test
 	if err = e.host.WriteFile(unitPath, originalUnit, 0644); err != nil {
 		t.Fatal(err)
 	}
+	originalJournal, err := e.journalRoot.ReadFile("install.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	changeJournal := func(context.Context) error {
+		current, err := e.load()
+		if err != nil {
+			return err
+		}
+		current.ID = strings.Repeat("b", 32)
+		return e.save(current)
+	}
+	if err = e.observeRecoveryQuiescence(context.Background(), changeJournal); !errors.Is(err, ErrConflict) {
+		t.Fatal("installation identity changed during observation accepted", err)
+	}
+	if err = e.journalRoot.WriteFile("install.json", originalJournal, 0600); err != nil {
+		t.Fatal(err)
+	}
 	replace := func(ctx context.Context) error {
 		if err := e.journalRoot.Remove("recovery-blocked"); err != nil {
 			return err
