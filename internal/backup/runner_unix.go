@@ -24,6 +24,10 @@ func lockMaintenanceRunner(ctx context.Context, directory string) (*os.File, err
 }
 
 func lockPrivateRunnerRoot(ctx context.Context, root *os.Root) (*os.File, error) {
+	return lockPrivateOwnedRoot(ctx, root, uint32(os.Geteuid()), true)
+}
+
+func lockPrivateOwnedRoot(ctx context.Context, root *os.Root, expectedUID uint32, create bool) (*os.File, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -34,15 +38,19 @@ func lockPrivateRunnerRoot(ctx context.Context, root *os.Root) (*os.File, error)
 	defer parent.Close()
 	info, err := parent.Stat()
 	var native unix.Stat_t
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 || unix.Fstat(int(parent.Fd()), &native) != nil || native.Uid != uint32(os.Geteuid()) {
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 || unix.Fstat(int(parent.Fd()), &native) != nil || native.Uid != expectedUID {
 		return nil, ErrMaintenanceRunner
 	}
-	file, err := root.OpenFile("maintenance.lock", os.O_CREATE|os.O_RDWR|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0600)
+	flags := os.O_RDWR | unix.O_NOFOLLOW | unix.O_NONBLOCK
+	if create {
+		flags |= os.O_CREATE
+	}
+	file, err := root.OpenFile("maintenance.lock", flags, 0600)
 	if err != nil {
 		return nil, err
 	}
 	info, err = file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || info.Size() != 0 || unix.Fstat(int(file.Fd()), &native) != nil || native.Uid != uint32(os.Geteuid()) || native.Nlink != 1 {
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || info.Size() != 0 || unix.Fstat(int(file.Fd()), &native) != nil || native.Uid != expectedUID || native.Nlink != 1 {
 		file.Close()
 		return nil, ErrMaintenanceRunner
 	}

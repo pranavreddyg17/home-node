@@ -562,11 +562,16 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if name, err := PreparePrivateRecovery(context.Background(), flowStaging.Root(), flowRoot, snapshot, manifest, policy); err != nil || name != "management.db" {
 		t.Fatal("explicit prepared-source retry", name, err)
 	}
-	preparedInventory, err := InspectPreparedRecovery(context.Background(), flowRoot, manifest, policy)
+	preparedLease, err := OpenPreparedRecovery(context.Background(), flowRoot, uint32(os.Geteuid()))
+	if err != nil {
+		t.Fatal("prepared installer lease", err)
+	}
+	defer preparedLease.Close()
+	preparedInventory, err := preparedLease.Inventory(context.Background(), manifest, policy)
 	if err != nil || preparedInventory.SnapshotID != snapshot || preparedInventory.ManagementName != "management.db" || preparedInventory.ManagementBytes <= 0 || preparedInventory.OwnerID == "" || preparedInventory.RecoveryEpoch < 1 || len(preparedInventory.Disks) != 1 {
 		t.Fatal("prepared installer handoff inventory", preparedInventory, err)
 	}
-	if _, err := InspectPreparedRecovery(context.Background(), flowRoot, manifest, RestorePolicy{MinimumCatalogVersion: manifest.CatalogVersion + 1, ApprovedImages: policy.ApprovedImages}); !errors.Is(err, ErrManifest) {
+	if _, err := preparedLease.Inventory(context.Background(), manifest, RestorePolicy{MinimumCatalogVersion: manifest.CatalogVersion + 1, ApprovedImages: policy.ApprovedImages}); !errors.Is(err, ErrManifest) {
 		t.Fatal("prepared inventory bypassed trusted catalog floor", err)
 	}
 	if err = copyRoot.Remove(finalName); err != nil {
