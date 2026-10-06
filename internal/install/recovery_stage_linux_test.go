@@ -154,6 +154,28 @@ func TestRootRecoveryManagementStagingReplay(t *testing.T) {
 	if _, err = borrowed.Stat(); !errors.Is(err, os.ErrClosed) {
 		t.Fatal("borrowed staging descriptor escaped", err)
 	}
+	consumerFailure := errors.New("publication consumer refused")
+	markerBefore, err := e.journalRoot.Lstat("recovery-blocked")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = e.withRecoveryStagedFiles(context.Background(), expected, func(ctx context.Context, files []backup.PreparedRecoveryFile) error {
+		borrowed = files[0].File
+		files[0].File = nil
+		return consumerFailure
+	}); !errors.Is(err, consumerFailure) {
+		t.Fatal("consumer refusal lost", err)
+	}
+	if _, err = borrowed.Stat(); !errors.Is(err, os.ErrClosed) {
+		t.Fatal("failed consumer retained descriptor", err)
+	}
+	markerAfter, err := e.journalRoot.Lstat("recovery-blocked")
+	if err != nil || !os.SameFile(markerBefore, markerAfter) {
+		t.Fatal("consumer refusal changed activation marker", err)
+	}
+	if err = e.reconcileRecoveryStaging(context.Background(), expected); err != nil {
+		t.Fatal("consumer refusal damaged staging", err)
+	}
 	if err = e.journalRoot.Remove("recovery-blocked"); err != nil {
 		t.Fatal(err)
 	}

@@ -3171,3 +3171,7 @@ Portable vacancy regression coverage now exercises all three fixed destination d
 ### Prepared-source cleanup retains private descriptor handles
 
 PreparedRecoveryLease.WithFiles now lends a separate consumer inventory slice, matching installer staged handoff: replacing metadata/file fields in the consumer's slice cannot change the lease-owned cleanup references or turn cleanup into a nil-descriptor panic. Backup race tests passed on the current worktree and Linux backup tests compiled; unrelated restic fixture edits were neither changed nor staged. CI37499514694 was revalidated in progress and had advanced past the installer root and kernel recovery steps to private backup listener activation. Full installed recovery and application acceptance remain unfinished.
+
+### Failed staged consumer releases descriptors and preserves recovery state
+
+The Linux root management-staging fixture now covers consumer refusal after clearing its own inventory descriptor field: the original error remains observable, borrowed descriptor closes, activation marker retains inode identity, and current staging still reconciles. Linux installer test compilation passed; execution of this added assertion awaits publication. CI37499514694 was verified running atbdd58ed and had advanced to reachable vulnerability checking. Full installed publication, ownership/runtime reconstruction, new-owner enrollment and application acceptance remain unfinished.
