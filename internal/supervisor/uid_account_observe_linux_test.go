@@ -31,6 +31,13 @@ func TestNativeGuestUIDLocalAccountObservation(t *testing.T) {
 	if err != nil || observed.First != pool.First || observed.Last != pool.Last {
 		t.Fatal("native account observation", observed, err)
 	}
+	processes, err := ObserveGuestUIDProcessConflicts(context.Background(), observed)
+	if err != nil || processes.First != pool.First || processes.Last != pool.Last {
+		t.Fatal("native process UID observation", processes, err)
+	}
+	if _, err = ObserveGuestUIDProcessConflicts(ctx, pool); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled process observation ignored", err)
+	}
 	if pool.Blocked != nil {
 		t.Fatal("input policy mutated")
 	}
