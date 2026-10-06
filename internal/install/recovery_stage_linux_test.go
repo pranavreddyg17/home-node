@@ -151,6 +151,22 @@ func TestRootRecoveryManagementStagingReplay(t *testing.T) {
 	if err = e.reconcileRecoveryStaging(context.Background(), expected); err != nil {
 		t.Fatal("restored owned policy did not reconcile", err)
 	}
+	receipt, err := e.journalRoot.ReadFile("recovery-staged.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = e.journalRoot.Remove("recovery-staged.json"); err != nil {
+		t.Fatal(err)
+	}
+	if err = e.reconcileRecoveryStaging(context.Background(), expected); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("missing completion receipt admitted", err)
+	}
+	if _, err = e.journalRoot.Lstat("recovery-staged.json"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("reconciliation recreated missing receipt", err)
+	}
+	if err = e.commitRecoveryRecord(context.Background(), "recovery-staged.json", receipt); err != nil {
+		t.Fatal(err)
+	}
 	if err = e.journalRoot.WriteFile(".recovery-management.copy", []byte("changed after completion"), 0600); err != nil {
 		t.Fatal(err)
 	}
