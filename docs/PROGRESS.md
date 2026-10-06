@@ -2947,3 +2947,7 @@ Extended encrypted native recovery fixture with separate private destinations pa
 ### Uncertain management-stage quarantine primitive
 
 Added private repair quarantine preserving uncertain stage bytes via a durable hard link before removing the active stage name. It requires matching journal/manifest intent, refuses completed original/rebound databases, output receipts/publications and SQLite journal/WAL/shared-memory sidecars, and never overwrites an unrelated quarantine inode. Unexpected inspection failures/cancellation do not trigger quarantine. Portable race tests verify preserved partial bytes, sidecar refusal and completed-copy refusal. This is a repair primitive for explicit guided workflow selection, not automatic repair or a claim of hot-journal recovery. Native repair orchestration, installed bootstrap/policy and full acceptance remain unfinished.
+
+### Frontend dependency advisory remediation
+
+CI37418019043 failed at the frontend vulnerability gate for source-map-js1.2.1 (GHSA-68fv-2mgg-jv7q), rather than establishing a successful complete run. Updated only that transitive lockfile entry to1.2.2, the patched release identified by the GitHub advisory. npm audit now reports zero vulnerabilities; TypeScript, production build, six dependency-evidence tests and diff checks passed. Publishing the remediation with accumulated recovery publication/orchestration/quarantine changes for another native CI run. Full installed recovery and application acceptance remain unfinished.
