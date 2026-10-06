@@ -35,7 +35,7 @@ func (m *Manager) ReserveGuestUID(ctx context.Context, id string, pool GuestUIDP
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	if !guestproto.ValidID(id) || pool.validate() != nil || m.Store == nil {
+	if !guestproto.ValidID(id) || m.validateGuestUIDServiceSeparation(pool) != nil || m.Store == nil {
 		return 0, ErrPolicy
 	}
 	var assigned uint32

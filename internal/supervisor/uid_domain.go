@@ -30,7 +30,7 @@ func (m *Manager) bindDomainGuestIdentity(ctx context.Context, d *Domain, reserv
 		return nil
 	}
 	pool := *m.GuestUIDPool
-	if pool.validate() != nil || m.GuestGID == 0 || m.GuestGID > 1<<31-1 {
+	if m.validateGuestUIDServiceSeparation(pool) != nil || m.GuestGID == 0 || m.GuestGID > 1<<31-1 {
 		return ErrPolicy
 	}
 	if reserve {
@@ -84,7 +84,7 @@ func (m *Manager) validateGuestIdentityPolicy(ctx context.Context) error {
 	if m.GuestUIDPool == nil && m.GuestGID != 0 {
 		return ErrPolicy
 	}
-	if m.GuestUIDPool != nil && (m.GuestUIDPool.validate() != nil || m.GuestGID == 0 || m.GuestGID > 1<<31-1) {
+	if m.GuestUIDPool != nil && (m.validateGuestUIDServiceSeparation(*m.GuestUIDPool) != nil || m.GuestGID == 0 || m.GuestGID > 1<<31-1) {
 		return ErrPolicy
 	}
 	return m.Store.Transaction(ctx, func(tx *sql.Tx) error {
@@ -136,4 +136,16 @@ func (m *Manager) validateGuestIdentityPolicy(ctx context.Context) error {
 		}
 		return errors.Join(rows.Err(), rows.Close())
 	})
+}
+
+func (m *Manager) validateGuestUIDServiceSeparation(pool GuestUIDPool) error {
+	if err := pool.validate(); err != nil {
+		return err
+	}
+	for _, uid := range []uint32{m.Policy.ControllerUID, m.Policy.TransferUID} {
+		if uid >= pool.First && uid <= pool.Last {
+			return ErrPolicy
+		}
+	}
+	return nil
 }

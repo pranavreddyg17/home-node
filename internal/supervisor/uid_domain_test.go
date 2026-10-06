@@ -188,3 +188,34 @@ func TestGuestUIDOnlyReservationCompletesAfterRestart(t *testing.T) {
 		t.Fatal("partial reservation changed identity", d, err)
 	}
 }
+
+func TestGuestUIDPoolCannotOverlapHostServiceIdentities(t *testing.T) {
+	for _, service := range []string{"controller", "transfer"} {
+		t.Run(service, func(t *testing.T) {
+			m, _ := newManager(t)
+			pool := GuestUIDPool{First: 200000, Last: 200001}
+			m.GuestUIDPool, m.GuestGID = &pool, 64055
+			if service == "controller" {
+				m.Policy.ControllerUID = pool.First
+			} else {
+				m.Policy.TransferUID = pool.Last
+			}
+			if err := m.Initialize(context.Background()); !errors.Is(err, ErrPolicy) {
+				t.Fatal("host service overlap accepted at startup", err)
+			}
+			if err := m.bindDomainGuestIdentity(context.Background(), &Domain{ID: state.Random()}, true); !errors.Is(err, ErrPolicy) {
+				t.Fatal("host service overlap reserved", err)
+			}
+			if _, err := m.ReserveGuestUID(context.Background(), state.Random(), pool); !errors.Is(err, ErrPolicy) {
+				t.Fatal("direct reservation overlaps service identity", err)
+			}
+			var records int
+			if err := m.Store.DB.QueryRow("SELECT (SELECT count(*) FROM runtime_uid_leases)+(SELECT count(*) FROM runtime_uid_pool)+(SELECT count(*) FROM runtime_guest_groups)").Scan(&records); err != nil {
+				t.Fatal(err)
+			}
+			if records != 0 {
+				t.Fatal("refusal changed identity records", records)
+			}
+		})
+	}
+}
