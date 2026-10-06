@@ -60,8 +60,22 @@ func TestPreparedRecoveryLeasePinsExistingOwnedRoot(t *testing.T) {
 		writer.Close()
 		t.Fatal("inspection did not retain preparation exclusion")
 	}
+	called := false
+	consume := func(context.Context, PreparedRecoveryInventory, []PreparedRecoveryFile) error {
+		called = true
+		return nil
+	}
+	if err = lease.WithFiles(ctx, uid, Manifest{}, RestorePolicy{}, consume); err == nil || called {
+		t.Fatal("unprepared files reached handoff", err)
+	}
+	if err = lease.WithFiles(ctx, uid+1, Manifest{}, RestorePolicy{}, consume); !errors.Is(err, ErrManifest) || called {
+		t.Fatal("foreign owner reached handoff", err)
+	}
 	lease.mu.Lock()
 	_, err = lease.Inventory(ctx, Manifest{}, RestorePolicy{})
+	if handoffErr := lease.WithFiles(ctx, uid, Manifest{}, RestorePolicy{}, consume); !errors.Is(handoffErr, ErrMaintenanceRunner) || called {
+		t.Fatal("overlapping handoff accepted", handoffErr)
+	}
 	lease.mu.Unlock()
 	if !errors.Is(err, ErrMaintenanceRunner) {
 		t.Fatal("overlapping inspection accepted", err)

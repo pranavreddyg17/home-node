@@ -574,6 +574,33 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if _, err := preparedLease.Inventory(context.Background(), manifest, RestorePolicy{MinimumCatalogVersion: manifest.CatalogVersion + 1, ApprovedImages: policy.ApprovedImages}); !errors.Is(err, ErrManifest) {
 		t.Fatal("prepared inventory bypassed trusted catalog floor", err)
 	}
+	var borrowed []*os.File
+	if err = preparedLease.WithFiles(context.Background(), uint32(os.Geteuid()), manifest, policy, func(ctx context.Context, inventory PreparedRecoveryInventory, files []PreparedRecoveryFile) error {
+		if inventory.OwnerID != preparedInventory.OwnerID || len(files) != 2 {
+			t.Fatal("scoped recovery files", inventory, len(files))
+		}
+		for _, file := range files {
+			borrowed = append(borrowed, file.File)
+			info, err := file.File.Stat()
+			if err != nil || info.Size() != file.Bytes || file.SHA256 == "" {
+				t.Fatal("borrowed recovery descriptor", file.Name, err)
+			}
+			if _, err := file.File.WriteAt([]byte("must not write"), 0); err == nil {
+				t.Fatal("recovery descriptor writable", file.Name)
+			}
+		}
+		if _, err := preparedLease.Inventory(ctx, manifest, policy); !errors.Is(err, ErrMaintenanceRunner) {
+			t.Fatal("scoped handoff lost exclusion", err)
+		}
+		return ctx.Err()
+	}); err != nil {
+		t.Fatal("scoped prepared recovery handoff", err)
+	}
+	for _, file := range borrowed {
+		if _, err := file.Stat(); !errors.Is(err, os.ErrClosed) {
+			t.Fatal("borrowed recovery descriptor retained after handoff", err)
+		}
+	}
 	if err = copyRoot.Remove(finalName); err != nil {
 		t.Fatal(err)
 	}
