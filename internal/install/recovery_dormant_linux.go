@@ -36,11 +36,11 @@ func observeRecoveryServicesWith(ctx context.Context, command func(context.Conte
 			return err
 		}
 		step, finish := context.WithTimeout(bounded, 5*time.Second)
-		properties := "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,LoadState,ActiveState,SubState"
+		properties := "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,Job,LoadState,ActiveState,SubState"
 		if unit != "homenode-backup-credential.socket" {
 			properties += ",MainPID,ControlPID"
 		}
-		cmd := command(step, "/usr/bin/systemctl", "--system", "--no-pager", "show", properties, unit)
+		cmd := command(step, "/usr/bin/systemctl", "--system", "--no-pager", "--all", "show", properties, unit)
 		if cmd == nil {
 			finish()
 			return ErrPlan

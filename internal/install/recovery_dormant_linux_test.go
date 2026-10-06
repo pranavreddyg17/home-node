@@ -15,19 +15,19 @@ func TestRecoveryDormantQueriesOnlyFixedServices(t *testing.T) {
 	valid := "LoadState=loaded\nActiveState=inactive\nSubState=dead\nMainPID=0\nControlPID=0\n"
 	units := []string{}
 	command := func(ctx context.Context, path string, args ...string) *exec.Cmd {
-		expectedProperties := "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,LoadState,ActiveState,SubState,MainPID,ControlPID"
-		if len(args) == 5 && args[4] == "homenode-backup-credential.socket" {
-			expectedProperties = "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,LoadState,ActiveState,SubState"
+		expectedProperties := "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,Job,LoadState,ActiveState,SubState,MainPID,ControlPID"
+		if len(args) == 6 && args[5] == "homenode-backup-credential.socket" {
+			expectedProperties = "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,Job,LoadState,ActiveState,SubState"
 		}
-		if path != "/usr/bin/systemctl" || len(args) != 5 || !reflect.DeepEqual(args[:4], []string{"--system", "--no-pager", "show", expectedProperties}) {
+		if path != "/usr/bin/systemctl" || len(args) != 6 || !reflect.DeepEqual(args[:5], []string{"--system", "--no-pager", "--all", "show", expectedProperties}) {
 			t.Fatal("unexpected manager query", path, args)
 		}
 		units = append(units, args[len(args)-1])
 		response := valid
-		if args[4] == "homenode-backup-credential.socket" {
+		if args[5] == "homenode-backup-credential.socket" {
 			response = strings.ReplaceAll(strings.ReplaceAll(response, "MainPID=0\n", ""), "ControlPID=0\n", "")
 		}
-		return exec.CommandContext(ctx, "/bin/sh", "-c", "printf '%s' \"$1\"", "fixture", "Id="+args[4]+"\nFragmentPath=/etc/systemd/system/"+args[4]+"\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\n"+response)
+		return exec.CommandContext(ctx, "/bin/sh", "-c", "printf '%s' \"$1\"", "fixture", "Id="+args[5]+"\nFragmentPath=/etc/systemd/system/"+args[5]+"\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\nJob=\n"+response)
 	}
 	if err := observeRecoveryServicesWith(context.Background(), command); err != nil {
 		t.Fatal(err)

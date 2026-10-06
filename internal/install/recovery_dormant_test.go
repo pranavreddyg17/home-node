@@ -29,7 +29,7 @@ func TestRecoveryDormancyRequiresExactInactiveProcessState(t *testing.T) {
 
 func TestRecoveryDormancyBindsInstalledUnitIdentity(t *testing.T) {
 	unit := "homenode-control.service"
-	valid := "Id=" + unit + "\nFragmentPath=/etc/systemd/system/" + unit + "\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\nLoadState=loaded\nActiveState=inactive\nSubState=dead\nMainPID=0\nControlPID=0\n"
+	valid := "Id=" + unit + "\nFragmentPath=/etc/systemd/system/" + unit + "\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\nJob=\nLoadState=loaded\nActiveState=inactive\nSubState=dead\nMainPID=0\nControlPID=0\n"
 	if err := validateRecoveryDormantUnit([]byte(valid), unit); err != nil {
 		t.Fatal(err)
 	}
@@ -39,6 +39,8 @@ func TestRecoveryDormancyBindsInstalledUnitIdentity(t *testing.T) {
 		strings.Replace(valid, "DropInPaths=", "DropInPaths=/etc/foreign.conf", 1),
 		strings.Replace(valid, "NeedDaemonReload=no", "NeedDaemonReload=yes", 1),
 		strings.Replace(valid, "Transient=no", "Transient=yes", 1),
+		strings.Replace(valid, "Job=\n", "Job=42\n", 1),
+		strings.Replace(valid, "Job=\n", "", 1),
 	} {
 		if err := validateRecoveryDormantUnit([]byte(data), unit); !errors.Is(err, ErrConflict) {
 			t.Fatal("foreign loaded unit admitted", data, err)
@@ -51,7 +53,7 @@ func TestRecoveryDormancyBindsInstalledUnitIdentity(t *testing.T) {
 
 func TestRecoveryCredentialSocketMustBeInactive(t *testing.T) {
 	unit := "homenode-backup-credential.socket"
-	valid := "Id=" + unit + "\nFragmentPath=/etc/systemd/system/" + unit + "\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\nLoadState=loaded\nActiveState=inactive\nSubState=dead\n"
+	valid := "Id=" + unit + "\nFragmentPath=/etc/systemd/system/" + unit + "\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\nJob=\nLoadState=loaded\nActiveState=inactive\nSubState=dead\n"
 	if err := validateRecoveryDormantUnit([]byte(valid), unit); err != nil {
 		t.Fatal(err)
 	}

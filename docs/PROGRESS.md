@@ -3139,3 +3139,7 @@ Disposable kernel cgroup fixture now requires a pre-cancelled root observation t
 ### Missing guest hierarchy is not recovery quiescence
 
 The disposable kernel fixture now requires an absent homenode.slice hierarchy to return ErrConflict before creating its test units. Linux test compilation passed. CI37479528801 completed successfully at 0f525a445bb6db50b8ed7dd71c77eab27d6544f2; the newly added actual-kernel fixture still awaits its own CI execution. Installed publication, retained activation exclusion, ownership/bootstrap/runtime reconstruction and complete product acceptance remain unfinished.
+
+### Recovery observation refuses queued manager jobs
+
+Installed fixed service and credential-socket observations now require an explicit empty Job property; queued IDs and missing observations are refused. The systemctl query uses --all so systemd 255 prints the empty Job value (verified against upstream v255 systemctl-show.c). Portable installer race tests passed and Linux installer tests compiled. Linux command execution remains for CI. This is a point-in-time queued-job check, not retained exclusion of future activation; destination publication and full restore remain unfinished. CI37480663185 was verified running at 89d778822d698dc77689d0f90cbbbd781eebaf9f, so this change is kept local until that run finishes.

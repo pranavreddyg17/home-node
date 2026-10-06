@@ -19,7 +19,7 @@ func validateRecoveryDormantUnit(data []byte, unit string) error {
 	default:
 		return ErrPlan
 	}
-	expected := map[string]string{"Id": unit, "FragmentPath": "/etc/systemd/system/" + unit, "DropInPaths": "", "NeedDaemonReload": "no", "Transient": "no", "LoadState": "loaded", "ActiveState": "inactive", "SubState": "dead", "MainPID": "0", "ControlPID": "0"}
+	expected := map[string]string{"Job": "", "Id": unit, "FragmentPath": "/etc/systemd/system/" + unit, "DropInPaths": "", "NeedDaemonReload": "no", "Transient": "no", "LoadState": "loaded", "ActiveState": "inactive", "SubState": "dead", "MainPID": "0", "ControlPID": "0"}
 	if unit == "homenode-backup-credential.socket" {
 		delete(expected, "MainPID")
 		delete(expected, "ControlPID")
