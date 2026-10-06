@@ -1,4 +1,5 @@
 [Unit]
+ConditionPathExists=!/var/lib/homenode-install/recovery-blocked
 Description=HomeNode bounded guest transfer service
 Requires=homenode-supervisor.service
 After=homenode-supervisor.service

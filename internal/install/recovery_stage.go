@@ -28,6 +28,9 @@ func (e *Engine) stageRecoveryCopies(ctx context.Context, prepared *backup.Prepa
 	if err != nil {
 		return RecoveryConfigurationPreview{}, err
 	}
+	if err = e.blockRecoveryActivation(ctx); err != nil {
+		return RecoveryConfigurationPreview{}, err
+	}
 	if e.checkpoint != nil {
 		if err = e.checkpoint("recovery-intent", preview.Recovery.SnapshotID); err != nil {
 			return RecoveryConfigurationPreview{}, err

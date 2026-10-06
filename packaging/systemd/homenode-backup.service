@@ -1,4 +1,5 @@
 [Unit]
+ConditionPathExists=!/var/lib/homenode-install/recovery-blocked
 Description=HomeNode isolated encrypted backup worker
 Requires=homenode-control.service homenode-backup-credential.socket
 After=homenode-control.service homenode-backup-credential.socket

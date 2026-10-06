@@ -1,4 +1,5 @@
 [Unit]
+ConditionPathExists=!/var/lib/homenode-install/recovery-blocked
 Description=HomeNode private control plane
 Requires=homenode-supervisor.service homenode-transfer.service
 After=network-online.target tailscaled.service homenode-supervisor.service homenode-transfer.service
