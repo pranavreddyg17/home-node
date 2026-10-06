@@ -109,6 +109,59 @@ func TestNativeGuestChannelDirectoryOwnership(t *testing.T) {
 	if err := os.Remove(unknown); err != nil {
 		t.Fatal(err)
 	}
+	grantCtx, stopGrant := context.WithCancel(context.Background())
+	stopGrant()
+	beforeCancel, err := os.Lstat(socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := grantGuestChannelAccess(grantCtx, socketPath, 1000000000, 64055); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled grant ignored", err)
+	}
+	afterCancel, err := os.Lstat(socketPath)
+	if err != nil || !os.SameFile(beforeCancel, afterCancel) || beforeCancel.Mode() != afterCancel.Mode() {
+		t.Fatal("cancelled grant changed socket", err)
+	}
+	if err := os.Remove(socketPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(socketPath, []byte("regular sentinel"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(socketPath, 1000000000, 64055); err != nil {
+		t.Fatal(err)
+	}
+	if err := grantGuestChannelAccess(context.Background(), socketPath, 1000000000, 64055); !errors.Is(err, ErrPolicy) {
+		t.Fatal("regular file granted socket access", err)
+	}
+	if data, err := os.ReadFile(socketPath); err != nil || string(data) != "regular sentinel" {
+		t.Fatal("regular sentinel changed", err)
+	}
+	regular, err := os.Lstat(socketPath)
+	if err != nil || regular.Mode().Perm() != 0600 {
+		t.Fatal("refused regular file mode changed", err)
+	}
+	if err := os.Remove(socketPath); err != nil {
+		t.Fatal(err)
+	}
+	grantTarget := filepath.Join(parent, "grant-target")
+	if err := os.WriteFile(grantTarget, []byte("symlink sentinel"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(grantTarget, socketPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := grantGuestChannelAccess(context.Background(), socketPath, 1000000000, 64055); !errors.Is(err, ErrPolicy) {
+		t.Fatal("symlink granted socket access", err)
+	}
+	if data, err := os.ReadFile(grantTarget); err != nil || string(data) != "symlink sentinel" {
+		t.Fatal("grant symlink target changed", err)
+	}
+	grantInfo, err := os.Lstat(grantTarget)
+	grantOwner, grantOK := openedSysUID(grantInfo)
+	if err != nil || !grantOK || grantOwner != 0 || grantInfo.Mode().Perm() != 0600 {
+		t.Fatal("grant target metadata changed", err)
+	}
 	target := filepath.Join(parent, "target")
 	if err := os.Mkdir(target, 0700); err != nil {
 		t.Fatal(err)
