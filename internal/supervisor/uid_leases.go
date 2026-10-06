@@ -24,7 +24,7 @@ func (p GuestUIDPool) validate() error {
 }
 
 func (m *Manager) initializeGuestUIDLeases(ctx context.Context) error {
-	_, err := m.Store.DB.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS runtime_uid_leases(instance_id TEXT PRIMARY KEY, uid INTEGER NOT NULL UNIQUE CHECK(uid>=65536 AND uid<=2147483647)); CREATE TABLE IF NOT EXISTS runtime_uid_pool(singleton INTEGER PRIMARY KEY CHECK(singleton=1), first_uid INTEGER NOT NULL, last_uid INTEGER NOT NULL);`)
+	_, err := m.Store.DB.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS runtime_uid_leases(instance_id TEXT PRIMARY KEY, uid INTEGER NOT NULL UNIQUE CHECK(uid>=65536 AND uid<=2147483647)); CREATE TABLE IF NOT EXISTS runtime_guest_groups(instance_id TEXT PRIMARY KEY, gid INTEGER NOT NULL CHECK(gid>0 AND gid<=2147483647)); CREATE TABLE IF NOT EXISTS runtime_uid_pool(singleton INTEGER PRIMARY KEY CHECK(singleton=1), first_uid INTEGER NOT NULL, last_uid INTEGER NOT NULL);`)
 	return err
 }
 

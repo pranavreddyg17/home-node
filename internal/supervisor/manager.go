@@ -71,6 +71,8 @@ type Backend interface {
 	CleanupPreparation(context.Context, string, string, int64) error
 }
 type Manager struct {
+	GuestUIDPool              *GuestUIDPool // independently qualified, exclusively provisioned host policy
+	GuestGID                  uint32
 	Store                     *state.Store
 	Policy                    Policy
 	Manifest                  catalog.Manifest
@@ -285,6 +287,9 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 		return fail(err)
 	}
 	domain := Domain{ID: r.InstanceID, Image: image, DiskReserveBytes: m.Policy.DiskReserveBytes, SystemPath: systemPath, DataPath: filepath.Join(m.Volumes, r.InstanceID+".raw"), ChannelPath: filepath.Join(m.Channels, r.InstanceID, "adapter.sock")}
+	if err = m.bindDomainGuestIdentity(ctx, &domain, true); err != nil {
+		return fail(err)
+	}
 	if err = m.Backend.Prepare(ctx, domain); err != nil {
 		return fail(err)
 	}
@@ -528,7 +533,10 @@ func (m *Manager) Audit(ctx context.Context) error {
 		}
 		if !stop {
 			d := Domain{ID: id, Image: image, DiskReserveBytes: m.Policy.DiskReserveBytes, SystemPath: filepath.Join(m.Images, image.SHA256+".raw"), DataPath: filepath.Join(m.Volumes, id+".raw"), ChannelPath: filepath.Join(m.Channels, id, "adapter.sock")}
-			stop = m.Backend.Verify(ctx, d) != nil
+			stop = m.bindDomainGuestIdentity(ctx, &d, false) != nil
+			if !stop {
+				stop = m.Backend.Verify(ctx, d) != nil
+			}
 		}
 		if stop {
 			if _, err = m.Store.DB.ExecContext(ctx, "UPDATE runtime_instances SET state='stopping',desired='stopped' WHERE id=?", id); err != nil {
