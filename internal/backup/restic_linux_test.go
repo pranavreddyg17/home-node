@@ -461,6 +461,66 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if repeatedReceipt, err := reconcileRecoveryManagementOutput(context.Background(), freshRoot); err != nil || repeatedReceipt != firstReceipt {
 		t.Fatal("joined retry changed output receipt", repeatedReceipt, err)
 	}
+	for _, boundary := range []string{"copied", "rebound", "partial-copy"} {
+		t.Run("management-boundary-"+boundary, func(t *testing.T) {
+			boundaryPath := t.TempDir()
+			if err := os.Chmod(boundaryPath, 0700); err != nil {
+				t.Fatal(err)
+			}
+			boundaryRoot, err := os.OpenRoot(boundaryPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer boundaryRoot.Close()
+			if _, err = prepareRecoveryDisks(context.Background(), installRoot, boundaryRoot, snapshot, manifest, policy); err != nil {
+				t.Fatal(err)
+			}
+			beforePlan, err := boundaryRoot.ReadFile("recovery-install.json")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if boundary == "partial-copy" {
+				if err = boundaryRoot.WriteFile(".recovery-management.stage", []byte("interrupted incomplete copy"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if err = copyRecoveryManagement(context.Background(), installRoot, boundaryRoot, manifest, policy); err != nil {
+					t.Fatal(err)
+				}
+				if boundary == "rebound" {
+					if err = rebindRecoveryManagement(context.Background(), boundaryRoot, manifest); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			name, prepareErr := prepareRecoveryManagement(context.Background(), installRoot, boundaryRoot, snapshot, manifest, policy)
+			if boundary == "partial-copy" {
+				if prepareErr == nil || name != "" {
+					t.Fatal("partial database adopted", name, prepareErr)
+				}
+				retained, err := boundaryRoot.ReadFile(".recovery-management.stage")
+				if err != nil || string(retained) != "interrupted incomplete copy" {
+					t.Fatal("partial stage silently changed", err)
+				}
+				for _, name := range []string{"management.db", "recovery-management.json"} {
+					if _, err := boundaryRoot.Lstat(name); !errors.Is(err, os.ErrNotExist) {
+						t.Fatal("refusal published database/receipt", name, err)
+					}
+				}
+			} else {
+				if prepareErr != nil || name != "management.db" {
+					t.Fatal("completed boundary did not resume", name, prepareErr)
+				}
+				if _, err = reconcileRecoveryManagementOutput(context.Background(), boundaryRoot); err != nil {
+					t.Fatal(err)
+				}
+			}
+			afterPlan, err := boundaryRoot.ReadFile("recovery-install.json")
+			if err != nil || !bytes.Equal(beforePlan, afterPlan) {
+				t.Fatal("boundary retry changed journaled identities", err)
+			}
+		})
+	}
 	if err = copyRoot.Remove(finalName); err != nil {
 		t.Fatal(err)
 	}
