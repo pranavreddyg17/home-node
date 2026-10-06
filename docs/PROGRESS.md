@@ -2955,3 +2955,7 @@ CI37418019043 failed at the frontend vulnerability gate for source-map-js1.2.1 (
 ### Restart after preserved management quarantine fixture
 
 Encrypted native partial-copy fixture now selects quarantine explicitly, reruns joined disk/management preparation from validated restored source, reconciles the repaired output receipt and verifies quarantined uncertain bytes remain intact. Immutable journal identities must remain unchanged through refusal/quarantine/restart. Linux compilation and diff checks passed; the new assertion remains unexecuted natively. CI37418510830 is active at ecda02d. Guided owner repair UI, hot-journal/power-loss recovery, installed bootstrap/policy and complete acceptance remain unfinished.
+
+### Exclusive private recovery preparation entry point
+
+Added Linux PreparePrivateRecovery retaining persistent kernel maintenance leases on both private runner-owned source/destination roots through preparation and publication. Nonblocking overlap or same-root use is refused; destination refusal releases the already-acquired source lease, and close errors clear returned names. Unsupported hosts refuse preparation. Portable race tests verify overlap exclusion, destination refusal/source release and subsequent acquisition; Linux compilation passed and encrypted fresh/retry fixtures now call the leased entry point. Leases coordinate participating HomeNode writers, not independent privileged writers. Installed ownership/bootstrap/policy, guided owner workflow and full acceptance remain unfinished.
