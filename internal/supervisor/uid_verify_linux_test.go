@@ -21,7 +21,7 @@ func TestNativeGuestDACProcessVerification(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	pool, err := ObserveLocalGuestUIDConflicts(ctx, GuestUIDPool{First: 200000, Last: 200015})
+	pool, err := ObserveLocalGuestUIDConflicts(ctx, GuestUIDPool{First: 1000000000, Last: 1000000255})
 	if err != nil {
 		t.Fatal(err)
 	}

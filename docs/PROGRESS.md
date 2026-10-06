@@ -3263,3 +3263,7 @@ Manager now accepts independently qualified guest UID pool/GID policy and binds 
 ### Startup refuses guest identity policy drift
 
 Manager.Initialize now validates supplied guest identity policy against the durable pool, leases and groups before reconciliation. Removing the policy after reservation, changing pool bounds/groups, conflicting UID observations and orphan group assignments refuse startup. Matching policy and UID-only partial reservation retries remain supported. Tests exercise startup refusal and recovery to the original policy without altering assignments. Full supervisor race tests passed and Linux tests compiled. Installer exclusive pool provisioning/configuration and Linux per-guest volume/channel preparation remain required; this startup check does not establish host eligibility or authorize activation. CI37506109662 is verified live atb1797de. Full application acceptance remains unfinished.
+
+### Native DAC fixture avoids runner subordinate UID pool
+
+CI37506109662 failed atb1797de before spawning the positive DAC child: every UID in fixture range200000..200015 was blocked by observed account/delegation/process conflicts. It is not a verifier pass. The fixture now searches1000000000..1000000255, preserving all conflict observations and requiring a free identity; it does not bypass or delete runner allocations. Linux supervisor tests compiled; native execution awaits rerun.
