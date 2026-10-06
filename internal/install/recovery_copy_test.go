@@ -75,4 +75,42 @@ func TestRecoveryCopyChecksBorrowedBytesAndPreservesOccupiedStage(t *testing.T) 
 	if err = copyRecoveryFile(context.Background(), root, "../escape", borrowed, os.Geteuid()); !errors.Is(err, ErrPlan) {
 		t.Fatal("foreign stage path accepted", err)
 	}
+	if err = root.Remove(name); err != nil {
+		t.Fatal(err)
+	}
+	borrowed.SHA256 = digest(payload)
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err = copyRecoveryFile(cancelled, root, name, borrowed, os.Geteuid()); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled copy proceeded", err)
+	}
+	if _, err = root.Lstat(name); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("cancelled copy created stage", err)
+	}
+	if err = root.Symlink("source", name); err != nil {
+		t.Fatal(err)
+	}
+	if err = verifyRecoveryCopy(context.Background(), root, name, borrowed, os.Geteuid()); !errors.Is(err, ErrConflict) {
+		t.Fatal("symlink stage admitted", err)
+	}
+	if err = copyRecoveryFile(context.Background(), root, name, borrowed, os.Geteuid()); !errors.Is(err, os.ErrExist) {
+		t.Fatal("occupied symlink replaced", err)
+	}
+	got, err = root.ReadFile("source")
+	if err != nil || string(got) != string(payload) {
+		t.Fatal("symlink target altered", err)
+	}
+	if err = root.Remove(name); err != nil {
+		t.Fatal(err)
+	}
+	if err = root.WriteFile(name, payload[:3], 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = verifyRecoveryCopy(context.Background(), root, name, borrowed, os.Geteuid()); !errors.Is(err, ErrConflict) {
+		t.Fatal("partial copy admitted", err)
+	}
+	got, err = root.ReadFile(name)
+	if err != nil || string(got) != string(payload[:3]) {
+		t.Fatal("partial copy changed during refusal", err)
+	}
 }

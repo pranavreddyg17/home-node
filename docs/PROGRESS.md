@@ -3007,3 +3007,7 @@ Completed staging verification now syncs the verified file and destination direc
 ### Durable immutable intent retry and accumulated native publication
 
 Exact recovery-intent retry now syncs the verified recovery.json file before directory sync, covering initial completed bytes interrupted before file durability. Installer race suite, Linux compilation and diff checks passed. CI37419978389 completed successfully at e94abe5, verifying the prior prepared lease/replacement configuration changes. Publishing accumulated scoped descriptor handoff, immutable intent, bounded copy/verification and staging/refusal changes for native execution. Successful full installed restore/publication/ownership/bootstrap/runtime reconstruction and complete acceptance remain unfinished.
+
+### Recovery copy cancellation and occupied-path regression evidence
+
+Extended installer copy/verification fixture to prove pre-cancelled copy creates no stage, occupied symlink is refused by verification and never replaced by copying, its source target remains unchanged, and partial staging bytes remain intact after refusal. Installer race suite, Linux compilation and diff checks passed. CI37420643271 is still live at38f4529; this regression change remains local. Successful joined installed recovery, publication/ownership/bootstrap/runtime reconstruction and complete application acceptance remain unfinished.
