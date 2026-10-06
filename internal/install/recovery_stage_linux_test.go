@@ -134,6 +134,18 @@ func TestRootRecoveryManagementStagingReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	expected := recoveryIntent{Version: 1, ConfigurationID: installed.ID, ConfigurationDigest: installed.Digest, Recovery: preview.Recovery}
+	if err = e.journalRoot.Remove("recovery-blocked"); err != nil {
+		t.Fatal(err)
+	}
+	if err = e.reconcileRecoveryStaging(context.Background(), expected); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("missing activation block admitted", err)
+	}
+	if _, err = e.journalRoot.Lstat("recovery-blocked"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("reconciliation recreated activation block", err)
+	}
+	if err = e.blockRecoveryActivation(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	policyPath := "etc/homenode/runtime-policy.json"
 	originalPolicy, err := e.host.ReadFile(policyPath)
 	if err != nil {
