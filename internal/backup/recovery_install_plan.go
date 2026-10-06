@@ -214,20 +214,32 @@ func createRecoveryInstallPlan(ctx context.Context, root *os.Root, plan recovery
 	if root == nil || plan.validate() != nil {
 		return ErrManifest
 	}
-	info, err := root.Stat(".")
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-		return ErrManifest
-	}
 	data, err := json.Marshal(plan)
 	if err != nil {
 		return err
+	}
+	return createRecoveryJournal(ctx, root, "recovery-install.json", data)
+}
+
+// createRecoveryJournal durably creates a bounded private immutable journal.
+// Exclusive root ownership is required through creation and failure cleanup.
+func createRecoveryJournal(ctx context.Context, root *os.Root, name string, data []byte) (result error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if root == nil || (name != "recovery-install.json" && name != "recovery-management.json") || len(data) == 0 || len(data) > 4096 {
+		return ErrManifest
+	}
+	info, err := root.Stat(".")
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+		return ErrManifest
 	}
 	directory, err := root.Open(".")
 	if err != nil {
 		return err
 	}
 	defer func() { result = errors.Join(result, directory.Close()) }()
-	file, err := root.OpenFile("recovery-install.json", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	file, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return err
 	}
@@ -238,7 +250,7 @@ func createRecoveryInstallPlan(ctx context.Context, root *os.Root, plan recovery
 	defer func() {
 		result = errors.Join(result, file.Close())
 		if result != nil {
-			result = errors.Join(result, removeOwnedStaging(root, map[string]os.FileInfo{"recovery-install.json": created}), directory.Sync())
+			result = errors.Join(result, removeOwnedStaging(root, map[string]os.FileInfo{name: created}), directory.Sync())
 		}
 	}()
 	if err = ctx.Err(); err != nil {

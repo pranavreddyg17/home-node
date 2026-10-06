@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,6 +66,29 @@ func TestManagementOutputRequiresReboundJournalIdentity(t *testing.T) {
 	output, err := inspectReboundRecoveryManagement(context.Background(), root)
 	if err != nil || output.Bytes <= 0 || !repositoryPattern.MatchString(output.SHA256) || !repositoryPattern.MatchString(output.PlanSHA256) || output.SHA256 == manifest.Files[0].SHA256 {
 		t.Fatal("rebound output identity differs", output, err)
+	}
+	if err = recordRecoveryManagementOutput(context.Background(), root); err != nil {
+		t.Fatal(err)
+	}
+	receiptBytes, err := root.ReadFile("recovery-management.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := decodeRecoveryManagementReceipt(receiptBytes)
+	if err != nil || receipt.Output != output {
+		t.Fatal("durable management output differs", receipt, err)
+	}
+	if err = recordRecoveryManagementOutput(context.Background(), root); !errors.Is(err, os.ErrExist) {
+		t.Fatal("occupied management receipt adopted", err)
+	}
+	for _, invalid := range []string{
+		strings.Replace(string(receiptBytes), `"version":1`, `"version":1,"Version":1`, 1),
+		strings.Replace(string(receiptBytes), `"output":{`, `"output":{"sha256":null,`, 1),
+		string(receiptBytes) + `{}`,
+	} {
+		if receipt, err := decodeRecoveryManagementReceipt([]byte(invalid)); err == nil || receipt.Output.SHA256 != "" {
+			t.Fatal("ambiguous receipt returned output", receipt, err)
+		}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

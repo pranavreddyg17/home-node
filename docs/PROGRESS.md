@@ -2923,3 +2923,7 @@ Added Linux management-stage rebinding under a30-second deadline using retained 
 ### Rebound management output identity inspection
 
 Added private rebound-stage inspection requiring exact journaled owner/epoch/app identities, validated sanitized schema/authority and private inode/size checks before context-aware hashing. It returns resulting database bytes/SHA256 and full plan digest for later durable output recording, with zero result on failure. Portable race fixture refuses the original historical database, verifies changed rebound output and cancellation; Linux compilation passed with encrypted fixture output checks awaiting native execution. Returned output is transient, not a durable receipt. Durable output recording, crash reconciliation/publication and full installed recovery remain unfinished.
+
+### Durable management output receipt creation
+
+Added immutable management-output receipt creation from newly validated rebound bytes, sharing bounded private journal creation/sync/failure cleanup with the installation plan. Receipt codec requires exact nonnull fields, unique JSON keys, valid digest/size bounds and version. Portable race tests verify persisted output equality, occupied-receipt refusal and ambiguous/trailing JSON rejection; existing plan tests passed after journal helper extraction. Receipt reopening/digest reconciliation and database publication remain unfinished, along with installed bootstrap/policy and full application acceptance.
