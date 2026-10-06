@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"golang.org/x/sys/unix"
 )
 
 func TestNativeGuestChannelDirectoryOwnership(t *testing.T) {
@@ -32,6 +34,67 @@ func TestNativeGuestChannelDirectoryOwnership(t *testing.T) {
 	}
 	if err := prepareGuestChannelDirectory(context.Background(), path, 1000000000, 64055); err != nil {
 		t.Fatal("refusal damaged directory", err)
+	}
+	socketPath := filepath.Join(path, "adapter.sock")
+	fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := unix.Bind(fd, &unix.SockaddrUnix{Name: socketPath}); err != nil {
+		unix.Close(fd)
+		t.Fatal(err)
+	}
+	if err := unix.Close(fd); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(socketPath, 1000000000, 64055); err != nil {
+		t.Fatal(err)
+	}
+	socketBefore, err := os.Lstat(socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareGuestChannelDirectory(context.Background(), path, 1000000000, 64055); err != nil {
+		t.Fatal("existing guest socket refused", err)
+	}
+	socketAfter, err := os.Lstat(socketPath)
+	if err != nil || !os.SameFile(socketBefore, socketAfter) || socketBefore.Mode() != socketAfter.Mode() {
+		t.Fatal("retry changed socket", err)
+	}
+	if err := os.Chown(socketPath, 1000000001, 64055); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareGuestChannelDirectory(context.Background(), path, 1000000000, 64055); !errors.Is(err, ErrPolicy) {
+		t.Fatal("foreign socket accepted", err)
+	}
+	if err := os.Chown(socketPath, 1000000000, 64055); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(parent, "alias.sock")
+	if err := os.Link(socketPath, alias); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareGuestChannelDirectory(context.Background(), path, 1000000000, 64055); !errors.Is(err, ErrPolicy) {
+		t.Fatal("aliased socket accepted", err)
+	}
+	if err := os.Remove(alias); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareGuestChannelDirectory(context.Background(), path, 1000000000, 64055); err != nil {
+		t.Fatal("socket retry after refusal", err)
+	}
+	unknown := filepath.Join(path, "unknown")
+	if err := os.WriteFile(unknown, []byte("retained"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareGuestChannelDirectory(context.Background(), path, 1000000000, 64055); !errors.Is(err, ErrPolicy) {
+		t.Fatal("unknown guest-directory entry accepted", err)
+	}
+	if data, err := os.ReadFile(unknown); err != nil || string(data) != "retained" {
+		t.Fatal("unknown entry changed", err)
+	}
+	if err := os.Remove(unknown); err != nil {
+		t.Fatal(err)
 	}
 	target := filepath.Join(parent, "target")
 	if err := os.Mkdir(target, 0700); err != nil {
