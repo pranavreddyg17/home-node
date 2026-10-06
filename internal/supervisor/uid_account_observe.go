@@ -102,19 +102,23 @@ func readGuestUIDAccountFile(ctx context.Context, root *os.Root, name string, ow
 
 // ObserveGuestUIDNameServiceEligibility verifies a protected local-only NSS
 // configuration. It does not provision or reserve the guest UID pool.
-func ObserveGuestUIDNameServiceEligibility(ctx context.Context) (result error) {
+func ObserveGuestUIDNameServiceEligibility(ctx context.Context) error {
+	return observeGuestUIDNameServiceEligibilityAt(ctx, "/etc")
+}
+
+func observeGuestUIDNameServiceEligibilityAt(ctx context.Context, directory string) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if runtime.GOOS != "linux" || os.Geteuid() != 0 {
 		return ErrPolicy
 	}
-	before, err := os.Lstat("/etc")
+	before, err := os.Lstat(directory)
 	owner, ok := openedSysUID(before)
 	if err != nil || !ok || owner != 0 || !before.IsDir() || before.Mode().Perm()&0022 != 0 {
 		return ErrPolicy
 	}
-	root, err := os.OpenRoot("/etc")
+	root, err := os.OpenRoot(directory)
 	if err != nil {
 		return err
 	}
@@ -131,7 +135,7 @@ func ObserveGuestUIDNameServiceEligibility(ctx context.Context) (result error) {
 	if err := validateGuestUIDNameServices(ctx, data); err != nil {
 		return err
 	}
-	current, err := os.Lstat("/etc")
+	current, err := os.Lstat(directory)
 	owner, ok = openedSysUID(current)
 	if err != nil || !ok || owner != 0 || !os.SameFile(opened, current) || current.Mode().Perm()&0022 != 0 {
 		return ErrPolicy
