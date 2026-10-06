@@ -3191,3 +3191,7 @@ Domain accepts an optional reserved high GuestUID and non-root GuestGID, refuses
 ### Concurrent UID reservations preserve uniqueness and retry identity
 
 Added race-enabled concurrency coverage allocating sixteen fresh guests against a sixteen-UID pool through simultaneous transactions. Every result must be distinct and in range, every retry must retain its original UID, and a seventeenth guest must fail capacity. Targeted reservation/concurrency race tests passed. CI37500794893 was verified running at70317b7. Production lease-to-domain wiring, reserved host-pool validation, ownership enforcement and full installed recovery remain unfinished.
+
+### UID pool excludes parsed local and subordinate account conflicts
+
+Added bounded UTF-8 local passwd/subuid observation parsing for the guest UID pool. Existing account UIDs and overlaps with delegated subordinate UID ranges become blocked candidates; malformed fields, numeric signs/overflow, zero-size delegations, wraparound and ambiguous CRLF are refused. Caller blocked-policy maps are copied rather than mutated. Tests join those observations to actual durable reservation and require the only nonconflicting UID followed by capacity refusal; targeted supervisor race tests passed. This is parsing of supplied observations, not a complete host observer: protected host-file reads, NSS eligibility, active process conflicts and exclusive reserved-pool provisioning remain to implement, as do production domain/ownership wiring and full installed recovery. CI37500794893 remains live at70317b7.
