@@ -2943,3 +2943,7 @@ Added Linux orchestration joining qualified journaled disks, verified management
 ### Management completed-boundary retry fixtures
 
 Extended encrypted native recovery fixture with separate private destinations paused after completed management copy and after committed rebinding before receipt. Orchestration must resume/publish/reconcile without changing immutable journal identities. An incomplete management-copy fixture must fail, preserve its partial bytes and publish neither database nor receipt. Linux compilation and diff checks passed; native assertions remain pending publication/execution. These emulate completed-operation boundaries, not process-kill/power-loss/hot-journal recovery. Explicit partial repair and full installed recovery/acceptance remain unfinished.
+
+### Uncertain management-stage quarantine primitive
+
+Added private repair quarantine preserving uncertain stage bytes via a durable hard link before removing the active stage name. It requires matching journal/manifest intent, refuses completed original/rebound databases, output receipts/publications and SQLite journal/WAL/shared-memory sidecars, and never overwrites an unrelated quarantine inode. Unexpected inspection failures/cancellation do not trigger quarantine. Portable race tests verify preserved partial bytes, sidecar refusal and completed-copy refusal. This is a repair primitive for explicit guided workflow selection, not automatic repair or a claim of hot-journal recovery. Native repair orchestration, installed bootstrap/policy and full acceptance remain unfinished.
