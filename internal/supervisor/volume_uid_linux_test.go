@@ -3,6 +3,7 @@
 package supervisor
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -23,8 +24,19 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	if err = file.Truncate(size); err != nil {
 		t.Fatal(err)
 	}
-	if err = file.Chown(200000, 200000); err != nil {
+	if err = transferVolumeToGuest(context.Background(), file, size, 200000, 200000); err != nil {
 		t.Fatal(err)
+	}
+	if err = transferVolumeToGuest(context.Background(), file, size, 200000, 200000); err != nil {
+		t.Fatal("ownership retry refused", err)
+	}
+	if err = transferVolumeToGuest(context.Background(), file, size, 200001, 200001); !errors.Is(err, ErrPolicy) {
+		t.Fatal("another guest took ownership", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err = transferVolumeToGuest(ctx, file, size, 200000, 200000); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled ownership ignored", err)
 	}
 	if err = admitVolumeForUID(file, size, 200000); err != nil {
 		t.Fatal("reserved guest ownership refused", err)
