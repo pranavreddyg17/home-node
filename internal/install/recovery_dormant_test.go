@@ -26,3 +26,25 @@ func TestRecoveryDormancyRequiresExactInactiveProcessState(t *testing.T) {
 		}
 	}
 }
+
+func TestRecoveryDormancyBindsInstalledUnitIdentity(t *testing.T) {
+	unit := "homenode-control.service"
+	valid := "Id=" + unit + "\nFragmentPath=/etc/systemd/system/" + unit + "\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\nLoadState=loaded\nActiveState=inactive\nSubState=dead\nMainPID=0\nControlPID=0\n"
+	if err := validateRecoveryDormantUnit([]byte(valid), unit); err != nil {
+		t.Fatal(err)
+	}
+	for _, data := range []string{
+		strings.Replace(valid, "Id="+unit, "Id=foreign.service", 1),
+		strings.Replace(valid, "/etc/systemd/system/", "/run/systemd/system/", 1),
+		strings.Replace(valid, "DropInPaths=", "DropInPaths=/etc/foreign.conf", 1),
+		strings.Replace(valid, "NeedDaemonReload=no", "NeedDaemonReload=yes", 1),
+		strings.Replace(valid, "Transient=no", "Transient=yes", 1),
+	} {
+		if err := validateRecoveryDormantUnit([]byte(data), unit); !errors.Is(err, ErrConflict) {
+			t.Fatal("foreign loaded unit admitted", data, err)
+		}
+	}
+	if err := validateRecoveryDormantUnit([]byte(valid), "foreign.service"); !errors.Is(err, ErrPlan) {
+		t.Fatal("foreign unit selected", err)
+	}
+}

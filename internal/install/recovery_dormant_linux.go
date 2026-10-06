@@ -33,7 +33,7 @@ func observeRecoveryServicesWith(ctx context.Context, command func(context.Conte
 	defer cancel()
 	for _, unit := range []string{"homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service"} {
 		step, finish := context.WithTimeout(bounded, 5*time.Second)
-		cmd := command(step, "/usr/bin/systemctl", "--system", "--no-pager", "show", "--property=LoadState,ActiveState,SubState,MainPID,ControlPID", unit)
+		cmd := command(step, "/usr/bin/systemctl", "--system", "--no-pager", "show", "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,LoadState,ActiveState,SubState,MainPID,ControlPID", unit)
 		if cmd == nil {
 			finish()
 			return ErrPlan
@@ -49,7 +49,7 @@ func observeRecoveryServicesWith(ctx context.Context, command func(context.Conte
 		if err != nil || contextErr != nil {
 			return errors.Join(ErrConflict, err, contextErr)
 		}
-		if err = validateRecoveryDormant(output.Bytes()); err != nil {
+		if err = validateRecoveryDormantUnit(output.Bytes(), unit); err != nil {
 			return err
 		}
 	}

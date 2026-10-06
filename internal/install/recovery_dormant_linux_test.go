@@ -15,11 +15,11 @@ func TestRecoveryDormantQueriesOnlyFixedServices(t *testing.T) {
 	valid := "LoadState=loaded\nActiveState=inactive\nSubState=dead\nMainPID=0\nControlPID=0\n"
 	units := []string{}
 	command := func(ctx context.Context, path string, args ...string) *exec.Cmd {
-		if path != "/usr/bin/systemctl" || len(args) != 5 || !reflect.DeepEqual(args[:4], []string{"--system", "--no-pager", "show", "--property=LoadState,ActiveState,SubState,MainPID,ControlPID"}) {
+		if path != "/usr/bin/systemctl" || len(args) != 5 || !reflect.DeepEqual(args[:4], []string{"--system", "--no-pager", "show", "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,LoadState,ActiveState,SubState,MainPID,ControlPID"}) {
 			t.Fatal("unexpected manager query", path, args)
 		}
 		units = append(units, args[len(args)-1])
-		return exec.CommandContext(ctx, "/bin/sh", "-c", "printf '%s' \"$1\"", "fixture", valid)
+		return exec.CommandContext(ctx, "/bin/sh", "-c", "printf '%s' \"$1\"", "fixture", "Id="+args[4]+"\nFragmentPath=/etc/systemd/system/"+args[4]+"\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\n"+valid)
 	}
 	if err := observeRecoveryServicesWith(context.Background(), command); err != nil {
 		t.Fatal(err)
