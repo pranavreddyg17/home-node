@@ -3251,3 +3251,7 @@ Added a disposable Linux/root fixture that observes local account and process co
 ### Shared preparation refuses reserved DAC before filesystem effects
 
 Review found that LinuxBackend.Prepare still used the shared libvirt-qemu account even for a Domain carrying reserved UID/GID fields. It now preserves early cancellation and refuses either reserved identity field before account lookup or channel/volume mutation, pending coordinated per-guest ownership lifecycle implementation. The regression test checks complete and partial reserved identities, empty destination preservation and cancellation. Full supervisor race tests passed and Linux supervisor tests compiled. This closes a contradictory preparation path; it does not implement the missing production DAC lifecycle. CI37505225345 has completed with failure at9d745f8; its native OOM, protected account and volume steps passed, and the failed later step is being inspected. Full application remains unfinished.
+
+### OOM regression tests preserve clean package checkout
+
+CI37505225345 failed the packaging clean-checkout gate because the newly added OOM unittest import created packaging/maintenance/__pycache__. The native OOM sibling termination and guest volume ownership steps passed. The OOM unittest step now sets PYTHONDONTWRITEBYTECODE=1, matching existing packaging Python test practice, without weakening the clean-checkout gate. Native positive DAC fixture execution still awaits the next run.
