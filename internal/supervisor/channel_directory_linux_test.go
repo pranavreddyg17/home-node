@@ -109,6 +109,18 @@ func TestNativeGuestChannelDirectoryOwnership(t *testing.T) {
 	if err := os.Remove(unknown); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chmod(path, 0710|os.ModeSticky); err != nil {
+		t.Fatal(err)
+	}
+	if err := grantGuestChannelAccess(context.Background(), socketPath, 1000000000, 64055); !errors.Is(err, ErrPolicy) {
+		t.Fatal("special directory mode admitted", err)
+	}
+	if err := os.Chmod(path, 0710); err != nil {
+		t.Fatal(err)
+	}
+	if err := grantGuestChannelAccess(context.Background(), socketPath, 1000000000, 64055); err != nil {
+		t.Fatal("valid directory mode retry", err)
+	}
 	grantCtx, stopGrant := context.WithCancel(context.Background())
 	stopGrant()
 	beforeCancel, err := os.Lstat(socketPath)

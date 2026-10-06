@@ -23,7 +23,7 @@ func grantGuestChannelAccess(ctx context.Context, path string, uid uint32, gid i
 	parentPath := filepath.Dir(path)
 	before, err := os.Lstat(parentPath)
 	owner, ok := openedSysUID(before)
-	if err != nil || !ok || owner != uid || !before.IsDir() || before.Mode().Perm() != 0710 {
+	if err != nil || !ok || owner != uid || !before.IsDir() || before.Mode().Perm() != 0710 || before.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
 		return ErrPolicy
 	}
 	root, err := os.OpenRoot(parentPath)
@@ -39,7 +39,7 @@ func grantGuestChannelAccess(ctx context.Context, path string, uid uint32, gid i
 	opened, err := parent.Stat()
 	owner, ok = openedSysUID(opened)
 	var directory unix.Stat_t
-	if err != nil || !ok || owner != uid || !os.SameFile(before, opened) || opened.Mode().Perm() != 0710 || unix.Fstat(int(parent.Fd()), &directory) != nil || directory.Gid != uint32(gid) {
+	if err != nil || !ok || owner != uid || !os.SameFile(before, opened) || opened.Mode().Perm() != 0710 || opened.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || unix.Fstat(int(parent.Fd()), &directory) != nil || directory.Gid != uint32(gid) {
 		return ErrPolicy
 	}
 	file, err := root.OpenFile("adapter.sock", unix.O_PATH|unix.O_NOFOLLOW, 0)
@@ -59,6 +59,9 @@ func grantGuestChannelAccess(ctx context.Context, path string, uid uint32, gid i
 		return err
 	}
 	if err := unix.Fchownat(int(file.Fd()), "", -1, gid, unix.AT_EMPTY_PATH|unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := unix.Fchmodat(int(file.Fd()), "", 0660, unix.AT_EMPTY_PATH); err != nil {

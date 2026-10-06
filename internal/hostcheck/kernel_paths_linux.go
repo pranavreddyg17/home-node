@@ -2,7 +2,10 @@
 
 package hostcheck
 
-import "golang.org/x/sys/unix"
+import (
+	"errors"
+	"golang.org/x/sys/unix"
+)
 
 // Probe actual kernel support in this process, never infer it from a release name.
 func probeKernelPaths() (bool, bool) {
@@ -14,4 +17,10 @@ func probeKernelPaths() (bool, bool) {
 	var info unix.Statx_t
 	err = unix.Statx(fd, "", unix.AT_EMPTY_PATH, unix.STATX_MNT_ID, &info)
 	return true, err == nil && info.Mask&unix.STATX_MNT_ID != 0 && info.Mnt_id != 0
+}
+
+// An invalid descriptor makes this feature probe side-effect-free. EBADF
+// proves the kernel accepted AT_EMPTY_PATH; unsupported/blocked calls refuse.
+func probeDescriptorChmod() bool {
+	return errors.Is(unix.Fchmodat(-1, "", 0600, unix.AT_EMPTY_PATH), unix.EBADF)
 }
