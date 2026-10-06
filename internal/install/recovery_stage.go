@@ -18,6 +18,10 @@ import (
 // scoped source qualification, copying and retry reconciliation. Files remain
 // disconnected under installer ownership in the private journal directory.
 func (e *Engine) stageRecoveryCopies(ctx context.Context, prepared *backup.PreparedRecoveryLease, source backup.Manifest, c Configuration, now time.Time) (RecoveryConfigurationPreview, error) {
+	// One deadline bounds all repeated qualification/copy/reconciliation work,
+	// rather than granting a fresh full timeout to each phase.
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Hour)
+	defer cancel()
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	preview, err := e.prepareRecoveryIntentLocked(ctx, prepared, source, c, now)

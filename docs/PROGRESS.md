@@ -3035,3 +3035,7 @@ Staging reconciliation now verifies every installed ownership record against cur
 ### Missing completion record is never synthesized by reconciliation
 
 Portable immutable-record regression now removes staging receipt and requires read-only matching to refuse with not-exist while leaving the record absent. Linux joined fixture likewise removes a completed receipt, requires staging reconciliation refusal/no recreation, and uses the explicit record writer to restore test state for later corruption checks. Installer race suite, Linux compilation and diff checks passed; native joined assertion remains pending publication. CI37420643271 remains live. Successful publication/ownership/bootstrap/runtime reconstruction and full application acceptance remain unfinished.
+
+### Whole installer recovery staging deadline and native publication
+
+Joined installer staging now shares one two-hour deadline across configuration/intent qualification, scoped source inspection/copy, descriptor cleanup, completion receipt and final current-byte reconciliation. Repeated phases no longer receive independently reset full deadlines. Installer race suite, Linux compilation and diff checks passed. CI37420643271 completed successfully at38f4529, verifying earlier scoped handoff/intent/copy staging changes; publishing accumulated completion receipt, current configuration/byte reconciliation and joined interruption fixtures for native execution. Full installed publication/ownership/bootstrap/runtime reconstruction and complete application acceptance remain unfinished.
