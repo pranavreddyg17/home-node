@@ -12,6 +12,7 @@ import (
 // inspection. expectedUID must come from trusted installed account configuration,
 // never restored metadata. This lease grants no activation/ownership authority.
 type PreparedRecoveryLease struct {
+	ownerUID uint32
 	root     *os.Root
 	lock     *os.File
 	mu       sync.Mutex
@@ -39,7 +40,16 @@ func OpenPreparedRecovery(ctx context.Context, root *os.Root, expectedUID uint32
 	if err = ctx.Err(); err != nil {
 		return nil, errors.Join(err, pinned.Close(), lock.Close())
 	}
-	return &PreparedRecoveryLease{root: pinned, lock: lock}, nil
+	return &PreparedRecoveryLease{ownerUID: expectedUID, root: pinned, lock: lock}, nil
+}
+
+// InventoryForOwner binds the retained lease to the installer's independently
+// observed maintenance account. A lease opened for another identity is refused.
+func (l *PreparedRecoveryLease) InventoryForOwner(ctx context.Context, expectedUID uint32, manifest Manifest, policy RestorePolicy) (PreparedRecoveryInventory, error) {
+	if l == nil || l.ownerUID != expectedUID {
+		return PreparedRecoveryInventory{}, ErrManifest
+	}
+	return l.Inventory(ctx, manifest, policy)
 }
 
 func (l *PreparedRecoveryLease) Inventory(ctx context.Context, manifest Manifest, policy RestorePolicy) (PreparedRecoveryInventory, error) {
