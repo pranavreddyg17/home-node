@@ -55,11 +55,11 @@ try:
         hidden.write_text("fixture")
         command = ["/usr/bin/systemd-run", "--quiet", "--wait", "--pipe", "--collect", "--unit=homenode-supervisor-fixture-" + uuid.uuid4().hex,
                    "--property=Restart=no", *properties,
-                   "--setenv=HOMENODE_VOLUME_INTEGRATION=1", "--setenv=HOMENODE_SUPERVISOR_SOURCE_FIXTURE=1",
+                   "--setenv=HOMENODE_VOLUME_INTEGRATION=1", "--setenv=HOMENODE_GUEST_UID_ACCOUNTS_INTEGRATION=1", "--setenv=HOMENODE_SUPERVISOR_SOURCE_FIXTURE=1",
                    "--setenv=HOMENODE_SUPERVISOR_VOLUME_PARENT=/var/lib/homenode/volumes",
                    "--setenv=HOMENODE_SUPERVISOR_HIDDEN_PATH=" + str(hidden),
                    "/usr/lib/homenode-fixtures/supervisor.test",
-                   "-test.run=^TestNative(FreshVolumeFormattingPreservesExistingData|PreparedVolumeCleanup|VolumePublicationIdentity|SupervisorServiceIsolation)$", "-test.count=1"]
+                   "-test.run=^TestNative(FreshVolumeFormattingPreservesExistingData|PreparedVolumeCleanup|VolumePublicationIdentity|GuestUIDVolumeAdmission|GuestChannelDirectoryOwnership|GuestNSSNameServiceEligibility|SupervisorServiceIsolation)$", "-test.count=1"]
         if subprocess.run(command, timeout=60, check=False).returncode:
             sys.exit("Supervisor source protection fixture failed")
 finally:
