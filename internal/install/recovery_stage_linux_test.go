@@ -134,6 +134,25 @@ func TestRootRecoveryManagementStagingReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	expected := recoveryIntent{Version: 1, ConfigurationID: installed.ID, ConfigurationDigest: installed.Digest, Recovery: preview.Recovery}
+	var borrowed *os.File
+	if err = e.withRecoveryStagedFiles(context.Background(), expected, func(ctx context.Context, files []backup.PreparedRecoveryFile) error {
+		if len(files) != 1 || files[0].Name != "management.db" || files[0].Bytes != preview.Recovery.ManagementBytes {
+			t.Fatal("unexpected staged file inventory", files)
+		}
+		borrowed = files[0].File
+		if _, writeErr := borrowed.WriteAt([]byte("x"), 0); writeErr == nil {
+			t.Fatal("staged descriptor writable")
+		}
+		if nestedErr := e.withRecoveryStagedFiles(ctx, expected, func(context.Context, []backup.PreparedRecoveryFile) error { return nil }); !errors.Is(nestedErr, ErrConflict) {
+			t.Fatal("overlapping staged handoff admitted", nestedErr)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal("staged descriptor handoff", err)
+	}
+	if _, err = borrowed.Stat(); !errors.Is(err, os.ErrClosed) {
+		t.Fatal("borrowed staging descriptor escaped", err)
+	}
 	if err = e.journalRoot.Remove("recovery-blocked"); err != nil {
 		t.Fatal(err)
 	}
