@@ -70,6 +70,29 @@ func TestRootRecoveryManagementStagingReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer lease.Close()
+	intentInterrupted := errors.New("intent acknowledgement interrupted")
+	e.checkpoint = func(stage, name string) error {
+		if stage == "recovery-intent" {
+			return intentInterrupted
+		}
+		return nil
+	}
+	if _, err = e.stageRecoveryCopies(context.Background(), lease, manifest, c, now); !errors.Is(err, intentInterrupted) {
+		t.Fatal("intent boundary", err)
+	}
+	originalIntent, err := e.journalRoot.ReadFile("recovery.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{".recovery-management.copy", "recovery-staged.json"} {
+		if _, err = e.journalRoot.Lstat(name); !errors.Is(err, os.ErrNotExist) {
+			t.Fatal("intent boundary performed copy", name, err)
+		}
+	}
+	if err = e.Close(); err != nil {
+		t.Fatal(err)
+	}
+	e = openEngine(t, host, journal)
 	interrupted := errors.New("copy acknowledgement interrupted")
 	e.checkpoint = func(stage, name string) error {
 		if stage == "recovery-copy" {
@@ -98,6 +121,10 @@ func TestRootRecoveryManagementStagingReplay(t *testing.T) {
 	after, err := e.journalRoot.Lstat(".recovery-management.copy")
 	if err != nil || !os.SameFile(before, after) {
 		t.Fatal("completed copy replaced", err)
+	}
+	retryIntent, err := e.journalRoot.ReadFile("recovery.json")
+	if err != nil || string(retryIntent) != string(originalIntent) {
+		t.Fatal("intent changed across retries", err)
 	}
 	if _, err = e.journalRoot.Lstat("recovery-staged.json"); err != nil {
 		t.Fatal("completion receipt missing", err)
