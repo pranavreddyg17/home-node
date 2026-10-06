@@ -99,6 +99,9 @@ func (m *Manager) Initialize(ctx context.Context) error {
 	if err = m.initializeGuestUIDLeases(ctx); err != nil {
 		return err
 	}
+	if err = m.validateGuestIdentityPolicy(ctx); err != nil {
+		return err
+	}
 	for _, table := range []string{"runtime_instances", "runtime_stops"} {
 		var columns int
 		if err = m.Store.DB.QueryRowContext(ctx, "SELECT count(*) FROM pragma_table_info(?) WHERE name='revision'", table).Scan(&columns); err != nil {

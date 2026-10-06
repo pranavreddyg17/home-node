@@ -102,3 +102,40 @@ func TestManagerLaunchAndAuditUseSameGuestIdentity(t *testing.T) {
 		t.Fatal("policy removal did not stop before verification", b.stops, len(backend.verified))
 	}
 }
+
+func TestManagerInitializationRefusesGuestIdentityPolicyDrift(t *testing.T) {
+	m, _ := newManager(t)
+	pool := GuestUIDPool{First: 200000, Last: 200001}
+	m.GuestUIDPool, m.GuestGID = &pool, 64055
+	d := Domain{ID: state.Random()}
+	if err := m.bindDomainGuestIdentity(context.Background(), &d, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Initialize(context.Background()); err != nil {
+		t.Fatal("matching startup policy refused", err)
+	}
+	m.GuestGID++
+	if err := m.Initialize(context.Background()); !errors.Is(err, ErrPolicy) {
+		t.Fatal("group drift accepted at startup", err)
+	}
+	m.GuestGID = 64055
+	pool.Last++
+	if err := m.Initialize(context.Background()); !errors.Is(err, ErrPolicy) {
+		t.Fatal("pool drift accepted at startup", err)
+	}
+	pool.Last--
+	m.GuestUIDPool, m.GuestGID = nil, 0
+	if err := m.Initialize(context.Background()); !errors.Is(err, ErrPolicy) {
+		t.Fatal("shared identity downgrade accepted at startup", err)
+	}
+	m.GuestUIDPool, m.GuestGID = &pool, 64055
+	if err := m.Initialize(context.Background()); err != nil {
+		t.Fatal("refusal damaged original policy", err)
+	}
+	if _, err := m.Store.DB.Exec("INSERT INTO runtime_guest_groups VALUES(?,?)", state.Random(), 64055); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Initialize(context.Background()); !errors.Is(err, ErrPolicy) {
+		t.Fatal("orphan group accepted", err)
+	}
+}

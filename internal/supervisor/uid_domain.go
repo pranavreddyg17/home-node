@@ -70,3 +70,62 @@ func (m *Manager) bindDomainGuestIdentity(ctx context.Context, d *Domain, reserv
 	d.GuestUID, d.GuestGID = uid, gid
 	return nil
 }
+
+// validateGuestIdentityPolicy refuses startup policy drift before reconciliation
+// can use a shared identity for a previously reserved runtime. Partial UID-only
+// reservations remain retryable, but an orphan group assignment is invalid.
+func (m *Manager) validateGuestIdentityPolicy(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if m.Store == nil {
+		return ErrPolicy
+	}
+	if m.GuestUIDPool == nil && m.GuestGID != 0 {
+		return ErrPolicy
+	}
+	if m.GuestUIDPool != nil && (m.GuestUIDPool.validate() != nil || m.GuestGID == 0 || m.GuestGID > 1<<31-1) {
+		return ErrPolicy
+	}
+	return m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		var first, last uint32
+		err := tx.QueryRowContext(ctx, "SELECT first_uid,last_uid FROM runtime_uid_pool WHERE singleton=1").Scan(&first, &last)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if err == nil && (m.GuestUIDPool == nil || first != m.GuestUIDPool.First || last != m.GuestUIDPool.Last) {
+			return ErrPolicy
+		}
+		var conflicts int
+		if m.GuestUIDPool == nil {
+			if err := tx.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_leases)+(SELECT count(*) FROM runtime_guest_groups)").Scan(&conflicts); err != nil {
+				return err
+			}
+			if conflicts != 0 {
+				return ErrPolicy
+			}
+			return nil
+		}
+		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM runtime_guest_groups g LEFT JOIN runtime_uid_leases u ON u.instance_id=g.instance_id WHERE u.instance_id IS NULL OR g.gid!=?", m.GuestGID).Scan(&conflicts); err != nil {
+			return err
+		}
+		if conflicts != 0 {
+			return ErrPolicy
+		}
+		rows, err := tx.QueryContext(ctx, "SELECT uid FROM runtime_uid_leases")
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var uid uint32
+			if err := rows.Scan(&uid); err != nil {
+				return err
+			}
+			if uid < m.GuestUIDPool.First || uid > m.GuestUIDPool.Last || m.GuestUIDPool.Blocked[uid] {
+				return ErrPolicy
+			}
+		}
+		return errors.Join(rows.Err(), rows.Close())
+	})
+}
