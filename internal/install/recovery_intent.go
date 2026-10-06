@@ -67,16 +67,23 @@ func (e *Engine) prepareRecoveryIntentLocked(ctx context.Context, prepared *back
 
 // Exact canonical bytes are the retry proof. Existing ambiguous, truncated or
 // foreign intent is preserved and refused rather than parsed/adopted.
-func (e *Engine) commitRecoveryIntent(ctx context.Context, data []byte) (result error) {
+func (e *Engine) commitRecoveryIntent(ctx context.Context, data []byte) error {
+	return e.commitRecoveryRecord(ctx, "recovery.json", data)
+}
+
+func (e *Engine) commitRecoveryRecord(ctx context.Context, name string, data []byte) (result error) {
+	if name != "recovery.json" && name != "recovery-staged.json" {
+		return ErrPlan
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if len(data) == 0 || len(data) > 8192 {
 		return ErrPlan
 	}
-	file, err := e.journalRoot.OpenFile("recovery.json", os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0600)
+	file, err := e.journalRoot.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0600)
 	if errors.Is(err, os.ErrExist) {
-		file, err = e.journalRoot.OpenFile("recovery.json", os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+		file, err = e.journalRoot.OpenFile(name, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 		if err != nil {
 			return err
 		}
@@ -89,7 +96,7 @@ func (e *Engine) commitRecoveryIntent(ctx context.Context, data []byte) (result 
 		if err != nil || !bytes.Equal(actual, data) {
 			return ErrConflict
 		}
-		current, err := e.journalRoot.Lstat("recovery.json")
+		current, err := e.journalRoot.Lstat(name)
 		if err != nil || !os.SameFile(info, current) {
 			return ErrConflict
 		}

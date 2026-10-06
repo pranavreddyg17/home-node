@@ -63,5 +63,29 @@ func (e *Engine) stageRecoveryCopies(ctx context.Context, prepared *backup.Prepa
 	if err != nil {
 		return RecoveryConfigurationPreview{}, err
 	}
+	// Record completion only after borrowed descriptors have closed successfully.
+	installed, err := e.load()
+	if err != nil {
+		return RecoveryConfigurationPreview{}, err
+	}
+	intent, err := json.Marshal(recoveryIntent{Version: 1, ConfigurationID: installed.ID, ConfigurationDigest: installed.Digest, Recovery: preview.Recovery})
+	if err != nil {
+		return RecoveryConfigurationPreview{}, err
+	}
+	receipt, err := json.Marshal(recoveryStagedReceipt{Version: 1, IntentSHA256: digest(intent), Files: len(preview.Recovery.Disks) + 1})
+	if err != nil {
+		return RecoveryConfigurationPreview{}, err
+	}
+	if err = e.commitRecoveryRecord(ctx, "recovery-staged.json", receipt); err != nil {
+		return RecoveryConfigurationPreview{}, err
+	}
 	return preview, nil
+}
+
+// Receipt identifies completed disconnected staging, not installed ownership,
+// runtime admission, application health or client enrollment.
+type recoveryStagedReceipt struct {
+	Version      int    `json:"version"`
+	IntentSHA256 string `json:"intentSha256"`
+	Files        int    `json:"files"`
 }

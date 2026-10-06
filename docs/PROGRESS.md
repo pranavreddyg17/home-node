@@ -3011,3 +3011,7 @@ Exact recovery-intent retry now syncs the verified recovery.json file before dir
 ### Recovery copy cancellation and occupied-path regression evidence
 
 Extended installer copy/verification fixture to prove pre-cancelled copy creates no stage, occupied symlink is refused by verification and never replaced by copying, its source target remains unchanged, and partial staging bytes remain intact after refusal. Installer race suite, Linux compilation and diff checks passed. CI37420643271 is still live at38f4529; this regression change remains local. Successful joined installed recovery, publication/ownership/bootstrap/runtime reconstruction and complete application acceptance remain unfinished.
+
+### Durable disconnected staging completion receipt
+
+Installer staging now writes immutable recovery-staged.json only after all source-scoped copies verify/sync and borrowed descriptor cleanup succeeds. Receipt binds version, exact canonical configuration/recovery intent SHA256 and expected management-plus-disk count. Shared immutable record writer accepts only the intent/completion fixed filenames, preserves conflicting bytes, and requires exact durable retry. Installer race suite, Linux compilation and diff checks passed; receipt regression tests cover exact retry, foreign receipt refusal and journal path allowlist. Successful full joined native restore remains unverified; live publication/ownership/bootstrap/runtime reconstruction and complete acceptance remain unfinished. CI37420643271 remains active, so this change stays local.
