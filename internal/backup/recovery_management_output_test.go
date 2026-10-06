@@ -78,6 +78,9 @@ func TestManagementOutputRequiresReboundJournalIdentity(t *testing.T) {
 	if err != nil || receipt.Output != output {
 		t.Fatal("durable management output differs", receipt, err)
 	}
+	if reopened, err := reconcileRecoveryManagementOutput(context.Background(), root); err != nil || reopened != receipt {
+		t.Fatal("receipt reconciliation differs", reopened, err)
+	}
 	if err = recordRecoveryManagementOutput(context.Background(), root); !errors.Is(err, os.ErrExist) {
 		t.Fatal("occupied management receipt adopted", err)
 	}
@@ -94,5 +97,22 @@ func TestManagementOutputRequiresReboundJournalIdentity(t *testing.T) {
 	cancel()
 	if output, err := inspectReboundRecoveryManagement(ctx, root); err == nil || output.SHA256 != "" {
 		t.Fatal("cancelled inspection returned identity", output, err)
+	}
+	if reopened, err := reconcileRecoveryManagementOutput(ctx, root); !errors.Is(err, context.Canceled) || reopened.Output.SHA256 != "" {
+		t.Fatal("cancelled receipt reconciliation returned identity", reopened, err)
+	}
+	changed, err := sql.Open("sqlite", filepath.Join(path, ".recovery-management.stage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, changeErr := changed.Exec("INSERT INTO settings(key,value) VALUES('backup.reminder.interval-days','14')")
+	if err = errors.Join(changeErr, changed.Close()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := inspectReboundRecoveryManagement(context.Background(), root); err != nil {
+		t.Fatal("fixture mutation invalidated metadata", err)
+	}
+	if reopened, err := reconcileRecoveryManagementOutput(context.Background(), root); !errors.Is(err, ErrManifest) || reopened.Output.SHA256 != "" {
+		t.Fatal("changed valid database adopted recorded checksum", reopened, err)
 	}
 }

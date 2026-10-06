@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"unicode/utf8"
 )
@@ -11,6 +13,67 @@ import (
 type recoveryManagementReceipt struct {
 	Version int                      `json:"version"`
 	Output  recoveryManagementOutput `json:"output"`
+}
+
+// reconcileRecoveryManagementOutput reopens the private receipt and requires
+// freshly validated output to match its recorded plan, bytes and checksum.
+// Exclusive root ownership must continue through subsequent publication.
+func reconcileRecoveryManagementOutput(ctx context.Context, root *os.Root) (receipt recoveryManagementReceipt, result error) {
+	if err := ctx.Err(); err != nil {
+		return receipt, err
+	}
+	if root == nil {
+		return receipt, ErrManifest
+	}
+	directory, err := root.Stat(".")
+	if err != nil || !directory.IsDir() || directory.Mode().Perm()&0077 != 0 {
+		return receipt, ErrManifest
+	}
+	const name = "recovery-management.json"
+	expected, err := root.Lstat(name)
+	if err != nil {
+		return receipt, err
+	}
+	if !expected.Mode().IsRegular() || expected.Mode().Perm() != 0600 || expected.Size() <= 0 || expected.Size() > 4096 {
+		return receipt, ErrManifest
+	}
+	file, err := root.Open(name)
+	if err != nil {
+		return receipt, err
+	}
+	defer func() {
+		result = errors.Join(result, file.Close())
+		if result != nil {
+			receipt = recoveryManagementReceipt{}
+		}
+	}()
+	opened, err := file.Stat()
+	if err != nil || !os.SameFile(expected, opened) {
+		return receipt, ErrManifest
+	}
+	data, err := io.ReadAll(io.LimitReader(file, 4097))
+	if err != nil {
+		return receipt, err
+	}
+	receipt, err = decodeRecoveryManagementReceipt(data)
+	if err != nil {
+		return recoveryManagementReceipt{}, err
+	}
+	output, err := inspectReboundRecoveryManagement(ctx, root)
+	if err != nil {
+		return recoveryManagementReceipt{}, err
+	}
+	if output != receipt.Output {
+		return recoveryManagementReceipt{}, ErrManifest
+	}
+	current, err := root.Lstat(name)
+	if err != nil || !current.Mode().IsRegular() || !os.SameFile(opened, current) || current.Size() != int64(len(data)) || current.Mode().Perm() != 0600 {
+		return recoveryManagementReceipt{}, ErrManifest
+	}
+	if err = ctx.Err(); err != nil {
+		return recoveryManagementReceipt{}, err
+	}
+	return receipt, nil
 }
 
 func decodeRecoveryManagementReceipt(data []byte) (recoveryManagementReceipt, error) {

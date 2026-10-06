@@ -370,6 +370,12 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if err != nil || !repositoryPattern.MatchString(managementOutput.SHA256) || !repositoryPattern.MatchString(managementOutput.PlanSHA256) || managementOutput.Bytes <= 0 || managementOutput.SHA256 == manifest.Files[0].SHA256 {
 		t.Fatal("rebound database output identity", managementOutput, err)
 	}
+	if err = recordRecoveryManagementOutput(context.Background(), copyRoot); err != nil {
+		t.Fatal("rebound output receipt", err)
+	}
+	if receipt, err := reconcileRecoveryManagementOutput(context.Background(), copyRoot); err != nil || receipt.Output != managementOutput {
+		t.Fatal("native output receipt reconciliation", receipt, err)
+	}
 	changedManifest := manifest
 	changedManifest.Release = "0.1.1~dev"
 	if err = requalifyRecoveryInstallPlan(context.Background(), installRoot, reopenedPlan, changedManifest, policy); !errors.Is(err, ErrManifest) {
