@@ -3115,3 +3115,7 @@ Added root-only Linux ObserveRecoveryGuestsEmpty reading bounded cgroup.events b
 ### Kernel guest hierarchy identity retained through observation
 
 Native guest-cgroup observation now refuses symlink/non-directory fixed slice paths, compares pre-open path identity with retained directory descriptor and rechecks current fixed-path identity after reading events. A replaced hierarchy cannot supply stale empty evidence from an older pinned root. Linux compilation and diff checks passed; actual kernel fixture remains pending implementation/execution. CI37422229911 remains live. Queued/future activation exclusion, installed publication/ownership/bootstrap/runtime reconstruction and complete application acceptance remain unfinished.
+
+### Accumulated recovery preflight native validation publication
+
+CI37422229911 completed successfully at3d5415f, verifying the repaired repeatable-condition activation/OOM fixtures and preceding activation-marker/preflight changes. Revalidated current installer race suite, Linux compilation and diff checks before publishing accumulated marker pinning, whole-preflight deadline, manager failure/configuration/unit/journal drift fixtures and fixed guest-cgroup observation/identity checks. Cached portable installer results are reused by Go for unchanged inputs; native newly added fixtures still require this publication run. Actual kernel empty-hierarchy fixture, queued/future activation exclusion, installed publication/ownership/bootstrap/runtime reconstruction and full application acceptance remain unfinished.
