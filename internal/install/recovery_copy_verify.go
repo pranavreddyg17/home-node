@@ -57,5 +57,16 @@ func verifyRecoveryCopy(ctx context.Context, root *os.Root, stage string, expect
 	if err != nil || !os.SameFile(opened, current) || !current.Mode().IsRegular() || current.Size() != expected.Bytes || current.Mode().Perm() != 0600 || !owned(current, owner) {
 		return ErrConflict
 	}
+	if err = ctx.Err(); err != nil {
+		return err
+	}
+	// A prior copy may have finished its bytes but lost acknowledgement before
+	// file/directory sync. Reverification must complete durability on retry.
+	if err = file.Sync(); err != nil {
+		return err
+	}
+	if err = syncDirectory(root, "."); err != nil {
+		return err
+	}
 	return ctx.Err()
 }
