@@ -3167,3 +3167,7 @@ Quiescence preflight now observes the fixed management, supervisor and volume di
 ### Fixed recovery destinations reject symlinks, files and absence
 
 Portable vacancy regression coverage now exercises all three fixed destination directories: missing paths remain missing, symlink paths are refused and retained with empty targets unchanged, and regular foreign files are refused with bytes preserved. Targeted installer race tests passed. CI37499514694 was verified running atbdd58ed, currently in Go/Linux adapters; local changes await its terminal result. Unrelated worktree edits, including internal/backup/restic_linux_test.go, were left untouched. Full installed recovery and product acceptance remain unfinished.
+
+### Prepared-source cleanup retains private descriptor handles
+
+PreparedRecoveryLease.WithFiles now lends a separate consumer inventory slice, matching installer staged handoff: replacing metadata/file fields in the consumer's slice cannot change the lease-owned cleanup references or turn cleanup into a nil-descriptor panic. Backup race tests passed on the current worktree and Linux backup tests compiled; unrelated restic fixture edits were neither changed nor staged. CI37499514694 was revalidated in progress and had advanced past the installer root and kernel recovery steps to private backup listener activation. Full installed recovery and application acceptance remain unfinished.

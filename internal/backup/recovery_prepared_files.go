@@ -74,7 +74,8 @@ func (l *PreparedRecoveryLease) WithFiles(ctx context.Context, expectedUID uint3
 			return err
 		}
 	}
-	if err = consume(deadline, inventory, files); err != nil {
+	// Keep cleanup handles private even when a consumer edits its inventory.
+	if err = consume(deadline, inventory, append([]PreparedRecoveryFile(nil), files...)); err != nil {
 		return err
 	}
 	return deadline.Err()
