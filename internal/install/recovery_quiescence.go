@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"syscall"
+	"time"
 )
 
 // ObserveRecoveryQuiescence validates owned activation-conditioned units and
@@ -16,12 +17,16 @@ func (e *Engine) ObserveRecoveryQuiescence(ctx context.Context) error {
 	if runtime.GOOS != "linux" || os.Geteuid() != 0 || e.host.Name() != "/" {
 		return ErrConflict
 	}
-	e.mu.Lock()
+	if !e.mu.TryLock() {
+		return ErrConflict
+	}
 	defer e.mu.Unlock()
 	return e.observeRecoveryQuiescence(ctx, ObserveRecoveryServicesDormant)
 }
 
 func (e *Engine) observeRecoveryQuiescence(ctx context.Context, observe func(context.Context) error) (result error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -45,11 +50,17 @@ func (e *Engine) observeRecoveryQuiescence(ctx context.Context, observe func(con
 		return err
 	}
 	for _, record := range installed.Items {
+		if err = ctx.Err(); err != nil {
+			return err
+		}
 		if err = e.matches(record); err != nil {
 			return ErrConflict
 		}
 	}
 	for _, unit := range []string{"homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket"} {
+		if err = ctx.Err(); err != nil {
+			return err
+		}
 		data, err := e.readConfiguration(installed, "etc/systemd/system/"+unit)
 		if err != nil || bytes.Count(data, []byte("ConditionPathExists=!/var/lib/homenode-install/recovery-blocked\n")) != 1 {
 			return ErrConflict
