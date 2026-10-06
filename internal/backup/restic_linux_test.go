@@ -448,6 +448,19 @@ func TestRealResticRecoverySnapshotRoundTrip(t *testing.T) {
 	if resumed, err := prepareRecoveryDisks(context.Background(), installRoot, freshRoot, snapshot, manifest, policy); err != nil || len(resumed) != 1 || resumed[0] != freshPrepared[0] {
 		t.Fatal("fresh recovery orchestration retry", resumed, err)
 	}
+	if name, err := prepareRecoveryManagement(context.Background(), installRoot, freshRoot, snapshot, manifest, policy); err != nil || name != "management.db" {
+		t.Fatal("fresh disk and management preparation", name, err)
+	}
+	firstReceipt, err := reconcileRecoveryManagementOutput(context.Background(), freshRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name, err := prepareRecoveryManagement(context.Background(), installRoot, freshRoot, snapshot, manifest, policy); err != nil || name != "management.db" {
+		t.Fatal("joined management preparation retry", name, err)
+	}
+	if repeatedReceipt, err := reconcileRecoveryManagementOutput(context.Background(), freshRoot); err != nil || repeatedReceipt != firstReceipt {
+		t.Fatal("joined retry changed output receipt", repeatedReceipt, err)
+	}
 	if err = copyRoot.Remove(finalName); err != nil {
 		t.Fatal(err)
 	}
