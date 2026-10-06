@@ -22,7 +22,12 @@ func (e *Engine) stageRecoveryCopies(ctx context.Context, prepared *backup.Prepa
 	// rather than granting a fresh full timeout to each phase.
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Hour)
 	defer cancel()
-	e.mu.Lock()
+	if err := ctx.Err(); err != nil {
+		return RecoveryConfigurationPreview{}, err
+	}
+	if !e.mu.TryLock() {
+		return RecoveryConfigurationPreview{}, ErrConflict
+	}
 	defer e.mu.Unlock()
 	preview, err := e.prepareRecoveryIntentLocked(ctx, prepared, source, c, now)
 	if err != nil {

@@ -3147,3 +3147,7 @@ Installed fixed service and credential-socket observations now require an explic
 ### Kernel fixture exercises the recovery activation condition
 
 The disposable Linux cgroup fixture now places a private temporary marker behind the same negative ConditionPathExists mechanism used by installed recovery-conditioned units. Starting its sleeping descendant with the marker present must preserve an empty hierarchy; removing the fixture marker and starting again must populate it and fail quiescence. It uses a temporary marker, not the owner's installation journal, and does not claim retained production exclusion. Linux test compilation and diff checks passed; native execution awaits publication after CI37480663185, verified still running. Full destination publication and application acceptance remain unfinished.
+
+### Recovery staging refuses overlapping installer operations
+
+Recovery staging checks cancellation before acquiring installer exclusion and uses TryLock to return ErrConflict immediately when another operation owns the engine, avoiding an unbounded mutex wait outside its two-hour cooperative deadline. Regression coverage holds the mutex and checks overlap/cancellation refusal with no intent, receipt, marker or data-copy effects. Installer race tests passed. CI37480663185 was revalidated in progress; changes remain local pending its terminal result. Destination publication, runtime reconstruction, new-owner enrollment and complete product acceptance remain unfinished.

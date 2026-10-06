@@ -43,3 +43,25 @@ func TestRootRecoveryStagingRefusesDifferentInstalledConfiguration(t *testing.T)
 		t.Fatal("conflicting configuration journaled", err)
 	}
 }
+
+func TestRecoveryStagingRefusesOverlappingInstallerWork(t *testing.T) {
+	host, journal := roots(t)
+	e := openEngine(t, host, journal)
+	defer e.Close()
+	c, _, _, now := configurationFixture(t)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if _, err := e.stageRecoveryCopies(context.Background(), nil, backup.Manifest{}, c, now); !errors.Is(err, ErrConflict) {
+		t.Fatal("overlapping installer work admitted", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := e.stageRecoveryCopies(ctx, nil, backup.Manifest{}, c, now); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled overlapping recovery lost cancellation", err)
+	}
+	for _, name := range []string{"recovery.json", "recovery-staged.json", "recovery-blocked", ".recovery-management.copy"} {
+		if _, err := e.journalRoot.Lstat(name); !errors.Is(err, os.ErrNotExist) {
+			t.Fatal("refused overlapping recovery wrote data", name, err)
+		}
+	}
+}
