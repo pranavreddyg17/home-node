@@ -116,8 +116,23 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			s.connections[index] = nil
 		}
 	}()
+	aborted := make(chan struct{})
+	stopAbort := context.AfterFunc(ctx, func() { _ = conn.Close(); close(aborted) })
+	defer func() {
+		if !stopAbort() {
+			<-aborted
+			healthy = false
+		}
+	}()
 	deadline, _ := ctx.Deadline()
-	_ = conn.SetDeadline(deadline)
+	if err = conn.SetDeadline(deadline); err != nil {
+		http.Error(w, "guest deadline failed", 502)
+		return
+	}
+	if err = ctx.Err(); err != nil {
+		http.Error(w, "transfer cancelled", 503)
+		return
+	}
 	if err = guestproto.Write(conn, request.Request); err != nil {
 		http.Error(w, "guest write failed", 502)
 		return

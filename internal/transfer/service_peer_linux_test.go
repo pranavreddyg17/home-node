@@ -246,3 +246,102 @@ func TestTransferAdmittedPeerRoundTripAndCachedIdentityDrift(t *testing.T) {
 		t.Fatal("guest fixture did not terminate")
 	}
 }
+
+func TestTransferCancellationInterruptsGuestRead(t *testing.T) {
+	uid := uint32(os.Geteuid())
+	if uid == 0 {
+		t.Skip("positive guest peer must be non-root")
+	}
+	root, err := os.MkdirTemp("/tmp", "hn-peer-cancel-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.RemoveAll(root); err != nil {
+			t.Errorf("fixture cleanup: %v", err)
+		}
+	}()
+	controller, err := net.ListenUnix("unix", &net.UnixAddr{Net: "unix", Name: filepath.Join(root, "controller.sock")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer controller.Close()
+	client, err := net.DialUnix("unix", nil, controller.Addr().(*net.UnixAddr))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	controllerPeer, err := controller.AcceptUnix()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer controllerPeer.Close()
+	id := state.Random()
+	directory := filepath.Join(root, id)
+	if err := os.Mkdir(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Net: "unix", Name: filepath.Join(directory, "adapter.sock")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	if err := listener.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		peer, err := listener.AcceptUnix()
+		if err != nil {
+			done <- err
+			return
+		}
+		defer peer.Close()
+		if err := peer.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+			done <- err
+			return
+		}
+		var frame guestproto.Request
+		if err := guestproto.Read(peer, &frame); err != nil {
+			done <- err
+			return
+		}
+		cancel() // The guest deliberately withholds a response.
+		var data [1]byte
+		n, err := peer.Read(data[:])
+		if n != 0 || err != io.EOF {
+			done <- fmt.Errorf("cancelled guest connection retained: %d %v", n, err)
+			return
+		}
+		done <- nil
+	}()
+	service := New(peerFixtureInspector{supervisor.Instance{ID: id, State: "running", GuestUID: uid}}, root, uid, 1)
+	frame := runtimeclient.GuestRequest{InstanceID: id, Request: guestproto.Request{Version: 1, RequestID: state.Random(), Operation: "health"}}
+	body, err := json.Marshal(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest("POST", "/v1/guest", bytes.NewReader(body)).WithContext(supervisor.PeerContext(ctx, controllerPeer))
+	response := httptest.NewRecorder()
+	started := time.Now()
+	service.ServeHTTP(response, request)
+	if response.Code < 400 || time.Since(started) >= 3*time.Second {
+		t.Fatal("cancellation waited for guest response deadline", response.Code, time.Since(started))
+	}
+	for _, connection := range service.connections {
+		if connection != nil {
+			connection.Close()
+			t.Fatal("cancelled connection cached")
+		}
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(4 * time.Second):
+		t.Fatal("cancelled guest fixture did not terminate")
+	}
+}
