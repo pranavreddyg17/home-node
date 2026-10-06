@@ -3131,3 +3131,7 @@ Added explicit disposable Linux root fixture guarding fixed unit/hierarchy vacan
 ### Native kernel fixture cleanup failures remain visible
 
 Disposable cgroup fixture now reports service/slice stop, created-unit removal and daemon reload cleanup failures through the test result rather than silently ignoring them. It retains vacancy guards and only attempts service cleanup after successful service creation. Linux compilation and diff checks passed; fixture execution remains pending publication. CI37479528801 remains live. Queued/future activation exclusion, installed publication/ownership/bootstrap/runtime reconstruction and complete application acceptance remain unfinished.
+
+### Native kernel observation cancellation before fixture effects
+
+Disposable kernel cgroup fixture now requires a pre-cancelled root observation to return context cancellation before checking/creating temporary manager units and hierarchy. Linux compilation and diff checks passed; native execution remains pending publication. CI37479528801 remains live. Queued/future activation exclusion, installed publication/ownership/bootstrap/runtime reconstruction and complete application acceptance remain unfinished.

@@ -17,6 +17,11 @@ func TestNativeRecoveryGuestCgroupObservation(t *testing.T) {
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_RECOVERY_CGROUP_INTEGRATION") != "1" {
 		t.Skip("explicit disposable Linux root fixture")
 	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := ObserveRecoveryGuestsEmpty(cancelled); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled kernel observation ignored", err)
+	}
 	const slice = "homenode.slice"
 	const service = "homenode-recovery-cgroup-fixture.service"
 	const slicePath = "/run/systemd/system/homenode.slice"
