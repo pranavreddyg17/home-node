@@ -58,6 +58,18 @@ func TestRootRecoveryQuiescenceRejectsMarkerReplacementDuringObservation(t *test
 	if err = e.observeRecoveryQuiescence(context.Background(), func(context.Context) error { return nil }); err != nil {
 		t.Fatal("owned preflight", err)
 	}
+	occupied := "var/lib/homenode/control/management.db-wal"
+	if err = e.observeRecoveryQuiescence(context.Background(), func(context.Context) error {
+		return e.host.WriteFile(occupied, []byte("preserve existing WAL"), 0600)
+	}); !errors.Is(err, ErrConflict) {
+		t.Fatal("new destination entry during observation admitted", err)
+	}
+	if data, readErr := e.host.ReadFile(occupied); readErr != nil || string(data) != "preserve existing WAL" {
+		t.Fatal("refused preflight changed existing destination", readErr)
+	}
+	if err = e.host.Remove(occupied); err != nil {
+		t.Fatal(err)
+	}
 	observerFailure := errors.New("manager observation unavailable")
 	markerBefore, err := e.journalRoot.Lstat("recovery-blocked")
 	if err != nil {

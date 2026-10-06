@@ -72,6 +72,9 @@ func (e *Engine) observeRecoveryQuiescence(ctx context.Context, observe func(con
 			return ErrConflict
 		}
 	}
+	if err = e.observeRecoveryDestinationVacancy(ctx); err != nil {
+		return err
+	}
 	if err = observe(ctx); err != nil {
 		return err
 	}
@@ -88,6 +91,9 @@ func (e *Engine) observeRecoveryQuiescence(ctx context.Context, observe func(con
 		if err = e.matches(record); err != nil {
 			return ErrConflict
 		}
+	}
+	if err = e.observeRecoveryDestinationVacancy(ctx); err != nil {
+		return err
 	}
 	// Recheck marker after manager observation; never recreate lost exclusion.
 	if err = e.requireRecoveryActivationBlock(ctx); err != nil {
