@@ -84,6 +84,20 @@ func TestRootRecoveryQuiescenceRejectsMarkerReplacementDuringObservation(t *test
 	if err = e.host.WriteFile(policyPath, originalPolicy, 0600); err != nil {
 		t.Fatal(err)
 	}
+	unitPath := "etc/systemd/system/homenode-control.service"
+	originalUnit, err := e.host.ReadFile(unitPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changeUnit := func(context.Context) error {
+		return e.host.WriteFile(unitPath, []byte("[Unit]\nDescription=foreign\n[Service]\nExecStart=/bin/true\n"), 0644)
+	}
+	if err = e.observeRecoveryQuiescence(context.Background(), changeUnit); !errors.Is(err, ErrConflict) {
+		t.Fatal("unit drift during observation accepted", err)
+	}
+	if err = e.host.WriteFile(unitPath, originalUnit, 0644); err != nil {
+		t.Fatal(err)
+	}
 	replace := func(ctx context.Context) error {
 		if err := e.journalRoot.Remove("recovery-blocked"); err != nil {
 			return err

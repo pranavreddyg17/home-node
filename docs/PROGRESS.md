@@ -3099,3 +3099,7 @@ Recovery preflight now reloads installed journal after manager observation and r
 ### Manager observation failure preserves activation exclusion fixture
 
 Temporary root preflight fixture now injects unavailable manager observation, requires the original error to propagate and verifies the persistent activation marker inode remains unchanged. Linux compilation and diff checks passed; native assertion remains pending publication/execution. CI37422229911 remains confirmed live at3d5415f. Live manager/cgroup/queued-job exclusion, installed publication/ownership/bootstrap/runtime reconstruction and complete application acceptance remain unfinished.
+
+### Unit-file drift during manager observation fixture
+
+Temporary root recovery preflight fixture now replaces owned control unit bytes during injected observation and requires refusal, restores exact owned bytes, then proceeds to marker replacement refusal. This exercises the final owned-record check on activation-critical unit source rather than runtime policy only. Linux compilation and diff checks passed; native execution remains pending publication. CI37422229911 remains live. Live manager/cgroup/queued-job exclusion, installed publication/ownership/bootstrap/runtime reconstruction and complete acceptance remain unfinished.
