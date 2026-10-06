@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/pranavreddyg17/home-node/internal/state"
+	"path/filepath"
 	"sync"
 	"testing"
 )
@@ -93,7 +94,7 @@ func TestConcurrentGuestUIDReservationsRemainUnique(t *testing.T) {
 }
 
 func TestGuestUIDLeaseSurvivesDatabaseReopen(t *testing.T) {
-	directory := t.TempDir()
+	directory := filepath.Join(t.TempDir(), "state")
 	store, err := state.Open(directory)
 	if err != nil {
 		t.Fatal(err)
