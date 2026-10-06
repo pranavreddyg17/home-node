@@ -31,6 +31,9 @@ func TestNativeRecoveryGuestCgroupObservation(t *testing.T) {
 			t.Fatal("fixture path occupied", path, err)
 		}
 	}
+	if err := ObserveRecoveryGuestsEmpty(context.Background()); !errors.Is(err, ErrConflict) {
+		t.Fatal("absent hierarchy treated as empty", err)
+	}
 	command := func(args ...string) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

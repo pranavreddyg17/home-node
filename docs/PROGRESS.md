@@ -3135,3 +3135,7 @@ Disposable cgroup fixture now reports service/slice stop, created-unit removal a
 ### Native kernel observation cancellation before fixture effects
 
 Disposable kernel cgroup fixture now requires a pre-cancelled root observation to return context cancellation before checking/creating temporary manager units and hierarchy. Linux compilation and diff checks passed; native execution remains pending publication. CI37479528801 remains live. Queued/future activation exclusion, installed publication/ownership/bootstrap/runtime reconstruction and complete application acceptance remain unfinished.
+
+### Missing guest hierarchy is not recovery quiescence
+
+The disposable kernel fixture now requires an absent homenode.slice hierarchy to return ErrConflict before creating its test units. Linux test compilation passed. CI37479528801 completed successfully at 0f525a445bb6db50b8ed7dd71c77eab27d6544f2; the newly added actual-kernel fixture still awaits its own CI execution. Installed publication, retained activation exclusion, ownership/bootstrap/runtime reconstruction and complete product acceptance remain unfinished.
