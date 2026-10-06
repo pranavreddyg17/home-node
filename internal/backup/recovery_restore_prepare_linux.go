@@ -22,6 +22,11 @@ func RestoreAndPreparePrivateRecovery(ctx context.Context, repository *Repositor
 	if repository == nil || staging == nil || staging.Root() == nil || staging.lock == nil || destination == nil || !repositoryPattern.MatchString(snapshotID) {
 		return "", ErrManifest
 	}
+	releaseOperation, err := staging.holdOperation(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer releaseOperation()
 	if _, err := staging.lock.Stat(); err != nil {
 		return "", err
 	}

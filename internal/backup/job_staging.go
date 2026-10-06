@@ -19,6 +19,8 @@ type JobStaging struct {
 	lock         *os.File
 	once         sync.Once
 	closeErr     error
+	operationMu  sync.Mutex
+	closed       bool
 }
 
 func (s *JobStaging) Root() *os.Root {
@@ -31,8 +33,36 @@ func (s *JobStaging) Close() error {
 	if s == nil {
 		return nil
 	}
-	s.once.Do(func() { s.closeErr = errors.Join(s.root.Close(), s.parent.Close(), s.lock.Close()) })
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	s.once.Do(func() {
+		s.closed = true
+		s.closeErr = errors.Join(s.root.Close(), s.parent.Close(), s.lock.Close())
+	})
 	return s.closeErr
+}
+
+// holdOperation keeps Close from releasing the parent lease during an owned
+// operation. A competing operation refuses immediately rather than waiting.
+func (s *JobStaging) holdOperation(ctx context.Context) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if s == nil {
+		return nil, ErrManifest
+	}
+	if !s.operationMu.TryLock() {
+		return nil, ErrMaintenanceRunner
+	}
+	if s.closed {
+		s.operationMu.Unlock()
+		return nil, ErrManifest
+	}
+	if err := ctx.Err(); err != nil {
+		s.operationMu.Unlock()
+		return nil, err
+	}
+	return s.operationMu.Unlock, nil
 }
 
 // OpenJobStaging requires a pre-provisioned private directory owned by the
