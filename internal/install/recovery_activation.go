@@ -3,6 +3,7 @@ package install
 import (
 	"context"
 	"errors"
+	"golang.org/x/sys/unix"
 	"os"
 	"syscall"
 )
@@ -37,6 +38,10 @@ func (e *Engine) recoveryActivationMarker(ctx context.Context, create bool) (res
 	defer func() { result = errors.Join(result, file.Close()) }()
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || !owned(info, e.owner) || info.Mode().Perm() != 0600 || info.Size() != 0 {
+		return ErrConflict
+	}
+	var native unix.Stat_t
+	if unix.Fstat(int(file.Fd()), &native) != nil || native.Nlink != 1 {
 		return ErrConflict
 	}
 	current, err := e.journalRoot.Lstat("recovery-blocked")

@@ -56,6 +56,30 @@ func TestRecoveryActivationMarkerSurvivesRetryAndRefusesForeignBytes(t *testing.
 	if err = e.blockRecoveryActivation(context.Background()); !errors.Is(err, ErrConflict) {
 		t.Fatal("foreign marker adopted", err)
 	}
+	if err = e.journalRoot.WriteFile("recovery-blocked", nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = e.journalRoot.Link("recovery-blocked", "marker-alias"); err != nil {
+		t.Fatal(err)
+	}
+	if err = e.requireRecoveryActivationBlock(context.Background()); !errors.Is(err, ErrConflict) {
+		t.Fatal("aliased marker accepted", err)
+	}
+	if err = e.blockRecoveryActivation(context.Background()); !errors.Is(err, ErrConflict) {
+		t.Fatal("aliased marker adopted", err)
+	}
+	if err = e.journalRoot.Remove("marker-alias"); err != nil {
+		t.Fatal(err)
+	}
+	if err = e.requireRecoveryActivationBlock(context.Background()); err != nil {
+		t.Fatal("single-link marker refused", err)
+	}
+	if err = e.journalRoot.Chmod("recovery-blocked", 0640); err != nil {
+		t.Fatal(err)
+	}
+	if err = e.requireRecoveryActivationBlock(context.Background()); !errors.Is(err, ErrConflict) {
+		t.Fatal("permissive marker accepted", err)
+	}
 }
 
 func TestInstalledRecoveryActivationConditionsCoverServicesAndSocket(t *testing.T) {
