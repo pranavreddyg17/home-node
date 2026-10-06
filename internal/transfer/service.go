@@ -75,6 +75,11 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	instance, err := s.Runtime.Apply(ctx, supervisor.Request{Version: 1, OperationID: state.Random(), Action: "inspect", InstanceID: request.InstanceID, PolicyGeneration: s.PolicyGeneration})
 	if err != nil || instance.State != "running" || instance.ID != request.InstanceID {
+		if s.connections[index] != nil && s.instanceIDs[index] == request.InstanceID {
+			_ = s.connections[index].Close()
+			s.connections[index] = nil
+			s.instanceIDs[index] = ""
+		}
 		http.Error(w, "instance unavailable", 409)
 		return
 	}
