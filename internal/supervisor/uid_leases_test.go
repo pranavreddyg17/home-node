@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/pranavreddyg17/home-node/internal/state"
+	"sync"
 	"testing"
 )
 
@@ -48,5 +49,45 @@ func TestGuestUIDReservationsPersistAndRefuseConflicts(t *testing.T) {
 		if _, err := m.ReserveGuestUID(ctx, state.Random(), invalid); !errors.Is(err, ErrPolicy) {
 			t.Fatal("invalid pool admitted", invalid, err)
 		}
+	}
+}
+
+func TestConcurrentGuestUIDReservationsRemainUnique(t *testing.T) {
+	m, _ := newManager(t)
+	const count = 16
+	pool := GuestUIDPool{First: 200000, Last: 200000 + count - 1}
+	type reservation struct {
+		id  string
+		uid uint32
+		err error
+	}
+	results := make(chan reservation, count)
+	var workers sync.WaitGroup
+	for i := 0; i < count; i++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			id := state.Random()
+			uid, err := m.ReserveGuestUID(context.Background(), id, pool)
+			results <- reservation{id, uid, err}
+		}()
+	}
+	workers.Wait()
+	close(results)
+	seen := make(map[uint32]bool, count)
+	for result := range results {
+		if result.err != nil || seen[result.uid] || result.uid < pool.First || result.uid > pool.Last {
+			t.Fatal("concurrent lease collision/refusal", result)
+		}
+		seen[result.uid] = true
+		if uid, err := m.ReserveGuestUID(context.Background(), result.id, pool); err != nil || uid != result.uid {
+			t.Fatal("concurrent lease retry changed", uid, err)
+		}
+	}
+	if len(seen) != count {
+		t.Fatal("incomplete concurrent inventory", seen)
+	}
+	if _, err := m.ReserveGuestUID(context.Background(), state.Random(), pool); !errors.Is(err, ErrCapacity) {
+		t.Fatal("concurrent allocation exceeded pool", err)
 	}
 }

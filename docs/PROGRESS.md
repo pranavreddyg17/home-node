@@ -3187,3 +3187,7 @@ Supervisor initialization now creates dedicated runtime UID lease/pool tables. R
 ### Domain XML supports reserved numeric DAC identity alongside AppArmor
 
 Domain accepts an optional reserved high GuestUID and non-root GuestGID, refuses partial/out-of-range identities, and emits a static numeric DAC security label with relabel=no alongside dynamic AppArmor. The Linux libvirt-schema fixture now checks that combined configuration. Supervisor race tests passed; native schema validation is pending CI. The existing launch path still supplies zero DAC identity until provisioned host-pool observation, lease-to-domain wiring, volume/channel ownership and verification are implemented; no per-guest launch-isolation claim is made yet. CI37499514694 completed successfully atbdd58ed. Full installed recovery and product acceptance remain unfinished.
+
+### Concurrent UID reservations preserve uniqueness and retry identity
+
+Added race-enabled concurrency coverage allocating sixteen fresh guests against a sixteen-UID pool through simultaneous transactions. Every result must be distinct and in range, every retry must retain its original UID, and a seventeenth guest must fail capacity. Targeted reservation/concurrency race tests passed. CI37500794893 was verified running at70317b7. Production lease-to-domain wiring, reserved host-pool validation, ownership enforcement and full installed recovery remain unfinished.
