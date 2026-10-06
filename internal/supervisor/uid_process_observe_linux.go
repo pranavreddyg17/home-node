@@ -40,14 +40,8 @@ func ObserveGuestUIDProcessConflicts(ctx context.Context, pool GuestUIDPool) (ob
 		return observed, ErrPolicy
 	}
 	// A namespaced UID view cannot establish host credential conflicts.
-	mappingFile, err := root.OpenFile("self/uid_map", os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
-	if err != nil {
+	if err = qualifyGuestUIDNamespace(root); err != nil {
 		return observed, err
-	}
-	mapping, readMappingErr := io.ReadAll(io.LimitReader(mappingFile, (64<<10)+1))
-	err = errors.Join(readMappingErr, mappingFile.Close())
-	if err != nil || len(mapping) > 64<<10 || strings.Join(strings.Fields(string(mapping)), " ") != "0 0 4294967295" {
-		return observed, ErrPolicy
 	}
 	observed = GuestUIDPool{First: pool.First, Last: pool.Last, Blocked: make(map[uint32]bool, len(pool.Blocked))}
 	for uid, value := range pool.Blocked {
@@ -127,7 +121,23 @@ func readGuestUIDProcessStatus(ctx context.Context, root *os.Root, pid string) (
 // Linux tasks can hold distinct credentials. Enumerating leaders alone would
 // miss such authority. A retained process with an unreadable task directory is
 // ambiguous and must be refused, including leader-exit races.
-func observeGuestUIDTaskConflicts(ctx context.Context, root *os.Root, pid string, pool GuestUIDPool, count *int) (result error) {
+func observeGuestUIDTaskConflicts(ctx context.Context, root *os.Root, pid string, pool GuestUIDPool, count *int) error {
+	return withGuestUIDTaskStatus(ctx, root, pid, count, func(status []byte) error {
+		conflicts, err := processGuestUIDConflicts(ctx, GuestUIDPool{First: pool.First, Last: pool.Last}, status)
+		if err != nil {
+			return err
+		}
+		for uid := range conflicts.Blocked {
+			pool.Blocked[uid] = true
+		}
+		return nil
+	})
+}
+
+func withGuestUIDTaskStatus(ctx context.Context, root *os.Root, pid string, count *int, consume func([]byte) error) (result error) {
+	if count == nil || consume == nil {
+		return ErrPolicy
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -168,16 +178,28 @@ func observeGuestUIDTaskConflicts(ctx context.Context, root *os.Root, pid string
 			if !exists {
 				continue
 			}
-			conflicts, err := processGuestUIDConflicts(ctx, GuestUIDPool{First: pool.First, Last: pool.Last}, status)
-			if err != nil {
+			if err = consume(status); err != nil {
 				return err
-			}
-			for uid := range conflicts.Blocked {
-				pool.Blocked[uid] = true
 			}
 		}
 		if errors.Is(readErr, io.EOF) {
 			return ctx.Err()
 		}
 	}
+}
+
+func qualifyGuestUIDNamespace(root *os.Root) error {
+	mappingFile, err := root.OpenFile("self/uid_map", os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return err
+	}
+	mapping, readErr := io.ReadAll(io.LimitReader(mappingFile, (64<<10)+1))
+	err = errors.Join(readErr, mappingFile.Close())
+	if err != nil {
+		return err
+	}
+	if len(mapping) > 64<<10 || strings.Join(strings.Fields(string(mapping)), " ") != "0 0 4294967295" {
+		return ErrPolicy
+	}
+	return nil
 }

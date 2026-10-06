@@ -184,6 +184,11 @@ func (b LinuxBackend) Verify(ctx context.Context, d Domain) error {
 	if err != nil || pid < 1 {
 		return ErrPolicy
 	}
+	if d.GuestUID != 0 {
+		if err = verifyGuestDACProcess(ctx, pid, d.GuestUID, d.GuestGID); err != nil {
+			return err
+		}
+	}
 	proc := filepath.Join("/proc", strconv.Itoa(pid))
 	label, err := os.ReadFile(filepath.Join(proc, "attr/current"))
 	if err != nil {

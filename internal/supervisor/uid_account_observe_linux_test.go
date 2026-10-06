@@ -38,6 +38,12 @@ func TestNativeGuestUIDLocalAccountObservation(t *testing.T) {
 	if _, err = ObserveGuestUIDProcessConflicts(ctx, pool); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancelled process observation ignored", err)
 	}
+	if err = verifyGuestDACProcess(context.Background(), os.Getpid(), pool.First, 200000); !errors.Is(err, ErrPolicy) {
+		t.Fatal("root fixture process accepted as reserved guest", err)
+	}
+	if err = verifyGuestDACProcess(ctx, os.Getpid(), pool.First, 200000); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled DAC verification ignored", err)
+	}
 	if pool.Blocked != nil {
 		t.Fatal("input policy mutated")
 	}
