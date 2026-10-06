@@ -3267,3 +3267,7 @@ Manager.Initialize now validates supplied guest identity policy against the dura
 ### Native DAC fixture avoids runner subordinate UID pool
 
 CI37506109662 failed atb1797de before spawning the positive DAC child: every UID in fixture range200000..200015 was blocked by observed account/delegation/process conflicts. It is not a verifier pass. The fixture now searches1000000000..1000000255, preserving all conflict observations and requiring a free identity; it does not bypass or delete runner allocations. Linux supervisor tests compiled; native execution awaits rerun.
+
+### Missing durable UID pool refuses reconstruction over existing assignments
+
+Reservation and startup now refuse an absent pool record when any durable UID/group assignment remains, instead of recreating policy around old identities. A corruption fixture deletes only the pool and requires same/new-identity reservations and initialization to refuse without changing retained leases/groups or recreating the pool. A separate manager replacement fixture verifies an interrupted UID-only reservation with intact pool can initialize and complete its group binding using the same UID. Full supervisor race tests passed and Linux supervisor tests compiled. This distinguishes recoverable partial assignment from missing authoritative policy; it does not prove power-loss durability or complete Linux ownership/provisioning. CI37506590731 was verified live atc20d425. Full application acceptance remains unfinished.

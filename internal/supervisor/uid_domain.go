@@ -97,6 +97,14 @@ func (m *Manager) validateGuestIdentityPolicy(ctx context.Context) error {
 			return ErrPolicy
 		}
 		var conflicts int
+		if errors.Is(err, sql.ErrNoRows) {
+			if err = tx.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_leases)+(SELECT count(*) FROM runtime_guest_groups)").Scan(&conflicts); err != nil {
+				return err
+			}
+			if conflicts != 0 {
+				return ErrPolicy
+			}
+		}
 		if m.GuestUIDPool == nil {
 			if err := tx.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_leases)+(SELECT count(*) FROM runtime_guest_groups)").Scan(&conflicts); err != nil {
 				return err

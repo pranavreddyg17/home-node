@@ -139,3 +139,52 @@ func TestManagerInitializationRefusesGuestIdentityPolicyDrift(t *testing.T) {
 		t.Fatal("orphan group accepted", err)
 	}
 }
+
+func TestGuestIdentityMissingPoolCannotBeRecreated(t *testing.T) {
+	m, _ := newManager(t)
+	ctx := context.Background()
+	pool := GuestUIDPool{First: 200000, Last: 200001}
+	m.GuestUIDPool, m.GuestGID = &pool, 64055
+	id := state.Random()
+	d := Domain{ID: id}
+	if err := m.bindDomainGuestIdentity(ctx, &d, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Store.DB.Exec("DELETE FROM runtime_uid_pool"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Initialize(ctx); !errors.Is(err, ErrPolicy) {
+		t.Fatal("missing durable pool accepted", err)
+	}
+	for _, candidate := range []string{id, state.Random()} {
+		if _, err := m.ReserveGuestUID(ctx, candidate, pool); !errors.Is(err, ErrPolicy) {
+			t.Fatal("missing pool silently recreated", err)
+		}
+	}
+	var pools, leases, groups int
+	if err := m.Store.DB.QueryRow("SELECT (SELECT count(*) FROM runtime_uid_pool),(SELECT count(*) FROM runtime_uid_leases),(SELECT count(*) FROM runtime_guest_groups)").Scan(&pools, &leases, &groups); err != nil {
+		t.Fatal(err)
+	}
+	if pools != 0 || leases != 1 || groups != 1 {
+		t.Fatal("refusal changed identity records", pools, leases, groups)
+	}
+}
+
+func TestGuestUIDOnlyReservationCompletesAfterRestart(t *testing.T) {
+	m, _ := newManager(t)
+	ctx := context.Background()
+	pool := GuestUIDPool{First: 200000, Last: 200001}
+	id := state.Random()
+	uid, err := m.ReserveGuestUID(ctx, id, pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement := &Manager{Store: m.Store, Policy: m.Policy, Manifest: m.Manifest, Images: m.Images, Volumes: m.Volumes, Channels: m.Channels, Backend: m.Backend, GuestUIDPool: &pool, GuestGID: 64055}
+	if err := replacement.Initialize(ctx); err != nil {
+		t.Fatal("partial reservation startup refused", err)
+	}
+	d := Domain{ID: id}
+	if err := replacement.bindDomainGuestIdentity(ctx, &d, true); err != nil || d.GuestUID != uid || d.GuestGID != 64055 {
+		t.Fatal("partial reservation changed identity", d, err)
+	}
+}

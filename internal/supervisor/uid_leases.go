@@ -43,6 +43,13 @@ func (m *Manager) ReserveGuestUID(ctx context.Context, id string, pool GuestUIDP
 		var first, last uint32
 		err := tx.QueryRowContext(ctx, "SELECT first_uid,last_uid FROM runtime_uid_pool WHERE singleton=1").Scan(&first, &last)
 		if errors.Is(err, sql.ErrNoRows) {
+			var assignedRecords int
+			if err = tx.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_leases)+(SELECT count(*) FROM runtime_guest_groups)").Scan(&assignedRecords); err != nil {
+				return err
+			}
+			if assignedRecords != 0 {
+				return ErrPolicy
+			}
 			if _, err = tx.ExecContext(ctx, "INSERT INTO runtime_uid_pool VALUES(1,?,?)", pool.First, pool.Last); err != nil {
 				return err
 			}
