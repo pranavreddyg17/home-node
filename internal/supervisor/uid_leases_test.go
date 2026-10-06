@@ -91,3 +91,45 @@ func TestConcurrentGuestUIDReservationsRemainUnique(t *testing.T) {
 		t.Fatal("concurrent allocation exceeded pool", err)
 	}
 }
+
+func TestGuestUIDLeaseSurvivesDatabaseReopen(t *testing.T) {
+	directory := t.TempDir()
+	store, err := state.Open(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{Store: store}
+	ctx := context.Background()
+	if err = m.initializeGuestUIDLeases(ctx); err != nil {
+		store.Close()
+		t.Fatal(err)
+	}
+	pool := GuestUIDPool{First: 200000, Last: 200001}
+	id := state.Random()
+	uid, err := m.ReserveGuestUID(ctx, id, pool)
+	if err != nil {
+		store.Close()
+		t.Fatal(err)
+	}
+	if err = store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := state.Open(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	replacement := &Manager{Store: reopened}
+	if err = replacement.initializeGuestUIDLeases(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := replacement.ReserveGuestUID(ctx, id, pool); err != nil || got != uid {
+		t.Fatal("reopen changed lease", got, uid, err)
+	}
+	if got, err := replacement.ReserveGuestUID(ctx, state.Random(), pool); err != nil || got == uid {
+		t.Fatal("reopen reused existing UID", got, err)
+	}
+	if _, err := replacement.ReserveGuestUID(ctx, state.Random(), pool); !errors.Is(err, ErrCapacity) {
+		t.Fatal("reopened pool lost reservations", err)
+	}
+}

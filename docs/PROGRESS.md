@@ -3203,3 +3203,7 @@ Added root/Linux ObserveLocalGuestUIDConflicts with a retained /etc directory an
 ### Disposable native protected account observation fixture
 
 Added a gated disposable Linux root fixture for ObserveLocalGuestUIDConflicts against real /etc/passwd and /etc/subuid. It requires cancellation refusal, retains the requested pool bounds without mutating input policy, and compares observed path inode/mode/size after the read. CI invokes it separately with an explicit integration environment flag; it is not run on the owner Mac. Linux supervisor tests compiled and diff checks passed; fixture execution awaits publication after CI37500794893, verified still running. This does not prove NSS/process exclusion, reserved-pool provisioning or per-guest launch ownership. Those gates and full installed recovery remain unfinished.
+
+### UID lease identity persists through actual database reopen
+
+Added a supervisor lease regression that reserves a UID, closes the state database, opens it again from the same private directory, reruns idempotent lease-table initialization and verifies the old guest keeps its UID while a new guest gets the remaining UID and further allocation fails capacity. Targeted race test passed. This is clean database-close/reopen evidence, not process-kill or power-loss testing. CI37500794893 completed successfully at70317b7; four account-observation/concurrency commits were pushed and remote main verified at0927164. CI37501792533 is verified live at that head. Production UID ownership wiring and full installed recovery remain unfinished.
