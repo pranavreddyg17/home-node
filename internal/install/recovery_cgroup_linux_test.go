@@ -47,15 +47,26 @@ func TestNativeRecoveryGuestCgroupObservation(t *testing.T) {
 	}
 	serviceCreated := false
 	defer func() {
+		// Report cleanup errors as test failures; never hide leftover fixture state.
 		if serviceCreated {
-			command("stop", service)
+			if err := command("stop", service); err != nil {
+				t.Errorf("stop fixture service: %v", err)
+			}
 		}
-		command("stop", slice)
+		if err := command("stop", slice); err != nil {
+			t.Errorf("stop fixture slice: %v", err)
+		}
 		if serviceCreated {
-			os.Remove(servicePath)
+			if err := os.Remove(servicePath); err != nil {
+				t.Errorf("remove fixture service: %v", err)
+			}
 		}
-		os.Remove(slicePath)
-		command("daemon-reload")
+		if err := os.Remove(slicePath); err != nil {
+			t.Errorf("remove fixture slice: %v", err)
+		}
+		if err := command("daemon-reload"); err != nil {
+			t.Errorf("reload after fixture cleanup: %v", err)
+		}
 	}()
 	if err := write(servicePath, "[Unit]\nDescription=Disposable populated guest cgroup\n[Service]\nType=simple\nSlice=homenode.slice\nExecStart=/bin/sleep 60\nKillMode=control-group\n"); err != nil {
 		t.Fatal(err)
