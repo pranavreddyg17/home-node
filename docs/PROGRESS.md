@@ -3119,3 +3119,7 @@ Native guest-cgroup observation now refuses symlink/non-directory fixed slice pa
 ### Accumulated recovery preflight native validation publication
 
 CI37422229911 completed successfully at3d5415f, verifying the repaired repeatable-condition activation/OOM fixtures and preceding activation-marker/preflight changes. Revalidated current installer race suite, Linux compilation and diff checks before publishing accumulated marker pinning, whole-preflight deadline, manager failure/configuration/unit/journal drift fixtures and fixed guest-cgroup observation/identity checks. Cached portable installer results are reused by Go for unchanged inputs; native newly added fixtures still require this publication run. Actual kernel empty-hierarchy fixture, queued/future activation exclusion, installed publication/ownership/bootstrap/runtime reconstruction and full application acceptance remain unfinished.
+
+### Kernel cgroup events descriptor/path identity check
+
+Guest-cgroup observation now rechecks cgroup.events as a regular current path matching the retained opened descriptor after parsing, in addition to fixed hierarchy identity and cgroup-v2 filesystem checks. Replaced events-file evidence is refused. Linux compilation and diff checks passed; actual kernel fixture remains pending implementation/execution. CI37479528801 remains live at0f525a4. Queued/future activation exclusion, installed publication/ownership/bootstrap/runtime reconstruction and complete application acceptance remain unfinished.

@@ -59,6 +59,10 @@ func ObserveRecoveryGuestsEmpty(ctx context.Context) (result error) {
 	if err = validateRecoveryEmptyCgroup(data); err != nil {
 		return err
 	}
+	currentEvents, err := root.Lstat("cgroup.events")
+	if err != nil || !currentEvents.Mode().IsRegular() || !os.SameFile(info, currentEvents) {
+		return ErrConflict
+	}
 	current, err := os.Lstat("/sys/fs/cgroup/homenode.slice")
 	if err != nil || !current.IsDir() || !os.SameFile(opened, current) {
 		return ErrConflict
