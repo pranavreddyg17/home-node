@@ -58,6 +58,20 @@ func TestRootRecoveryQuiescenceRejectsMarkerReplacementDuringObservation(t *test
 	if err = e.observeRecoveryQuiescence(context.Background(), func(context.Context) error { return nil }); err != nil {
 		t.Fatal("owned preflight", err)
 	}
+	policyPath := "etc/homenode/runtime-policy.json"
+	originalPolicy, err := e.host.ReadFile(policyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changePolicy := func(context.Context) error {
+		return e.host.WriteFile(policyPath, []byte("changed during observation"), 0600)
+	}
+	if err = e.observeRecoveryQuiescence(context.Background(), changePolicy); !errors.Is(err, ErrConflict) {
+		t.Fatal("configuration drift during observation accepted", err)
+	}
+	if err = e.host.WriteFile(policyPath, originalPolicy, 0600); err != nil {
+		t.Fatal(err)
+	}
 	replace := func(ctx context.Context) error {
 		if err := e.journalRoot.Remove("recovery-blocked"); err != nil {
 			return err

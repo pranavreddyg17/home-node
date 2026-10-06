@@ -69,6 +69,20 @@ func (e *Engine) observeRecoveryQuiescence(ctx context.Context, observe func(con
 	if err = observe(ctx); err != nil {
 		return err
 	}
+	// Configuration may have changed while querying the manager. Retain the
+	// original journal identity and reverify its owned bytes before success.
+	currentInstallation, err := e.load()
+	if err != nil || currentInstallation.ID != installed.ID || currentInstallation.Digest != installed.Digest || currentInstallation.Phase != "installed" {
+		return ErrConflict
+	}
+	for _, record := range installed.Items {
+		if err = ctx.Err(); err != nil {
+			return err
+		}
+		if err = e.matches(record); err != nil {
+			return ErrConflict
+		}
+	}
 	// Recheck marker after manager observation; never recreate lost exclusion.
 	if err = e.requireRecoveryActivationBlock(ctx); err != nil {
 		return err
