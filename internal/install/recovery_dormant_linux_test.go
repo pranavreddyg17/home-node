@@ -15,16 +15,24 @@ func TestRecoveryDormantQueriesOnlyFixedServices(t *testing.T) {
 	valid := "LoadState=loaded\nActiveState=inactive\nSubState=dead\nMainPID=0\nControlPID=0\n"
 	units := []string{}
 	command := func(ctx context.Context, path string, args ...string) *exec.Cmd {
-		if path != "/usr/bin/systemctl" || len(args) != 5 || !reflect.DeepEqual(args[:4], []string{"--system", "--no-pager", "show", "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,LoadState,ActiveState,SubState,MainPID,ControlPID"}) {
+		expectedProperties := "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,LoadState,ActiveState,SubState,MainPID,ControlPID"
+		if len(args) == 5 && args[4] == "homenode-backup-credential.socket" {
+			expectedProperties = "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,LoadState,ActiveState,SubState"
+		}
+		if path != "/usr/bin/systemctl" || len(args) != 5 || !reflect.DeepEqual(args[:4], []string{"--system", "--no-pager", "show", expectedProperties}) {
 			t.Fatal("unexpected manager query", path, args)
 		}
 		units = append(units, args[len(args)-1])
-		return exec.CommandContext(ctx, "/bin/sh", "-c", "printf '%s' \"$1\"", "fixture", "Id="+args[4]+"\nFragmentPath=/etc/systemd/system/"+args[4]+"\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\n"+valid)
+		response := valid
+		if args[4] == "homenode-backup-credential.socket" {
+			response = strings.ReplaceAll(strings.ReplaceAll(response, "MainPID=0\n", ""), "ControlPID=0\n", "")
+		}
+		return exec.CommandContext(ctx, "/bin/sh", "-c", "printf '%s' \"$1\"", "fixture", "Id="+args[4]+"\nFragmentPath=/etc/systemd/system/"+args[4]+"\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\n"+response)
 	}
 	if err := observeRecoveryServicesWith(context.Background(), command); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(units, []string{"homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service"}) {
+	if !reflect.DeepEqual(units, []string{"homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket"}) {
 		t.Fatal("service set", units)
 	}
 	valid = strings.Replace(valid, "MainPID=0", "MainPID=1", 1)

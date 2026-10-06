@@ -29,14 +29,18 @@ func observeRecoveryServicesWith(ctx context.Context, command func(context.Conte
 	if command == nil {
 		return ErrPlan
 	}
-	bounded, cancel := context.WithTimeout(ctx, 20*time.Second)
+	bounded, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
-	for _, unit := range []string{"homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service"} {
+	for _, unit := range []string{"homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket"} {
 		if err := bounded.Err(); err != nil {
 			return err
 		}
 		step, finish := context.WithTimeout(bounded, 5*time.Second)
-		cmd := command(step, "/usr/bin/systemctl", "--system", "--no-pager", "show", "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,LoadState,ActiveState,SubState,MainPID,ControlPID", unit)
+		properties := "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,LoadState,ActiveState,SubState"
+		if unit != "homenode-backup-credential.socket" {
+			properties += ",MainPID,ControlPID"
+		}
+		cmd := command(step, "/usr/bin/systemctl", "--system", "--no-pager", "show", properties, unit)
 		if cmd == nil {
 			finish()
 			return ErrPlan

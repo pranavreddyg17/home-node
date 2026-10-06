@@ -48,3 +48,15 @@ func TestRecoveryDormancyBindsInstalledUnitIdentity(t *testing.T) {
 		t.Fatal("foreign unit selected", err)
 	}
 }
+
+func TestRecoveryCredentialSocketMustBeInactive(t *testing.T) {
+	unit := "homenode-backup-credential.socket"
+	valid := "Id=" + unit + "\nFragmentPath=/etc/systemd/system/" + unit + "\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\nLoadState=loaded\nActiveState=inactive\nSubState=dead\n"
+	if err := validateRecoveryDormantUnit([]byte(valid), unit); err != nil {
+		t.Fatal(err)
+	}
+	listening := strings.Replace(strings.Replace(valid, "ActiveState=inactive", "ActiveState=active", 1), "SubState=dead", "SubState=listening", 1)
+	if err := validateRecoveryDormantUnit([]byte(listening), unit); !errors.Is(err, ErrConflict) {
+		t.Fatal("listening credential socket admitted", err)
+	}
+}

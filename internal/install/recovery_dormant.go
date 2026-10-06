@@ -15,11 +15,15 @@ func validateRecoveryDormant(data []byte) error {
 
 func validateRecoveryDormantUnit(data []byte, unit string) error {
 	switch unit {
-	case "homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service":
+	case "homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket":
 	default:
 		return ErrPlan
 	}
 	expected := map[string]string{"Id": unit, "FragmentPath": "/etc/systemd/system/" + unit, "DropInPaths": "", "NeedDaemonReload": "no", "Transient": "no", "LoadState": "loaded", "ActiveState": "inactive", "SubState": "dead", "MainPID": "0", "ControlPID": "0"}
+	if unit == "homenode-backup-credential.socket" {
+		delete(expected, "MainPID")
+		delete(expected, "ControlPID")
+	}
 	return validateRecoveryProperties(data, expected)
 }
 
