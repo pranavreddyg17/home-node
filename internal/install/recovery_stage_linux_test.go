@@ -129,4 +129,15 @@ func TestRootRecoveryManagementStagingReplay(t *testing.T) {
 	if _, err = e.journalRoot.Lstat("recovery-staged.json"); err != nil {
 		t.Fatal("completion receipt missing", err)
 	}
+	installed, err := e.load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := recoveryIntent{Version: 1, ConfigurationID: installed.ID, ConfigurationDigest: installed.Digest, Recovery: preview.Recovery}
+	if err = e.journalRoot.WriteFile(".recovery-management.copy", []byte("changed after completion"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = e.reconcileRecoveryStaging(context.Background(), expected); !errors.Is(err, ErrConflict) {
+		t.Fatal("receipt masked changed staging bytes", err)
+	}
 }

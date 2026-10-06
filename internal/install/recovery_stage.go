@@ -89,6 +89,9 @@ func (e *Engine) stageRecoveryCopies(ctx context.Context, prepared *backup.Prepa
 	if err = e.commitRecoveryRecord(ctx, "recovery-staged.json", receipt); err != nil {
 		return RecoveryConfigurationPreview{}, err
 	}
+	if err = e.reconcileRecoveryStaging(ctx, recoveryIntent{Version: 1, ConfigurationID: installed.ID, ConfigurationDigest: installed.Digest, Recovery: preview.Recovery}); err != nil {
+		return RecoveryConfigurationPreview{}, err
+	}
 	return preview, nil
 }
 

@@ -55,6 +55,12 @@ func TestRecoveryIntentPreservesForeignAndTornWrites(t *testing.T) {
 	if err = e.commitRecoveryRecord(ctx, "recovery-staged.json", []byte(`{"version":1,"files":2}`)); !errors.Is(err, ErrConflict) {
 		t.Fatal("foreign staging receipt adopted", err)
 	}
+	if err = e.matchRecoveryRecord(ctx, "recovery-staged.json", receipt); err != nil {
+		t.Fatal("matching receipt refused", err)
+	}
+	if err = e.matchRecoveryRecord(ctx, "recovery-staged.json", []byte(`{"version":2}`)); !errors.Is(err, ErrConflict) {
+		t.Fatal("foreign receipt matched", err)
+	}
 	if err = e.commitRecoveryRecord(ctx, "../escape", receipt); !errors.Is(err, ErrPlan) {
 		t.Fatal("foreign journal path admitted", err)
 	}
