@@ -11,11 +11,23 @@ import (
 // installed service/socket conditions. It does not stop already-running units
 // or prove manager reload/guest emptiness; publication must check those too.
 // No automatic release is provided before bootstrap/restore acceptance exists.
-func (e *Engine) blockRecoveryActivation(ctx context.Context) (result error) {
+func (e *Engine) blockRecoveryActivation(ctx context.Context) error {
+	return e.recoveryActivationMarker(ctx, true)
+}
+
+func (e *Engine) requireRecoveryActivationBlock(ctx context.Context) error {
+	return e.recoveryActivationMarker(ctx, false)
+}
+
+func (e *Engine) recoveryActivationMarker(ctx context.Context, create bool) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	file, err := e.journalRoot.OpenFile("recovery-blocked", os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0600)
+	flags := os.O_RDONLY | syscall.O_NOFOLLOW | syscall.O_NONBLOCK
+	if create {
+		flags = os.O_CREATE | os.O_EXCL | os.O_WRONLY | syscall.O_NOFOLLOW
+	}
+	file, err := e.journalRoot.OpenFile("recovery-blocked", flags, 0600)
 	if errors.Is(err, os.ErrExist) {
 		file, err = e.journalRoot.OpenFile("recovery-blocked", os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	}

@@ -35,6 +35,21 @@ func TestRecoveryActivationMarkerSurvivesRetryAndRefusesForeignBytes(t *testing.
 	if err != nil || !os.SameFile(before, after) {
 		t.Fatal("marker replaced", err)
 	}
+	if err = e.requireRecoveryActivationBlock(context.Background()); err != nil {
+		t.Fatal("existing activation block refused", err)
+	}
+	if err = e.journalRoot.Remove("recovery-blocked"); err != nil {
+		t.Fatal(err)
+	}
+	if err = e.requireRecoveryActivationBlock(context.Background()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("missing block accepted", err)
+	}
+	if _, err = e.journalRoot.Lstat("recovery-blocked"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("validation recreated block", err)
+	}
+	if err = e.blockRecoveryActivation(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	if err = e.journalRoot.WriteFile("recovery-blocked", []byte("foreign"), 0600); err != nil {
 		t.Fatal(err)
 	}
