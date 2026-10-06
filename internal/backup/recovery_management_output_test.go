@@ -13,7 +13,7 @@ import (
 )
 
 func TestManagementOutputRequiresReboundJournalIdentity(t *testing.T) {
-	source, manifest, _, _ := recoverySet(t)
+	source, manifest, policy, _ := recoverySet(t)
 	entry := manifest.Files[1]
 	disk := RecoveryInstallDisk{Workload: entry.Workload, SourceName: entry.Name, Bytes: entry.Bytes, SourceSHA256: entry.SHA256, ImageSHA256: entry.ImageSHA256, InstanceID: state.Random()}
 	plan, err := newRecoveryInstallPlan(context.Background(), source, strings.Repeat("c", 64), manifest, []RecoveryInstallDisk{disk})
@@ -77,6 +77,9 @@ func TestManagementOutputRequiresReboundJournalIdentity(t *testing.T) {
 	receipt, err := decodeRecoveryManagementReceipt(receiptBytes)
 	if err != nil || receipt.Output != output {
 		t.Fatal("durable management output differs", receipt, err)
+	}
+	if inventory, err := InspectPreparedRecovery(context.Background(), root, manifest, policy); err == nil || inventory.OwnerID != "" || inventory.Disks != nil {
+		t.Fatal("management-only state became complete prepared inventory", inventory, err)
 	}
 	if reopened, err := reconcileRecoveryManagementOutput(context.Background(), root); err != nil || reopened != receipt {
 		t.Fatal("receipt reconciliation differs", reopened, err)
