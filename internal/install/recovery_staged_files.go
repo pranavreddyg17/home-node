@@ -71,7 +71,9 @@ func (e *Engine) withRecoveryStagedFiles(ctx context.Context, expected recoveryI
 			return ErrConflict
 		}
 	}
-	if err := use(ctx, files); err != nil {
+	// Lend a separate inventory slice so consumer metadata edits cannot replace
+	// the descriptor handles retained for verification and cleanup.
+	if err := use(ctx, append([]backup.PreparedRecoveryFile(nil), files...)); err != nil {
 		return err
 	}
 	if err := e.reconcileRecoveryStaging(ctx, expected); err != nil {

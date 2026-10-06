@@ -140,6 +140,7 @@ func TestRootRecoveryManagementStagingReplay(t *testing.T) {
 			t.Fatal("unexpected staged file inventory", files)
 		}
 		borrowed = files[0].File
+		files[0].File = nil // Consumer inventory edits must not lose retained cleanup.
 		if _, writeErr := borrowed.WriteAt([]byte("x"), 0); writeErr == nil {
 			t.Fatal("staged descriptor writable")
 		}

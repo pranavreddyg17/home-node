@@ -3155,3 +3155,7 @@ Recovery staging checks cancellation before acquiring installer exclusion and us
 ### Scoped installer staging descriptor handoff
 
 Added internal withRecoveryStagedFiles to retain installer exclusion through current intent/receipt/copy reconciliation, pin read-only management/disk descriptors, compare path identities before and after the consumer, revalidate current bytes and close every borrowed descriptor before unlocking. The scope has one two-hour cooperative deadline, immediate overlap refusal and no runtime/publication authority. Portable installer race suite and targeted refusal/cancellation/overlap test passed; Linux tests including the root management-staging descriptor lifetime/read-only/overlap assertions compiled. Native execution is pending CI. Full installed publication, activation exclusion, ownership/runtime reconstruction, bootstrap enrollment and product acceptance remain unfinished.
+
+### Staged consumer inventory cannot replace retained cleanup handles
+
+The staged-file consumer now receives a separate inventory slice; edits to its descriptor fields cannot alter the installer-owned references used for post-handoff identity verification and close. The Linux management fixture clears the consumer's file field and still requires the original borrowed descriptor closed after return. Installer race tests passed and Linux tests compiled; root execution remains pending publication. CI37480663185 was verified running during this turn. Full installed restore and application acceptance remain unfinished.
