@@ -215,14 +215,19 @@ func (b LinuxBackend) Verify(ctx context.Context, d Domain) error {
 	if err = boundedCgroup(filepath.Join("/sys/fs/cgroup", relative), "memory.max", int64(d.Image.MemoryMiB+512)*(1<<20)); err != nil {
 		return err
 	}
-	info, err := os.Lstat(d.ChannelPath)
-	if err != nil || info.Mode()&os.ModeSocket == 0 {
-		return errors.New("guest channel missing")
+	uid := d.GuestUID
+	if uid == 0 {
+		account, lookupErr := user.Lookup("libvirt-qemu")
+		if lookupErr != nil {
+			return lookupErr
+		}
+		parsed, parseErr := strconv.ParseUint(account.Uid, 10, 32)
+		if parseErr != nil || parsed == 0 {
+			return ErrPolicy
+		}
+		uid = uint32(parsed)
 	}
-	if err = os.Chown(d.ChannelPath, -1, b.TransferGID); err != nil {
-		return err
-	}
-	return os.Chmod(d.ChannelPath, 0660)
+	return grantGuestChannelAccess(ctx, d.ChannelPath, uid, b.TransferGID)
 }
 func (b LinuxBackend) FreeBytes(directory string) (int64, error) {
 	var stat syscall.Statfs_t

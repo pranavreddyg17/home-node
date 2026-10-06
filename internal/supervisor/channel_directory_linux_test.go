@@ -50,6 +50,16 @@ func TestNativeGuestChannelDirectoryOwnership(t *testing.T) {
 	if err := os.Chown(socketPath, 1000000000, 64055); err != nil {
 		t.Fatal(err)
 	}
+	if err := grantGuestChannelAccess(context.Background(), socketPath, 1000000000, 64055); err != nil {
+		t.Fatal("pinned socket access grant", err)
+	}
+	granted, err := os.Lstat(socketPath)
+	if err != nil || granted.Mode().Perm() != 0660 {
+		t.Fatal("socket grant mode", err)
+	}
+	if err := grantGuestChannelAccess(context.Background(), socketPath, 1000000001, 64055); !errors.Is(err, ErrPolicy) {
+		t.Fatal("wrong socket identity granted", err)
+	}
 	socketBefore, err := os.Lstat(socketPath)
 	if err != nil {
 		t.Fatal(err)
@@ -76,6 +86,9 @@ func TestNativeGuestChannelDirectoryOwnership(t *testing.T) {
 	}
 	if err := prepareGuestChannelDirectory(context.Background(), path, 1000000000, 64055); !errors.Is(err, ErrPolicy) {
 		t.Fatal("aliased socket accepted", err)
+	}
+	if err := grantGuestChannelAccess(context.Background(), socketPath, 1000000000, 64055); !errors.Is(err, ErrPolicy) {
+		t.Fatal("aliased socket grant", err)
 	}
 	if err := os.Remove(alias); err != nil {
 		t.Fatal(err)

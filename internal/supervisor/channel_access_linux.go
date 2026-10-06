@@ -1,0 +1,78 @@
+//go:build linux
+
+package supervisor
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+
+	"golang.org/x/sys/unix"
+)
+
+// grantGuestChannelAccess changes the pinned socket inode, never a pathname
+// resolved again for mutation. Kernels without descriptor chmod support refuse.
+func grantGuestChannelAccess(ctx context.Context, path string, uid uint32, gid int) (result error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if os.Geteuid() != 0 || uid == 0 || uid > 1<<31-1 || gid < 1 || gid > 1<<31-1 || !filepath.IsAbs(path) || filepath.Clean(path) != path || filepath.Base(path) != "adapter.sock" {
+		return ErrPolicy
+	}
+	parentPath := filepath.Dir(path)
+	before, err := os.Lstat(parentPath)
+	owner, ok := openedSysUID(before)
+	if err != nil || !ok || owner != uid || !before.IsDir() || before.Mode().Perm() != 0710 {
+		return ErrPolicy
+	}
+	root, err := os.OpenRoot(parentPath)
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, root.Close()) }()
+	parent, err := root.Open(".")
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, parent.Close()) }()
+	opened, err := parent.Stat()
+	owner, ok = openedSysUID(opened)
+	var directory unix.Stat_t
+	if err != nil || !ok || owner != uid || !os.SameFile(before, opened) || opened.Mode().Perm() != 0710 || unix.Fstat(int(parent.Fd()), &directory) != nil || directory.Gid != uint32(gid) {
+		return ErrPolicy
+	}
+	file, err := root.OpenFile("adapter.sock", unix.O_PATH|unix.O_NOFOLLOW, 0)
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, file.Close()) }()
+	var socket unix.Stat_t
+	if unix.Fstat(int(file.Fd()), &socket) != nil || socket.Mode&unix.S_IFMT != unix.S_IFSOCK || socket.Uid != uid || socket.Nlink != 1 {
+		return ErrPolicy
+	}
+	original, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := unix.Fchownat(int(file.Fd()), "", -1, gid, unix.AT_EMPTY_PATH|unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return err
+	}
+	if err := unix.Fchmodat(int(file.Fd()), "", 0660, unix.AT_EMPTY_PATH); err != nil {
+		return err
+	}
+	var final unix.Stat_t
+	current, err := root.Lstat("adapter.sock")
+	if err != nil || !os.SameFile(original, current) || unix.Fstat(int(file.Fd()), &final) != nil || final.Dev != socket.Dev || final.Ino != socket.Ino || final.Uid != uid || final.Gid != uint32(gid) || final.Nlink != 1 || final.Mode&07777 != 0660 {
+		return ErrPolicy
+	}
+	currentParent, err := os.Lstat(parentPath)
+	owner, ok = openedSysUID(currentParent)
+	if err != nil || !ok || owner != uid || !os.SameFile(opened, currentParent) || currentParent.Mode() != opened.Mode() || unix.Fstat(int(parent.Fd()), &directory) != nil || directory.Uid != uid || directory.Gid != uint32(gid) {
+		return ErrPolicy
+	}
+	return ctx.Err()
+}
