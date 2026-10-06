@@ -27,6 +27,13 @@ func (m *Manager) bindDomainGuestIdentity(ctx context.Context, d *Domain, reserv
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
+		var reserved int
+		if err := m.Store.DB.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_pool)+(SELECT count(*) FROM runtime_guest_groups WHERE instance_id=?)", d.ID).Scan(&reserved); err != nil {
+			return err
+		}
+		if reserved != 0 {
+			return ErrPolicy
+		}
 		return nil
 	}
 	pool := *m.GuestUIDPool

@@ -223,3 +223,40 @@ func TestGuestUIDPoolCannotOverlapHostServiceIdentities(t *testing.T) {
 		})
 	}
 }
+
+func TestRunningInspectionRefusesDamagedGuestIdentityAndAuditStops(t *testing.T) {
+	for _, missing := range []string{"group", "lease", "policy-removed"} {
+		t.Run(missing, func(t *testing.T) {
+			m, b := newManager(t)
+			pool := GuestUIDPool{First: 200000, Last: 200001}
+			m.GuestUIDPool, m.GuestGID = &pool, 64055
+			request := startRequest()
+			if _, err := m.Apply(context.Background(), request); err != nil {
+				t.Fatal(err)
+			}
+			statement := "DELETE FROM runtime_guest_groups WHERE instance_id=?"
+			if missing == "lease" || missing == "policy-removed" {
+				statement = "DELETE FROM runtime_uid_leases WHERE instance_id=?"
+			}
+			if _, err := m.Store.DB.Exec(statement, request.InstanceID); err != nil {
+				t.Fatal(err)
+			}
+			if missing == "policy-removed" {
+				if _, err := m.Store.DB.Exec("DELETE FROM runtime_guest_groups WHERE instance_id=?", request.InstanceID); err != nil {
+					t.Fatal(err)
+				}
+				m.GuestUIDPool, m.GuestGID = nil, 0
+			}
+			if _, err := m.Inspect(context.Background(), request.InstanceID); err == nil {
+				t.Fatal("damaged running identity admitted")
+			}
+			if err := m.Audit(context.Background()); err != nil {
+				t.Fatal("identity damage prevented safe stop", err)
+			}
+			instance, err := m.Inspect(context.Background(), request.InstanceID)
+			if err != nil || instance.State != "interrupted" || instance.Desired != "stopped" || b.stops != 1 {
+				t.Fatal("damaged identity guest not stopped", instance, b.stops, err)
+			}
+		})
+	}
+}

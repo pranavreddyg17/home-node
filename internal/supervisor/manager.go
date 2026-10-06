@@ -148,6 +148,21 @@ func (m *Manager) Initialize(ctx context.Context) error {
 	})
 }
 func (m *Manager) Inspect(ctx context.Context, id string) (Instance, error) {
+	instance, err := m.inspectRuntimeRecord(ctx, id)
+	if err != nil {
+		return instance, err
+	}
+	if instance.State == "running" {
+		domain := Domain{ID: instance.ID}
+		if err := m.bindDomainGuestIdentity(ctx, &domain, false); err != nil {
+			return Instance{}, err
+		}
+		instance.GuestUID = domain.GuestUID
+	}
+	return instance, nil
+}
+
+func (m *Manager) inspectRuntimeRecord(ctx context.Context, id string) (Instance, error) {
 	var i Instance
 	err := m.Store.DB.QueryRowContext(ctx, "SELECT r.id,r.workload,r.state,r.desired,r.image_sha256,r.memory_mib,r.vcpus,r.data_bytes,r.created_at,r.revision,coalesce(u.uid,0) FROM runtime_instances r LEFT JOIN runtime_uid_leases u ON u.instance_id=r.id WHERE r.id=?", id).Scan(&i.ID, &i.Workload, &i.State, &i.Desired, &i.ImageSHA256, &i.MemoryMiB, &i.VCPUs, &i.DataBytes, &i.CreatedAt, &i.Revision, &i.GuestUID)
 	return i, err
@@ -515,7 +530,7 @@ func (m *Manager) Audit(ctx context.Context) error {
 	}
 	hostErr := m.Backend.ValidateHost(ctx, m.Policy)
 	for _, id := range ids {
-		i, err := m.Inspect(ctx, id)
+		i, err := m.inspectRuntimeRecord(ctx, id)
 		if err != nil {
 			return err
 		}
