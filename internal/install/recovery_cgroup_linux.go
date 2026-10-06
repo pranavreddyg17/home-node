@@ -21,6 +21,10 @@ func ObserveRecoveryGuestsEmpty(ctx context.Context) (result error) {
 	if os.Geteuid() != 0 {
 		return ErrConflict
 	}
+	before, err := os.Lstat("/sys/fs/cgroup/homenode.slice")
+	if err != nil || !before.IsDir() || before.Mode()&os.ModeSymlink != 0 {
+		return ErrConflict
+	}
 	root, err := os.OpenRoot("/sys/fs/cgroup/homenode.slice")
 	if err != nil {
 		return err
@@ -31,6 +35,10 @@ func ObserveRecoveryGuestsEmpty(ctx context.Context) (result error) {
 		return err
 	}
 	defer func() { result = errors.Join(result, directory.Close()) }()
+	opened, err := directory.Stat()
+	if err != nil || !os.SameFile(before, opened) {
+		return ErrConflict
+	}
 	var filesystem unix.Statfs_t
 	if unix.Fstatfs(int(directory.Fd()), &filesystem) != nil || filesystem.Type != unix.CGROUP2_SUPER_MAGIC {
 		return ErrConflict
@@ -50,6 +58,10 @@ func ObserveRecoveryGuestsEmpty(ctx context.Context) (result error) {
 	}
 	if err = validateRecoveryEmptyCgroup(data); err != nil {
 		return err
+	}
+	current, err := os.Lstat("/sys/fs/cgroup/homenode.slice")
+	if err != nil || !current.IsDir() || !os.SameFile(opened, current) {
+		return ErrConflict
 	}
 	return ctx.Err()
 }
