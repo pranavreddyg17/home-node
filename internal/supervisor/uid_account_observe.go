@@ -120,7 +120,8 @@ func ObserveGuestUIDNameServiceEligibility(ctx context.Context) (result error) {
 	}
 	defer func() { result = errors.Join(result, root.Close()) }()
 	opened, err := root.Stat(".")
-	if err != nil || !os.SameFile(before, opened) {
+	owner, ok = openedSysUID(opened)
+	if err != nil || !ok || owner != 0 || !os.SameFile(before, opened) || opened.Mode().Perm()&0022 != 0 {
 		return ErrPolicy
 	}
 	data, err := readGuestUIDAccountFile(ctx, root, "nsswitch.conf", 0)
