@@ -46,7 +46,12 @@ resource_properties = {}
 if packet:
     source = configparser.ConfigParser(interpolation=None, strict=True)
     source.optionxform = str
-    source.read(pathlib.Path(__file__).resolve().parents[1] / "systemd" / "homenode-backup.service")
+    # Inspect Service resource settings strictly. Unit conditions are repeatable
+    # systemd directives, so the generic INI parser must not parse that section.
+    unit_text = (pathlib.Path(__file__).resolve().parents[1] / "systemd" / "homenode-backup.service").read_text()
+    if unit_text.count("[Service]\n") != 1:
+        raise SystemExit("backup unit Service section is ambiguous")
+    source.read_string("[Service]\n" + unit_text.split("[Service]\n", 1)[1])
     service_source = source["Service"]
     required = {"MemoryMax": "1G", "MemorySwapMax": "0", "CPUQuota": "100%", "TasksMax": "64", "OOMPolicy": "kill", "KillMode": "control-group"}
     for key, value in required.items():
