@@ -5,6 +5,8 @@ import pathlib
 import subprocess
 import time
 
+from oom_observation import wait_for_oom
+
 if os.geteuid() != 0 or os.environ.get("HOMENODE_BACKUP_OOM_INTEGRATION") != "1":
     raise SystemExit("requires explicit disposable Linux root fixture")
 
@@ -97,17 +99,9 @@ TimeoutStopSec=5
     if quota == "max" or int(quota) <= 0 or int(quota) != int(period):
         raise RuntimeError("kernel CPU quota did not bound service to one CPU")
     (runtime / "allocate").write_text("go")
-    deadline = time.monotonic() + 60
-    while time.monotonic() < deadline:
-        result = command("systemctl", "show", unit, "--property=Result", "--value").stdout.strip()
-        if result == "oom-kill":
-            break
-        phase = command("systemctl", "show", unit, "--property=ActiveState", "--value").stdout.strip()
-        if phase in ("failed", "inactive"):
-            raise RuntimeError("fixture stopped without an OOM result")
-        time.sleep(0.2)
-    else:
-        raise RuntimeError("bounded service did not report OOM")
+    wait_for_oom(lambda property_name: command(
+        "systemctl", "show", unit, f"--property={property_name}", "--value"
+    ).stdout.strip())
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         main_pid = command("systemctl", "show", unit, "--property=MainPID", "--value").stdout.strip()
