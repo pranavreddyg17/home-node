@@ -3143,3 +3143,7 @@ The disposable kernel fixture now requires an absent homenode.slice hierarchy to
 ### Recovery observation refuses queued manager jobs
 
 Installed fixed service and credential-socket observations now require an explicit empty Job property; queued IDs and missing observations are refused. The systemctl query uses --all so systemd 255 prints the empty Job value (verified against upstream v255 systemctl-show.c). Portable installer race tests passed and Linux installer tests compiled. Linux command execution remains for CI. This is a point-in-time queued-job check, not retained exclusion of future activation; destination publication and full restore remain unfinished. CI37480663185 was verified running at 89d778822d698dc77689d0f90cbbbd781eebaf9f, so this change is kept local until that run finishes.
+
+### Kernel fixture exercises the recovery activation condition
+
+The disposable Linux cgroup fixture now places a private temporary marker behind the same negative ConditionPathExists mechanism used by installed recovery-conditioned units. Starting its sleeping descendant with the marker present must preserve an empty hierarchy; removing the fixture marker and starting again must populate it and fail quiescence. It uses a temporary marker, not the owner's installation journal, and does not claim retained production exclusion. Linux test compilation and diff checks passed; native execution awaits publication after CI37480663185, verified still running. Full destination publication and application acceptance remain unfinished.

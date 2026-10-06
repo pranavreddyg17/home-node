@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -53,6 +54,10 @@ func TestNativeRecoveryGuestCgroupObservation(t *testing.T) {
 	if err := write(slicePath, "[Unit]\nDescription=Disposable recovery guest slice\n[Slice]\nTasksMax=16\nMemoryMax=64M\n"); err != nil {
 		t.Fatal(err)
 	}
+	marker := filepath.Join(t.TempDir(), "recovery-blocked")
+	if err := os.WriteFile(marker, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
 	serviceCreated := false
 	defer func() {
 		// Report cleanup errors as test failures; never hide leftover fixture state.
@@ -76,7 +81,7 @@ func TestNativeRecoveryGuestCgroupObservation(t *testing.T) {
 			t.Errorf("reload after fixture cleanup: %v", err)
 		}
 	}()
-	if err := write(servicePath, "[Unit]\nDescription=Disposable populated guest cgroup\n[Service]\nType=simple\nSlice=homenode.slice\nExecStart=/bin/sleep 60\nKillMode=control-group\n"); err != nil {
+	if err := write(servicePath, "[Unit]\nDescription=Disposable populated guest cgroup\nConditionPathExists=!"+marker+"\n[Service]\nType=simple\nSlice=homenode.slice\nExecStart=/bin/sleep 60\nKillMode=control-group\n"); err != nil {
 		t.Fatal(err)
 	}
 	serviceCreated = true
@@ -88,6 +93,15 @@ func TestNativeRecoveryGuestCgroupObservation(t *testing.T) {
 	}
 	if err := ObserveRecoveryGuestsEmpty(context.Background()); err != nil {
 		t.Fatal("empty kernel hierarchy refused", err)
+	}
+	if err := command("start", service); err != nil {
+		t.Fatal(err)
+	}
+	if err := ObserveRecoveryGuestsEmpty(context.Background()); err != nil {
+		t.Fatal("activation marker did not preserve empty hierarchy", err)
+	}
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
 	}
 	if err := command("start", service); err != nil {
 		t.Fatal(err)
