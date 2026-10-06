@@ -3123,3 +3123,7 @@ CI37422229911 completed successfully at3d5415f, verifying the repaired repeatabl
 ### Kernel cgroup events descriptor/path identity check
 
 Guest-cgroup observation now rechecks cgroup.events as a regular current path matching the retained opened descriptor after parsing, in addition to fixed hierarchy identity and cgroup-v2 filesystem checks. Replaced events-file evidence is refused. Linux compilation and diff checks passed; actual kernel fixture remains pending implementation/execution. CI37479528801 remains live at0f525a4. Queued/future activation exclusion, installed publication/ownership/bootstrap/runtime reconstruction and complete application acceptance remain unfinished.
+
+### Disposable actual kernel guest-cgroup fixture
+
+Added explicit disposable Linux root fixture guarding fixed unit/hierarchy vacancy, creating a temporary bounded homenode.slice, observing empty state, starting a harmless sleeping descendant and requiring populated refusal, then stopping it and requiring empty admission. Cleanup only targets successfully created service/unit paths. CI invokes the gated fixture separately after installer root checks. Linux compilation and diff checks passed; the new kernel fixture has not executed yet and is not run on the owner Mac. CI37479528801 remains live. Queued/future activation exclusion, installed publication/ownership/bootstrap/runtime reconstruction and complete application acceptance remain unfinished.
