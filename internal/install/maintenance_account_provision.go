@@ -32,11 +32,14 @@ func (e *Engine) loadMaintenanceAccountJournal(base accountJournal) (maintenance
 	}
 	defer file.Close()
 	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || !owned(info, e.owner) || info.Mode().Perm() != 0600 {
+	if err != nil || !accountJournalFileAdmitted(info, e.owner, 16384) {
 		return j, ErrConflict
 	}
 	data, err := io.ReadAll(io.LimitReader(file, 16385))
 	if err != nil || len(data) > 16384 || json.Unmarshal(data, &j) != nil {
+		return j, ErrConflict
+	}
+	if !e.accountJournalPathUnchanged("maintenance-accounts.json", info, 16384) {
 		return j, ErrConflict
 	}
 	p := j.Plan

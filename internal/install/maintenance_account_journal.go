@@ -63,13 +63,13 @@ func (e *Engine) prepareMaintenanceAccount(ctx context.Context, b accountProvisi
 	existing := false
 	if err == nil {
 		info, statErr := file.Stat()
-		if statErr != nil || !info.Mode().IsRegular() || !owned(info, e.owner) || info.Mode().Perm() != 0600 {
+		if statErr != nil || !accountJournalFileAdmitted(info, e.owner, 16384) {
 			file.Close()
 			return empty, ErrConflict
 		}
 		data, readErr := io.ReadAll(io.LimitReader(file, 16385))
 		closeErr := file.Close()
-		if readErr != nil || closeErr != nil || len(data) > 16384 || !bytes.Equal(data, expected) {
+		if readErr != nil || closeErr != nil || len(data) > 16384 || !bytes.Equal(data, expected) || !e.accountJournalPathUnchanged("maintenance-accounts.json", info, 16384) {
 			return empty, ErrConflict
 		}
 		existing = true

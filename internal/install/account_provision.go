@@ -43,12 +43,15 @@ func (e *Engine) loadAccountJournal() (accountJournal, error) {
 	}
 	defer file.Close()
 	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || !owned(info, e.owner) || info.Mode().Perm() != 0600 {
+	if err != nil || !accountJournalFileAdmitted(info, e.owner, 64<<10) {
 		return j, ErrConflict
 	}
 	decoder := json.NewDecoder(io.LimitReader(file, (64<<10)+1))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&j) != nil || decoder.Decode(new(any)) != io.EOF {
+		return j, ErrConflict
+	}
+	if !e.accountJournalPathUnchanged("accounts.json", info, 64<<10) {
 		return j, ErrConflict
 	}
 	a := j.Accounts
