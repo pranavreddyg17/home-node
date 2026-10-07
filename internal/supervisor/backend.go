@@ -227,6 +227,9 @@ func (b LinuxBackend) Verify(ctx context.Context, d Domain) error {
 		}
 		uid = uint32(parsed)
 	}
+	if d.GuestUID != 0 {
+		return grantLibvirtGuestChannelAccess(ctx, d.ChannelPath, uid, b.TransferGID, UnixPeerIdentity{PID: int32(pid), UID: uid, GID: d.GuestGID})
+	}
 	return grantGuestChannelAccess(ctx, d.ChannelPath, uid, b.TransferGID)
 }
 func (b LinuxBackend) FreeBytes(directory string) (int64, error) {

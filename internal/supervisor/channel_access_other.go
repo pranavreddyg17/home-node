@@ -10,3 +10,7 @@ func grantGuestChannelAccess(ctx context.Context, path string, uid uint32, gid i
 	}
 	return ErrPolicy
 }
+
+func grantLibvirtGuestChannelAccess(context.Context, string, uint32, int, UnixPeerIdentity) error {
+	return ErrPolicy
+}

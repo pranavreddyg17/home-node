@@ -5,8 +5,10 @@ package supervisor
 import (
 	"context"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -14,6 +16,18 @@ import (
 // grantGuestChannelAccess changes the pinned socket inode, never a pathname
 // resolved again for mutation. Kernels without descriptor chmod support refuse.
 func grantGuestChannelAccess(ctx context.Context, path string, uid uint32, gid int) (result error) {
+	return grantGuestChannelAccessWithPeer(ctx, path, uid, gid, nil)
+}
+
+// Only the verified libvirt domain path may adopt its root-created listener.
+func grantLibvirtGuestChannelAccess(ctx context.Context, path string, uid uint32, gid int, peer UnixPeerIdentity) error {
+	if peer.PID <= 0 || peer.UID != uid || peer.UID == 0 || peer.GID == 0 {
+		return ErrPolicy
+	}
+	return grantGuestChannelAccessWithPeer(ctx, path, uid, gid, &peer)
+}
+
+func grantGuestChannelAccessWithPeer(ctx context.Context, path string, uid uint32, gid int, peer *UnixPeerIdentity) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -48,7 +62,7 @@ func grantGuestChannelAccess(ctx context.Context, path string, uid uint32, gid i
 	}
 	defer func() { result = errors.Join(result, file.Close()) }()
 	var socket unix.Stat_t
-	if unix.Fstat(int(file.Fd()), &socket) != nil || socket.Mode&unix.S_IFMT != unix.S_IFSOCK || socket.Uid != uid || socket.Nlink != 1 {
+	if unix.Fstat(int(file.Fd()), &socket) != nil || socket.Mode&unix.S_IFMT != unix.S_IFSOCK || (socket.Uid != uid && !(peer != nil && socket.Uid == 0 && socket.Gid == 0 && socket.Mode&07777 == 0775)) || socket.Nlink != 1 {
 		return ErrPolicy
 	}
 	original, err := file.Stat()
@@ -58,7 +72,29 @@ func grantGuestChannelAccess(ctx context.Context, path string, uid uint32, gid i
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := unix.Fchownat(int(file.Fd()), "", -1, gid, unix.AT_EMPTY_PATH|unix.AT_SYMLINK_NOFOLLOW); err != nil {
+	if peer != nil {
+		connection, err := (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", path)
+		if err != nil {
+			return err
+		}
+		identity, identityErr := PeerProcessIdentity(connection.(*net.UnixConn))
+		closeErr := connection.Close()
+		if identityErr != nil || closeErr != nil || identity != *peer {
+			return errors.Join(ErrPolicy, identityErr, closeErr)
+		}
+		current, err := root.Lstat("adapter.sock")
+		if err != nil || !os.SameFile(original, current) {
+			return ErrPolicy
+		}
+	}
+	ownerUID := -1
+	if socket.Uid == 0 {
+		ownerUID = int(uid)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := unix.Fchownat(int(file.Fd()), "", ownerUID, gid, unix.AT_EMPTY_PATH|unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
