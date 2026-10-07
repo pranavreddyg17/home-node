@@ -212,7 +212,7 @@ func (b LinuxBackend) Verify(ctx context.Context, d Domain) error {
 	if !strings.HasPrefix(relative, "/homenode.slice/") || filepath.Clean(relative) != relative {
 		return errors.New("QEMU is outside bounded workload slice")
 	}
-	if err = boundedCgroup(filepath.Join("/sys/fs/cgroup", relative), "memory.max", int64(d.Image.MemoryMiB+512)*(1<<20)); err != nil {
+	if err = observeGuestMemoryProcess(ctx, pid, d.ID, int64(d.Image.MemoryMiB+512)*(1<<20)); err != nil {
 		return err
 	}
 	uid := d.GuestUID

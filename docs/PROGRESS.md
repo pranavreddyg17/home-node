@@ -3501,3 +3501,8 @@ Added a bounded exact unified membership parser binding procfs cgroup records to
 ### Pinned process membership around memory observation
 
 Added observeGuestMemoryProcess with bounded context, root-only procfs qualification, initial UID namespace admission, retained process directory identity, bounded nofollow cgroup reads, exact requested scope parsing, protected resource-domain observation and unchanged membership/process-directory rechecks. This is a snapshot and does not exclude later migration or replace all-task DAC verification. Added it to the native VM experiment before unchanged production Verify. Linux compilation passed for both helper and updated experiment. Native execution of this follow-up remains pending; CI37590289728 is live atc08e20d and excludes it. Production Verify remains unchanged and full application remains unfinished.
+
+
+### Native resource-domain observer passed; production memory integration
+
+CI37590289728 completed failure atc08e20d. Its log explicitly records native per-domain memory observer positive and refusal checks passed, followed by the old leaf-only memory.max refusal. Linux race suite passed. Integrated observeGuestMemoryProcess into LinuxBackend.Verify in place of leaf-file boundedCgroup, with a non-Linux refusing stub. Exact requested scope, retained procfs membership, protected nearest resource-domain limit and unchanged metadata/type/value checks remain mandatory. Channel ownership and transfer peer UID checks are unchanged; reserved-DAC Prepare remains refused. Local supervisor races passed in8.938s and Linux compilation passed; next native CI must qualify the process-pinning change and expose listener peer identity. Full application remains unfinished.
