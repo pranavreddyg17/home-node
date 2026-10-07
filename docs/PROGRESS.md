@@ -3516,3 +3516,8 @@ Added a separate gated native GuestConnect experiment sharing the disposable sli
 ### Full kernel peer credentials for guest-connect qualification
 
 Added UnixPeerIdentity and PeerProcessIdentity returning kernel PID/UID/GID with zero result on errors, refusing nil or nonpositive-PID peers. Existing PeerUID delegates to this Linux helper; non-Linux refuses. Extended the native guest-initiated experiment to require actual QEMU PID, assigned UID and KVM GID, rather than UID alone, and the Linux real-socket regression to compare the known connecting process credentials. Linux compilation passed before the final regression addition; updated compilation is pending. Actual Linux execution and future accepted registry/process lifetime binding remain mandatory. CI37590886954 remains live at9ce7a0b and excludes this follow-up. Full application remains unfinished.
+
+
+### Native process-pinned memory passed; guest peer inference corrected
+
+CI37590886954 completed failure at9ce7a0b. The exact success marker follows observeGuestMemoryProcess, proving that native wrapper and domain positive/refusal checks executed. The inherited listener actually reported guest UID2000000000; pathname stayed root:root0775. This refutes the prior inference of a root peer. Production Verify now reaches channel policy refusal after memory qualification. Preserve guest UID authentication; investigate narrow pinned admission of libvirt-created root-owned socket metadata without granting root-peer trust. Guest-connect remains an alternative experiment, not selected production migration. Current follow-ups compiled and will be published after this terminal run. Full application remains unfinished.

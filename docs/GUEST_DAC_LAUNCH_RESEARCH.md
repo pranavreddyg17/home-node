@@ -78,3 +78,10 @@ The preferred next experiment is reversing this channel: a transfer-owned per-do
 
 
 CI37590289728 failed atc08e20d, but its explicit marker proves the draft memory observer passed real-QEMU positive/excessive-limit/other-ID/cancellation checks before unchanged production Verify refused missing leaf memory.max. Ordinary Linux race tests also passed. The production memory check now calls the retained-procfs membership/resource-domain observer instead of demanding a leaf file; exact domain scope and nearest threaded resource-domain bounds remain required. The process-pinning follow-up and inherited peer observation still require native qualification in the next run. Channel ownership/peer admission remains strict, so this does not enable reserved-DAC production preparation or satisfy full launch acceptance.
+
+
+## Native listener observation corrects provenance inference
+
+CI37590886954 failed at9ce7a0b after the process-pinned memory observer succeeded. The actual inherited listener peer UID was2000000000, matching QEMU, while pathname metadata remained root:root0775. This contradicts the prior prediction of a root peer: daemon bind/listen source alone was insufficient to establish final connected credentials. The underlying reason, potentially subsequent QEMU listen behavior, is not yet verified. Do not treat the earlier inference as a production fact.
+
+Production memory verification progressed; the remaining policy refusal is channel pathname ownership admission. Guest-UID peer authentication remains appropriate on this observed stack. Next qualify a narrowly admitted, descriptor-pinned libvirt-created root-owned socket only after exact process/domain verification, retaining strict UID peer checks and alias/replacement refusals. Root ownership must not become general root-peer trust. The guest-connect experiment remains an alternative to qualify rather than a selected replacement architecture. Full adapter and restart acceptance remain unverified.
