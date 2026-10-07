@@ -89,9 +89,19 @@ func (e *Engine) commitGuestUIDIntent(ctx context.Context, plan GuestUIDProvisio
 			return ErrConflict
 		}
 	} else {
+		if e.checkpoint != nil {
+			if err := e.checkpoint("guest-uid-intent-created", name); err != nil {
+				return err
+			}
+		}
 		// Retain partial writes for explicit recovery; never replace uncertain intent.
 		if n, err := file.Write(data); err != nil || n != len(data) {
 			return errors.Join(io.ErrShortWrite, err)
+		}
+		if e.checkpoint != nil {
+			if err := e.checkpoint("guest-uid-intent-written", name); err != nil {
+				return err
+			}
 		}
 	}
 	if err := ctx.Err(); err != nil {
@@ -106,6 +116,11 @@ func (e *Engine) commitGuestUIDIntent(ctx context.Context, plan GuestUIDProvisio
 	}
 	if err := syncDirectory(e.journalRoot, "."); err != nil {
 		return err
+	}
+	if e.checkpoint != nil {
+		if err := e.checkpoint("guest-uid-intent-durable", name); err != nil {
+			return err
+		}
 	}
 	return ctx.Err()
 }

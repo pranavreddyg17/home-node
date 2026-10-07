@@ -3,6 +3,7 @@ package install
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -120,6 +121,60 @@ func TestGuestUIDIntentPreservesAmbiguousExistingRecord(t *testing.T) {
 			contents, err := os.ReadFile(preserved)
 			if err != nil || !bytes.Equal(original, contents) {
 				t.Fatal("uncertain intent changed", err)
+			}
+		})
+	}
+}
+
+func TestGuestUIDIntentInterruptedAcknowledgement(t *testing.T) {
+	for _, phase := range []string{"guest-uid-intent-created", "guest-uid-intent-written", "guest-uid-intent-durable"} {
+		t.Run(phase, func(t *testing.T) {
+			host, jr := roots(t)
+			engine := openEngine(t, host, jr)
+			defer func() { _ = engine.Close() }()
+			ctx := context.Background()
+			plan, err := guestUIDProvisioningPlan(ctx, strings.Repeat("a", 32), supervisor.GuestUIDPool{First: 200000, Last: 200001}, []uint32{998, 997})
+			if err != nil {
+				t.Fatal(err)
+			}
+			interrupted := errors.New("fixture lost acknowledgement")
+			engine.checkpoint = func(point, name string) error {
+				if point == phase {
+					return interrupted
+				}
+				return nil
+			}
+			if err := engine.commitGuestUIDIntent(ctx, plan); !errors.Is(err, interrupted) {
+				t.Fatal("interruption not reported", err)
+			}
+			path := filepath.Join(jr, "guest-uid-intent.json")
+			before, err := os.Stat(path)
+			if err != nil {
+				t.Fatal("uncertain record removed", err)
+			}
+			contents, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := engine.Close(); err != nil {
+				t.Fatal(err)
+			}
+			engine = openEngine(t, host, jr)
+			err = engine.commitGuestUIDIntent(ctx, plan)
+			if phase == "guest-uid-intent-created" {
+				if err == nil || len(contents) != 0 {
+					t.Fatal("empty uncertain record adopted", err)
+				}
+			} else if err != nil {
+				t.Fatal("complete exact bytes could not finish retry", err)
+			}
+			after, err := os.Stat(path)
+			if err != nil || !os.SameFile(before, after) {
+				t.Fatal("retry replaced uncertain record", err)
+			}
+			preserved, err := os.ReadFile(path)
+			if err != nil || !bytes.Equal(contents, preserved) {
+				t.Fatal("retry changed uncertain bytes", err)
 			}
 		})
 	}
