@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"runtime"
+	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
 )
@@ -19,7 +20,19 @@ func (e *Engine) PlanInstalledGuestUIDProvisioning(ctx context.Context, pool sup
 	if runtime.GOOS != "linux" || os.Geteuid() != 0 || e.host.Name() != "/" {
 		return empty, ErrAccounts
 	}
-	e.mu.Lock()
+	return e.planInstalledGuestUIDProvisioning(ctx, pool)
+}
+
+func (e *Engine) planInstalledGuestUIDProvisioning(ctx context.Context, pool supervisor.GuestUIDPool) (GuestUIDProvisioningPlan, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	empty := GuestUIDProvisioningPlan{}
+	if err := ctx.Err(); err != nil {
+		return empty, err
+	}
+	if !e.mu.TryLock() {
+		return empty, ErrConflict
+	}
 	defer e.mu.Unlock()
 	base, err := e.loadAccountJournal()
 	if err != nil {
