@@ -33,6 +33,7 @@ jobs:
             sudo env HOMENODE_KVM_API_INTEGRATION=1 "$(command -v go)" test ./internal/hostcheck -run '^TestNativeKVMAPIAccess$' -count=1
             sudo env HOMENODE_KVM_API_INTEGRATION=1 "$(command -v go)" test ./internal/supervisor -run '^TestNativeKVMPrimaryGroupAccess$' -count=1
             sudo systemctl start libvirtd
+            sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 "$(command -v go)" test ./internal/supervisor -run '^TestNativeReservedDACGuestConnect$' -count=1
             sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 "$(command -v go)" test ./internal/supervisor -run '^TestNativeReservedDACLibvirtLaunch$' -count=1
           else
             echo 'Native KVM API NOT VERIFIED: runner exposes no character device at /dev/kvm.'

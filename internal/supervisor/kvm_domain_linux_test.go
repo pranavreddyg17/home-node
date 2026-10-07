@@ -22,6 +22,14 @@ import (
 
 // This launches firmware on synthetic disks, not an application guest image.
 func TestNativeReservedDACLibvirtLaunch(t *testing.T) {
+	runNativeReservedDACLaunch(t, false)
+}
+
+func TestNativeReservedDACGuestConnect(t *testing.T) {
+	runNativeReservedDACLaunch(t, true)
+}
+
+func runNativeReservedDACLaunch(t *testing.T, guestConnect bool) {
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_KVM_DOMAIN_INTEGRATION") != "1" {
 		t.Skip("explicit disposable Linux libvirt/KVM experiment")
 	}
@@ -233,8 +241,37 @@ func TestNativeReservedDACLibvirtLaunch(t *testing.T) {
 			t.Errorf("domain cleanup exit not observed: %v", err)
 		}
 	}()
+	var listener *net.UnixListener
+	if guestConnect {
+		listener, err = net.ListenUnix("unix", &net.UnixAddr{Name: domain.ChannelPath, Net: "unix"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		listener.SetUnlinkOnClose(false)
+		defer listener.Close()
+		// Synthetic admission only: production listener ownership is undecided.
+		if err := os.Chown(domain.ChannelPath, int(uid), int(transferGID)); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(domain.ChannelPath, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for attempt := 0; attempt < 2; attempt++ {
-		if err := backend.Start(ctx, domain); err != nil {
+		start := func() error {
+			if !guestConnect {
+				return backend.Start(ctx, domain)
+			}
+			xml, err := domain.XML()
+			if err != nil {
+				return err
+			}
+			// Experiment changes only channel direction in production-generated XML.
+			xml = strings.Replace(xml, "<source mode='bind'", "<source mode='connect'", 1)
+			_, err = command(ctx, xml, "/usr/bin/virsh", "--connect", "qemu:///system", "create", "/dev/stdin")
+			return err
+		}
+		if err := start(); err != nil {
 			safeCleanup = false
 			nativeDomainDiagnostics(t, domain)
 			t.Fatal("native reserved-DAC launch refused", err)
@@ -293,6 +330,35 @@ func TestNativeReservedDACLibvirtLaunch(t *testing.T) {
 			t.Fatal("native pinned process memory observation refused", err)
 		}
 		t.Log("native per-domain memory observer positive and refusal checks passed")
+		if guestConnect {
+			if err := verifyGuestDACProcess(ctx, pid, uid, domain.GuestGID); err != nil {
+				t.Fatal("guest-connect process credentials", err)
+			}
+			label, err := readBounded(filepath.Join("/proc", strconv.Itoa(pid), "attr/current"), 4096)
+			if err != nil || !strings.HasPrefix(string(label), "libvirt-") || !strings.HasSuffix(strings.TrimSpace(string(label)), "(enforce)") {
+				t.Fatal("guest-connect AppArmor not enforcing", err)
+			}
+			if err := listener.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			accepted, err := listener.AcceptUnix()
+			if err != nil {
+				t.Fatal("guest-initiated connection missing", err)
+			}
+			peerUID, identityErr := PeerUID(accepted)
+			closeErr := accepted.Close()
+			if identityErr != nil || closeErr != nil || peerUID != uid {
+				t.Fatal("guest-connect peer identity mismatch", peerUID, identityErr, closeErr)
+			}
+			if err := backend.Stop(ctx, id); err != nil {
+				t.Fatal(err)
+			}
+			if running, err := backend.Running(ctx, id); err != nil || running {
+				t.Fatal("guest-connect stop unverified", running, err)
+			}
+			t.Log("native guest-initiated channel authenticated without payload", attempt)
+			continue
+		}
 		// Measure inherited-listener credentials without sending an adapter frame.
 		// This is an experiment only; production must still reject root peers.
 		inherited, err := (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", domain.ChannelPath)
