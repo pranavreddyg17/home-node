@@ -79,10 +79,12 @@ os.close(pinned)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer stdin.Close()
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer stdout.Close()
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -101,6 +103,37 @@ os.close(pinned)
 	}
 	if err := verifyGuestDACProcess(ctx, cmd.Process.Pid, uid, stat.Gid); err != nil {
 		t.Fatal("device query process gained unexpected authority", err)
+	}
+
+	wrongGID := uid
+	if wrongGID == stat.Gid {
+		wrongGID++
+	}
+	const deniedScript = `import errno, os, stat
+pinned=os.open('/dev/kvm', os.O_PATH|os.O_NOFOLLOW|os.O_CLOEXEC)
+s=os.fstat(pinned)
+if not stat.S_ISCHR(s.st_mode) or os.major(s.st_rdev)!=10 or os.minor(s.st_rdev)!=232:
+    raise RuntimeError('unexpected device')
+try:
+    fd=os.open('/proc/self/fd/%d' % pinned, os.O_RDWR|os.O_CLOEXEC)
+except PermissionError as exc:
+    if exc.errno!=errno.EACCES:
+        raise
+    print('KVM_GROUP_DENIED', flush=True)
+else:
+    os.close(fd)
+    raise RuntimeError('unqualified group acquired KVM access')
+os.close(pinned)
+`
+	denied := exec.CommandContext(ctx, "/usr/bin/setpriv", "--reuid="+strconv.FormatUint(uint64(uid), 10), "--regid="+strconv.FormatUint(uint64(wrongGID), 10), "--clear-groups", "--inh-caps=-all", "--ambient-caps=-all", "--bounding-set=-all", "--no-new-privs", "--pdeathsig=SIGKILL", "/usr/bin/python3", "-I", "-B", "-c", deniedScript)
+	denied.Env = cmd.Env
+	denied.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
+	denied.WaitDelay = time.Second
+	var denial boundedOutput
+	denied.Stdout = &denial
+	denied.Stderr = io.Discard
+	if err := denied.Run(); err != nil || denial.tooLarge || denial.String() != "KVM_GROUP_DENIED\n" {
+		t.Fatal("unqualified primary group did not receive permission denial", err)
 	}
 	if _, err := unix.Lgetxattr("/dev/kvm", "system.posix_acl_access", nil); !errors.Is(err, unix.ENODATA) {
 		t.Fatal("device ACL changed during experiment", err)
