@@ -3471,3 +3471,8 @@ CI37589363542 is terminal failure at3a7ea68. Actual QEMU launch succeeded; proce
 ### Per-domain cgroup path contract
 
 Reviewed kernel threaded cgroup resource-domain rules after the native missing-leaf-memory.max failure. Added guestCgroupScope with exact HomeNode domain binding to the observed libvirt systemd scope and bounded clean descendants. Tests reject other VM/slice identity, traversal, malformed ordinal, controls and excessive depth; targeted macOS tests and diff checks passed. The helper is not yet wired into production verification: protected cgroup descriptor/type/memory reads and membership rechecks remain necessary. No aggregate-slice-only or root-listener fallback was added. Full application remains unfinished.
+
+
+### Descriptor-pinned per-domain memory observer draft
+
+Added Linux observeGuestMemoryDomain: exact guest scope admission, no-symlink cgroup2 root, retained root-owned/non-group-writable hierarchy descriptors, bounded protected type/memory reads, nearest non-threaded resource-domain selection confined below the workload slice, and unchanged path/type/limit rechecks. Missing, unlimited, nonpositive or excessive domain bounds refuse. Linux supervisor tests compile. This draft is not wired into production: native positive/negative qualification, root-path identity/mount scrutiny and process/task membership consistency still need verification. It does not fix the root-created listener or grant activation authority. Full application remains unfinished.
