@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -16,14 +17,18 @@ import (
 // observeGuestMemoryDomain verifies a snapshot, not an activation barrier.
 // It never substitutes the aggregate workload slice for a domain-specific limit.
 func observeGuestMemoryDomain(ctx context.Context, relative, id string, maximum int64) (result error) {
+	return observeGuestMemoryDomainAt(ctx, "/sys/fs/cgroup", relative, id, maximum)
+}
+
+func observeGuestMemoryDomainAt(ctx context.Context, directory, relative, id string, maximum int64) (result error) {
 	scope, err := guestCgroupScope(relative, id)
-	if err != nil || maximum <= 0 {
+	if err != nil || maximum <= 0 || !filepath.IsAbs(directory) || filepath.Clean(directory) != directory {
 		return ErrPolicy
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	fd, err := unix.Openat2(unix.AT_FDCWD, "/sys/fs/cgroup", &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
+	fd, err := unix.Openat2(unix.AT_FDCWD, directory, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
 	if err != nil {
 		return err
 	}
@@ -37,13 +42,17 @@ func observeGuestMemoryDomain(ctx context.Context, relative, id string, maximum 
 	if unix.Fstatfs(fd, &filesystem) != nil || filesystem.Type != unix.CGROUP2_SUPER_MAGIC {
 		return ErrPolicy
 	}
+	var rootStat unix.Stat_t
+	if unix.Fstat(fd, &rootStat) != nil || rootStat.Uid != 0 || rootStat.Mode&0022 != 0 {
+		return ErrPolicy
+	}
 	components := strings.Split(strings.TrimPrefix(relative, "/"), "/")
 	snapshots := make([]unix.Stat_t, 0, len(components))
 	for _, component := range components {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		child, err := unix.Openat(descriptors[len(descriptors)-1], component, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+		child, err := unix.Openat2(descriptors[len(descriptors)-1], component, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC, Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS | unix.RESOLVE_NO_XDEV})
 		if err != nil {
 			return err
 		}
@@ -58,7 +67,7 @@ func observeGuestMemoryDomain(ctx context.Context, relative, id string, maximum 
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
-		fd, err := unix.Openat(directory, name, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+		fd, err := unix.Openat2(directory, name, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NONBLOCK, Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS | unix.RESOLVE_NO_XDEV})
 		if err != nil {
 			return "", err
 		}
@@ -80,6 +89,7 @@ func observeGuestMemoryDomain(ctx context.Context, relative, id string, maximum 
 	// The scope is component index1. Never climb into homenode.slice.
 	selected := -1
 	types := map[int]string{}
+	threaded := false
 	for i := len(components) - 1; i >= 1; i-- {
 		kind, err := read(descriptors[i+1], "cgroup.type")
 		if err != nil {
@@ -87,9 +97,10 @@ func observeGuestMemoryDomain(ctx context.Context, relative, id string, maximum 
 		}
 		types[i] = kind
 		if kind == "threaded" {
+			threaded = true
 			continue
 		}
-		if kind != "domain" && kind != "domain threaded" {
+		if (kind != "domain" && kind != "domain threaded") || (threaded && kind != "domain threaded") {
 			return ErrPolicy
 		}
 		selected = i
@@ -101,6 +112,14 @@ func observeGuestMemoryDomain(ctx context.Context, relative, id string, maximum 
 	limit, err := read(descriptors[selected+1], "memory.max")
 	if err != nil {
 		return err
+	}
+	if limit == "" {
+		return ErrPolicy
+	}
+	for _, digit := range limit {
+		if digit < '0' || digit > '9' {
+			return ErrPolicy
+		}
 	}
 	numeric, err := strconv.ParseInt(limit, 10, 64)
 	if err != nil || numeric <= 0 || numeric > maximum {
@@ -127,6 +146,10 @@ func observeGuestMemoryDomain(ctx context.Context, relative, id string, maximum 
 		return err
 	}
 	if current != limit {
+		return ErrPolicy
+	}
+	var currentRoot unix.Stat_t
+	if unix.Lstat(directory, &currentRoot) != nil || currentRoot.Dev != rootStat.Dev || currentRoot.Ino != rootStat.Ino || currentRoot.Mode != rootStat.Mode || currentRoot.Uid != rootStat.Uid || currentRoot.Gid != rootStat.Gid {
 		return ErrPolicy
 	}
 	return ctx.Err()

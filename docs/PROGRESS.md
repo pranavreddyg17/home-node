@@ -3476,3 +3476,8 @@ Reviewed kernel threaded cgroup resource-domain rules after the native missing-l
 ### Descriptor-pinned per-domain memory observer draft
 
 Added Linux observeGuestMemoryDomain: exact guest scope admission, no-symlink cgroup2 root, retained root-owned/non-group-writable hierarchy descriptors, bounded protected type/memory reads, nearest non-threaded resource-domain selection confined below the workload slice, and unchanged path/type/limit rechecks. Missing, unlimited, nonpositive or excessive domain bounds refuse. Linux supervisor tests compile. This draft is not wired into production: native positive/negative qualification, root-path identity/mount scrutiny and process/task membership consistency still need verification. It does not fix the root-created listener or grant activation authority. Full application remains unfinished.
+
+
+### Cgroup observer mount/root refusal checks
+
+Strengthened the draft observer with root ownership/mode admission and final root inode/metadata recheck, openat2 beneath/no-symlink/no-magic-link/no-mount-crossing child and control-file access, digit-only memory bounds, and requiring domain-threaded after traversing threaded descendants. Added Linux tests refusing plausible ordinary-filesystem controls, symlink roots, cancelled observation and invalid bounds. Linux supervisor tests compile; these Linux-only refusal tests have not executed locally on macOS. Native positive/negative cgroup qualification and process membership rechecks remain pending, so production Verify is unchanged and full application remains unfinished.
