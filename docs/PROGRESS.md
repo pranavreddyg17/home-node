@@ -3496,3 +3496,8 @@ Upstream libvirt10 source confirms daemon-side bind/listen and fd handoff; Unix 
 ### Strict unified guest membership parsing
 
 Added a bounded exact unified membership parser binding procfs cgroup records to the requested guest scope. Rejects legacy/multiple/empty/oversized records, controls/whitespace and aggregate slice paths; the native experiment now uses it. The initial deleted-cgroup negative test caught acceptance of the kernel deleted marker in a descendant component; tightened whitespace admission and targeted macOS tests passed. Linux compilation passed before that final tightening and is being repeated. Production process descriptor/membership consistency and observer integration remain pending; CI37590289728 is live atc08e20d and excludes this follow-up. Full application remains unfinished.
+
+
+### Pinned process membership around memory observation
+
+Added observeGuestMemoryProcess with bounded context, root-only procfs qualification, initial UID namespace admission, retained process directory identity, bounded nofollow cgroup reads, exact requested scope parsing, protected resource-domain observation and unchanged membership/process-directory rechecks. This is a snapshot and does not exclude later migration or replace all-task DAC verification. Added it to the native VM experiment before unchanged production Verify. Linux compilation passed for both helper and updated experiment. Native execution of this follow-up remains pending; CI37590289728 is live atc08e20d and excludes it. Production Verify remains unchanged and full application remains unfinished.

@@ -288,6 +288,10 @@ func TestNativeReservedDACLibvirtLaunch(t *testing.T) {
 		if err := observeGuestMemoryDomain(cancelled, relative, id, maximum); !errors.Is(err, context.Canceled) {
 			t.Fatal("native cancelled memory observation admitted", err)
 		}
+		if err := observeGuestMemoryProcess(ctx, pid, id, maximum); err != nil {
+			nativeDomainDiagnostics(t, domain)
+			t.Fatal("native pinned process memory observation refused", err)
+		}
 		t.Log("native per-domain memory observer positive and refusal checks passed")
 		// Measure inherited-listener credentials without sending an adapter frame.
 		// This is an experiment only; production must still reject root peers.
