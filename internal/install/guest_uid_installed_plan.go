@@ -34,6 +34,14 @@ func (e *Engine) planInstalledGuestUIDProvisioning(ctx context.Context, pool sup
 		return empty, ErrConflict
 	}
 	defer e.mu.Unlock()
+	return e.planInstalledGuestUIDProvisioningLocked(ctx, pool)
+}
+
+func (e *Engine) planInstalledGuestUIDProvisioningLocked(ctx context.Context, pool supervisor.GuestUIDPool) (GuestUIDProvisioningPlan, error) {
+	empty := GuestUIDProvisioningPlan{}
+	if err := ctx.Err(); err != nil {
+		return empty, err
+	}
 	base, err := e.loadAccountJournal()
 	if err != nil {
 		return empty, err

@@ -20,3 +20,12 @@ func TestGuestUIDPlanRefusesMalformedArgumentsWithoutOutput(t *testing.T) {
 		t.Fatal("cancelled proposal emitted", err)
 	}
 }
+
+func TestGuestUIDPreparationRequiresJournalWithoutIdentityOverrides(t *testing.T) {
+	for _, args := range [][]string{nil, {"--owner-id", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, {"--journal-dir", "/missing-fixture", "--controller-uid", "998"}} {
+		var out bytes.Buffer
+		if err := runGuestUIDProposal(context.Background(), args, &out, true); err == nil || out.Len() != 0 {
+			t.Fatal("invalid preparation emitted", args, err)
+		}
+	}
+}

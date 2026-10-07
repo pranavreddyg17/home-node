@@ -33,6 +33,8 @@ func main() {
 		usage()
 	}
 	switch os.Args[1] {
+	case "guest-uid-prepare":
+		guestUIDPrepare(os.Args[2:])
 	case "guest-uid-plan":
 		guestUIDPlan(os.Args[2:])
 	case "install-check":
@@ -64,7 +66,7 @@ func main() {
 	}
 }
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: homenode <guest-uid-plan|install-check|install-prepare|update-trust-initialize|doctor|accounts-provision|accounts-check|maintenance-accounts-prepare|maintenance-accounts-provision|maintenance-accounts-check|network-check|serve|setup-code> [options]")
+	fmt.Fprintln(os.Stderr, "usage: homenode <guest-uid-prepare|guest-uid-plan|install-check|install-prepare|update-trust-initialize|doctor|accounts-provision|accounts-check|maintenance-accounts-prepare|maintenance-accounts-provision|maintenance-accounts-check|network-check|serve|setup-code> [options]")
 	os.Exit(2)
 }
 func fatal(err error) { fmt.Fprintln(os.Stderr, err); os.Exit(1) }

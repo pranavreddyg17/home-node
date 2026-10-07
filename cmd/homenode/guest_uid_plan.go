@@ -24,6 +24,18 @@ func guestUIDPlan(args []string) {
 // This command only observes eligibility and emits pending provisioning gates.
 // Explicit service UIDs are proposal inputs, not proof of installed identities.
 func runGuestUIDPlan(ctx context.Context, args []string, out io.Writer) error {
+	return runGuestUIDProposal(ctx, args, out, false)
+}
+
+func guestUIDPrepare(args []string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := runGuestUIDProposal(ctx, args, os.Stdout, true); err != nil {
+		fatal(err)
+	}
+}
+
+func runGuestUIDProposal(ctx context.Context, args []string, out io.Writer, prepare bool) error {
 	flags := flag.NewFlagSet("guest-uid-plan", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	journal := flags.String("journal-dir", "", "derive identities from an existing installer journal")
@@ -37,6 +49,9 @@ func runGuestUIDPlan(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 	if flags.NArg() != 0 || *first > 1<<31-1 || *last > 1<<31-1 || *controller > 1<<31-1 || *transfer > 1<<31-1 || *backup > 1<<31-1 {
+		return install.ErrPlan
+	}
+	if prepare && *journal == "" {
 		return install.ErrPlan
 	}
 	if *journal != "" && (*owner != "" || *controller != 0 || *transfer != 0 || *backup != 0) {
@@ -61,12 +76,16 @@ func runGuestUIDPlan(ctx context.Context, args []string, out io.Writer) error {
 			return openErr
 		}
 		defer engine.Close()
-		plan, err = engine.PlanInstalledGuestUIDProvisioning(ctx, pool)
+		if prepare {
+			plan, err = engine.PrepareGuestUIDProvisioning(ctx, pool)
+		} else {
+			plan, err = engine.PlanInstalledGuestUIDProvisioning(ctx, pool)
+		}
 	} else {
 		plan, err = install.PlanGuestUIDProvisioning(ctx, *owner, pool, identities)
 	}
 	if err != nil {
 		return err
 	}
-	return json.NewEncoder(out).Encode(map[string]any{"plan": plan, "policyPublished": false, "servicesActivated": false})
+	return json.NewEncoder(out).Encode(map[string]any{"plan": plan, "intentCommitted": prepare, "policyPublished": false, "servicesActivated": false})
 }
