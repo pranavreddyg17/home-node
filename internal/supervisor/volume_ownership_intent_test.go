@@ -52,6 +52,9 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 	if err := m.recordVolumeOwnershipIntent(ctx, intent); err == nil {
 		t.Fatal("changed durable UID lease admitted")
 	}
+	if err := m.bindDomainGuestIdentity(ctx, &Domain{ID: intent.InstanceID}, false); err == nil {
+		t.Fatal("binding admitted intent/lease UID mismatch")
+	}
 	var actualUID uint32
 	if err := m.Store.DB.QueryRow(`SELECT uid FROM runtime_uid_leases WHERE instance_id=?`, intent.InstanceID).Scan(&actualUID); err != nil || actualUID != intent.UID+1 {
 		t.Fatal("refusal repaired changed lease", actualUID, err)
@@ -64,6 +67,11 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 	}
 	if err := m.recordVolumeOwnershipIntent(ctx, intent); err == nil {
 		t.Fatal("missing durable group admitted")
+	}
+	for _, reserve := range []bool{false, true} {
+		if err := m.bindDomainGuestIdentity(ctx, &Domain{ID: intent.InstanceID}, reserve); err == nil {
+			t.Fatal("binding admitted missing intent group", reserve)
+		}
 	}
 	var groups int
 	if err := m.Store.DB.QueryRow(`SELECT count(*) FROM runtime_guest_groups WHERE instance_id=?`, intent.InstanceID).Scan(&groups); err != nil || groups != 0 {

@@ -57,8 +57,26 @@ func (m *Manager) bindDomainGuestIdentity(ctx context.Context, d *Domain, reserv
 	}
 	var gid uint32
 	err = m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		var currentUID, currentFirst, currentLast uint32
+		if err := tx.QueryRowContext(ctx, `SELECT l.uid,p.first_uid,p.last_uid FROM runtime_uid_leases l JOIN runtime_uid_pool p ON p.singleton=1 WHERE l.instance_id=?`, d.ID).Scan(&currentUID, &currentFirst, &currentLast); err != nil {
+			return err
+		}
+		if currentUID != uid || currentFirst != pool.First || currentLast != pool.Last {
+			return ErrPolicy
+		}
+		var ownershipUID, ownershipGID uint32
+		ownershipErr := tx.QueryRowContext(ctx, `SELECT uid,gid FROM runtime_volume_ownership WHERE instance_id=?`, d.ID).Scan(&ownershipUID, &ownershipGID)
+		if ownershipErr != nil && !errors.Is(ownershipErr, sql.ErrNoRows) {
+			return ownershipErr
+		}
+		if ownershipErr == nil && (ownershipUID != uid || ownershipGID != m.GuestGID) {
+			return ErrPolicy
+		}
 		err := tx.QueryRowContext(ctx, "SELECT gid FROM runtime_guest_groups WHERE instance_id=?", d.ID).Scan(&gid)
 		if errors.Is(err, sql.ErrNoRows) && reserve {
+			if ownershipErr == nil {
+				return ErrPolicy
+			}
 			gid = m.GuestGID
 			_, err = tx.ExecContext(ctx, "INSERT INTO runtime_guest_groups VALUES(?,?)", d.ID, gid)
 			return err
