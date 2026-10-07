@@ -63,6 +63,36 @@ func TestNativeGuestChannelRootListenerRefusal(t *testing.T) {
 	if n, err := accepted.Read(buffer); n != 0 || !errors.Is(err, io.EOF) {
 		t.Fatal("denied root peer received payload", n, err)
 	}
+	alias := filepath.Join(directory, "alias.sock")
+	if err := os.Link(path, alias); err != nil {
+		t.Fatal(err)
+	}
+	if err := grantLibvirtGuestChannelAccess(context.Background(), path, guestUID, transferGID, expected); err == nil {
+		t.Fatal("aliased root listener admitted")
+	}
+	if err := listener.SetDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	unexpected, err := listener.AcceptUnix()
+	if unexpected != nil {
+		unexpected.Close()
+		t.Fatal("aliased listener reached peer probe")
+	}
+	var timeout net.Error
+	if !errors.As(err, &timeout) || !timeout.Timeout() {
+		t.Fatal("alias refusal probe observation ambiguous", err)
+	}
+	aliased, err := os.Lstat(alias)
+	if err != nil || !os.SameFile(before, aliased) || aliased.Mode() != before.Mode() {
+		t.Fatal("alias refusal changed socket", err)
+	}
+	aliasMetadata, ok := aliased.Sys().(*syscall.Stat_t)
+	if !ok || aliasMetadata.Uid != 0 || aliasMetadata.Gid != 0 || aliasMetadata.Nlink != 2 {
+		t.Fatal("alias refusal changed ownership")
+	}
+	if err := os.Remove(alias); err != nil {
+		t.Fatal(err)
+	}
 	after, err := os.Lstat(path)
 	if err != nil {
 		t.Fatal(err)

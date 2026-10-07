@@ -3546,3 +3546,8 @@ Review found that probing every reserved-DAC Verify could queue connections behi
 ### Root-peer refusal must exercise the probe without payload
 
 Strengthened the pending native root-listener refusal fixture: after attempted adoption, a bounded accept must observe the actual probe connection and a bounded read must return EOF with zero bytes. Earlier metadata refusals cannot falsely satisfy this peer-authentication case. Original socket inode/ownership/mode/link count still must remain unchanged. Linux tests compile and diff checks passed; actual native execution remains pending. CI37591975925 remains live at8aa2131 and excludes this test strengthening and no-repeat-probe follow-up. Full application remains unfinished.
+
+
+### Aliased libvirt socket refused before probe
+
+Extended the pending root-listener native refusal fixture with a hardlinked socket. Adoption must refuse before connecting; a bounded accept must time out, both paths must retain the same inode/mode/root ownership and link count2, and removing only the fixture-created alias returns the original single-link state. This proves the intended alias admission boundary rather than relying solely on mismatched credentials. Linux test compilation and diff checks passed; native execution awaits publication. CI37591975925 remains live at8aa2131 and excludes this strengthening. Coordinated volume/image/installer ownership policy and full application acceptance remain unfinished.
