@@ -3451,3 +3451,8 @@ Rechecked CI37586384346: terminal success at1c2b18ac2183187d348dd160ab92adc25e4f
 ### Bounded native VM memory hierarchy diagnostics
 
 While CI37588842072 is live at2d13481, added failure diagnostics for the synthetic domain's unified cgroup memory.max values through its HomeNode slice, with clean-path admission, sixteen-level bound and bounded reads. This exposes leaf-versus-parent limit placement without relaxing production verification or reading unrelated workload hierarchies. Linux supervisor test compilation and diff checks passed. This follow-up is not in the live run and will wait for its terminal outcome before publication.
+
+
+### First native libvirt experiment refused at partition precondition
+
+CI37588842072 completed with failure at2d13481. Linux race tests and root KVM API/sole-primary-group allow-deny probes passed. The VM experiment stopped before any launch because systemctl reported the named slice loaded; its original prerequisite demanded not-found. The fixture now admits loaded only with all requested properties present and empty FragmentPath, DropInPaths, Job and ControlGroup, plus inactive/dead state. Existing configured or active partitions remain refused; exclusive source creation remains required. Linux compilation passed. This is a fixture admission correction, not evidence that those conditions or VM launch pass natively. The next run includes bounded memory hierarchy diagnostics; full product acceptance remains unfinished.

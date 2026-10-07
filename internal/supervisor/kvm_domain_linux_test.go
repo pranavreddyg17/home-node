@@ -38,9 +38,31 @@ func TestNativeReservedDACLibvirtLaunch(t *testing.T) {
 	if err != nil || strings.TrimSpace(names) != "" {
 		t.Fatal("libvirt experiment requires an empty disposable service", err)
 	}
-	loaded, err := command(ctx, "", "/usr/bin/systemctl", "show", "homenode.slice", "--property=LoadState", "--value")
-	if err != nil || strings.TrimSpace(loaded) != "not-found" {
-		t.Fatal("workload partition already occupied", loaded, err)
+	partition, err := command(ctx, "", "/usr/bin/systemctl", "show", "homenode.slice", "--property=LoadState,FragmentPath,DropInPaths,ActiveState,SubState,Job,ControlGroup")
+	if err != nil {
+		t.Fatal("cannot inspect disposable workload partition", err)
+	}
+	properties := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(partition), "\n") {
+		key, value, valid := strings.Cut(line, "=")
+		if !valid {
+			t.Fatal("malformed workload partition properties")
+		}
+		if _, duplicate := properties[key]; duplicate {
+			t.Fatal("duplicate workload partition property", key)
+		}
+		properties[key] = value
+	}
+	// Systemd can implicitly load a named slice without a unit file. Admit
+	// only that inert, source-free state; never stop or replace an active slice.
+	for key, expected := range map[string]string{"FragmentPath": "", "DropInPaths": "", "ActiveState": "inactive", "SubState": "dead", "Job": "", "ControlGroup": ""} {
+		value, present := properties[key]
+		if !present || value != expected {
+			t.Fatal("workload partition already occupied", key, value)
+		}
+	}
+	if properties["LoadState"] != "not-found" && properties["LoadState"] != "loaded" {
+		t.Fatal("unqualified workload partition load state", properties["LoadState"])
 	}
 	pool, err := ObserveLocalGuestUIDConflicts(ctx, GuestUIDPool{First: 2000000000, Last: 2000000255})
 	if err != nil {
