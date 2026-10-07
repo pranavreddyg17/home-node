@@ -3441,3 +3441,8 @@ Extended the queued native device experiment with a second capability-cleared/No
 ### Verified native root KVM API CI execution
 
 Run37585441086 completed successfully at0bc7573. Its full job log shows the hardware branch actually executed sudo HOMENODE_KVM_API_INTEGRATION=1 hostcheck TestNativeKVMAPIAccess and returned success, rather than printing the unavailable-hardware message as an executed command. This proves the pinned metadata/procfd/API12 probe on this Linux runner as root; ordinary Linux negative device fixtures also passed. It does not prove unprivileged primary-group access, libvirt launch, AppArmor/cgroup VM isolation or full product acceptance. The queued primary-group allow/deny experiment is the next hardware evidence step; production activation remains gated.
+
+
+### Native primary-group evidence and reserved-DAC libvirt experiment
+
+Rechecked CI37586384346: terminal success at1c2b18ac2183187d348dd160ab92adc25e4f5747. Its actual hardware branch ran root KVM API and sole-primary-group positive/negative tests. Added a gated disposable-root libvirt/KVM experiment using production launch verification, two cold starts, exact listener peer UID, bounded slice and synthetic disks. Cleanup preserves uncertain launch/stop state and diagnostics stay within the synthetic domain. CI installs the actual QEMU/libvirt daemon and selects this experiment only when hardware exists. An initial uint32/int channel argument compilation error was fixed; Linux supervisor tests now compile. Actual VM execution is pending publication. Firmware-only disks and a public temporary parent are not production image/adapter or directory-policy evidence. Full product implementation and reserved-DAC activation remain unfinished.

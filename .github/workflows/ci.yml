@@ -19,7 +19,7 @@ jobs:
           go-version: '1.26.8'
           cache: true
       - name: Install guest test tools
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg libvirt-clients libxml2-utils restic e2fsprogs
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libvirt-clients libvirt-daemon-system qemu-system-x86 libxml2-utils restic e2fsprogs
       - name: Test Go and Linux adapters
         env:
           HOMENODE_GUEST_INTEGRATION: '1'
@@ -32,6 +32,8 @@ jobs:
           if test -c /dev/kvm; then
             sudo env HOMENODE_KVM_API_INTEGRATION=1 "$(command -v go)" test ./internal/hostcheck -run '^TestNativeKVMAPIAccess$' -count=1
             sudo env HOMENODE_KVM_API_INTEGRATION=1 "$(command -v go)" test ./internal/supervisor -run '^TestNativeKVMPrimaryGroupAccess$' -count=1
+            sudo systemctl start libvirtd
+            sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 "$(command -v go)" test ./internal/supervisor -run '^TestNativeReservedDACLibvirtLaunch$' -count=1
           else
             echo 'Native KVM API NOT VERIFIED: runner exposes no character device at /dev/kvm.'
           fi
