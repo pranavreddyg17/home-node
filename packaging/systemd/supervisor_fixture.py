@@ -59,7 +59,7 @@ try:
                    "--setenv=HOMENODE_SUPERVISOR_VOLUME_PARENT=/var/lib/homenode/volumes",
                    "--setenv=HOMENODE_SUPERVISOR_HIDDEN_PATH=" + str(hidden),
                    "/usr/lib/homenode-fixtures/supervisor.test",
-                   "-test.run=^TestNative(FreshVolumeFormattingPreservesExistingData|PreparedVolumeCleanup|VolumePublicationIdentity|GuestUIDVolumeAdmission|GuestChannelDirectoryOwnership|GuestNSSNameServiceEligibility|SupervisorServiceIsolation)$", "-test.count=1"]
+                   "-test.run=^TestNative(FreshVolumeFormattingPreservesExistingData|PreparedVolumeCleanup|VolumePublicationIdentity|GuestUIDVolumeAdmission|GuestChannelDirectoryOwnership|GuestNSSNameServiceEligibility|GuestAutomaticUIDAllocationEligibility|SupervisorServiceIsolation)$", "-test.count=1"]
         if subprocess.run(command, timeout=60, check=False).returncode:
             sys.exit("Supervisor source protection fixture failed")
 finally:
