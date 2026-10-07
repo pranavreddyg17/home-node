@@ -3531,3 +3531,8 @@ Added a private libvirt channel admission path for reserved-DAC Verify only. Aft
 ### Channel re-admission after peer observation
 
 The pending libvirt socket adoption now rechecks retained socket inode/mode/UID/GID/link count and parent pathname/mode/UID/GID immediately after the potentially blocking peer probe and before descriptor mutation. Any drift refuses before chown/chmod; final checks remain. Linux supervisor tests compile and diff checks passed. Actual root negative fixture and QEMU adoption execution remain pending. CI37591471926 remains live at788375e, which excludes this adoption code. Full production ownership lifecycle and full application remain unfinished.
+
+
+### Native guest-connect qualification and adoption revision queued
+
+CI37591471926 is terminal failure at788375e. Its hardware branch actually passed root API, sole-primary-group probe and GuestConnect test4.294s; the latter checks two launches with exact QEMU PID/UID/GID, DAC/AppArmor and process-bound memory. The following inherited listener again returned the guest UID, then failed the unchanged pathname-owner gate. Linux race suite passed, including full kernel credential regression. No production or application adapter success is inferred. Pending root-created socket adoption/readmission and root-peer negative fixture are now ready for publication under the same user identity. All local races/compilation reported earlier remain appropriately scoped. Full application remains unfinished.
