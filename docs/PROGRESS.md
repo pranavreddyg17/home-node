@@ -3413,3 +3413,7 @@ Added CheckGuestUIDProvisioningIntent and guest-uid-check. Under bounded install
 ### Broader installer and CLI race verification
 
 After journal admission, immutable UID intent, subprocess-kill retry and saved-intent checking changes, the complete local internal/install and cmd/homenode race suites passed (4.510s/1.522s). Native root/systemd fixtures are gated and did not run on the owner Mac; unrelated existing dirty workspace files remain untouched. Run37583846793 remains in progress atcf3495a, currently checking reachable Go vulnerabilities; it excludes later native allocation/crash/check fixtures. This broadens local regression evidence only, not root-host activation or full acceptance. Exclusive provisioning, native launch and the original end-to-end product requirements remain unfinished.
+
+### Completed allocation-observer revision CI
+
+Run37583846793 completed successfully atcf3495a (7m13s), including Linux Go/race tests, native protected UID/NSS/channel fixtures, package/service inspections, vulnerability checks and browser workflows. It covers the login.defs observer/parser addition but predates the new native allocation-specific fixture, SIGKILL intent tests and saved-intent check CLI. Those queued changes will receive separate CI evidence after publication. No full KVM/native activation or complete product acceptance is claimed.
