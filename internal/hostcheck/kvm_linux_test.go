@@ -3,6 +3,7 @@
 package hostcheck
 
 import (
+	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,7 +19,11 @@ func TestKVMProbeRefusesOrdinaryAndUnrelatedDevices(t *testing.T) {
 	if err := os.Symlink(regular, link); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{regular, link, directory, filepath.Join(directory, "missing"), "relative", "/dev/null"} {
+	fifo := filepath.Join(directory, "fifo")
+	if err := unix.Mkfifo(fifo, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{regular, link, fifo, directory, filepath.Join(directory, "missing"), "relative", "/dev/null"} {
 		if probeKVMDeviceAt(path) {
 			t.Fatal("non-KVM path reported usable", path)
 		}
