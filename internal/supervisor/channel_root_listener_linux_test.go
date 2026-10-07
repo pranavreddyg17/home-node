@@ -4,11 +4,14 @@ package supervisor
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"syscall"
 	"testing"
+	"time"
 )
 
 func TestNativeGuestChannelRootListenerRefusal(t *testing.T) {
@@ -42,6 +45,23 @@ func TestNativeGuestChannelRootListenerRefusal(t *testing.T) {
 	expected := UnixPeerIdentity{PID: int32(os.Getpid()), UID: guestUID, GID: 993}
 	if err := grantLibvirtGuestChannelAccess(context.Background(), path, guestUID, transferGID, expected); err == nil {
 		t.Fatal("root peer admitted as guest")
+	}
+	// Require the peer probe to have actually connected and closed without
+	// an adapter payload, rather than passing through an earlier refusal.
+	if err := listener.SetDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	accepted, err := listener.AcceptUnix()
+	if err != nil {
+		t.Fatal("root peer probe was not exercised", err)
+	}
+	defer accepted.Close()
+	if err := accepted.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	buffer := make([]byte, 1)
+	if n, err := accepted.Read(buffer); n != 0 || !errors.Is(err, io.EOF) {
+		t.Fatal("denied root peer received payload", n, err)
 	}
 	after, err := os.Lstat(path)
 	if err != nil {

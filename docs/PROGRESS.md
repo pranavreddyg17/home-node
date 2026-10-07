@@ -3541,3 +3541,8 @@ CI37591471926 is terminal failure at788375e. Its hardware branch actually passed
 ### Avoid channel probes during repeated runtime audits
 
 Review found that probing every reserved-DAC Verify could queue connections behind an active QEMU adapter stream and eventually make audit disruptive. Restricted exact PID/UID/GID probe to initial root-owned adoption; already guest-owned sockets retain pinned ownership/mode/link/path admission and transfer's per-request guest UID authentication. Native launch fixture now repeats Verify while its no-payload client connection remains open, before close/stop/restart. This does not prove uninterrupted guest adapter payloads. Linux tests compile and diff checks passed. CI37591975925 is live at8aa2131 and excludes this follow-up. Actual native retry and complete ownership/activation lifecycle remain pending; full application remains unfinished.
+
+
+### Root-peer refusal must exercise the probe without payload
+
+Strengthened the pending native root-listener refusal fixture: after attempted adoption, a bounded accept must observe the actual probe connection and a bounded read must return EOF with zero bytes. Earlier metadata refusals cannot falsely satisfy this peer-authentication case. Original socket inode/ownership/mode/link count still must remain unchanged. Linux tests compile and diff checks passed; actual native execution remains pending. CI37591975925 remains live at8aa2131 and excludes this test strengthening and no-repeat-probe follow-up. Full application remains unfinished.
