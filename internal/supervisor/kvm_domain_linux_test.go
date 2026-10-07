@@ -380,7 +380,12 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool) {
 			t.Fatal("native adapter listener unavailable", err)
 		}
 		peerUID, identityErr := PeerUID(peer.(*net.UnixConn))
+		// Reconciliation must not create another adapter connection after adoption.
+		repeatedVerify := backend.Verify(ctx, domain)
 		closeErr := peer.Close()
+		if repeatedVerify != nil {
+			t.Fatal("native active-channel verification retry refused", repeatedVerify)
+		}
 		if identityErr != nil || peerUID != uid || closeErr != nil {
 			t.Fatal("native listener creator identity differs from guest", peerUID, identityErr, closeErr)
 		}

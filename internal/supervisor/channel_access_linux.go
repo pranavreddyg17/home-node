@@ -72,7 +72,9 @@ func grantGuestChannelAccessWithPeer(ctx context.Context, path string, uid uint3
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if peer != nil {
+	// Probe only initial root ownership. Audit of an already adopted socket
+	// must not queue extra connections behind the active adapter stream.
+	if peer != nil && socket.Uid == 0 {
 		connection, err := (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", path)
 		if err != nil {
 			return err

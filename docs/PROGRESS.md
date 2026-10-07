@@ -3536,3 +3536,8 @@ The pending libvirt socket adoption now rechecks retained socket inode/mode/UID/
 ### Native guest-connect qualification and adoption revision queued
 
 CI37591471926 is terminal failure at788375e. Its hardware branch actually passed root API, sole-primary-group probe and GuestConnect test4.294s; the latter checks two launches with exact QEMU PID/UID/GID, DAC/AppArmor and process-bound memory. The following inherited listener again returned the guest UID, then failed the unchanged pathname-owner gate. Linux race suite passed, including full kernel credential regression. No production or application adapter success is inferred. Pending root-created socket adoption/readmission and root-peer negative fixture are now ready for publication under the same user identity. All local races/compilation reported earlier remain appropriately scoped. Full application remains unfinished.
+
+
+### Avoid channel probes during repeated runtime audits
+
+Review found that probing every reserved-DAC Verify could queue connections behind an active QEMU adapter stream and eventually make audit disruptive. Restricted exact PID/UID/GID probe to initial root-owned adoption; already guest-owned sockets retain pinned ownership/mode/link/path admission and transfer's per-request guest UID authentication. Native launch fixture now repeats Verify while its no-payload client connection remains open, before close/stop/restart. This does not prove uninterrupted guest adapter payloads. Linux tests compile and diff checks passed. CI37591975925 is live at8aa2131 and excludes this follow-up. Actual native retry and complete ownership/activation lifecycle remain pending; full application remains unfinished.
