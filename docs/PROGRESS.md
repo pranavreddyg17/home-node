@@ -3556,3 +3556,8 @@ Extended the pending root-listener native refusal fixture with a hardlinked sock
 ### Cancelled socket adoption refusal
 
 Extended the pending native socket refusal fixture to require context.Canceled from an already cancelled adoption request before the real denied-peer probe. Its subsequent connection/EOF, no-extra-probe alias check and unchanged metadata assertions remain. Linux tests compile and diff checks passed. CI37591975925 is still live at8aa2131, now through native fixtures/frontend checks into Debian package inspection; full log evidence and this follow-up's actual native execution remain pending. Reviewed future volume-intent requirements against the manager: durable lease/group alone does not pin a disk inode or prove stopped-runtime ownership mutation authority. Full application remains unfinished.
+
+
+### Full native adoption revision passed
+
+CI37591975925 completed success at8aa2131. Inspected full log: actual KVM branch ran root API and primary-group probe, GuestConnect4.296s and LibvirtLaunch3.618s; unavailable-hardware text appears only in echoed source. Root account fixture selected ChannelRootListenerRefusal and passed. This proves two firmware-only launches with production isolation/memory verification, exact peer-authenticated descriptor socket adoption, guest-UID connection, stop/directory retry/restart on that runner. Full Linux races, packaging and browser checks also passed. It excludes later no-repeat-audit and strengthened payload/alias/cancellation fixtures, now queued for publication. Installed policy/service protections, application guest adapters and full product acceptance remain unfinished.
