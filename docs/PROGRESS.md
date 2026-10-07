@@ -3491,3 +3491,8 @@ Extended the gated real-QEMU experiment to invoke the draft descriptor-pinned me
 ### Inherited listener authentication research
 
 Upstream libvirt10 source confirms daemon-side bind/listen and fd handoff; Unix socket documentation ties peer credentials to listen-time identity. Recorded the inference that pathname chown cannot turn inherited root listener credentials into guest credentials. Proposed a separately qualified guest-initiated channel with transfer-owned per-domain listener and accepted-connection registry; production migration requires ordering, generation binding, cancellation and teardown, not a root-peer fallback. Added native peer-UID measurement with immediate close/no adapter payload before unchanged Verify. Initial duplicate local closeErr declaration failed compilation; corrected it and Linux tests compiled. Actual peer observation awaits publication; CI37590289728 remains live atc08e20d and excludes this follow-up. Full application remains unfinished.
+
+
+### Strict unified guest membership parsing
+
+Added a bounded exact unified membership parser binding procfs cgroup records to the requested guest scope. Rejects legacy/multiple/empty/oversized records, controls/whitespace and aggregate slice paths; the native experiment now uses it. The initial deleted-cgroup negative test caught acceptance of the kernel deleted marker in a descendant component; tightened whitespace admission and targeted macOS tests passed. Linux compilation passed before that final tightening and is being repeated. Production process descriptor/membership consistency and observer integration remain pending; CI37590289728 is live atc08e20d and excludes this follow-up. Full application remains unfinished.

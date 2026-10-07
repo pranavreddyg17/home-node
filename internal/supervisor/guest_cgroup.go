@@ -39,3 +39,22 @@ func guestCgroupScope(relative, id string) (string, error) {
 	}
 	return "/homenode.slice/" + scope, nil
 }
+
+// guestUnifiedMembership accepts only the supported unified procfs view.
+func guestUnifiedMembership(data []byte, id string) (string, error) {
+	if len(data) == 0 || len(data) > 4096 || strings.ContainsAny(string(data), "\x00\r\t ") {
+		return "", ErrPolicy
+	}
+	value := strings.TrimSuffix(string(data), "\n")
+	if strings.Contains(value, "\n") {
+		return "", ErrPolicy
+	}
+	relative, valid := strings.CutPrefix(value, "0::")
+	if !valid {
+		return "", ErrPolicy
+	}
+	if _, err := guestCgroupScope(relative, id); err != nil {
+		return "", err
+	}
+	return relative, nil
+}

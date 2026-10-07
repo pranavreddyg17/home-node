@@ -23,3 +23,19 @@ func TestGuestCgroupScopeBindsDomain(t *testing.T) {
 		t.Fatal("invalid domain admitted")
 	}
 }
+
+func TestGuestUnifiedMembershipRefusesAmbiguity(t *testing.T) {
+	id := strings.Repeat("A", 26)
+	relative := `/homenode.slice/machine-qemu\x2d1\x2dhomenode\x2d` + id + ".scope/libvirt/emulator"
+	for _, input := range []string{"0::" + relative, "0::" + relative + "\n"} {
+		got, err := guestUnifiedMembership([]byte(input), id)
+		if err != nil || got != relative {
+			t.Fatal("unified membership refused", got, err)
+		}
+	}
+	for _, input := range []string{"", "0::" + relative + "\n\n", "0::" + relative + "\n0::" + relative, "1:memory:" + relative, "0::" + relative + "\r\n", "0::" + relative + " (deleted)", "0::" + relative + "\x00", "0::/homenode.slice", strings.Repeat("X", 4097)} {
+		if got, err := guestUnifiedMembership([]byte(input), id); err == nil || got != "" {
+			t.Fatalf("ambiguous membership admitted %q", input)
+		}
+	}
+}

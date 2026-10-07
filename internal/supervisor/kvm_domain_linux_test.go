@@ -268,9 +268,9 @@ func TestNativeReservedDACLibvirtLaunch(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		relative, unified := strings.CutPrefix(strings.TrimSpace(string(membership)), "0::")
-		if !unified || strings.ContainsAny(relative, "\r\n") {
-			t.Fatal("ambiguous native cgroup membership")
+		relative, err := guestUnifiedMembership(membership, id)
+		if err != nil {
+			t.Fatal("ambiguous native cgroup membership", err)
 		}
 		maximum := int64(domain.Image.MemoryMiB+512) * (1 << 20)
 		if err := observeGuestMemoryDomain(ctx, relative, id, maximum); err != nil {
