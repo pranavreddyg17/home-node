@@ -87,6 +87,17 @@ func grantGuestChannelAccessWithPeer(ctx context.Context, path string, uid uint3
 			return ErrPolicy
 		}
 	}
+	// Peer observation may block. Re-admit both pinned objects before mutation,
+	// including link count and ownership changes during that interval.
+	var admitted unix.Stat_t
+	currentSocket, err := root.Lstat("adapter.sock")
+	if err != nil || !os.SameFile(original, currentSocket) || unix.Fstat(int(file.Fd()), &admitted) != nil || admitted.Dev != socket.Dev || admitted.Ino != socket.Ino || admitted.Mode != socket.Mode || admitted.Uid != socket.Uid || admitted.Gid != socket.Gid || admitted.Nlink != 1 {
+		return ErrPolicy
+	}
+	currentDirectory, err := os.Lstat(parentPath)
+	if err != nil || !os.SameFile(opened, currentDirectory) || currentDirectory.Mode() != opened.Mode() || unix.Fstat(int(parent.Fd()), &directory) != nil || directory.Uid != uid || directory.Gid != uint32(gid) {
+		return ErrPolicy
+	}
 	ownerUID := -1
 	if socket.Uid == 0 {
 		ownerUID = int(uid)
