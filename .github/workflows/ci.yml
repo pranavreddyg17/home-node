@@ -27,6 +27,13 @@ jobs:
           HOMENODE_RESTIC_INTEGRATION: '1'
           HOMENODE_FILESYSTEM_INTEGRATION: '1'
         run: go test -race ./...
+      - name: Qualify KVM API when runner hardware is exposed
+        run: |
+          if test -c /dev/kvm; then
+            sudo env HOMENODE_KVM_API_INTEGRATION=1 "$(command -v go)" test ./internal/hostcheck -run '^TestNativeKVMAPIAccess$' -count=1
+          else
+            echo 'Native KVM API NOT VERIFIED: runner exposes no character device at /dev/kvm.'
+          fi
       - name: Test inspection syscall candidate refusal before native effects
         run: python3 packaging/inspection/resolve_syscall_candidate_test.py
       - name: Test installer ownership with root fixture

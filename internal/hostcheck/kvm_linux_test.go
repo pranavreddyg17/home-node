@@ -33,3 +33,12 @@ func TestKVMProbeRefusesOrdinaryAndUnrelatedDevices(t *testing.T) {
 		t.Fatal("probe changed ordinary file", err)
 	}
 }
+
+func TestNativeKVMAPIAccess(t *testing.T) {
+	if os.Geteuid() != 0 || os.Getenv("HOMENODE_KVM_API_INTEGRATION") != "1" {
+		t.Skip("explicit disposable Linux KVM fixture")
+	}
+	if !probeKVMDevice() {
+		t.Fatal("supported KVM device/API could not be qualified")
+	}
+}
