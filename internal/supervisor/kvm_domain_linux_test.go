@@ -289,6 +289,18 @@ func TestNativeReservedDACLibvirtLaunch(t *testing.T) {
 			t.Fatal("native cancelled memory observation admitted", err)
 		}
 		t.Log("native per-domain memory observer positive and refusal checks passed")
+		// Measure inherited-listener credentials without sending an adapter frame.
+		// This is an experiment only; production must still reject root peers.
+		inherited, err := (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", domain.ChannelPath)
+		if err != nil {
+			t.Fatal("native inherited listener unavailable", err)
+		}
+		creator, identityErr := PeerUID(inherited.(*net.UnixConn))
+		inheritedCloseErr := inherited.Close()
+		if identityErr != nil || inheritedCloseErr != nil {
+			t.Fatal("native listener credential observation failed", identityErr, inheritedCloseErr)
+		}
+		t.Log("native inherited listener peer UID, without payload", creator)
 		if err := backend.Verify(ctx, domain); err != nil {
 			nativeDomainDiagnostics(t, domain)
 			t.Fatal("native launch isolation verification refused", err)
