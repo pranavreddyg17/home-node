@@ -3,6 +3,7 @@ package supervisor
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -32,6 +33,44 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 	replacement := &Manager{Store: m.Store, GuestUIDPool: &pool, GuestGID: m.GuestGID, Policy: m.Policy}
 	if err := replacement.recordVolumeOwnershipIntent(ctx, intent); err != nil {
 		t.Fatal("immutable retry refused", err)
+	}
+	if err := m.Store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := state.Open(filepath.Join(m.Images, "journal"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	m.Store, replacement.Store = reopened, reopened
+	if err := replacement.recordVolumeOwnershipIntent(ctx, intent); err != nil {
+		t.Fatal("reopened ownership intent refused", err)
+	}
+	if _, err := m.Store.DB.Exec(`UPDATE runtime_uid_leases SET uid=? WHERE instance_id=?`, intent.UID+1, intent.InstanceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.recordVolumeOwnershipIntent(ctx, intent); err == nil {
+		t.Fatal("changed durable UID lease admitted")
+	}
+	var actualUID uint32
+	if err := m.Store.DB.QueryRow(`SELECT uid FROM runtime_uid_leases WHERE instance_id=?`, intent.InstanceID).Scan(&actualUID); err != nil || actualUID != intent.UID+1 {
+		t.Fatal("refusal repaired changed lease", actualUID, err)
+	}
+	if _, err := m.Store.DB.Exec(`UPDATE runtime_uid_leases SET uid=? WHERE instance_id=?`, intent.UID, intent.InstanceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Store.DB.Exec(`DELETE FROM runtime_guest_groups WHERE instance_id=?`, intent.InstanceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.recordVolumeOwnershipIntent(ctx, intent); err == nil {
+		t.Fatal("missing durable group admitted")
+	}
+	var groups int
+	if err := m.Store.DB.QueryRow(`SELECT count(*) FROM runtime_guest_groups WHERE instance_id=?`, intent.InstanceID).Scan(&groups); err != nil || groups != 0 {
+		t.Fatal("refusal recreated group", groups, err)
+	}
+	if _, err := m.Store.DB.Exec(`INSERT INTO runtime_guest_groups VALUES(?,?)`, intent.InstanceID, intent.GID); err != nil {
+		t.Fatal(err)
 	}
 	for _, change := range []func(*VolumeOwnershipIntent){func(i *VolumeOwnershipIntent) { i.Inode++ }, func(i *VolumeOwnershipIntent) { i.Device++ }, func(i *VolumeOwnershipIntent) { i.UID++ }, func(i *VolumeOwnershipIntent) { i.GID++ }, func(i *VolumeOwnershipIntent) { i.Size++ }, func(i *VolumeOwnershipIntent) { i.ImageSHA256 = strings.Repeat("b", 64) }} {
 		changed := intent
