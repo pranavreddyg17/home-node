@@ -244,7 +244,23 @@ func nativeDomainDiagnostics(t *testing.T, domain Domain) {
 			}
 		}
 		t.Log("AppArmor", strings.TrimSpace(string(read(filepath.Join(process, "attr/current"), 4096))))
-		t.Log("cgroup", strings.TrimSpace(string(read(filepath.Join(process, "cgroup"), 4096))))
+		cgroup := strings.TrimSpace(string(read(filepath.Join(process, "cgroup"), 4096)))
+		t.Log("cgroup", cgroup)
+		// Record only the synthetic domain's hierarchy, stopping at our slice.
+		// Libvirt may place emulator threads beneath the memory-limited scope.
+		for _, line := range strings.Split(cgroup, "\n") {
+			relative, unified := strings.CutPrefix(line, "0::")
+			if !unified || !strings.HasPrefix(relative, "/homenode.slice/") || filepath.Clean(relative) != relative {
+				continue
+			}
+			for depth := 0; depth < 16 && strings.HasPrefix(relative, "/homenode.slice"); depth++ {
+				t.Log("memory bound", relative, strings.TrimSpace(string(read(filepath.Join("/sys/fs/cgroup", relative, "memory.max"), 128))))
+				if relative == "/homenode.slice" {
+					break
+				}
+				relative = filepath.Dir(relative)
+			}
+		}
 	}
 	if socket, err := os.Lstat(domain.ChannelPath); err == nil {
 		if metadata, ok := socket.Sys().(*syscall.Stat_t); ok {
