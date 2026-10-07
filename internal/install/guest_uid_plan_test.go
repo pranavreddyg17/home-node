@@ -33,3 +33,19 @@ func TestGuestUIDProvisioningPlanRefusesConflictWithoutShrinking(t *testing.T) {
 		t.Fatal("cancelled host observation admitted")
 	}
 }
+
+func TestGuestUIDProvisioningPlanCopiesReviewedServiceIdentities(t *testing.T) {
+	ids := []uint32{998, 997, 996}
+	plan, err := guestUIDProvisioningPlan(context.Background(), strings.Repeat("a", 32), supervisor.GuestUIDPool{First: 200000, Last: 200001}, ids)
+	if err != nil || len(plan.ServiceUIDs) != 3 {
+		t.Fatal(plan, err)
+	}
+	ids[0] = 200000
+	if plan.ServiceUIDs[0] != 998 {
+		t.Fatal("reviewed service identities changed through caller slice")
+	}
+	plan.ServiceUIDs[1] = 200001
+	if ids[1] != 997 {
+		t.Fatal("proposal mutation changed caller identities")
+	}
+}

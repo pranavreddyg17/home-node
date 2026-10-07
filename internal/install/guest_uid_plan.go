@@ -10,10 +10,11 @@ import (
 // GuestUIDProvisioningPlan is a read-only first-install proposal. Pending gates
 // must be implemented and verified before publishing policy or enabling guests.
 type GuestUIDProvisioningPlan struct {
-	OwnerID string   `json:"ownerId"`
-	First   uint32   `json:"firstUid"`
-	Last    uint32   `json:"lastUid"`
-	Pending []string `json:"pending"`
+	OwnerID     string   `json:"ownerId"`
+	First       uint32   `json:"firstUid"`
+	Last        uint32   `json:"lastUid"`
+	ServiceUIDs []uint32 `json:"serviceUids"`
+	Pending     []string `json:"pending"`
 }
 
 // PlanGuestUIDProvisioning observes the host; it does not modify NSS, login.defs,
@@ -62,7 +63,7 @@ func guestUIDProvisioningPlan(ctx context.Context, ownerID string, pool supervis
 	if err := ctx.Err(); err != nil {
 		return empty, err
 	}
-	return GuestUIDProvisioningPlan{OwnerID: ownerID, First: pool.First, Last: pool.Last, Pending: []string{
+	return GuestUIDProvisioningPlan{OwnerID: ownerID, First: pool.First, Last: pool.Last, ServiceUIDs: append([]uint32(nil), serviceUIDs...), Pending: []string{
 		"exclude future local and subordinate account allocations from the entire range",
 		"journal immutable host pool policy and ownership intent",
 		"verify stopped-runtime barriers and qualified volume/channel ownership",

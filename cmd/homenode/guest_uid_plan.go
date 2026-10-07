@@ -26,6 +26,7 @@ func guestUIDPlan(args []string) {
 func runGuestUIDPlan(ctx context.Context, args []string, out io.Writer) error {
 	flags := flag.NewFlagSet("guest-uid-plan", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
+	journal := flags.String("journal-dir", "", "derive identities from an existing installer journal")
 	owner := flags.String("owner-id", "", "installer ownership ID for this proposal")
 	first := flags.Uint64("first-uid", 0, "first proposed reserved guest UID")
 	last := flags.Uint64("last-uid", 0, "last proposed reserved guest UID")
@@ -38,6 +39,9 @@ func runGuestUIDPlan(ctx context.Context, args []string, out io.Writer) error {
 	if flags.NArg() != 0 || *first > 1<<31-1 || *last > 1<<31-1 || *controller > 1<<31-1 || *transfer > 1<<31-1 || *backup > 1<<31-1 {
 		return install.ErrPlan
 	}
+	if *journal != "" && (*owner != "" || *controller != 0 || *transfer != 0 || *backup != 0) {
+		return install.ErrPlan
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -48,7 +52,19 @@ func runGuestUIDPlan(ctx context.Context, args []string, out io.Writer) error {
 	if *backup != 0 {
 		identities = append(identities, uint32(*backup))
 	}
-	plan, err := install.PlanGuestUIDProvisioning(ctx, *owner, supervisor.GuestUIDPool{First: uint32(*first), Last: uint32(*last)}, identities)
+	pool := supervisor.GuestUIDPool{First: uint32(*first), Last: uint32(*last)}
+	var plan install.GuestUIDProvisioningPlan
+	var err error
+	if *journal != "" {
+		engine, openErr := install.Open("/", *journal)
+		if openErr != nil {
+			return openErr
+		}
+		defer engine.Close()
+		plan, err = engine.PlanInstalledGuestUIDProvisioning(ctx, pool)
+	} else {
+		plan, err = install.PlanGuestUIDProvisioning(ctx, *owner, pool, identities)
+	}
 	if err != nil {
 		return err
 	}
