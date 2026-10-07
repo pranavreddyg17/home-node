@@ -56,10 +56,7 @@ func (e *Engine) commitGuestUIDIntent(ctx context.Context, plan GuestUIDProvisio
 	if !bytes.Equal(actual, expected) {
 		return ErrPlan
 	}
-	data, err := json.Marshal(struct {
-		Version int                      `json:"version"`
-		Plan    GuestUIDProvisioningPlan `json:"plan"`
-	}{1, qualified})
+	data, err := json.Marshal(guestUIDIntent{Version: 1, Plan: qualified})
 	if err != nil {
 		return err
 	}
