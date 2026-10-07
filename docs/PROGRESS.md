@@ -3466,3 +3466,8 @@ The reserved-DAC VM experiment now independently requires standard KVM character
 ### Actual reserved-DAC QEMU launch exposed cgroup and listener incompatibilities
 
 CI37589363542 is terminal failure at3a7ea68. Actual QEMU launch succeeded; process diagnostics showed reserved UID2000000000, sole KVM group993, zero active capabilities, NoNewPrivs1 and enforcing AppArmor. Verify refused absent leaf memory.max; the enclosing libvirt cgroup held the requested768MiB bound. Socket metadata was root:root0775 and QEMU received its channel listener as an fd. Channel admission/peer UID and restart checks were not reached. Retained these findings in the launch research record; no security gate was weakened. Next work must qualify enclosing per-domain cgroup bounds and redesign listener provenance/authentication. The independently qualified device-policy follow-up compiled and is ready for publication now that this run is terminal. Full application remains unfinished.
+
+
+### Per-domain cgroup path contract
+
+Reviewed kernel threaded cgroup resource-domain rules after the native missing-leaf-memory.max failure. Added guestCgroupScope with exact HomeNode domain binding to the observed libvirt systemd scope and bounded clean descendants. Tests reject other VM/slice identity, traversal, malformed ordinal, controls and excessive depth; targeted macOS tests and diff checks passed. The helper is not yet wired into production verification: protected cgroup descriptor/type/memory reads and membership rechecks remain necessary. No aggregate-slice-only or root-listener fallback was added. Full application remains unfinished.
