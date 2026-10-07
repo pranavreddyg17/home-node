@@ -43,6 +43,11 @@ func TestNativeGuestChannelRootListenerRefusal(t *testing.T) {
 		t.Fatal("generic helper adopted root socket")
 	}
 	expected := UnixPeerIdentity{PID: int32(os.Getpid()), UID: guestUID, GID: 993}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := grantLibvirtGuestChannelAccess(cancelled, path, guestUID, transferGID, expected); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled socket adoption did not preserve cancellation", err)
+	}
 	if err := grantLibvirtGuestChannelAccess(context.Background(), path, guestUID, transferGID, expected); err == nil {
 		t.Fatal("root peer admitted as guest")
 	}

@@ -3551,3 +3551,8 @@ Strengthened the pending native root-listener refusal fixture: after attempted a
 ### Aliased libvirt socket refused before probe
 
 Extended the pending root-listener native refusal fixture with a hardlinked socket. Adoption must refuse before connecting; a bounded accept must time out, both paths must retain the same inode/mode/root ownership and link count2, and removing only the fixture-created alias returns the original single-link state. This proves the intended alias admission boundary rather than relying solely on mismatched credentials. Linux test compilation and diff checks passed; native execution awaits publication. CI37591975925 remains live at8aa2131 and excludes this strengthening. Coordinated volume/image/installer ownership policy and full application acceptance remain unfinished.
+
+
+### Cancelled socket adoption refusal
+
+Extended the pending native socket refusal fixture to require context.Canceled from an already cancelled adoption request before the real denied-peer probe. Its subsequent connection/EOF, no-extra-probe alias check and unchanged metadata assertions remain. Linux tests compile and diff checks passed. CI37591975925 is still live at8aa2131, now through native fixtures/frontend checks into Debian package inspection; full log evidence and this follow-up's actual native execution remain pending. Reviewed future volume-intent requirements against the manager: durable lease/group alone does not pin a disk inode or prove stopped-runtime ownership mutation authority. Full application remains unfinished.
