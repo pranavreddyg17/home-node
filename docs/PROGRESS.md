@@ -3456,3 +3456,8 @@ While CI37588842072 is live at2d13481, added failure diagnostics for the synthet
 ### First native libvirt experiment refused at partition precondition
 
 CI37588842072 completed with failure at2d13481. Linux race tests and root KVM API/sole-primary-group allow-deny probes passed. The VM experiment stopped before any launch because systemctl reported the named slice loaded; its original prerequisite demanded not-found. The fixture now admits loaded only with all requested properties present and empty FragmentPath, DropInPaths, Job and ControlGroup, plus inactive/dead state. Existing configured or active partitions remain refused; exclusive source creation remains required. Linux compilation passed. This is a fixture admission correction, not evidence that those conditions or VM launch pass natively. The next run includes bounded memory hierarchy diagnostics; full product acceptance remains unfinished.
+
+
+### Independent native launch device admission
+
+The reserved-DAC VM experiment now independently requires standard KVM character-device10:232, root ownership, a signed-range non-root group, exact0660 permissions without special bits, and absence of POSIX extended ACL. Its deferred final observation requires unchanged inode, device identity, mode, owner/group and ACL. This removes reliance on a separate earlier test's snapshot when running the launch experiment alone. Linux test compilation and diff checks passed; native execution of this follow-up is pending. CI37589363542 remains live at3a7ea68 and excludes this follow-up, which will not be pushed until that run is terminal. Full production device lifecycle and end-to-end acceptance remain unfinished.

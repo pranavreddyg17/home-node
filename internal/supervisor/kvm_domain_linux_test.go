@@ -4,6 +4,7 @@ package supervisor
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/pranavreddyg17/home-node/internal/catalog"
 	"github.com/pranavreddyg17/home-node/internal/state"
+	"golang.org/x/sys/unix"
 )
 
 // This launches firmware on synthetic disks, not an application guest image.
@@ -30,9 +32,26 @@ func TestNativeReservedDACLibvirtLaunch(t *testing.T) {
 		t.Fatal(err)
 	}
 	deviceStat, ok := device.Sys().(*syscall.Stat_t)
-	if !ok || device.Mode()&os.ModeCharDevice == 0 || deviceStat.Uid != 0 || deviceStat.Gid == 0 || device.Mode().Perm() != 0660 {
+	if !ok || device.Mode()&os.ModeCharDevice == 0 || deviceStat.Uid != 0 || deviceStat.Gid == 0 || deviceStat.Gid > 1<<31-1 || device.Mode().Perm() != 0660 || device.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || unix.Major(uint64(deviceStat.Rdev)) != 10 || unix.Minor(uint64(deviceStat.Rdev)) != 232 {
 		t.Fatal("unqualified KVM device group")
 	}
+	if _, err := unix.Lgetxattr("/dev/kvm", "system.posix_acl_access", nil); !errors.Is(err, unix.ENODATA) {
+		t.Fatal("ambiguous native launch device ACL", err)
+	}
+	defer func() {
+		current, err := os.Lstat("/dev/kvm")
+		if err != nil || !os.SameFile(device, current) || current.Mode() != device.Mode() {
+			t.Errorf("native launch device identity changed: %v", err)
+			return
+		}
+		metadata, valid := current.Sys().(*syscall.Stat_t)
+		if !valid || metadata.Uid != deviceStat.Uid || metadata.Gid != deviceStat.Gid || metadata.Rdev != deviceStat.Rdev {
+			t.Error("native launch device ownership changed")
+		}
+		if _, err := unix.Lgetxattr("/dev/kvm", "system.posix_acl_access", nil); !errors.Is(err, unix.ENODATA) {
+			t.Errorf("native launch device ACL changed: %v", err)
+		}
+	}()
 	// Never adopt an existing workload partition or an occupied libvirt service.
 	names, err := command(ctx, "", "/usr/bin/virsh", "--connect", "qemu:///system", "list", "--all", "--name")
 	if err != nil || strings.TrimSpace(names) != "" {
