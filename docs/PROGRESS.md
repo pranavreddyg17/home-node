@@ -3481,3 +3481,8 @@ Added Linux observeGuestMemoryDomain: exact guest scope admission, no-symlink cg
 ### Cgroup observer mount/root refusal checks
 
 Strengthened the draft observer with root ownership/mode admission and final root inode/metadata recheck, openat2 beneath/no-symlink/no-magic-link/no-mount-crossing child and control-file access, digit-only memory bounds, and requiring domain-threaded after traversing threaded descendants. Added Linux tests refusing plausible ordinary-filesystem controls, symlink roots, cancelled observation and invalid bounds. Linux supervisor tests compile; these Linux-only refusal tests have not executed locally on macOS. Native positive/negative cgroup qualification and process membership rechecks remain pending, so production Verify is unchanged and full application remains unfinished.
+
+
+### Native domain memory observer experiment queued
+
+Extended the gated real-QEMU experiment to invoke the draft descriptor-pinned memory observer against bounded PID/cgroup observations before the unchanged production Verify gate. It requires success at the configured per-domain limit and refusals for an excessive observed limit, another domain ID and cancelled observation, then logs a specific marker. Existing production verification still runs and is expected to expose remaining leaf-memory/channel incompatibilities; no known failure is suppressed. Linux tests compile. Synthetic-filesystem refusal tests and positive native observer execution await CI publication. This experiment remains a snapshot, with production process/task membership binding still pending. Full application remains unfinished.

@@ -239,6 +239,56 @@ func TestNativeReservedDACLibvirtLaunch(t *testing.T) {
 			nativeDomainDiagnostics(t, domain)
 			t.Fatal("native reserved-DAC launch refused", err)
 		}
+		// Qualify the draft memory observer before the existing production gate.
+		// Success here does not bypass channel or full launch verification.
+		readBounded := func(path string, limit int64) (data []byte, result error) {
+			file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+			if err != nil {
+				return nil, err
+			}
+			defer func() { result = errors.Join(result, file.Close()) }()
+			data, err = io.ReadAll(io.LimitReader(file, limit+1))
+			if err != nil {
+				return nil, err
+			}
+			if int64(len(data)) > limit {
+				return nil, ErrPolicy
+			}
+			return data, nil
+		}
+		pidBytes, err := readBounded(filepath.Join("/run/libvirt/qemu", domain.Name()+".pid"), 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(string(pidBytes)))
+		if err != nil || pid <= 0 {
+			t.Fatal("invalid native domain PID")
+		}
+		membership, err := readBounded(filepath.Join("/proc", strconv.Itoa(pid), "cgroup"), 4096)
+		if err != nil {
+			t.Fatal(err)
+		}
+		relative, unified := strings.CutPrefix(strings.TrimSpace(string(membership)), "0::")
+		if !unified || strings.ContainsAny(relative, "\r\n") {
+			t.Fatal("ambiguous native cgroup membership")
+		}
+		maximum := int64(domain.Image.MemoryMiB+512) * (1 << 20)
+		if err := observeGuestMemoryDomain(ctx, relative, id, maximum); err != nil {
+			nativeDomainDiagnostics(t, domain)
+			t.Fatal("native per-domain memory observation refused", err)
+		}
+		if err := observeGuestMemoryDomain(ctx, relative, id, maximum-1); err == nil {
+			t.Fatal("excessive domain memory bound admitted")
+		}
+		if err := observeGuestMemoryDomain(ctx, relative, state.Random(), maximum); err == nil {
+			t.Fatal("another domain memory scope admitted")
+		}
+		cancelled, stopObservation := context.WithCancel(ctx)
+		stopObservation()
+		if err := observeGuestMemoryDomain(cancelled, relative, id, maximum); !errors.Is(err, context.Canceled) {
+			t.Fatal("native cancelled memory observation admitted", err)
+		}
+		t.Log("native per-domain memory observer positive and refusal checks passed")
 		if err := backend.Verify(ctx, domain); err != nil {
 			nativeDomainDiagnostics(t, domain)
 			t.Fatal("native launch isolation verification refused", err)
