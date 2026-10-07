@@ -28,7 +28,7 @@ func (m *Manager) bindDomainGuestIdentity(ctx context.Context, d *Domain, reserv
 			return err
 		}
 		var reserved int
-		if err := m.Store.DB.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_pool)+(SELECT count(*) FROM runtime_guest_groups WHERE instance_id=?)", d.ID).Scan(&reserved); err != nil {
+		if err := m.Store.DB.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_pool)+(SELECT count(*) FROM runtime_guest_groups WHERE instance_id=?)+(SELECT count(*) FROM runtime_volume_ownership)", d.ID).Scan(&reserved); err != nil {
 			return err
 		}
 		if reserved != 0 {
@@ -105,7 +105,7 @@ func (m *Manager) validateGuestIdentityPolicy(ctx context.Context) error {
 		}
 		var conflicts int
 		if errors.Is(err, sql.ErrNoRows) {
-			if err = tx.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_leases)+(SELECT count(*) FROM runtime_guest_groups)").Scan(&conflicts); err != nil {
+			if err = tx.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_leases)+(SELECT count(*) FROM runtime_guest_groups)+(SELECT count(*) FROM runtime_volume_ownership)").Scan(&conflicts); err != nil {
 				return err
 			}
 			if conflicts != 0 {
@@ -113,7 +113,7 @@ func (m *Manager) validateGuestIdentityPolicy(ctx context.Context) error {
 			}
 		}
 		if m.GuestUIDPool == nil {
-			if err := tx.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_leases)+(SELECT count(*) FROM runtime_guest_groups)").Scan(&conflicts); err != nil {
+			if err := tx.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_leases)+(SELECT count(*) FROM runtime_guest_groups)+(SELECT count(*) FROM runtime_volume_ownership)").Scan(&conflicts); err != nil {
 				return err
 			}
 			if conflicts != 0 {
@@ -122,6 +122,12 @@ func (m *Manager) validateGuestIdentityPolicy(ctx context.Context) error {
 			return nil
 		}
 		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM runtime_guest_groups g LEFT JOIN runtime_uid_leases u ON u.instance_id=g.instance_id WHERE u.instance_id IS NULL OR g.gid!=?", m.GuestGID).Scan(&conflicts); err != nil {
+			return err
+		}
+		if conflicts != 0 {
+			return ErrPolicy
+		}
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM runtime_volume_ownership o LEFT JOIN runtime_uid_leases l ON l.instance_id=o.instance_id LEFT JOIN runtime_guest_groups g ON g.instance_id=o.instance_id WHERE l.instance_id IS NULL OR g.instance_id IS NULL OR o.uid!=l.uid OR o.gid!=g.gid`).Scan(&conflicts); err != nil {
 			return err
 		}
 		if conflicts != 0 {

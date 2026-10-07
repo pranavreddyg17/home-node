@@ -3571,3 +3571,8 @@ Added immutable runtime_volume_ownership records unique by instance and device/i
 ### Ownership intent survives reopen and refuses lease corruption
 
 Extended the ownership-intent regression to close SQLite, reopen the actual journal directory and retry through a new manager store handle. Exact intent survives and is accepted. Changing its durable UID lease or deleting its group record causes refusal without repairing either; the fixture explicitly restores only its own altered inputs before later cases. Targeted race test passed1.629s and Linux tests compile. This proves orderly reopen and corruption refusal for synthetic metadata, not SIGKILL/power loss or retained kernel ownership barriers. CI37592962040 remains live at96d75d3 and excludes volume intent. Full application remains unfinished.
+
+
+### Ownership intent prevents identity policy recreation/downgrade
+
+Review found new ownership records were absent from existing pristine-pool/shared-identity admission counts. Added them to missing-pool and nil-policy checks; reservation/startup also refuse orphan or mismatched intent-to-lease/group bindings. Regression deletes all pool/lease/group records after saving intent and requires reservation/startup/shared fallback refusal without recreating policy. Full local supervisor races passed9.549s and Linux tests compile. This preserves evidence of prior reserved ownership but does not publish host UID policy, repair corruption or grant actual disk mutation authority. CI37592962040 remains live at96d75d3 and excludes these changes. Full application remains unfinished.

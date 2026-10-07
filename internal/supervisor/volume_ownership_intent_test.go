@@ -98,4 +98,21 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 	if err := m.Store.DB.QueryRow(`SELECT count(*) FROM runtime_volume_ownership`).Scan(&count); err != nil || count != 1 {
 		t.Fatal("refusal changed inventory", count, err)
 	}
+	if _, err := m.Store.DB.Exec(`DELETE FROM runtime_uid_leases; DELETE FROM runtime_guest_groups; DELETE FROM runtime_uid_pool;`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.ReserveGuestUID(ctx, state.Random(), pool); err == nil {
+		t.Fatal("orphan ownership intent permitted pool recreation")
+	}
+	if err := m.validateGuestIdentityPolicy(ctx); err == nil {
+		t.Fatal("orphan ownership intent admitted at startup")
+	}
+	if err := m.Store.DB.QueryRow(`SELECT count(*) FROM runtime_uid_pool`).Scan(&count); err != nil || count != 0 {
+		t.Fatal("refusal recreated pool", count, err)
+	}
+	m.GuestUIDPool, m.GuestGID = nil, 0
+	if err := m.bindDomainGuestIdentity(ctx, &Domain{ID: state.Random()}, false); err == nil {
+		t.Fatal("ownership intent allowed shared-identity downgrade")
+	}
+
 }
