@@ -40,6 +40,13 @@ func TestUnixPeerIdentityIsKernelDerived(t *testing.T) {
 	if uid != uint32(os.Getuid()) {
 		t.Fatalf("peer identity mismatch %d", uid)
 	}
+	identity, err := PeerProcessIdentity(conn)
+	if err != nil || identity.PID != int32(os.Getpid()) || identity.UID != uint32(os.Getuid()) || identity.GID != uint32(os.Getgid()) {
+		t.Fatal("kernel process identity mismatch", identity, err)
+	}
+	if identity, err := PeerProcessIdentity(nil); err == nil || identity != (UnixPeerIdentity{}) {
+		t.Fatal("nil peer admitted")
+	}
 	if err = <-done; err != nil {
 		t.Fatal(err)
 	}

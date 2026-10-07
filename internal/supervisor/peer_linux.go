@@ -8,21 +8,35 @@ import (
 )
 
 func PeerUID(connection *net.UnixConn) (uint32, error) {
+	identity, err := PeerProcessIdentity(connection)
+	return identity.UID, err
+}
+
+func PeerProcessIdentity(connection *net.UnixConn) (UnixPeerIdentity, error) {
+	if connection == nil {
+		return UnixPeerIdentity{}, ErrPolicy
+	}
 	raw, err := connection.SyscallConn()
 	if err != nil {
-		return 0, err
+		return UnixPeerIdentity{}, err
 	}
-	var uid uint32
+	var identity UnixPeerIdentity
 	var socketErr error
 	err = raw.Control(func(fd uintptr) {
 		cred, e := unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
 		socketErr = e
 		if e == nil {
-			uid = cred.Uid
+			identity = UnixPeerIdentity{PID: cred.Pid, UID: cred.Uid, GID: cred.Gid}
 		}
 	})
 	if err != nil {
-		return 0, err
+		return UnixPeerIdentity{}, err
 	}
-	return uid, socketErr
+	if socketErr != nil {
+		return UnixPeerIdentity{}, socketErr
+	}
+	if identity.PID <= 0 {
+		return UnixPeerIdentity{}, ErrPolicy
+	}
+	return identity, nil
 }

@@ -10,3 +10,7 @@ import (
 func PeerUID(*net.UnixConn) (uint32, error) {
 	return 0, errors.New("production peer authentication requires Linux")
 }
+
+func PeerProcessIdentity(*net.UnixConn) (UnixPeerIdentity, error) {
+	return UnixPeerIdentity{}, errors.New("production peer authentication requires Linux")
+}

@@ -345,10 +345,10 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool) {
 			if err != nil {
 				t.Fatal("guest-initiated connection missing", err)
 			}
-			peerUID, identityErr := PeerUID(accepted)
+			identity, identityErr := PeerProcessIdentity(accepted)
 			closeErr := accepted.Close()
-			if identityErr != nil || closeErr != nil || peerUID != uid {
-				t.Fatal("guest-connect peer identity mismatch", peerUID, identityErr, closeErr)
+			if identityErr != nil || closeErr != nil || identity.UID != uid || identity.GID != domain.GuestGID || int(identity.PID) != pid {
+				t.Fatal("guest-connect peer identity mismatch", identity, identityErr, closeErr)
 			}
 			if err := backend.Stop(ctx, id); err != nil {
 				t.Fatal(err)

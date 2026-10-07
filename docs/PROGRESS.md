@@ -3511,3 +3511,8 @@ CI37590289728 completed failure atc08e20d. Its log explicitly records native per
 ### Guest-initiated channel experiment implemented
 
 Added a separate gated native GuestConnect experiment sharing the disposable slice/disks/UID/cleanup fixture. It changes only channel direction in production-generated XML, uses a synthetic private guest-accessible listener, verifies exact QEMU DAC/AppArmor and process-bound memory, authenticates the accepted peer UID with no payload, then stops and repeats a second cold launch. This experiment does not run production channel grant logic or qualify a transfer-owned listener/registry; no production transport setting changed. CI selects it before the unchanged inherited-listener launch gate. Linux compilation passed. Native execution awaits publication after live CI37590886954 at9ce7a0b completes. Full application and coordinated channel lifecycle remain unfinished.
+
+
+### Full kernel peer credentials for guest-connect qualification
+
+Added UnixPeerIdentity and PeerProcessIdentity returning kernel PID/UID/GID with zero result on errors, refusing nil or nonpositive-PID peers. Existing PeerUID delegates to this Linux helper; non-Linux refuses. Extended the native guest-initiated experiment to require actual QEMU PID, assigned UID and KVM GID, rather than UID alone, and the Linux real-socket regression to compare the known connecting process credentials. Linux compilation passed before the final regression addition; updated compilation is pending. Actual Linux execution and future accepted registry/process lifetime binding remain mandatory. CI37590886954 remains live at9ce7a0b and excludes this follow-up. Full application remains unfinished.
