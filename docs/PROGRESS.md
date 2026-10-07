@@ -3461,3 +3461,8 @@ CI37588842072 completed with failure at2d13481. Linux race tests and root KVM AP
 ### Independent native launch device admission
 
 The reserved-DAC VM experiment now independently requires standard KVM character-device10:232, root ownership, a signed-range non-root group, exact0660 permissions without special bits, and absence of POSIX extended ACL. Its deferred final observation requires unchanged inode, device identity, mode, owner/group and ACL. This removes reliance on a separate earlier test's snapshot when running the launch experiment alone. Linux test compilation and diff checks passed; native execution of this follow-up is pending. CI37589363542 remains live at3a7ea68 and excludes this follow-up, which will not be pushed until that run is terminal. Full production device lifecycle and end-to-end acceptance remain unfinished.
+
+
+### Actual reserved-DAC QEMU launch exposed cgroup and listener incompatibilities
+
+CI37589363542 is terminal failure at3a7ea68. Actual QEMU launch succeeded; process diagnostics showed reserved UID2000000000, sole KVM group993, zero active capabilities, NoNewPrivs1 and enforcing AppArmor. Verify refused absent leaf memory.max; the enclosing libvirt cgroup held the requested768MiB bound. Socket metadata was root:root0775 and QEMU received its channel listener as an fd. Channel admission/peer UID and restart checks were not reached. Retained these findings in the launch research record; no security gate was weakened. Next work must qualify enclosing per-domain cgroup bounds and redesign listener provenance/authentication. The independently qualified device-policy follow-up compiled and is ready for publication now that this run is terminal. Full application remains unfinished.

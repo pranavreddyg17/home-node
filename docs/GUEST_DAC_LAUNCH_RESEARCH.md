@@ -54,3 +54,12 @@ CI37586384346 completed successfully at1c2b18ac2183187d348dd160ab92adc25e4f5747.
 TestNativeReservedDACLibvirtLaunch now exercises production domain XML, Start, Verify, Stop and channel directory retry twice against an empty disposable libvirt service. It uses unused numeric identities, synthetic raw disks, a bounded owned systemd slice, and checks Unix listener peer UID before any payload. It retains fixture files and the unit after uncertain launch or stop outcomes. Diagnostics are restricted to the synthetic domain's credentials, AppArmor label, cgroup, socket metadata and bounded log. The initial UID argument type error was corrected and Linux compilation passed; native execution is pending.
 
 The fixture boots firmware only. Its public temporary parent and proposed root:KVM-group immutable disk do not qualify installed production directory permissions. It does not qualify application adapters, shipped supervisor service protections, exclusive UID policy, reboot/udev persistence, or cross-VM isolation. Production reserved-DAC activation remains refused until those coordinated gates pass.
+
+
+## First actual reserved-DAC launch evidence
+
+CI37589363542 failed at3a7ea68 after QEMU successfully launched on Ubuntu libvirt10.0.0-2ubuntu8.19/QEMU8.2.2. Diagnostics showed UID2000000000 across all four UID fields, primary/supplementary GID993 only, zero inheritable/permitted/effective/ambient capabilities, NoNewPrivs1, and an enforcing libvirt AppArmor label. These are process observations from a firmware-only synthetic guest, not full guest acceptance.
+
+The production verifier refused because the process was in a threaded emulator cgroup with no memory.max file. Its libvirt parent reported805306368 bytes, while the scope reportedmax and the owned slice1073741824. A production fix must prove the effective enclosing per-domain bound through protected cgroup traversal and process membership, including negative tests; accepting the aggregate slice alone is insufficient.
+
+The adapter socket was root:root with mode0775; QEMU's command line showed the listener passed as an fd. Current channel admission correctly refuses a root-owned socket for the reserved guest UID. This contradicts the assumption that QEMU creates its listener after dropping privileges. SO_PEERCRED was not reached. Resolve listener provenance and peer authentication with upstream research and a coordinated design before enabling production; do not simply trust root peers or chown an arbitrary socket. Restart and guest-adapter payload acceptance remain unverified.
