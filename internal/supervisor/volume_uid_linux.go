@@ -4,23 +4,32 @@ package supervisor
 
 import (
 	"context"
-	"golang.org/x/sys/unix"
 	"os"
+	"strings"
+
+	"github.com/pranavreddyg17/home-node/internal/guestproto"
+	"golang.org/x/sys/unix"
 )
 
 // transferVolumeToGuest requires a pinned, qualified volume, independently
 // reserved UID, committed ownership intent and retained stopped-runtime barrier.
-// This metadata operation does not establish those publication prerequisites.
+// The caller must authenticate the intent against the durable store and retain
+// the stopped-runtime barrier. This operation checks the exact inode but does
+// not establish those publication prerequisites.
 // Uncertain effects are preserved and exact owner/group retries are idempotent.
-func transferVolumeToGuest(ctx context.Context, file *os.File, size int64, uid, gid uint32) error {
+func transferVolumeToGuest(ctx context.Context, file *os.File, intent VolumeOwnershipIntent) error {
+	size, uid, gid := intent.Size, intent.UID, intent.GID
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if os.Geteuid() != 0 || file == nil || uid < 65536 || uid > 1<<31-1 || gid == 0 || gid > 1<<31-1 {
+	if !guestproto.ValidID(intent.InstanceID) || len(intent.ImageSHA256) != 64 || strings.Trim(intent.ImageSHA256, "0123456789abcdef") != "" || intent.Inode == 0 || size < 16<<20 || size > 512<<30 || os.Geteuid() != 0 || file == nil || uid < 65536 || uid > 1<<31-1 || gid == 0 || gid > 1<<31-1 {
 		return ErrPolicy
 	}
 	var before unix.Stat_t
 	if unix.Fstat(int(file.Fd()), &before) != nil {
+		return ErrPolicy
+	}
+	if uint64(before.Dev) != intent.Device || before.Ino != intent.Inode {
 		return ErrPolicy
 	}
 	if before.Uid != 0 && before.Uid != uid {

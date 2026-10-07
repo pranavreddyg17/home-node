@@ -5,8 +5,11 @@ package supervisor
 import (
 	"context"
 	"errors"
+	"github.com/pranavreddyg17/home-node/internal/state"
+	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -24,27 +27,65 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	if err = file.Truncate(size); err != nil {
 		t.Fatal(err)
 	}
-	if err = transferVolumeToGuest(context.Background(), file, size, 200000, 0); !errors.Is(err, ErrPolicy) {
-		t.Fatal("root guest group accepted", err)
-	}
-	if err = transferVolumeToGuest(context.Background(), file, size, 200000, 200000); err != nil {
+	var stat unix.Stat_t
+	if err := unix.Fstat(int(file.Fd()), &stat); err != nil {
 		t.Fatal(err)
 	}
-	if err = transferVolumeToGuest(context.Background(), file, size, 200000, 200000); err != nil {
+	intent := VolumeOwnershipIntent{InstanceID: state.Random(), ImageSHA256: strings.Repeat("a", 64), UID: 200000, GID: 200000, Device: uint64(stat.Dev), Inode: stat.Ino, Size: size}
+	for _, change := range []func(*VolumeOwnershipIntent){func(i *VolumeOwnershipIntent) { i.Inode++ }, func(i *VolumeOwnershipIntent) { i.Device++ }, func(i *VolumeOwnershipIntent) { i.Size++ }, func(i *VolumeOwnershipIntent) { i.InstanceID = "invalid" }, func(i *VolumeOwnershipIntent) { i.ImageSHA256 = "invalid" }} {
+		changed := intent
+		change(&changed)
+		if err := transferVolumeToGuest(context.Background(), file, changed); !errors.Is(err, ErrPolicy) {
+			t.Fatal("unbound intent admitted", changed, err)
+		}
+		var unchanged unix.Stat_t
+		if err := unix.Fstat(int(file.Fd()), &unchanged); err != nil || unchanged.Uid != 0 || unchanged.Gid != 0 || unchanged.Ino != stat.Ino || unchanged.Mode != stat.Mode {
+			t.Fatal("refusal changed metadata", err)
+		}
+	}
+	other, err := os.OpenFile(filepath.Join(filepath.Dir(path), "other.raw"), os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	if err := other.Truncate(size); err != nil {
+		t.Fatal(err)
+	}
+	if err := transferVolumeToGuest(context.Background(), other, intent); !errors.Is(err, ErrPolicy) {
+		t.Fatal("replacement inode admitted", err)
+	}
+	var otherStat unix.Stat_t
+	if err := unix.Fstat(int(other.Fd()), &otherStat); err != nil || otherStat.Uid != 0 || otherStat.Gid != 0 || otherStat.Mode&0777 != 0600 {
+		t.Fatal("replacement refusal changed metadata", err)
+	}
+	transfer := func(ctx context.Context, file *os.File, size int64, uid, gid uint32) error {
+		requested := intent
+		requested.Size = size
+		requested.UID = uid
+		requested.GID = gid
+		return transferVolumeToGuest(ctx, file, requested)
+	}
+	if err = transfer(context.Background(), file, size, 200000, 0); !errors.Is(err, ErrPolicy) {
+		t.Fatal("root guest group accepted", err)
+	}
+	if err = transfer(context.Background(), file, size, 200000, 200000); err != nil {
+		t.Fatal(err)
+	}
+	if err = transfer(context.Background(), file, size, 200000, 200000); err != nil {
 		t.Fatal("ownership retry refused", err)
 	}
-	if err = transferVolumeToGuest(context.Background(), file, size, 200001, 200001); !errors.Is(err, ErrPolicy) {
+	if err = transfer(context.Background(), file, size, 200001, 200001); !errors.Is(err, ErrPolicy) {
 		t.Fatal("another guest took ownership", err)
 	}
-	if err = transferVolumeToGuest(context.Background(), file, size, 200000, 200001); !errors.Is(err, ErrPolicy) {
+	if err = transfer(context.Background(), file, size, 200000, 200001); !errors.Is(err, ErrPolicy) {
 		t.Fatal("changed guest group accepted", err)
 	}
-	if err = transferVolumeToGuest(context.Background(), file, size, 200000, 200000); err != nil {
+	if err = transfer(context.Background(), file, size, 200000, 200000); err != nil {
 		t.Fatal("refused group change modified ownership", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err = transferVolumeToGuest(ctx, file, size, 200000, 200000); !errors.Is(err, context.Canceled) {
+	if err = transfer(ctx, file, size, 200000, 200000); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancelled ownership ignored", err)
 	}
 	if err = admitVolumeForUID(file, size, 200000); err != nil {
