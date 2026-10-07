@@ -9,7 +9,7 @@ import (
 )
 
 func TestGuestUIDAccountFileReadRejectsUnsafeInputs(t *testing.T) {
-	for _, name := range []string{"passwd", "subuid", "nsswitch.conf"} {
+	for _, name := range []string{"passwd", "subuid", "nsswitch.conf", "login.defs"} {
 		t.Run(name, func(t *testing.T) { testGuestUIDAccountFileReadRejectsUnsafeInputs(t, name) })
 	}
 }

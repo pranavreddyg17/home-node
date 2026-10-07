@@ -18,6 +18,9 @@ func ObserveGuestUIDPoolEligibility(ctx context.Context, pool GuestUIDPool) (Gue
 	if err := ObserveGuestUIDNameServiceEligibility(ctx); err != nil {
 		return GuestUIDPool{}, err
 	}
+	if err := ObserveGuestUIDAutomaticAllocation(ctx, pool); err != nil {
+		return GuestUIDPool{}, err
+	}
 	observed, err := ObserveLocalGuestUIDConflicts(ctx, pool)
 	if err != nil {
 		return GuestUIDPool{}, err

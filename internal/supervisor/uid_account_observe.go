@@ -64,7 +64,7 @@ func readGuestUIDAccountFile(ctx context.Context, root *os.Root, name string, ow
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if root == nil || (name != "passwd" && name != "subuid" && name != "nsswitch.conf") {
+	if root == nil || (name != "passwd" && name != "subuid" && name != "nsswitch.conf" && name != "login.defs") {
 		return nil, ErrPolicy
 	}
 	before, err := root.Lstat(name)
@@ -106,7 +106,14 @@ func ObserveGuestUIDNameServiceEligibility(ctx context.Context) error {
 	return observeGuestUIDNameServiceEligibilityAt(ctx, "/etc")
 }
 
-func observeGuestUIDNameServiceEligibilityAt(ctx context.Context, directory string) (result error) {
+func observeGuestUIDNameServiceEligibilityAt(ctx context.Context, directory string) error {
+	return observeProtectedGuestIdentityConfig(ctx, directory, "nsswitch.conf", func(data []byte) error { return validateGuestUIDNameServices(ctx, data) })
+}
+
+func observeProtectedGuestIdentityConfig(ctx context.Context, directory, name string, validate func([]byte) error) (result error) {
+	if validate == nil {
+		return ErrPolicy
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -128,11 +135,11 @@ func observeGuestUIDNameServiceEligibilityAt(ctx context.Context, directory stri
 	if err != nil || !ok || owner != 0 || !os.SameFile(before, opened) || opened.Mode().Perm()&0022 != 0 {
 		return ErrPolicy
 	}
-	data, err := readGuestUIDAccountFile(ctx, root, "nsswitch.conf", 0)
+	data, err := readGuestUIDAccountFile(ctx, root, name, 0)
 	if err != nil {
 		return err
 	}
-	if err := validateGuestUIDNameServices(ctx, data); err != nil {
+	if err := validate(data); err != nil {
 		return err
 	}
 	current, err := os.Lstat(directory)
