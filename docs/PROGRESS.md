@@ -3417,3 +3417,7 @@ After journal admission, immutable UID intent, subprocess-kill retry and saved-i
 ### Completed allocation-observer revision CI
 
 Run37583846793 completed successfully atcf3495a (7m13s), including Linux Go/race tests, native protected UID/NSS/channel fixtures, package/service inspections, vulnerability checks and browser workflows. It covers the login.defs observer/parser addition but predates the new native allocation-specific fixture, SIGKILL intent tests and saved-intent check CLI. Those queued changes will receive separate CI evidence after publication. No full KVM/native activation or complete product acceptance is claimed.
+
+### KVM preflight requires actual stable API
+
+Replaced the open-only /dev/kvm preflight with Linux openat2 no-symlink/magic-link admission, character-device validation and KVM_GET_API_VERSION=12, requiring successful descriptor close. Non-Linux returns false. Added Linux negative fixtures for ordinary files, aliases, directories, missing/relative paths and /dev/null, preserving ordinary bytes. Local hostcheck race tests passed (1.236s) and Linux hostcheck tests compiled; new Linux execution awaits publication. Kernel documentation/UAPI support the query; it creates no VM/vCPU and proves neither guest-specific device permissions nor VM launch. Current CI37584603841 targets8e3d290, excluding this change. Reserved guest device/image policy and full application acceptance remain unfinished.

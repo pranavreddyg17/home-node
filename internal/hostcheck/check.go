@@ -121,10 +121,7 @@ func probe(dataRoot string) Facts {
 		f.SafePathResolution, f.MountIdentity = probeKernelPaths()
 		f.DescriptorChmod = probeDescriptorChmod()
 		f.Distribution, f.DistributionVersion = readOSRelease("/etc/os-release")
-		if kvm, err := os.OpenFile("/dev/kvm", os.O_RDWR, 0); err == nil {
-			f.KVMUsable = true
-			_ = kvm.Close()
-		}
+		f.KVMUsable = probeKVMDevice()
 		if b, err := os.ReadFile("/sys/module/apparmor/parameters/enabled"); err == nil {
 			f.AppArmorEnforcing = strings.TrimSpace(string(b)) == "Y"
 		}
