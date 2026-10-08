@@ -128,6 +128,50 @@ func TestRootGuestUIDAllocatorSourceRejectsDrift(t *testing.T) {
 				}
 				return check()
 			})
+			if fault == "none" && err == nil {
+				stage, loadErr := e.loadGuestUIDAllocationStage(ctx, intent)
+				if loadErr != nil {
+					t.Fatal("allocator staging reload", loadErr)
+				}
+				directory, openErr := e.host.OpenRoot("etc")
+				if openErr != nil {
+					t.Fatal(openErr)
+				}
+				defer directory.Close()
+				parent, openErr := directory.Open(".")
+				if openErr != nil {
+					t.Fatal(openErr)
+				}
+				defer parent.Close()
+				interruption := errors.New("fixture interrupted after allocator exchange")
+				err = withGuestIdentityAllocationLock(ctx, directory, func(ctx context.Context, checkLock func() error) error {
+					observations := 0
+					publishErr := e.publishGuestUIDAllocation(ctx, parent, stage, intent, func(context.Context) error {
+						observations++
+						if err := checkLock(); err != nil {
+							return err
+						}
+						if observations == 3 {
+							return interruption
+						}
+						return nil
+					})
+					if !errors.Is(publishErr, interruption) {
+						t.Fatal("allocator exchange interruption was not retained", publishErr)
+					}
+					for i := 0; i < 2; i++ {
+						if err := e.publishGuestUIDAllocation(ctx, parent, stage, intent, func(context.Context) error { return checkLock() }); err != nil {
+							return err
+						}
+					}
+					return nil
+				})
+				current, readErr := os.ReadFile(path)
+				retained, retainedErr := os.ReadFile(filepath.Join(host, "etc/.homenode-login-defs.stage"))
+				if readErr != nil || retainedErr != nil || string(current) != proposal.Contents || string(retained) != original {
+					t.Fatal("allocator publication or retry lost original bytes", readErr, retainedErr)
+				}
+			}
 			if fault == "none" {
 				if err != nil || !called {
 					t.Fatal("qualified allocator source refused", err)
