@@ -62,9 +62,16 @@ observation and saved storage intent validation. Its recovery quiescence API
 explicitly provides only a snapshot and also checks restore-destination vacancy;
 that API must not be reused as a general storage migration lease.
 
-Loaded-condition admission, owned guest teardown, the retained migration
-transaction, immutable policy publication and activation release remain
-unimplemented. Native tests must exercise a queued start while the marker is
+Loaded-condition admission and a bounded fixed-unit stop operation are now
+implemented in the recovery quiescence path. `homenode recovery-quiesce` checks
+loaded identity before stopping and checks dormancy, conditions, marker and guest
+emptiness afterward; it still returns no publication authority. Its Linux wire
+query and native activation fixture have compiled but remain unverified by
+native execution at this revision.
+
+Owned guest teardown, the retained migration transaction, immutable policy
+publication and activation release remain unimplemented. Native tests must
+exercise a queued start while the marker is
 present, an already-running service, a live guest after supervisor stop, marker
 replacement, cancellation and crash at every publication boundary. Run those
 tests only on disposable Linux hosts, never on the developer's desktop.
