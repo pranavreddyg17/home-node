@@ -32,3 +32,17 @@ func TestGuestUIDNameServicesRequireExplicitLocalResolution(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestGuestUIDNameServiceRefusalsIdentifyOnlyFixedDatabaseNames(t *testing.T) {
+	for _, fixture := range []struct{ data, diagnostic string }{
+		{"passwd: files systemd\ngroup: files\nshadow: files\nsubid: files\n", "passwd identity resolution requires an explicit files-only rule"},
+		{"passwd: files\ngroup: files\nshadow: files\n", "missing explicit subid identity resolution rule"},
+		{"passwd: files\npasswd: files\n", "duplicate passwd identity resolution rule"},
+		{"passwd: files secret-provider-token\n", "passwd identity resolution requires an explicit files-only rule"},
+	} {
+		err := validateGuestUIDNameServices(context.Background(), []byte(fixture.data))
+		if !errors.Is(err, ErrPolicy) || !strings.HasPrefix(err.Error(), fixture.diagnostic+": ") || strings.Contains(err.Error(), "secret-provider-token") {
+			t.Fatal("identity refusal lost policy identity or disclosed configuration", err)
+		}
+	}
+}

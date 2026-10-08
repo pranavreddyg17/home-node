@@ -2,6 +2,7 @@ package supervisor
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"unicode/utf8"
 )
@@ -35,14 +36,17 @@ func validateGuestUIDNameServices(ctx context.Context, data []byte) error {
 			continue
 		}
 		fields := strings.Fields(body)
-		if seen || len(fields) != 1 || fields[0] != "files" {
-			return ErrPolicy
+		if seen {
+			return fmt.Errorf("duplicate %s identity resolution rule: %w", name, ErrPolicy)
+		}
+		if len(fields) != 1 || fields[0] != "files" {
+			return fmt.Errorf("%s identity resolution requires an explicit files-only rule: %w", name, ErrPolicy)
 		}
 		required[name] = true
 	}
-	for _, seen := range required {
-		if !seen {
-			return ErrPolicy
+	for _, name := range []string{"passwd", "group", "shadow", "subid"} {
+		if !required[name] {
+			return fmt.Errorf("missing explicit %s identity resolution rule: %w", name, ErrPolicy)
 		}
 	}
 	return ctx.Err()
