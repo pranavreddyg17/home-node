@@ -70,6 +70,19 @@ func TestRootGuestIdentityHostSourceRetention(t *testing.T) {
 				if err != nil || !called {
 					t.Fatal("qualified original refused", err)
 				}
+				for attempt := 0; attempt < 2; attempt++ {
+					e.mu.Lock()
+					err = e.applyGuestIdentityNameServicesLocked(context.Background(), intent, func(context.Context) error { return nil })
+					e.mu.Unlock()
+					if err != nil {
+						t.Fatal("identity transaction or exact retry refused", attempt, err)
+					}
+				}
+				current, err := os.ReadFile(path)
+				original, originalErr := os.ReadFile(filepath.Join(parent, ".homenode-nsswitch.stage"))
+				if err != nil || originalErr != nil || string(current) != proposal.Contents || string(original) != string(data) {
+					t.Fatal("identity transaction lost retained original", err, originalErr)
+				}
 			} else if !errors.Is(err, ErrConflict) {
 				t.Fatal("source drift accepted", fault, err)
 			}
