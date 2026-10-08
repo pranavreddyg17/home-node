@@ -140,6 +140,13 @@ func TestInstalledAccountInspection(t *testing.T) {
 	if err = json.Unmarshal(output, &backupResult); err != nil || !backupResult.Valid || backupResult.Activated || backupResult.Identity != maintenance {
 		t.Fatal("CLI backup identity result", backupResult, err)
 	}
+	engine.mu.Lock()
+	identityOwner, identityErr := engine.inspectGuestIdentityAccountsLocked(ctx)
+	engine.mu.Unlock()
+	baseIdentity, baseErr := engine.loadAccountJournal()
+	if identityErr != nil || baseErr != nil || identityOwner != baseIdentity.OwnerID {
+		t.Fatal("identity configuration ownership qualification failed", identityErr, baseErr)
+	}
 	storagePrepared := false
 	storageQualified := t.Run("QualifiedGuestStorageIntent", func(t *testing.T) {
 		device, err := os.Lstat("/dev/kvm")
