@@ -73,6 +73,10 @@ func TestRootGuestIdentityStagingRefusesDriftBeforeCommit(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer parentFile.Close()
+				loaded, err := e.loadGuestIdentityNameServiceStage(ctx, intent)
+				if err != nil || loaded != stage {
+					t.Fatal("restart staging identity differs from committed intent", err)
+				}
 				for _, recordName := range []string{"guest-identity-nss-intent.json", "guest-identity-nss-stage.json"} {
 					recordPath := filepath.Join(journal, recordName)
 					recordBytes, err := os.ReadFile(recordPath)
@@ -104,7 +108,7 @@ func TestRootGuestIdentityStagingRefusesDriftBeforeCommit(t *testing.T) {
 					}
 				}
 				for attempt := 0; attempt < 2; attempt++ {
-					if err := e.publishGuestIdentityNameServices(ctx, parentFile, stage, intent, guard); err != nil {
+					if err := e.publishGuestIdentityNameServices(ctx, parentFile, loaded, intent, guard); err != nil {
 						t.Fatal("record-bound publication or retry refused", attempt, err)
 					}
 				}
