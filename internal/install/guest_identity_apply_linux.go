@@ -11,8 +11,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Caller holds e.mu, owned-account authority, allocation exclusion and a
-// retained activation barrier. Intent must already be durably committed from
+// Caller holds e.mu, owned-account authority and a retained activation barrier.
+// This transaction also retains the shared account-writer allocation lock.
+// Intent must already be durably committed from
 // independently observed host bytes. Failures preserve records and both files.
 func (e *Engine) applyGuestIdentityNameServicesLocked(ctx context.Context, intent guestIdentityNameServiceIntent, guard func(context.Context) error) (result error) {
 	if err := ctx.Err(); err != nil {
@@ -59,17 +60,31 @@ func (e *Engine) applyGuestIdentityNameServicesLocked(ctx context.Context, inten
 		if err := retainedGuard(ctx); err != nil {
 			return err
 		}
-		stage, err := e.loadGuestIdentityNameServiceStage(ctx, intent)
-		if errors.Is(err, os.ErrNotExist) {
-			err = e.withGuestIdentityHostSource(ctx, intent, func(ctx context.Context, source *os.File) error {
-				var stageErr error
-				stage, stageErr = e.stageGuestIdentityNameServices(ctx, directory, source, intent, retainedGuard)
-				return stageErr
-			})
-		}
-		if err != nil {
-			return err
-		}
-		return e.publishGuestIdentityNameServices(ctx, parent, stage, intent, retainedGuard)
+		return withGuestIdentityAllocationLock(ctx, directory, func(ctx context.Context, checkAllocation func() error) error {
+			lockedGuard := func(ctx context.Context) error {
+				if err := checkAllocation(); err != nil {
+					return err
+				}
+				if err := retainedGuard(ctx); err != nil {
+					return err
+				}
+				return checkAllocation()
+			}
+			if err := lockedGuard(ctx); err != nil {
+				return err
+			}
+			stage, err := e.loadGuestIdentityNameServiceStage(ctx, intent)
+			if errors.Is(err, os.ErrNotExist) {
+				err = e.withGuestIdentityHostSource(ctx, intent, func(ctx context.Context, source *os.File) error {
+					var stageErr error
+					stage, stageErr = e.stageGuestIdentityNameServices(ctx, directory, source, intent, lockedGuard)
+					return stageErr
+				})
+			}
+			if err != nil {
+				return err
+			}
+			return e.publishGuestIdentityNameServices(ctx, parent, stage, intent, lockedGuard)
+		})
 	})
 }

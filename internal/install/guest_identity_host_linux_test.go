@@ -15,7 +15,7 @@ func TestRootGuestIdentityHostSourceRetention(t *testing.T) {
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_UPDATE_INIT_INTEGRATION") != "1" {
 		t.Skip("explicit disposable Linux root fixture")
 	}
-	for _, fault := range []string{"none", "writable-source", "alias-source", "replace-source", "change-source", "replace-parent"} {
+	for _, fault := range []string{"none", "writable-source", "alias-source", "replace-source", "change-source", "replace-parent", "allocation-lock-replaced"} {
 		t.Run(fault, func(t *testing.T) {
 			host, journal := roots(t)
 			e := openEngine(t, host, journal)
@@ -63,6 +63,21 @@ func TestRootGuestIdentityHostSourceRetention(t *testing.T) {
 						return err
 					}
 					return os.Mkdir(parent, 0755)
+				case "allocation-lock-replaced":
+					e.mu.Lock()
+					defer e.mu.Unlock()
+					return e.applyGuestIdentityNameServicesLocked(ctx, intent, func(context.Context) error {
+						lockPath := filepath.Join(parent, ".pwd.lock")
+						if _, err := os.Lstat(lockPath); errors.Is(err, os.ErrNotExist) {
+							return nil
+						} else if err != nil {
+							return err
+						}
+						if err := os.Rename(lockPath, lockPath+".held"); err != nil {
+							return err
+						}
+						return os.WriteFile(lockPath, nil, 0600)
+					})
 				}
 				return ctx.Err()
 			})
@@ -88,6 +103,15 @@ func TestRootGuestIdentityHostSourceRetention(t *testing.T) {
 			}
 			if (fault == "writable-source" || fault == "alias-source") && called {
 				t.Fatal("invalid source reached consumer")
+			}
+			if fault == "allocation-lock-replaced" {
+				current, err := os.ReadFile(path)
+				if err != nil || string(current) != string(data) {
+					t.Fatal("allocation lock drift changed host identity configuration", err)
+				}
+				if _, err := os.Stat(filepath.Join(parent, ".homenode-nsswitch.stage")); !errors.Is(err, os.ErrNotExist) {
+					t.Fatal("allocation drift reached replacement staging", err)
+				}
 			}
 		})
 	}
