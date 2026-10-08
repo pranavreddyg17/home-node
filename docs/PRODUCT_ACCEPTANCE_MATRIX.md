@@ -1,0 +1,41 @@
+# Product acceptance evidence matrix
+
+This matrix preserves the scope of [the product specification](../END_TO_END_PRODUCT_SPEC.md) and [implementation plan](../IMPLEMENTATION_PLAN.md). It is a release audit ledger, not approval or a substitute for implementation. Every release demonstration below remains unverified. Component results in [PROGRESS.md](PROGRESS.md) must retain their commit, environment and exact scope; a newer commit does not inherit unexecuted native evidence.
+
+## Owner journey
+
+| Required outcome | Enforcing implementation/workstream | Evidence required for completion | Current evidence boundary / remaining work |
+| --- | --- | --- | --- |
+| Fresh supported laptop installation | Installer ownership journal, host checks, Debian package, systemd units | Trusted signed release installed on a clean supported physical host; interrupted installation resumes without unintended changes | Disposable root installation and package checks exist. Physical installation, signing/promotion and published supported matrix remain unverified. |
+| Local bootstrap and secure private access | Authentication/bootstrap, trusted TLS origin, private-network policy | Real owner pairs two allowed devices; unauthenticated and denied overlay devices fail; certificates and passkey origin remain valid | Component/browser fixtures do not establish real mobile enrollment or deployed overlay ACL behavior. |
+| Resumable Files workflow | Controller, transfer service, guest adapter, durable object metadata | A 1 GB interrupted/resumed upload and download have matching hashes through the actual guest; quota and trash/export behavior remain correct | Transfer/protocol fixtures do not prove the shipped VM adapter path. Reserved volume/channel lifecycle and real guest payload qualification remain required. |
+| CPU AI chat | Model acquisition/profile, AI guest adapter, authenticated streaming UI | Published licensed model profile answers on reference CPU hardware; cancellation, history, resource limits and competing workloads work | Firmware VM launches do not run model inference. Model licenses, quality/performance and actual guest streaming remain unverified. |
+| Conversion and cancellation | Signed preset catalog, job/attempt journal, video guest adapter | Uploaded input runs in the real isolated VM; verified output downloads; cancellation/restart do not duplicate effects | Fake/backend/protocol tests cannot qualify actual conversion, finite-job limits or artifact publication through installed services. |
+| Device revocation | Session/device policy, controller/transfer stream termination, overlay ACL | Existing sessions, downloads and generations terminate within the specified local target; overlay revocation separately measured | Requires two actual allowed devices and a denied device; browser fixtures alone are insufficient. |
+| Safe update | TUF acquisition, constrained inspection, owned installation, migration/rollback policy | Trusted release upgrades installed service under maintenance; invalid/revoked versions refuse; interruption and permitted rollback preserve data | Development evidence and acquisition/inspection checks are not signed promotion or installation/migration qualification. |
+| Encrypted external-drive backup | Registered target identity, maintenance coordinator, pinned disks, management snapshot, restic | Real app disks and management state backed up consistently; missing/full/wrong drive refuses; failed backup restarts stopped apps | Native maintenance/credential fixtures exist; complete drive registration and consistency workflow remain unverified. |
+| Replacement-host restore | Recovery staging/activation exclusion, compatibility, new identity epoch, bootstrap | Restore onto another eligible host while clients excluded; new passkeys/devices enrolled; old sessions remain invalid; apps resume only after health/policy reconstruction | Snapshot quiescence is not future activation exclusion. Installed publication, database/credential reconstruction and wizard acceptance remain required. |
+| Export and uninstall | Files/app export, retention policy, owned removal | Owner exports data, removes package, and retains intended app data/backups; destructive purge separately authorized | Reserved guest deletion/intent retirement still needs descriptor-qualified integration. The legacy purge refusal is a safety gate, not completed purge support. |
+| Accessible ordinary operation | Setup and dashboard UI, errors/status, redacted diagnostics | Nondeveloper completes journey on keyboard and touch; status reflects actual work; support export preview contains no secrets/content | Automated UI checks remain component evidence. Physical/mobile accessibility and support usability remain unverified. |
+
+## Security and operational gates
+
+| Required invariant | Evidence required | Remaining boundary |
+| --- | --- | --- |
+| Guest authority cannot reach another volume, management secrets or LAN | Two actual application VMs; positive allowed operations and negative cross-guest/host/network attempts under installed service protections | Synthetic firmware/DAC/AppArmor/resource observations do not prove application adapters, installed storage policy or cross-VM workload isolation. |
+| Identity, intent and inode stay bound through crash/retry | Durable independent UID/group policy, retained runtime exclusion, pinned volume ownership and cleanup, actual crash/power-loss outcomes | Orderly SQLite reopen and synthetic metadata tests are not power-loss evidence. Reserved Prepare remains refused until coordinated integration is qualified. |
+| Control survives resource pressure | Concurrent workload memory/CPU/disk/connection exhaustion on reference hardware; API p95 measurement | Cgroup limit observations are not overload performance evidence. |
+| Release supply chain is maintainable | Complete SBOM/licenses, authenticated provenance, reviewed promotion, root/role rotation and revocation drills, vulnerability dispositions | Development inventories and zero reachable findings do not establish completeness or release approval. |
+| Recovery and updates cannot bypass trust or resurrect access | Negative malformed/malicious artifacts; retained maintenance/activation barriers; epoch and session checks after actual restore | Parser and staging fixtures do not establish the complete installed transition. |
+| Supported host remains reliable | 72-hour mixed workload soak, reboot/lid/battery/thermal/disconnect/disk-pressure and physical power-loss matrix | No completion inference from cloud CI or compiled Linux tests. |
+| Independent security review closes findings | Review of identity, runtime, networking, update and recovery authority; critical/high findings fixed and retested | External assessment and operational reporting/advisory ownership remain required. |
+
+## Next integration sequence
+
+1. Qualify the reserved parent/inode opener and exact ownership-intent retry under the shipped supervisor protections. Publish independently provisioned UID/group policy only after installer/default-allocation drift and image traversal are qualified.
+2. Connect preparation, ownership mutation, restart, backup admission and deletion to retained runtime exclusion and durable intent. Do not enable reserved Prepare from snapshot checks alone.
+3. Run actual shipped Files/AI/video adapters through the installed authenticated transfer path. Preserve positive and negative peer/cross-guest cases, actual payloads, cancellation and reconnect evidence.
+4. Complete one physical install-to-conversion journey, then the full two-device daily workflow and revocation tests.
+5. Complete signed upgrade and encrypted replacement-host restore/export/uninstall journeys, followed by the physical reliability matrix and independent review.
+
+Each row needs a retained result with commit/artifact hashes, supported environment, exact command or reproducible owner steps, expected and observed outcomes, and limitations. Missing, failed, indirect or out-of-scope evidence leaves that row unverified. Completion requires every specification/plan/security requirement in addition to these summarized journey rows.

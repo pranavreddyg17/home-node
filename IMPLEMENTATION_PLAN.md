@@ -61,7 +61,7 @@ The maintenance executable can provide shared code with separately privileged se
 
 **Release artifacts.** Ship a signed package/repository, pinned trust bootstrap, immutable guest/catalog artifacts, dependency inventory and licenses, recoverable configuration ownership record, setup guide, local recovery guide, backup/restore guide, and known limitations. CI signing credentials are separated from ordinary build jobs and releases require a reviewed promotion path. Include a provenance chain and regression evidence for all supported combinations. Development images and signing roots must be distinct from release roots.
 
-**Acceptance ownership.** Each security requirement maps to a threat, enforcing component, test, and retained result. Each user journey maps to an interface flow, API operation, stored state, failure behavior, and end-to-end test. This matrix must be maintained as code changes; passing only a frontend test cannot establish that a firewall or storage boundary works.
+**Acceptance ownership.** The maintained [product acceptance evidence matrix](docs/PRODUCT_ACCEPTANCE_MATRIX.md) tracks release demonstrations and remaining evidence boundaries. Each security requirement maps to a threat, enforcing component, test, and retained result. Each user journey maps to an interface flow, API operation, stored state, failure behavior, and end-to-end test. This matrix must be maintained as code changes; passing only a frontend test cannot establish that a firewall or storage boundary works.
 
 | Gate | Evidence needed before release |
 |---|---|
