@@ -3806,3 +3806,8 @@ CI37797490522 completed successfully at exact head a0ea6246ba25020b9f8b33971bc39
 ### Production KVM group snapshot observer
 
 Added ObserveGuestKVMGroup for installer/runtime integration: requires root in qualified initial UID namespace, canonical no-follow /dev component walk and retained O_PATH device metadata; admits only root-owned single-link character10:232 exact0660 with positive signed group, absent access ACL, unchanged current absolute device identity/ownership and reported retained/current path mount identity. It never opens the KVM driver or changes permissions. Close/cancellation failures suppress the returned group. Non-Linux refuses. Added native primary-group fixture positive group equality and cancelled refusal; Linux amd64 tests compile. Native execution remains pending. This snapshot does not certify future udev/reboot policy, account-allocation exclusion, API usability or installed publication; those remain required for complete reserved provisioning. Full product remains unfinished.
+
+
+### KVM group observation qualifies namespace and device parents
+
+KVM group observer now requires a retained root-owned nonwritable procfs directory before reading the namespace map, plus protected retained /dev ownership and final absolute parent identity/ownership/mount-ID equality. Namespace bytes alone must not qualify an ordinary substituted filesystem, and device metadata alone must not ignore a replaced parent path. Descriptor close failures suppress results. Linux amd64 tests compile; native execution pending. CI37798831780 is confirmed live at27a5633 and excludes these parent qualification additions. Full installed policy and runtime lifecycle remain unfinished.

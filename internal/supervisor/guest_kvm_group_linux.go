@@ -5,8 +5,9 @@ package supervisor
 import (
 	"context"
 	"errors"
-	"golang.org/x/sys/unix"
 	"os"
+
+	"golang.org/x/sys/unix"
 )
 
 // ObserveGuestKVMGroup observes the current device DAC group without opening
@@ -29,6 +30,21 @@ func ObserveGuestKVMGroup(ctx context.Context) (group uint32, result error) {
 			group = 0
 		}
 	}()
+	directory, err := proc.Open(".")
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		result = errors.Join(result, directory.Close())
+		if result != nil {
+			group = 0
+		}
+	}()
+	var filesystem unix.Statfs_t
+	var procMetadata unix.Stat_t
+	if unix.Fstatfs(int(directory.Fd()), &filesystem) != nil || filesystem.Type != unix.PROC_SUPER_MAGIC || unix.Fstat(int(directory.Fd()), &procMetadata) != nil || procMetadata.Uid != 0 || procMetadata.Mode&0022 != 0 {
+		return 0, ErrPolicy
+	}
 	if err := qualifyGuestUIDNamespace(proc); err != nil {
 		return 0, err
 	}
@@ -42,6 +58,10 @@ func ObserveGuestKVMGroup(ctx context.Context) (group uint32, result error) {
 			group = 0
 		}
 	}()
+	var parentBefore unix.Stat_t
+	if unix.Fstat(parent, &parentBefore) != nil || parentBefore.Uid != 0 || parentBefore.Mode&0022 != 0 {
+		return 0, ErrPolicy
+	}
 	fd, err := unix.Openat(parent, "kvm", unix.O_PATH|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 	if err != nil {
 		return 0, err
@@ -67,6 +87,10 @@ func ObserveGuestKVMGroup(ctx context.Context) (group uint32, result error) {
 		if unix.Lstat("/dev/kvm", &current) != nil || current.Dev != before.Dev || current.Ino != before.Ino || current.Mode != before.Mode || current.Uid != before.Uid || current.Gid != before.Gid || current.Nlink != before.Nlink || current.Rdev != before.Rdev || !samePathMount(fd, parent, "kvm") || !samePathMount(fd, unix.AT_FDCWD, "/dev/kvm") {
 			return 0, ErrPolicy
 		}
+	}
+	var parentAfter unix.Stat_t
+	if unix.Lstat("/dev", &parentAfter) != nil || parentAfter.Dev != parentBefore.Dev || parentAfter.Ino != parentBefore.Ino || parentAfter.Mode != parentBefore.Mode || parentAfter.Uid != parentBefore.Uid || parentAfter.Gid != parentBefore.Gid || !samePathMount(parent, unix.AT_FDCWD, "/dev") {
+		return 0, ErrPolicy
 	}
 	if err := ctx.Err(); err != nil {
 		return 0, err
