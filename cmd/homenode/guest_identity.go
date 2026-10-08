@@ -22,7 +22,27 @@ func guestIdentityPrepare(args []string) {
 }
 
 func runGuestIdentityPrepare(ctx context.Context, args []string, out io.Writer) error {
-	flags := flag.NewFlagSet("guest-identity-prepare", flag.ContinueOnError)
+	return runGuestIdentityConfiguration(ctx, args, out, false)
+}
+
+func guestIdentityApply(args []string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	if err := runGuestIdentityApply(ctx, args, os.Stdout); err != nil {
+		fatal(err)
+	}
+}
+
+func runGuestIdentityApply(ctx context.Context, args []string, out io.Writer) error {
+	return runGuestIdentityConfiguration(ctx, args, out, true)
+}
+
+func runGuestIdentityConfiguration(ctx context.Context, args []string, out io.Writer, apply bool) error {
+	name := "guest-identity-prepare"
+	if apply {
+		name = "guest-identity-apply"
+	}
+	flags := flag.NewFlagSet(name, flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	journal := flags.String("journal-dir", "/var/lib/homenode-install", "existing private installation journal")
 	if err := flags.Parse(args); err != nil {
@@ -41,7 +61,12 @@ func runGuestIdentityPrepare(ctx context.Context, args []string, out io.Writer) 
 	if err != nil {
 		return err
 	}
-	preview, err := engine.PrepareGuestIdentityConfiguration(ctx)
+	var preview install.GuestIdentityConfigurationPreview
+	if apply {
+		preview, err = engine.ApplyGuestIdentityConfiguration(ctx)
+	} else {
+		preview, err = engine.PrepareGuestIdentityConfiguration(ctx)
+	}
 	if err = errors.Join(err, engine.Close()); err != nil {
 		return err
 	}

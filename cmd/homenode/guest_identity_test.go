@@ -21,3 +21,18 @@ func TestGuestIdentityPreparationRejectsInputsBeforeHostEffects(t *testing.T) {
 		t.Fatal("cancelled identity command admitted", err)
 	}
 }
+
+func TestGuestIdentityApplicationRejectsInputsBeforeHostEffects(t *testing.T) {
+	for _, args := range [][]string{{"--journal-dir", ""}, {"extra"}, {"--apply"}, {"--journal-dir"}} {
+		var out bytes.Buffer
+		if err := runGuestIdentityApply(context.Background(), args, &out); err == nil || out.Len() != 0 {
+			t.Fatal("invalid identity application admitted", args, err)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var out bytes.Buffer
+	if err := runGuestIdentityApply(ctx, nil, &out); !errors.Is(err, context.Canceled) || out.Len() != 0 {
+		t.Fatal("cancelled identity application admitted", err)
+	}
+}

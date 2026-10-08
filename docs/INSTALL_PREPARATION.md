@@ -114,8 +114,16 @@ original and desired bytes are retained in `guest-identity-nss-intent.json`;
 JSON exposes their hashes and reports `configurationApplied: false`. Preparation
 preserves host configuration and refuses remote or ambiguous identity sources.
 It does not establish UID allocation exclusivity or enable reserved storage.
-Applying the proposal under the retained activation barrier is still pending
-public installer integration and native qualification.
+`sudo homenode guest-identity-apply` applies that saved proposal to an owned,
+empty installation with an existing durable activation block. It accepts the
+same journal option, validates loaded unit ownership before stopping services,
+and retains the activation block while rechecking service dormancy, guest
+emptiness and account ownership through publication. It holds the shared
+account-writer lock and preserves the original configuration under
+`/etc/.homenode-nsswitch.stage`; retries use the recorded file identities.
+Success reports `configurationApplied: true`. This command does not reserve
+UID ranges, publish runtime policy or release the activation block. Native
+qualification of the complete public application path is still pending.
 
 After account provisioning, inspect a proposed guest UID range on the dedicated
 Linux host. Choose the entire range deliberately; conflicts refuse the proposal
