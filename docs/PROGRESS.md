@@ -3811,3 +3811,8 @@ Added ObserveGuestKVMGroup for installer/runtime integration: requires root in q
 ### KVM group observation qualifies namespace and device parents
 
 KVM group observer now requires a retained root-owned nonwritable procfs directory before reading the namespace map, plus protected retained /dev ownership and final absolute parent identity/ownership/mount-ID equality. Namespace bytes alone must not qualify an ordinary substituted filesystem, and device metadata alone must not ignore a replaced parent path. Descriptor close failures suppress results. Linux amd64 tests compile; native execution pending. CI37798831780 is confirmed live at27a5633 and excludes these parent qualification additions. Full installed policy and runtime lifecycle remain unfinished.
+
+
+### KVM group observer native qualification completed
+
+CI37798831780 succeeded at exact head27a5633a3e3b56d6d1efd7d1dd9c2f49fbfa0efc; full log retained /tmp/homenode-ci-37798831780.log. Linux supervisor races24.522s; native primary-group/API fixture including production ObserveGuestKVMGroup positive equality and cancellation0.072s, protected-storage guest-connect4.580s and libvirt-launch3.918s, root volume group0.090s and selected package/browser stages passed. Procfs and /dev parent qualification added in queued3410624 is excluded. Current device observation remains a snapshot, not durable udev/reboot/allocation policy or installer publication. Full reserved runtime lifecycle and application acceptance remain unfinished.
