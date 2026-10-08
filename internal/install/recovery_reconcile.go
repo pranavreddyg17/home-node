@@ -70,7 +70,7 @@ func (e *Engine) matchRecoveryRecord(ctx context.Context, name string, expected 
 	if err != nil {
 		return err
 	}
-	if !before.Mode().IsRegular() || !owned(before, e.owner) || before.Mode().Perm() != 0600 || before.Size() != int64(len(expected)) {
+	if !accountJournalFileAdmitted(before, e.owner, 8192) || before.Size() != int64(len(expected)) {
 		return ErrConflict
 	}
 	file, err := e.journalRoot.OpenFile(name, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
@@ -79,7 +79,7 @@ func (e *Engine) matchRecoveryRecord(ctx context.Context, name string, expected 
 	}
 	defer func() { result = errors.Join(result, file.Close()) }()
 	opened, err := file.Stat()
-	if err != nil || !os.SameFile(before, opened) {
+	if err != nil || !os.SameFile(before, opened) || !accountJournalFileAdmitted(opened, e.owner, 8192) || opened.Size() != int64(len(expected)) {
 		return ErrConflict
 	}
 	actual, err := io.ReadAll(io.LimitReader(file, 8193))
@@ -87,7 +87,7 @@ func (e *Engine) matchRecoveryRecord(ctx context.Context, name string, expected 
 		return ErrConflict
 	}
 	current, err := e.journalRoot.Lstat(name)
-	if err != nil || !os.SameFile(opened, current) || current.Size() != int64(len(expected)) || current.Mode().Perm() != 0600 {
+	if err != nil || !os.SameFile(opened, current) || current.Size() != int64(len(expected)) || !accountJournalFileAdmitted(current, e.owner, 8192) {
 		return ErrConflict
 	}
 	return ctx.Err()

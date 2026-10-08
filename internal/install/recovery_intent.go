@@ -89,7 +89,7 @@ func (e *Engine) commitRecoveryRecord(ctx context.Context, name string, data []b
 		}
 		defer func() { result = errors.Join(result, file.Close()) }()
 		info, err := file.Stat()
-		if err != nil || !info.Mode().IsRegular() || !owned(info, e.owner) || info.Mode().Perm() != 0600 || info.Size() != int64(len(data)) {
+		if err != nil || !accountJournalFileAdmitted(info, e.owner, 8192) || info.Size() != int64(len(data)) {
 			return ErrConflict
 		}
 		actual, err := io.ReadAll(io.LimitReader(file, 8193))
@@ -97,7 +97,7 @@ func (e *Engine) commitRecoveryRecord(ctx context.Context, name string, data []b
 			return ErrConflict
 		}
 		current, err := e.journalRoot.Lstat(name)
-		if err != nil || !os.SameFile(info, current) {
+		if err != nil || !os.SameFile(info, current) || !accountJournalFileAdmitted(current, e.owner, 8192) || current.Size() != int64(len(data)) {
 			return ErrConflict
 		}
 		if err = ctx.Err(); err != nil {
@@ -117,6 +117,10 @@ func (e *Engine) commitRecoveryRecord(ctx context.Context, name string, data []b
 	// Preserve uncertain writes. They block handoff until explicit repair.
 	if n, err := file.Write(data); err != nil || n != len(data) {
 		return errors.Join(io.ErrShortWrite, err)
+	}
+	final, err := file.Stat()
+	if err != nil || !accountJournalFileAdmitted(final, e.owner, 8192) || final.Size() != int64(len(data)) || !e.accountJournalPathUnchanged(name, final, 8192) {
+		return ErrConflict
 	}
 	if err = file.Sync(); err != nil {
 		return err

@@ -4,8 +4,48 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 )
+
+func TestRecoveryRecordRefusesHardLinkAliasWithoutMutation(t *testing.T) {
+	for _, name := range []string{"recovery.json", "recovery-staged.json"} {
+		t.Run(name, func(t *testing.T) {
+			host, journal := roots(t)
+			e := openEngine(t, host, journal)
+			defer e.Close()
+			data := []byte(`{"version":1,"fixture":"immutable"}`)
+			if err := e.commitRecoveryRecord(context.Background(), name, data); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(journal, name)
+			alias := filepath.Join(journal, name+".alias")
+			if err := os.Link(path, alias); err != nil {
+				t.Fatal(err)
+			}
+			before, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := e.commitRecoveryRecord(context.Background(), name, data); !errors.Is(err, ErrConflict) {
+				t.Fatal("aliased retry admitted", err)
+			}
+			if err := e.matchRecoveryRecord(context.Background(), name, data); !errors.Is(err, ErrConflict) {
+				t.Fatal("aliased record matched", err)
+			}
+			for _, retained := range []string{path, alias} {
+				current, err := os.Stat(retained)
+				if err != nil || !os.SameFile(before, current) {
+					t.Fatal("refusal replaced aliased intent", err)
+				}
+				contents, err := os.ReadFile(retained)
+				if err != nil || string(contents) != string(data) {
+					t.Fatal("refusal changed intent", err)
+				}
+			}
+		})
+	}
+}
 
 func TestRecoveryIntentPreservesForeignAndTornWrites(t *testing.T) {
 	host, journal := roots(t)
