@@ -235,6 +235,26 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool) {
 			t.Fatal(err)
 		}
 	}
+	storage := map[string]unix.Stat_t{}
+	for _, path := range []string{filepath.Dir(domain.SystemPath), filepath.Dir(domain.DataPath), domain.SystemPath, domain.DataPath} {
+		var before unix.Stat_t
+		if err := unix.Lstat(path, &before); err != nil {
+			t.Fatal(err)
+		}
+		storage[path] = before
+	}
+	checkStorage := func() {
+		t.Helper()
+		for path, before := range storage {
+			var after unix.Stat_t
+			if err := unix.Lstat(path, &after); err != nil {
+				t.Fatal("native storage disappeared", path, err)
+			}
+			if before.Dev != after.Dev || before.Ino != after.Ino || before.Mode != after.Mode || before.Uid != after.Uid || before.Gid != after.Gid || before.Nlink != after.Nlink || before.Size != after.Size {
+				t.Fatal("native launch changed protected storage metadata", path)
+			}
+		}
+	}
 	if err := prepareGuestChannelDirectory(ctx, filepath.Dir(domain.ChannelPath), int(uid), int(transferGID)); err != nil {
 		t.Fatal(err)
 	}
@@ -392,6 +412,7 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool) {
 			t.Fatal("native adapter listener unavailable", err)
 		}
 		peerUID, identityErr := PeerUID(peer.(*net.UnixConn))
+		checkStorage()
 		// Reconciliation must not create another adapter connection after adoption.
 		repeatedVerify := backend.Verify(ctx, domain)
 		closeErr := peer.Close()
@@ -408,6 +429,7 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool) {
 		if err != nil || running {
 			t.Fatal("native guest not stopped", running, err)
 		}
+		checkStorage()
 		if err := prepareGuestChannelDirectory(ctx, filepath.Dir(domain.ChannelPath), int(uid), int(transferGID)); err != nil {
 			t.Fatal("stopped channel retry refused", err)
 		}
