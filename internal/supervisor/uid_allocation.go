@@ -7,6 +7,13 @@ import (
 	"unicode/utf8"
 )
 
+// ValidateGuestUIDAutomaticAllocationConfiguration validates explicit allocator
+// configuration bytes without observing or changing the host. It establishes
+// range eligibility only; future drift and allocation exclusion are separate.
+func ValidateGuestUIDAutomaticAllocationConfiguration(ctx context.Context, pool GuestUIDPool, data []byte) error {
+	return validateGuestUIDAutomaticAllocation(ctx, pool, data)
+}
+
 // validateGuestUIDAutomaticAllocation excludes the configured shadow automatic
 // ranges and systemd v255's documented default container allocation range. It
 // does not constrain explicit administrative IDs, other allocators, overridden
