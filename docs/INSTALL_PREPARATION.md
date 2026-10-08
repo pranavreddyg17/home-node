@@ -107,6 +107,16 @@ are current observations rather than saved authorization to skip later checks.
 
 ## Reserved guest storage proposal
 
+`sudo homenode guest-identity-prepare` records a dedicated-host identity
+configuration proposal after verifying the owned primary and maintenance
+accounts. It accepts `--journal-dir` for an existing private journal. The exact
+original and desired bytes are retained in `guest-identity-nss-intent.json`;
+JSON exposes their hashes and reports `configurationApplied: false`. Preparation
+preserves host configuration and refuses remote or ambiguous identity sources.
+It does not establish UID allocation exclusivity or enable reserved storage.
+Applying the proposal under the retained activation barrier is still pending
+public installer integration and native qualification.
+
 After account provisioning, inspect a proposed guest UID range on the dedicated
 Linux host. Choose the entire range deliberately; conflicts refuse the proposal
 rather than shrinking it. For example, a two-guest development range is:

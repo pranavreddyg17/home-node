@@ -155,6 +155,23 @@ func TestInstalledAccountInspection(t *testing.T) {
 	if identityErr != nil || identityReplay != identityPreview {
 		t.Fatal("native identity preparation retry changed intent", identityErr)
 	}
+	identityEngine := engine
+	engine = nil
+	if err := identityEngine.Close(); err != nil {
+		t.Fatal("identity CLI fixture lock release", err)
+	}
+	identityOutput, identityErr := accountCommand(ctx, "/usr/bin/homenode", "guest-identity-prepare", "--journal-dir", journalDirectory)
+	if identityErr != nil {
+		t.Fatal("packaged identity preparation command", identityErr)
+	}
+	var identityCLI GuestIdentityConfigurationPreview
+	if err := json.Unmarshal(identityOutput, &identityCLI); err != nil || identityCLI != identityPreview {
+		t.Fatal("packaged identity preparation status", err)
+	}
+	engine, err = Open("/", journalDirectory)
+	if err != nil {
+		t.Fatal("identity CLI journal reacquisition", err)
+	}
 	storagePrepared := false
 	storageQualified := t.Run("QualifiedGuestStorageIntent", func(t *testing.T) {
 		device, err := os.Lstat("/dev/kvm")
