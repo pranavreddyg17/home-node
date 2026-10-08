@@ -3781,3 +3781,8 @@ CI37730136089 succeeded at exact head efe15a36afebe6fd8f8b1587371f436c8f398ed3; 
 ### Native protected storage metadata preservation
 
 Extended protected-storage firmware fixtures to snapshot image/volume parent and disk device/inode, exact mode, UID/GID, link count and size before launch, then require unchanged metadata during active-channel verification and after each shutdown before restart. Successful launch alone must not qualify intended permissions if libvirt relabels or replaces storage. Linux amd64 test compilation passed; actual native execution remains pending. CI37796520402 is confirmed live at fb76a5f and excludes these preservation assertions. No installer journal/policy mutation or reserved Prepare activation is inferred. Full product remains unfinished.
+
+
+### Native proposed storage DAC access probe queued
+
+Added an owned other-identity0600 disk beneath the shared protected volume parent and a disposable host Python process launched with the exact proposed guest UID/sole KVM GID and empty supplementary groups. While each VM is alive, kernel opens must admit system-image read and own-volume read/write, and refuse system-image write plus other-volume read/write with EACCES. No bytes are read or written; owned metadata remains in preservation snapshots. This is host DAC pathname qualification, not application guest payload/cross-VM attack or AppArmor qualification of the Python probe. Linux amd64 tests compile; native execution pending. CI37796520402 is confirmed live at fb76a5f after successful native protected-layout qualification and excludes these queued probes/preservation checks. Full installed policy/runtime lifecycle remains unfinished.

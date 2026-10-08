@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -235,8 +236,43 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool) {
 			t.Fatal(err)
 		}
 	}
+	otherDisk := filepath.Join(filepath.Dir(domain.DataPath), "other.raw")
+	other, err := os.OpenFile(otherDisk, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := other.Chown(int(ids[1]), int(deviceStat.Gid)); err != nil {
+		other.Close()
+		t.Fatal(err)
+	}
+	if err := other.Close(); err != nil {
+		t.Fatal(err)
+	}
+	probeStorage := func() {
+		t.Helper()
+		// A host process with the exact proposed guest DAC identity tests
+		// pathname access only; this is not an in-guest exploit test.
+		probe := exec.CommandContext(ctx, "/usr/bin/python3", "-c", `import errno, os, sys
+for path, flags in ((sys.argv[1],os.O_RDONLY),(sys.argv[2],os.O_RDWR)):
+    os.close(os.open(path,flags|os.O_NOFOLLOW))
+for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.argv[3],os.O_WRONLY)):
+    try:
+        fd=os.open(path,flags|os.O_NOFOLLOW)
+    except OSError as error:
+        if error.errno != errno.EACCES: raise
+    else:
+        os.close(fd)
+        raise RuntimeError("forbidden storage access admitted")
+`, domain.SystemPath, domain.DataPath, otherDisk)
+		probe.Env = []string{"PATH=/usr/bin:/bin", "LANG=C"}
+		probe.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: deviceStat.Gid, Groups: []uint32{}}, Pdeathsig: syscall.SIGKILL}
+		probe.WaitDelay = 3 * time.Second
+		if output, err := probe.CombinedOutput(); err != nil {
+			t.Fatalf("native guest DAC storage probe: %v %s", err, output)
+		}
+	}
 	storage := map[string]unix.Stat_t{}
-	for _, path := range []string{filepath.Dir(domain.SystemPath), filepath.Dir(domain.DataPath), domain.SystemPath, domain.DataPath} {
+	for _, path := range []string{filepath.Dir(domain.SystemPath), filepath.Dir(domain.DataPath), domain.SystemPath, domain.DataPath, otherDisk} {
 		var before unix.Stat_t
 		if err := unix.Lstat(path, &before); err != nil {
 			t.Fatal(err)
@@ -413,6 +449,7 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool) {
 		}
 		peerUID, identityErr := PeerUID(peer.(*net.UnixConn))
 		checkStorage()
+		probeStorage()
 		// Reconciliation must not create another adapter connection after adoption.
 		repeatedVerify := backend.Verify(ctx, domain)
 		closeErr := peer.Close()
