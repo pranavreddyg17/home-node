@@ -302,9 +302,14 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 		if stopErr != nil {
 			phase = "stopping"
 		}
-		_, _ = m.Store.DB.Exec("UPDATE runtime_instances SET state=?,desired='stopped' WHERE id=?", phase, r.InstanceID)
-		_, _ = m.Store.DB.Exec("UPDATE runtime_operations SET state='failed' WHERE id=?", r.OperationID)
-		return Instance{}, cause
+		journalErr := m.Store.Transaction(stopCtx, func(tx *sql.Tx) error {
+			if _, err := tx.Exec("UPDATE runtime_instances SET state=?,desired='stopped' WHERE id=?", phase, r.InstanceID); err != nil {
+				return err
+			}
+			_, err := tx.Exec("UPDATE runtime_operations SET state='failed' WHERE id=?", r.OperationID)
+			return err
+		})
+		return Instance{}, errors.Join(cause, stopErr, journalErr)
 	}
 	systemPath, err := catalog.VerifyImage(m.Images, image)
 	if err != nil {

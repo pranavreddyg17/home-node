@@ -3741,3 +3741,8 @@ Extended both disposable firmware VM fixtures to invoke a child observer through
 ### Require executed native memory qualification evidence
 
 The source-service child now emits verbose test output and its native memory mode requires an explicit PASS marker for TestNativeSupervisorMemoryObservation in addition to successful service exit. A stale executable, unmatched test selector or skipped child must not silently qualify live QEMU observation. Captured diagnostics are checked against a one-MiB limit before printing. Python syntax validation passed; actual native execution remains pending. The preceding e241520 CI run is confirmed live; queued production and native qualification commits have not replaced it. Full application remains unfinished.
+
+
+### Atomic failed-start journal and visible teardown failures
+
+Failed-start cleanup now commits instance phase/desired state and operation failure together, returning the original cause joined with teardown and journal errors. Previously two unchecked independent SQL writes could partially publish failure state and hide failed teardown. A real SQLite abort trigger regression proves rollback of the first update when operation journaling refuses, while backend teardown still executes; a stop-failure regression proves the running backend remains visible as stopping/desired stopped and the returned error includes both causes. Full local supervisor race tests passed uncached (11.101s), targeted regressions passed (1.855s), and Linux amd64 tests compile. Fake backend tests do not qualify real VM teardown or power-loss recovery. CI37728874961 remains live at e241520 and excludes this change. Full application remains unfinished.
