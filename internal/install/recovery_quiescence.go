@@ -36,10 +36,21 @@ func (e *Engine) ObserveRecoveryQuiescence(ctx context.Context) error {
 func (e *Engine) observeRecoveryQuiescence(ctx context.Context, observe func(context.Context) error) (result error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
+	return e.withRecoveryExclusionLocked(ctx, observe, e.observeRecoveryDestinationVacancy, nil)
+}
+
+// withRecoveryExclusionLocked retains the marker descriptor and installation
+// authority across a consumer. Caller must hold e.mu. Destination admission is
+// separate so a journaled publisher can validate its own exact retry artifacts
+// rather than treating its newly published files as foreign occupied storage.
+// No production publisher is enabled by this composition boundary alone.
+func (e *Engine) withRecoveryExclusionLocked(ctx context.Context, observe, destinations, use func(context.Context) error) (result error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Hour)
+	defer cancel()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if observe == nil {
+	if observe == nil || destinations == nil {
 		return ErrPlan
 	}
 	installed, err := e.load()
@@ -75,11 +86,43 @@ func (e *Engine) observeRecoveryQuiescence(ctx context.Context, observe func(con
 			return ErrConflict
 		}
 	}
-	if err = e.observeRecoveryDestinationVacancy(ctx); err != nil {
+	if err = destinations(ctx); err != nil {
 		return err
 	}
 	if err = observe(ctx); err != nil {
 		return err
+	}
+	if use != nil {
+		currentInstallation, err := e.load()
+		if err != nil || currentInstallation.ID != installed.ID || currentInstallation.Digest != installed.Digest || currentInstallation.Phase != "installed" {
+			return ErrConflict
+		}
+		for _, record := range installed.Items {
+			if err = ctx.Err(); err != nil {
+				return err
+			}
+			if err = e.matches(record); err != nil {
+				return ErrConflict
+			}
+		}
+		if err = destinations(ctx); err != nil {
+			return err
+		}
+		// Recheck exclusion before granting the consumer access. Do not recreate
+		// missing markers or release them after an interrupted consumer.
+		if err = e.requireRecoveryActivationBlock(ctx); err != nil {
+			return err
+		}
+		current, err := e.journalRoot.Lstat("recovery-blocked")
+		if err != nil || !os.SameFile(markerBefore, current) {
+			return ErrConflict
+		}
+		if err = use(ctx); err != nil {
+			return err
+		}
+		if err = observe(ctx); err != nil {
+			return err
+		}
 	}
 	// Configuration may have changed while querying the manager. Retain the
 	// original journal identity and reverify its owned bytes before success.
@@ -95,7 +138,7 @@ func (e *Engine) observeRecoveryQuiescence(ctx context.Context, observe func(con
 			return ErrConflict
 		}
 	}
-	if err = e.observeRecoveryDestinationVacancy(ctx); err != nil {
+	if err = destinations(ctx); err != nil {
 		return err
 	}
 	// Recheck marker after manager observation; never recreate lost exclusion.
