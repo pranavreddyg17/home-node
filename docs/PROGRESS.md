@@ -3791,3 +3791,8 @@ Added an owned other-identity0600 disk beneath the shared protected volume paren
 ### Storage probe confirms effective kernel credentials
 
 Proposed guest DAC probe now requires its own real/effective/saved UID and GID tuples equal the supplied guest identity and an empty supplementary group list before any storage opens. Passing access checks must not implicitly assume child credential setup. Linux amd64 tests compile; native execution remains pending. CI37796520402 is confirmed live at fb76a5f in package inspection and excludes these queued assertions. Full installed runtime/storage lifecycle remains unfinished.
+
+
+### Protected parent traversal qualification completed
+
+CI37796520402 completed successfully at exact head fb76a5f0925e9b096e6eb5f3c58e6fb1c19bc0df; full log retained /tmp/homenode-ci-37796520402.log. Linux supervisor races22.276s; actual firmware guest-connect3.837s and libvirt-launch3.331s passed with synthetic immutable0440 system disk and private0600 data disk beneath distinct root:qualified-KVM-group0710 parents. Four explicit source-service memory observer PASS markers cover launch/restart across both experiments. Root volume group0.215s, packaging and browser stages passed. This qualifies native traversal in the owned fixture, not installer group publication or metadata preservation (queued931f9fe), host cross-identity DAC probes (queued1687ebe/44f8ece), real application payloads or installed service launch. Full reserved provisioning/runtime exclusion/product acceptance remain unfinished.
