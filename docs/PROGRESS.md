@@ -3696,3 +3696,8 @@ Reserved opener now uses O_PATH/no-follow/no-xdev to qualify the inode before re
 ### Reserved opener bounds the requested disk profile
 
 Added explicit16MiB..512GiB requested-size validation before reserved path access. The general inode admission helper compares observed size but does not independently enforce this profile range, so the opener must do so. Native fixture adds zero/below-minimum/above-maximum refusal cases under a qualified parent before the valid open. Linux amd64 tests compile and diff checks passed; native execution remains pending. CI37727729959 is confirmed live atb4680d0 and excludes pinned-before-I/O and bounds follow-ups. Complete runtime exclusion, production provisioning and application acceptance remain unfinished.
+
+
+### Reserved native fixture uses supervisor allowlisted volume tree
+
+Changed GuestUIDVolumeAdmission to use the established volumeFixtureDir helper. Ordinary disposable root execution still uses a private temporary directory; the source-service fixture now uses only its exclusively owned child under /var/lib/homenode/volumes, exercising the shipped ReadWritePaths boundary for the proposed parent policy and pinned provenance. It does not change the real shared parent or claim installed parent ownership qualification. Existing explicit Linux/root fixture gate and owned-directory cleanup remain. Linux amd64 tests compile and diff checks passed; actual source-protected execution awaits publication. CI37727729959 remains confirmed live atb4680d0, last observed installer fixture, and excludes this and pinned-before-I/O/bounds changes. Full application remains unfinished.
