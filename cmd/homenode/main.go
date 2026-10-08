@@ -41,6 +41,8 @@ func main() {
 		guestIdentityApply(os.Args[2:])
 	case "guest-allocation-prepare":
 		guestAllocationPrepare(os.Args[2:])
+	case "guest-allocation-apply":
+		guestAllocationApply(os.Args[2:])
 	case "guest-storage-plan":
 		guestStorage(os.Args[2:], "plan")
 	case "guest-storage-prepare":
@@ -82,7 +84,7 @@ func main() {
 	}
 }
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: homenode <guest-allocation-prepare|guest-identity-apply|guest-identity-prepare|recovery-quiesce|guest-storage-plan|guest-storage-prepare|guest-storage-check|guest-uid-check|guest-uid-prepare|guest-uid-plan|install-check|install-prepare|update-trust-initialize|doctor|accounts-provision|accounts-check|maintenance-accounts-prepare|maintenance-accounts-provision|maintenance-accounts-check|network-check|serve|setup-code> [options]")
+	fmt.Fprintln(os.Stderr, "usage: homenode <guest-allocation-apply|guest-allocation-prepare|guest-identity-apply|guest-identity-prepare|recovery-quiesce|guest-storage-plan|guest-storage-prepare|guest-storage-check|guest-uid-check|guest-uid-prepare|guest-uid-plan|install-check|install-prepare|update-trust-initialize|doctor|accounts-provision|accounts-check|maintenance-accounts-prepare|maintenance-accounts-provision|maintenance-accounts-check|network-check|serve|setup-code> [options]")
 	os.Exit(2)
 }
 func fatal(err error) { fmt.Fprintln(os.Stderr, err); os.Exit(1) }

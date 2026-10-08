@@ -13,3 +13,10 @@ func (e *Engine) PrepareGuestUIDAllocationConfiguration(ctx context.Context, _ s
 	}
 	return GuestUIDAllocationPreview{}, ErrAccounts
 }
+
+func (e *Engine) ApplyGuestUIDAllocationConfiguration(ctx context.Context) (GuestUIDAllocationPreview, error) {
+	if err := ctx.Err(); err != nil {
+		return GuestUIDAllocationPreview{}, err
+	}
+	return GuestUIDAllocationPreview{}, ErrAccounts
+}

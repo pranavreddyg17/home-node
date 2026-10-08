@@ -142,7 +142,14 @@ sudo homenode guest-allocation-prepare \
 These values are an example explicit policy, not detected host defaults. Choose
 ranges for the dedicated host before preparation. The command preserves host
 bytes, reports hashes with `configurationApplied: false`, and accepts
-`--journal-dir` for an existing private journal. Allocator application, future
+`--journal-dir` for an existing private journal.
+
+`sudo homenode guest-allocation-apply` applies the saved allocator proposal.
+It accepts only the journal option, requires the fixed installation journal,
+strict local NSS, an owned empty installation and its retained activation
+block. It preserves the original inode under `/etc/.homenode-login-defs.stage`
+and reports `configurationApplied: true` only after qualified publication.
+The activation block remains in place. Native application qualification, future
 drift enforcement and exclusive reservation remain pending.
 
 After account provisioning, inspect a proposed guest UID range on the dedicated

@@ -34,3 +34,18 @@ func TestAllocatorPreparationRejectsAmbiguousInputsBeforeHostEffects(t *testing.
 		t.Fatal("canceled allocator command supplied status", err)
 	}
 }
+
+func TestAllocatorApplicationRejectsOverridesBeforeHostEffects(t *testing.T) {
+	for _, args := range [][]string{{"extra"}, {"--first-uid", "2000000000"}, {"--sys-uid-min", "100"}, {"--journal-dir", ""}, {"--journal-dir"}} {
+		var out bytes.Buffer
+		if err := runGuestAllocationApply(context.Background(), args, &out); err == nil || out.Len() != 0 {
+			t.Fatal("allocator application accepted overrides or invalid input", err)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var out bytes.Buffer
+	if err := runGuestAllocationApply(ctx, nil, &out); !errors.Is(err, context.Canceled) || out.Len() != 0 {
+		t.Fatal("canceled allocator application emitted status", err)
+	}
+}
