@@ -179,6 +179,68 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	if err != nil || finalIntent != recorded {
 		t.Fatal("refusals changed provenance", finalIntent, err)
 	}
+	directory := filepath.Dir(path)
+	var originalParent unix.Stat_t
+	if err := unix.Stat(directory, &originalParent); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Chown(directory, 0, int(originalParent.Gid)); err != nil {
+			t.Error(err)
+		}
+		if err := os.Chmod(directory, os.FileMode(originalParent.Mode&0777)); err != nil {
+			t.Error(err)
+		}
+	}()
+	reservedPath := filepath.Join(directory, d.ID+".raw")
+	if err := os.Rename(path, reservedPath); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := openReservedVolume(context.Background(), directory, d); err == nil || got != nil {
+		if got != nil {
+			got.Close()
+		}
+		t.Fatal("unqualified parent admitted", err)
+	}
+	if err := os.Chown(directory, 0, int(d.GuestGID)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(directory, 0710); err != nil {
+		t.Fatal(err)
+	}
+	reserved, err := openReservedVolume(context.Background(), directory, d)
+	if err != nil {
+		t.Fatal("reserved parent/volume refused", err)
+	}
+	reservedIntent, verifyErr := m.verifyPinnedVolumeOwnership(context.Background(), d, reserved)
+	closeErr := reserved.Close()
+	if verifyErr != nil || closeErr != nil || reservedIntent != recorded {
+		t.Fatal("opened reserved provenance", reservedIntent, verifyErr, closeErr)
+	}
+	if err := os.Chmod(directory, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := openReservedVolume(context.Background(), directory, d); !errors.Is(err, ErrPolicy) || got != nil {
+		if got != nil {
+			got.Close()
+		}
+		t.Fatal("permissive reserved parent admitted", err)
+	}
+	if err := os.Chmod(directory, 0710); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(directory, 0, int(d.GuestGID+1)); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := openReservedVolume(context.Background(), directory, d); !errors.Is(err, ErrPolicy) || got != nil {
+		if got != nil {
+			got.Close()
+		}
+		t.Fatal("foreign parent group admitted", err)
+	}
+	if err := os.Chown(directory, 0, int(d.GuestGID)); err != nil {
+		t.Fatal(err)
+	}
 	for _, uid := range []uint32{1, 65535, 1 << 31} {
 		if err = admitVolumeForUID(file, size, uid); !errors.Is(err, ErrPolicy) {
 			t.Fatal("unreserved UID accepted", uid, err)
