@@ -28,7 +28,7 @@ func observeGuestMemoryDomainAt(ctx context.Context, directory, relative, id str
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	fd, err := unix.Openat2(unix.AT_FDCWD, directory, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
+	fd, err := openAbsoluteDirectoryNoLinks(directory)
 	if err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ func observeGuestMemoryDomainAt(ctx context.Context, directory, relative, id str
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		child, err := unix.Openat2(descriptors[len(descriptors)-1], component, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC, Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS | unix.RESOLVE_NO_XDEV})
+		child, err := openSameMountReadOnly(descriptors[len(descriptors)-1], component, true)
 		if err != nil {
 			return err
 		}
@@ -67,7 +67,7 @@ func observeGuestMemoryDomainAt(ctx context.Context, directory, relative, id str
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
-		fd, err := unix.Openat2(directory, name, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NONBLOCK, Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS | unix.RESOLVE_NO_XDEV})
+		fd, err := openSameMountReadOnly(directory, name, false)
 		if err != nil {
 			return "", err
 		}
