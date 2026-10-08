@@ -4,6 +4,7 @@ package install
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -17,7 +18,7 @@ func TestRootGuestUIDAllocatorSourceRejectsDrift(t *testing.T) {
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_UPDATE_INIT_INTEGRATION") != "1" {
 		t.Skip("explicit disposable Linux root fixture")
 	}
-	for _, fault := range []string{"none", "replace-source", "change-source", "replace-intent", "writable-source", "alias-source"} {
+	for _, fault := range []string{"none", "replace-source", "change-source", "replace-intent", "writable-source", "alias-source", "stage-corrupt", "stage-occupied"} {
 		t.Run(fault, func(t *testing.T) {
 			host, journal := roots(t)
 			e := openEngine(t, host, journal)
@@ -49,7 +50,7 @@ func TestRootGuestUIDAllocatorSourceRejectsDrift(t *testing.T) {
 				}
 			}
 			called := false
-			err = e.withGuestUIDAllocatorHostSource(ctx, intent, func(_ context.Context, _ *os.File, check func() error) error {
+			err = e.withGuestUIDAllocatorHostSource(ctx, intent, func(_ context.Context, file *os.File, check func() error) error {
 				called = true
 				switch fault {
 				case "replace-source":
@@ -76,11 +77,64 @@ func TestRootGuestUIDAllocatorSourceRejectsDrift(t *testing.T) {
 						return err
 					}
 				}
+				if fault == "none" || fault == "stage-corrupt" || fault == "stage-occupied" {
+					directory, err := e.host.OpenRoot("etc")
+					if err != nil {
+						return err
+					}
+					defer directory.Close()
+					stagePath := filepath.Join(host, "etc/.homenode-login-defs.stage")
+					if fault == "stage-occupied" {
+						if err := os.WriteFile(stagePath, []byte(proposal.Contents), 0600); err != nil {
+							return err
+						}
+					}
+					observations := 0
+					stage, err := e.stageGuestUIDAllocation(ctx, directory, file, intent, func(context.Context) error {
+						observations++
+						if fault == "stage-corrupt" && observations == 2 {
+							data := []byte(proposal.Contents)
+							data[0] = '!'
+							if err := os.WriteFile(stagePath, data, 0600); err != nil {
+								return err
+							}
+						}
+						return check()
+					})
+					if fault == "none" {
+						if err != nil || stage.Version != 1 || stage.Inode == 0 || stage.SourceInode == 0 || stage.Inode == stage.SourceInode || stage.Bytes != int64(len(proposal.Contents)) {
+							t.Fatal("allocator staging authority incomplete", err)
+						}
+						data, readErr := os.ReadFile(stagePath)
+						if readErr != nil || string(data) != proposal.Contents {
+							t.Fatal("allocator staging bytes changed", readErr)
+						}
+						record, readErr := e.journalRoot.ReadFile("guest-uid-allocation-stage.json")
+						var saved guestUIDAllocationStage
+						if readErr != nil || json.Unmarshal(record, &saved) != nil || saved != stage {
+							t.Fatal("allocator staging receipt does not bind returned authority", readErr)
+						}
+					} else {
+						if stage != (guestUIDAllocationStage{}) || err == nil {
+							t.Fatal("failed allocator staging returned authority", err)
+						}
+						if _, recordErr := e.journalRoot.Lstat("guest-uid-allocation-stage.json"); !os.IsNotExist(recordErr) {
+							t.Fatal("failed allocator staging committed authority", recordErr)
+						}
+					}
+					if err != nil {
+						return err
+					}
+				}
 				return check()
 			})
 			if fault == "none" {
 				if err != nil || !called {
 					t.Fatal("qualified allocator source refused", err)
+				}
+			} else if fault == "stage-occupied" {
+				if !errors.Is(err, os.ErrExist) {
+					t.Fatal("foreign allocator stage adopted", err)
 				}
 			} else if !errors.Is(err, ErrConflict) {
 				t.Fatal("allocator source drift retained authority", fault, err)
