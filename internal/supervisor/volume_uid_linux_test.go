@@ -273,6 +273,24 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	if err := os.Rename(originalPath, reservedPath); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Rename(reservedPath, originalPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := unix.Mkfifo(reservedPath, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := openReservedVolume(context.Background(), directory, d); !errors.Is(err, ErrPolicy) || got != nil {
+		if got != nil {
+			got.Close()
+		}
+		t.Fatal("FIFO reserved volume admitted", err)
+	}
+	if err := os.Remove(reservedPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(originalPath, reservedPath); err != nil {
+		t.Fatal(err)
+	}
 	preserved, err := m.verifyPinnedVolumeOwnership(context.Background(), d, file)
 	if err != nil || preserved != recorded {
 		t.Fatal("reserved opener refusals changed provenance", preserved, err)

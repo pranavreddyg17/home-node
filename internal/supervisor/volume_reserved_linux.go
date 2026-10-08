@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
 	"golang.org/x/sys/unix"
@@ -48,14 +49,38 @@ func openReservedVolume(ctx context.Context, directory string, d Domain) (result
 		return nil, ErrPolicy
 	}
 	name := d.ID + ".raw"
-	fd, err := unix.Openat2(int(parent.Fd()), name, &unix.OpenHow{Flags: unix.O_RDWR | unix.O_CLOEXEC | unix.O_NOFOLLOW | unix.O_NONBLOCK, Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS | unix.RESOLVE_NO_XDEV})
+	fd, err := unix.Openat2(int(parent.Fd()), name, &unix.OpenHow{Flags: unix.O_PATH | unix.O_CLOEXEC | unix.O_NOFOLLOW, Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS | unix.RESOLVE_NO_XDEV})
 	if err != nil {
 		return nil, err
 	}
-	file := os.NewFile(uintptr(fd), name)
-	fail := func(err error) (*os.File, error) { return nil, errors.Join(err, file.Close()) }
+	metadata := os.NewFile(uintptr(fd), name)
+	defer func() { resultErr = errors.Join(resultErr, metadata.Close()) }()
 	var disk unix.Stat_t
 	if unix.Fstat(fd, &disk) != nil || disk.Uid != 0 && disk.Uid != d.GuestUID || disk.Uid == 0 && disk.Gid != 0 || disk.Uid == d.GuestUID && disk.Gid != d.GuestGID {
+		return nil, ErrPolicy
+	}
+	if err := admitVolumeForUID(metadata, d.Image.DataBytes, disk.Uid); err != nil {
+		return nil, err
+	}
+	// Only the qualified regular inode may acquire read/write access. The
+	// kernel descriptor link is deliberate, under a retained procfs directory.
+	proc, err := unix.Open("/proc/self/fd", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { resultErr = errors.Join(resultErr, unix.Close(proc)) }()
+	var filesystem unix.Statfs_t
+	if unix.Fstatfs(proc, &filesystem) != nil || filesystem.Type != unix.PROC_SUPER_MAGIC {
+		return nil, ErrPolicy
+	}
+	reopened, err := unix.Openat(proc, strconv.Itoa(fd), unix.O_RDWR|unix.O_CLOEXEC|unix.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	file := os.NewFile(uintptr(reopened), name)
+	fail := func(err error) (*os.File, error) { return nil, errors.Join(err, file.Close()) }
+	var ioDisk unix.Stat_t
+	if unix.Fstat(reopened, &ioDisk) != nil || disk.Dev != ioDisk.Dev || disk.Ino != ioDisk.Ino || disk.Mode != ioDisk.Mode || disk.Uid != ioDisk.Uid || disk.Gid != ioDisk.Gid || disk.Nlink != ioDisk.Nlink || disk.Size != ioDisk.Size {
 		return fail(ErrPolicy)
 	}
 	if err := admitVolumeForUID(file, d.Image.DataBytes, disk.Uid); err != nil {
@@ -69,7 +94,7 @@ func openReservedVolume(ctx context.Context, directory string, d Domain) (result
 		return fail(ErrPolicy)
 	}
 	var finalDisk unix.Stat_t
-	if unix.Fstat(fd, &finalDisk) != nil || disk.Dev != finalDisk.Dev || disk.Ino != finalDisk.Ino || disk.Mode != finalDisk.Mode || disk.Uid != finalDisk.Uid || disk.Gid != finalDisk.Gid || disk.Nlink != finalDisk.Nlink || disk.Size != finalDisk.Size {
+	if unix.Fstat(reopened, &finalDisk) != nil || disk.Dev != finalDisk.Dev || disk.Ino != finalDisk.Ino || disk.Mode != finalDisk.Mode || disk.Uid != finalDisk.Uid || disk.Gid != finalDisk.Gid || disk.Nlink != finalDisk.Nlink || disk.Size != finalDisk.Size {
 		return fail(ErrPolicy)
 	}
 	if err := ctx.Err(); err != nil {
