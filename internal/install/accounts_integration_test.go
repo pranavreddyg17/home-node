@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"reflect"
 	"runtime"
 	"testing"
+
+	"github.com/pranavreddyg17/home-node/internal/supervisor"
 )
 
 // Explicitly enabled only in a disposable Linux CI runner after dependency and
@@ -130,6 +133,33 @@ func TestInstalledAccountInspection(t *testing.T) {
 	if err = json.Unmarshal(output, &backupResult); err != nil || !backupResult.Valid || backupResult.Activated || backupResult.Identity != maintenance {
 		t.Fatal("CLI backup identity result", backupResult, err)
 	}
+	storagePrepared := false
+	t.Run("QualifiedGuestStorageIntent", func(t *testing.T) {
+		device, err := os.Lstat("/dev/kvm")
+		if os.IsNotExist(err) {
+			t.Skip("native installed storage intent unverified: KVM is absent")
+		}
+		if err != nil || device.Mode()&os.ModeCharDevice == 0 {
+			t.Fatal("ambiguous KVM fixture", err)
+		}
+		pool := supervisor.GuestUIDPool{First: 2000000000, Last: 2000000001}
+		plan, err := engine.PrepareGuestStorageProvisioning(ctx, pool)
+		if err != nil {
+			t.Fatal("native installed storage preparation", err)
+		}
+		if plan.GuestGID == 0 || len(plan.Identity.ServiceUIDs) != 3 || plan.ParentMode != 0710 || plan.ImageMode != 0440 || plan.VolumeMode != 0600 {
+			t.Fatal("unqualified installed storage proposal", plan)
+		}
+		replayed, err := engine.PrepareGuestStorageProvisioning(ctx, pool)
+		if err != nil || !reflect.DeepEqual(replayed, plan) {
+			t.Fatal("native storage exact retry", replayed, err)
+		}
+		checked, err := engine.CheckGuestStorageProvisioningIntent(ctx)
+		if err != nil || !reflect.DeepEqual(checked, plan) {
+			t.Fatal("native storage revalidation", checked, err)
+		}
+		storagePrepared = true
+	})
 	if _, err = accountCommand(ctx, "/usr/sbin/usermod", "--append", "--groups", "root", "homenode-backup"); err != nil {
 		t.Fatal(err)
 	}
@@ -138,6 +168,11 @@ func TestInstalledAccountInspection(t *testing.T) {
 	}
 	if _, err = engine.ProvisionMaintenanceAccount(ctx); err == nil {
 		t.Fatal("unsafe backup readiness replay accepted")
+	}
+	if storagePrepared {
+		if _, err := engine.CheckGuestStorageProvisioningIntent(ctx); err == nil {
+			t.Fatal("storage intent admitted privileged maintenance account drift")
+		}
 	}
 	if _, err = accountCommand(ctx, "/usr/sbin/usermod", "--groups", "", "homenode-backup"); err != nil {
 		t.Fatal(err)

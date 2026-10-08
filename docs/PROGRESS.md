@@ -3836,3 +3836,8 @@ Added CheckGuestStorageProvisioningIntent and retained-file loader: requires bou
 ### KVM observer parent qualification completed
 
 CI37799951332 succeeded at exact headcaec5fcd538bc4a3d80a4d2293cd79a89403dc67; full log retained /tmp/homenode-ci-37799951332.log. Supervisor Linux races20.344s, native primary-group/API observer with genuine procfs and retained/current protected /dev checks0.086s, protected-storage guest-connect3.945s/libvirt-launch3.298s, root volumes0.079s and selected full packaging/browser stages passed. This excludes queued installed storage proposal/intent/load/revalidation code. Snapshot observation remains separate from persistent group/allocation policy and runtime activation barriers. Full product remains unfinished.
+
+
+### Native owned-account storage intent qualification queued
+
+Extended the existing explicit disposable Linux root installed-account fixture: when a real KVM character device is present, provisioned controller/transfer/maintenance identities must produce qualified storage intent, exact immutable replay and independent live revalidation. Later injected privileged backup supplementary membership must cause storage revalidation refusal. Missing KVM explicitly skips only this subtest as unverified; ambiguous device errors fail. CI now runs that account fixture verbose/uncached for retained subtest evidence. No additional host account mutations beyond the existing fixture; storage permissions and runtime remain unchanged. Linux amd64 installer tests compile; actual native execution pending. CI37800928815 is confirmed live at80ab00a and excludes this extension. Full installed storage migration/runtime publication and owner acceptance remain unfinished.
