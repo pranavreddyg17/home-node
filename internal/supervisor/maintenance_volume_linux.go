@@ -4,6 +4,7 @@ package supervisor
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -13,7 +14,7 @@ import (
 
 // Pin the admitted inode read-only; never follow guest/controller supplied
 // paths, mount the guest filesystem, or invoke its filesystem parser as root.
-func openMaintenanceVolume(ctx context.Context, directory, id string, size int64) (*os.File, error) {
+func openMaintenanceVolume(ctx context.Context, directory, id string, size int64) (result *os.File, resultErr error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -21,19 +22,25 @@ func openMaintenanceVolume(ctx context.Context, directory, id string, size int64
 		return nil, ErrPolicy
 	}
 	before, err := os.Lstat(directory)
-	if err != nil || !before.IsDir() || before.Mode().Perm()&0022 != 0 {
+	if err != nil || !before.IsDir() || before.Mode().Perm()&0022 != 0 || before.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
 		return nil, ErrPolicy
 	}
 	root, err := os.OpenRoot(directory)
 	if err != nil {
 		return nil, err
 	}
-	defer root.Close()
+	defer func() {
+		resultErr = errors.Join(resultErr, root.Close())
+		if resultErr != nil && result != nil {
+			resultErr = errors.Join(resultErr, result.Close())
+			result = nil
+		}
+	}()
 	parent, err := root.Open(".")
 	if err != nil {
 		return nil, err
 	}
-	defer parent.Close()
+	defer func() { resultErr = errors.Join(resultErr, parent.Close()) }()
 	opened, err := parent.Stat()
 	var native unix.Stat_t
 	if err != nil || !os.SameFile(before, opened) || unix.Fstat(int(parent.Fd()), &native) != nil || native.Uid != 0 {
@@ -44,12 +51,17 @@ func openMaintenanceVolume(ctx context.Context, directory, id string, size int64
 		return nil, err
 	}
 	if err = admitVolume(file, size); err != nil {
-		file.Close()
-		return nil, err
+		return nil, errors.Join(err, file.Close())
 	}
 	if err = ctx.Err(); err != nil {
-		file.Close()
-		return nil, err
+		return nil, errors.Join(err, file.Close())
+	}
+	pinned, err := file.Stat()
+	current, pathErr := root.Lstat(id + ".raw")
+	parentCurrent, parentErr := os.Lstat(directory)
+	var finalParent unix.Stat_t
+	if err != nil || pathErr != nil || parentErr != nil || !os.SameFile(pinned, current) || !os.SameFile(before, parentCurrent) || parentCurrent.Mode() != before.Mode() || unix.Fstat(int(parent.Fd()), &finalParent) != nil || finalParent.Dev != native.Dev || finalParent.Ino != native.Ino || finalParent.Uid != native.Uid || finalParent.Gid != native.Gid || finalParent.Mode != native.Mode {
+		return nil, errors.Join(ErrPolicy, file.Close())
 	}
 	return file, nil
 }

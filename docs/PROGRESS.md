@@ -3611,3 +3611,8 @@ Added private verifyPinnedVolumeOwnership alongside recording, sharing descripto
 ### Native provenance refusal matrix
 
 Extended the queued native descriptor fixture to exercise both recording and non-creating verification against hardlinked guest-owned volumes and permissive modes. Both must return ErrPolicy and zero intent. Cancelled contexts and nil descriptors also refuse, and after fixture-only alias removal/mode restoration exact provenance still matches the original saved record. Linux amd64 tests compile and diff checks passed; native execution remains pending, not inferred from compilation. CI37726148094 remains confirmed live ata86162c and excludes this matrix and prior queued descriptor/maintenance changes. Production runtime exclusion, installed permissions and complete application acceptance remain unfinished.
+
+
+### Maintenance volume parent/path admission recheck
+
+Hardened production read-only maintenance volume admission: refuse special parent modes, recheck pathname identity against the pinned disk and parent identity/mode/owner/group against the retained directory before return, and propagate descriptor close failures while closing any would-be returned disk on cleanup failure. Existing root-only volume policy remains; this does not enable reserved guest backup admission or establish filesystem consistency. Added disposable native parent sticky/setgid/group-writable refusal cases with fixture-only mode restoration. Linux amd64 tests compile and diff checks passed; actual native execution awaits publication. CI37726148094 remains confirmed live ata86162c and excludes queued changes. Full application and ownership lifecycle integration remain unfinished.

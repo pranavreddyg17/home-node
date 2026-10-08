@@ -20,7 +20,7 @@ func TestNativeMaintenanceVolume(t *testing.T) {
 	}
 	directory := volumeFixtureDir(t)
 	const size int64 = 16 << 20
-	for _, scenario := range []string{"valid", "symlink", "hardlink", "wrong-mode", "wrong-size", "fifo"} {
+	for _, scenario := range []string{"valid", "symlink", "hardlink", "wrong-mode", "wrong-size", "fifo", "parent-sticky", "parent-setgid", "parent-writable"} {
 		t.Run(scenario, func(t *testing.T) {
 			id := state.Random()
 			path := filepath.Join(directory, id+".raw")
@@ -38,6 +38,25 @@ func TestNativeMaintenanceVolume(t *testing.T) {
 			}
 			file.Close()
 			switch scenario {
+			case "parent-sticky", "parent-setgid", "parent-writable":
+				info, statErr := os.Stat(directory)
+				if statErr != nil {
+					t.Fatal(statErr)
+				}
+				original := info.Mode()
+				mode := original | os.ModeSticky
+				if scenario == "parent-setgid" {
+					mode = original | os.ModeSetgid
+				}
+				if scenario == "parent-writable" {
+					mode = original | 0020
+				}
+				err = os.Chmod(directory, mode)
+				defer func() {
+					if err := os.Chmod(directory, original); err != nil {
+						t.Error(err)
+					}
+				}()
 			case "symlink":
 				if err = os.Rename(path, path+".original"); err != nil {
 					t.Fatal(err)
