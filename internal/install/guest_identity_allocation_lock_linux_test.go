@@ -15,6 +15,39 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// Load libc before hiding /etc, then isolate all mount effects in the child.
+// The real libc API uses /etc/.pwd.lock; bind only the owned temporary directory
+// over that path's parent in a private mount namespace. No runner account file
+// or lock is changed. A failed namespace setup refuses the fixture.
+// Protocol reference: glibc-2.39/nss/lckpwdf.c in the glibc source repository.
+const guestIdentityLibcLockProbe = `
+import ctypes, errno, os, sys
+libc = ctypes.CDLL("libc.so.6", use_errno=True)
+libc.unshare.argtypes = [ctypes.c_int]
+libc.mount.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_ulong, ctypes.c_void_p]
+libc.lckpwdf.argtypes = []
+libc.ulckpwdf.argtypes = []
+if libc.unshare(0x00020000) != 0:
+    raise OSError(ctypes.get_errno(), "private mount namespace required")
+if libc.mount(None, b"/", None, (1 << 18) | 16384, None) != 0:
+    raise OSError(ctypes.get_errno(), "private mount propagation required")
+if libc.mount(os.fsencode(sys.argv[1]), b"/etc", None, 4096, None) != 0:
+    raise OSError(ctypes.get_errno(), "owned fixture bind mount required")
+ctypes.set_errno(0)
+result = libc.lckpwdf()
+error = ctypes.get_errno()
+if sys.argv[2] == "1":
+    if result != -1 or error != errno.EINTR:
+        if result == 0:
+            libc.ulckpwdf()
+        raise RuntimeError("libc account writer was not excluded", result, error)
+else:
+    if result != 0:
+        raise RuntimeError("released account lock remained unavailable", result, error)
+    if libc.ulckpwdf() != 0:
+        raise RuntimeError("libc account unlock failed")
+`
+
 func TestGuestIdentityAllocationLockChild(t *testing.T) {
 	path := os.Getenv("HOMENODE_ALLOCATION_LOCK_CHILD_PATH")
 	if path == "" {
@@ -73,6 +106,23 @@ func TestRootGuestIdentityAllocationLockInteroperability(t *testing.T) {
 		}
 		return err
 	}
+	probeLibc := func(blocked bool) error {
+		// libc bounds lock acquisition with its own fifteen-second alarm.
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer cancel()
+		value := "0"
+		if blocked {
+			value = "1"
+		}
+		command := exec.CommandContext(ctx, "/usr/bin/python3", "-I", "-c", guestIdentityLibcLockProbe, path, value)
+		command.Env = []string{"PATH=/usr/bin:/bin", "LC_ALL=C"}
+		command.WaitDelay = time.Second
+		output, err := command.CombinedOutput()
+		if err != nil {
+			t.Errorf("isolated libc account lock probe failed: %s", output)
+		}
+		return errors.Join(err, ctx.Err())
+	}
 	err = withGuestIdentityAllocationLock(context.Background(), directory, func(ctx context.Context, check func() error) error {
 		if err := probe(true); err != nil {
 			return err
@@ -88,12 +138,21 @@ func TestRootGuestIdentityAllocationLockInteroperability(t *testing.T) {
 		if err := check(); err != nil {
 			return err
 		}
-		return probe(true)
+		if err := probe(true); err != nil {
+			return err
+		}
+		if err := probeLibc(true); err != nil {
+			return err
+		}
+		return check()
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := probe(false); err != nil {
+		t.Fatal(err)
+	}
+	if err := probeLibc(false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := directory.Stat(".pwd.lock"); err != nil {
