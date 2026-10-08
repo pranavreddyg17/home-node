@@ -3,7 +3,9 @@ package install
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -155,6 +157,32 @@ func TestInstalledAccountInspection(t *testing.T) {
 	if identityErr != nil || identityReplay != identityPreview {
 		t.Fatal("native identity preparation retry changed intent", identityErr)
 	}
+	// This fixture owns accounts, but deliberately has no installed configuration
+	// journal or retained activation barrier. Refusal must precede host mutation.
+	identityBefore, identityErr := os.Lstat("/etc/nsswitch.conf")
+	if identityErr != nil {
+		t.Fatal(identityErr)
+	}
+	identityBytes, identityErr := os.ReadFile("/etc/nsswitch.conf")
+	if identityErr != nil {
+		t.Fatal(identityErr)
+	}
+	refusedPreview, identityErr := engine.ApplyGuestIdentityConfiguration(ctx)
+	if !errors.Is(identityErr, ErrConflict) || refusedPreview != (GuestIdentityConfigurationPreview{}) {
+		t.Fatal("uninstalled identity application gained authority", identityErr)
+	}
+	assertIdentityPreserved := func() {
+		t.Helper()
+		after, err := os.Lstat("/etc/nsswitch.conf")
+		current, readErr := os.ReadFile("/etc/nsswitch.conf")
+		if err != nil || readErr != nil || !os.SameFile(identityBefore, after) || string(current) != string(identityBytes) {
+			t.Fatal("refused identity application changed host configuration", err, readErr)
+		}
+		if _, err := os.Lstat(filepath.Join(journalDirectory, "guest-identity-nss-stage.json")); !errors.Is(err, os.ErrNotExist) {
+			t.Fatal("refused identity application committed a staging record", err)
+		}
+	}
+	assertIdentityPreserved()
 	identityEngine := engine
 	engine = nil
 	if err := identityEngine.Close(); err != nil {
@@ -168,6 +196,10 @@ func TestInstalledAccountInspection(t *testing.T) {
 	if err := json.Unmarshal(identityOutput, &identityCLI); err != nil || identityCLI != identityPreview {
 		t.Fatal("packaged identity preparation status", err)
 	}
+	if _, err := accountCommand(ctx, "/usr/bin/homenode", "guest-identity-apply", "--journal-dir", journalDirectory); err == nil {
+		t.Fatal("packaged apply command admitted uninstalled configuration")
+	}
+	assertIdentityPreserved()
 	engine, err = Open("/", journalDirectory)
 	if err != nil {
 		t.Fatal("identity CLI journal reacquisition", err)
