@@ -212,8 +212,11 @@ func (m *Manager) operation(tx *sql.Tx, r Request) (bool, error) {
 	return false, err
 }
 func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
-	m.startMu.Lock()
-	defer m.startMu.Unlock()
+	unlockStart, lockErr := m.lockStart(ctx)
+	if lockErr != nil {
+		return Instance{}, lockErr
+	}
+	defer unlockStart()
 	if m.shuttingDown {
 		return Instance{}, ErrPolicy
 	}
@@ -432,8 +435,11 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 		return err
 	}
 	defer unlock()
-	m.startMu.Lock()
-	defer m.startMu.Unlock()
+	unlockStart, err := m.lockStart(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlockStart()
 	m.shuttingDown = true
 	return m.reconcile(ctx)
 }
