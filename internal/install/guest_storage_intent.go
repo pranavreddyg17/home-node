@@ -42,16 +42,25 @@ func (e *Engine) PrepareGuestStorageProvisioning(ctx context.Context, pool super
 }
 
 func (e *Engine) commitGuestStorageIntent(ctx context.Context, plan GuestStorageProvisioningPlan) error {
-	identity, err := guestUIDProvisioningPlan(ctx, plan.Identity.OwnerID, supervisor.GuestUIDPool{First: plan.Identity.First, Last: plan.Identity.Last}, plan.Identity.ServiceUIDs)
+	qualified, err := canonicalGuestStoragePlan(ctx, plan)
 	if err != nil {
 		return err
 	}
-	if !reflect.DeepEqual(identity, plan.Identity) || plan.GuestGID == 0 || plan.GuestGID > 1<<31-1 || plan.ParentMode != 0710 || plan.ImageMode != 0440 || plan.VolumeMode != 0600 {
-		return ErrPlan
-	}
-	data, err := json.Marshal(guestStorageIntent{Version: 1, Plan: plan})
+	data, err := json.Marshal(guestStorageIntent{Version: 1, Plan: qualified})
 	if err != nil {
 		return err
 	}
 	return e.commitImmutableGuestIntent(ctx, "guest-storage-intent.json", "guest-storage-intent", data)
+}
+
+func canonicalGuestStoragePlan(ctx context.Context, plan GuestStorageProvisioningPlan) (GuestStorageProvisioningPlan, error) {
+	identity, err := guestUIDProvisioningPlan(ctx, plan.Identity.OwnerID, supervisor.GuestUIDPool{First: plan.Identity.First, Last: plan.Identity.Last}, plan.Identity.ServiceUIDs)
+	if err != nil {
+		return GuestStorageProvisioningPlan{}, err
+	}
+	if !reflect.DeepEqual(identity, plan.Identity) || plan.GuestGID == 0 || plan.GuestGID > 1<<31-1 || plan.ParentMode != 0710 || plan.ImageMode != 0440 || plan.VolumeMode != 0600 {
+		return GuestStorageProvisioningPlan{}, ErrPlan
+	}
+	plan.Identity = identity
+	return plan, nil
 }
