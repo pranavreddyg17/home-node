@@ -1,0 +1,37 @@
+//go:build linux
+
+package install
+
+import (
+	"context"
+	"errors"
+	"io"
+	"os/exec"
+	"time"
+)
+
+// stopRecoveryServicesWith is only the bounded manager operation. A caller
+// must retain installer/activation exclusion and qualify loaded unit ownership
+// before invoking it, then independently observe dormancy and guest emptiness.
+// It never removes an activation marker, restarts units or kills guest PIDs.
+func stopRecoveryServicesWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if command == nil {
+		return ErrPlan
+	}
+	bounded, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	cmd := command(bounded, "/usr/bin/systemctl", "--system", "--no-pager", "--no-ask-password", "stop", "homenode-backup-credential.socket", "homenode-control.service", "homenode-transfer.service", "homenode-backup.service", "homenode-supervisor.service")
+	if cmd == nil {
+		return ErrPlan
+	}
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "LC_ALL=C", "SYSTEMD_COLORS=0", "SYSTEMD_PAGER=cat"}
+	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+	cmd.WaitDelay = time.Second
+	if err := cmd.Run(); err != nil {
+		return errors.Join(ErrConflict, err, bounded.Err())
+	}
+	return bounded.Err()
+}
