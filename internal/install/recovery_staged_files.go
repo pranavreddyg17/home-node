@@ -26,6 +26,19 @@ func (e *Engine) withRecoveryStagedFiles(ctx context.Context, expected recoveryI
 		return ErrConflict
 	}
 	defer e.mu.Unlock()
+	return e.withRecoveryStagedFilesLocked(ctx, expected, use)
+}
+
+// withRecoveryStagedFilesLocked composes source qualification into an operation
+// that already retains e.mu and the engine's cross-process installation lock.
+// It does not acquire a second lock or grant runtime/publication authority.
+func (e *Engine) withRecoveryStagedFilesLocked(ctx context.Context, expected recoveryIntent, use func(context.Context, []backup.PreparedRecoveryFile) error) (result error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if use == nil {
+		return ErrPlan
+	}
 	if err := e.reconcileRecoveryStaging(ctx, expected); err != nil {
 		return err
 	}
