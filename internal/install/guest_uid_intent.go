@@ -67,7 +67,7 @@ func (e *Engine) commitImmutableGuestIntent(ctx context.Context, name, prefix st
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if name != "guest-uid-intent.json" && name != "guest-storage-intent.json" {
+	if name != "guest-uid-intent.json" && name != "guest-storage-intent.json" && name != "guest-identity-nss-intent.json" {
 		return ErrPlan
 	}
 	if len(data) > 8192 {
