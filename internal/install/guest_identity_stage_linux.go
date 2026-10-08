@@ -3,6 +3,7 @@
 package install
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -41,6 +42,23 @@ func (e *Engine) stageGuestIdentityNameServices(ctx context.Context, directory *
 		if unix.Fstat(int(source.Fd()), &original) != nil || original.Mode != unix.S_IFREG|0644 || original.Nlink != 1 || original.Uid != 0 || original.Gid != 0 || original.Size != int64(len(intent.Original)) {
 			return ErrConflict
 		}
+		checkSource := func() error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			data, err := io.ReadAll(io.NewSectionReader(source, 0, original.Size+1))
+			if err != nil {
+				return err
+			}
+			var current unix.Stat_t
+			if !bytes.Equal(data, []byte(intent.Original)) || unix.Fstat(int(source.Fd()), &current) != nil || current.Dev != original.Dev || current.Ino != original.Ino || current.Mode != original.Mode || current.Nlink != 1 || current.Uid != 0 || current.Gid != 0 || current.Size != original.Size {
+				return ErrConflict
+			}
+			return ctx.Err()
+		}
+		if err := checkSource(); err != nil {
+			return err
+		}
 		file, err := directory.OpenFile(".homenode-nsswitch.stage", os.O_CREATE|os.O_EXCL|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
 		if err != nil {
 			return err
@@ -68,6 +86,25 @@ func (e *Engine) stageGuestIdentityNameServices(ctx context.Context, directory *
 		if err := guard(ctx); err != nil {
 			return err
 		}
+		if err := checkSource(); err != nil {
+			return err
+		}
+		checkStage := func() error {
+			contents, err := io.ReadAll(io.NewSectionReader(file, 0, int64(len(data))+1))
+			if err != nil {
+				return err
+			}
+			var current unix.Stat_t
+			opened, statErr := file.Stat()
+			named, nameErr := directory.Lstat(".homenode-nsswitch.stage")
+			if !bytes.Equal(contents, data) || unix.Fstat(int(file.Fd()), &current) != nil || current.Dev != stat.Dev || current.Ino != stat.Ino || current.Mode != stat.Mode || current.Nlink != 1 || current.Uid != 0 || current.Gid != 0 || current.Size != stat.Size || statErr != nil || nameErr != nil || !os.SameFile(opened, named) {
+				return ErrConflict
+			}
+			return ctx.Err()
+		}
+		if err := checkStage(); err != nil {
+			return err
+		}
 		encodedStage, err := json.Marshal(stage)
 		if err != nil {
 			return err
@@ -75,7 +112,7 @@ func (e *Engine) stageGuestIdentityNameServices(ctx context.Context, directory *
 		if err := e.commitImmutableGuestIntent(ctx, "guest-identity-nss-stage.json", "guest-identity-nss-stage", encodedStage); err != nil {
 			return err
 		}
-		return ctx.Err()
+		return checkStage()
 	})
 	if result != nil {
 		stage = guestIdentityNameServiceStage{}
