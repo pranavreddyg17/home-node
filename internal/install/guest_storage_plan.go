@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"reflect"
 	"runtime"
@@ -43,11 +44,11 @@ func (e *Engine) planInstalledGuestStorageProvisioningLocked(ctx context.Context
 	empty := GuestStorageProvisioningPlan{}
 	group, err := supervisor.ObserveGuestKVMGroup(ctx)
 	if err != nil {
-		return empty, err
+		return empty, fmt.Errorf("qualify KVM storage group: %w", err)
 	}
 	identity, err := e.planInstalledGuestUIDProvisioningLocked(ctx, pool)
 	if err != nil {
-		return empty, err
+		return empty, fmt.Errorf("qualify installed guest UID pool: %w", err)
 	}
 	accounts, err := e.loadAccountJournal()
 	if err != nil {
@@ -73,7 +74,7 @@ func (e *Engine) planInstalledGuestStorageProvisioningLocked(ctx context.Context
 	}
 	current, err := supervisor.ObserveGuestKVMGroup(ctx)
 	if err != nil {
-		return empty, err
+		return empty, fmt.Errorf("recheck KVM storage group: %w", err)
 	}
 	if current != group {
 		return empty, ErrConflict
