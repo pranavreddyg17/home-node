@@ -60,10 +60,19 @@ func (e *Engine) commitGuestUIDIntent(ctx context.Context, plan GuestUIDProvisio
 	if err != nil {
 		return err
 	}
+	return e.commitImmutableGuestIntent(ctx, "guest-uid-intent.json", "guest-uid-intent", data)
+}
+
+func (e *Engine) commitImmutableGuestIntent(ctx context.Context, name, prefix string, data []byte) (result error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if name != "guest-uid-intent.json" && name != "guest-storage-intent.json" {
+		return ErrPlan
+	}
 	if len(data) > 8192 {
 		return ErrPlan
 	}
-	const name = "guest-uid-intent.json"
 	file, err := e.journalRoot.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0600)
 	existing := errors.Is(err, os.ErrExist)
 	if existing {
@@ -87,7 +96,7 @@ func (e *Engine) commitGuestUIDIntent(ctx context.Context, plan GuestUIDProvisio
 		}
 	} else {
 		if e.checkpoint != nil {
-			if err := e.checkpoint("guest-uid-intent-created", name); err != nil {
+			if err := e.checkpoint(prefix+"-created", name); err != nil {
 				return err
 			}
 		}
@@ -96,7 +105,7 @@ func (e *Engine) commitGuestUIDIntent(ctx context.Context, plan GuestUIDProvisio
 			return errors.Join(io.ErrShortWrite, err)
 		}
 		if e.checkpoint != nil {
-			if err := e.checkpoint("guest-uid-intent-written", name); err != nil {
+			if err := e.checkpoint(prefix+"-written", name); err != nil {
 				return err
 			}
 		}
@@ -115,7 +124,7 @@ func (e *Engine) commitGuestUIDIntent(ctx context.Context, plan GuestUIDProvisio
 		return err
 	}
 	if e.checkpoint != nil {
-		if err := e.checkpoint("guest-uid-intent-durable", name); err != nil {
+		if err := e.checkpoint(prefix+"-durable", name); err != nil {
 			return err
 		}
 	}

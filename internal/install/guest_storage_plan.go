@@ -36,6 +36,11 @@ func (e *Engine) PlanInstalledGuestStorageProvisioning(ctx context.Context, pool
 		return empty, ErrConflict
 	}
 	defer e.mu.Unlock()
+	return e.planInstalledGuestStorageProvisioningLocked(ctx, pool)
+}
+
+func (e *Engine) planInstalledGuestStorageProvisioningLocked(ctx context.Context, pool supervisor.GuestUIDPool) (GuestStorageProvisioningPlan, error) {
+	empty := GuestStorageProvisioningPlan{}
 	group, err := supervisor.ObserveGuestKVMGroup(ctx)
 	if err != nil {
 		return empty, err
