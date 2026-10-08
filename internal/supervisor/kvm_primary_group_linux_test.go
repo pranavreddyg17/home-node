@@ -34,6 +34,15 @@ func TestNativeKVMPrimaryGroupAccess(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
+	observedGroup, err := ObserveGuestKVMGroup(ctx)
+	if err != nil || observedGroup != stat.Gid {
+		t.Fatal("qualified KVM group observation", observedGroup, err)
+	}
+	cancelled, stop := context.WithCancel(ctx)
+	stop()
+	if group, err := ObserveGuestKVMGroup(cancelled); group != 0 || !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled KVM group admitted", group, err)
+	}
 	pool, err := ObserveLocalGuestUIDConflicts(ctx, GuestUIDPool{First: 2000000000, Last: 2000000255})
 	if err != nil {
 		t.Fatal(err)
