@@ -171,6 +171,30 @@ func TestRootRecoveryPublicationJournalsBeforeOwnershipTransfer(t *testing.T) {
 			if _, err := os.Stat(filepath.Join(destinationPath, "management.db")); !errors.Is(err, os.ErrNotExist) {
 				t.Fatal("ownership resume published data", err)
 			}
+			directory, err := destination.Open(".")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer directory.Close()
+			e.mu.Lock()
+			err = e.withResumedRecoveryPublication(context.Background(), destination, saved, recovery, guard, func(ctx context.Context, resumed *os.File) error {
+				return e.publishRecoveryWithIntent(ctx, directory, resumed, ".recovery-management.publish", saved, recovery, guard)
+			})
+			e.mu.Unlock()
+			if err != nil {
+				t.Fatal("resumed staged inode could not publish", err)
+			}
+			e.mu.Lock()
+			err = e.withResumedRecoveryPublication(context.Background(), destination, saved, recovery, guard, func(ctx context.Context, resumed *os.File) error {
+				return e.publishRecoveryWithIntent(ctx, directory, resumed, ".recovery-management.publish", saved, recovery, guard)
+			})
+			e.mu.Unlock()
+			if err != nil {
+				t.Fatal("published inode could not reconcile exact retry", err)
+			}
+			if err := unix.Lstat(filepath.Join(destinationPath, "management.db"), &stat); err != nil || stat.Ino != saved.Identity.Inode || stat.Uid != 801 || stat.Gid != 801 {
+				t.Fatal("published retry lost recorded identity", err)
+			}
 		})
 	}
 }

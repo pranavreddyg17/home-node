@@ -29,7 +29,13 @@ func (e *Engine) withResumedRecoveryPublication(ctx context.Context, destination
 		if intent.FileName != "management.db" {
 			stage = ".recovery-" + intent.FileName[:len(intent.FileName)-4] + ".publish"
 		}
-		file, err := destination.OpenFile(stage, os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+		name := stage
+		file, err := destination.OpenFile(name, os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+		published := false
+		if errors.Is(err, os.ErrNotExist) {
+			name, published = intent.FileName, true
+			file, err = destination.OpenFile(name, os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+		}
 		if err != nil {
 			return err
 		}
@@ -42,6 +48,9 @@ func (e *Engine) withResumedRecoveryPublication(ctx context.Context, destination
 		// chown changes the UID and GID together. Accept only the original
 		// private root ownership or the complete committed target ownership.
 		original := stat.Uid == 0 && stat.Gid == 0
+		if published && original {
+			return ErrConflict
+		}
 		if !original && (stat.Uid != i.UID || stat.Gid != i.GID) {
 			return ErrConflict
 		}
@@ -57,10 +66,15 @@ func (e *Engine) withResumedRecoveryPublication(ctx context.Context, destination
 			return err
 		}
 		qualifyPath := func() error {
-			current, err := destination.Lstat(stage)
+			current, err := destination.Lstat(name)
 			opened, statErr := file.Stat()
 			if err != nil || statErr != nil || !os.SameFile(current, opened) {
 				return ErrConflict
+			}
+			if published {
+				if _, err := destination.Lstat(stage); !errors.Is(err, os.ErrNotExist) {
+					return ErrConflict
+				}
 			}
 			return nil
 		}
