@@ -101,7 +101,30 @@ func TestRootRecoveryPublicationJournalsBeforeOwnershipTransfer(t *testing.T) {
 			if err != nil || string(record) != string(retained) {
 				t.Fatal("refused retry changed ownership intent", err)
 			}
+			// Equal-size corruption must refuse before either ownership or
+			// the consumer changes the recorded object.
+			corrupt := append([]byte(nil), data...)
+			corrupt[0] ^= 1
+			if err := os.WriteFile(stagePath, corrupt, 0600); err != nil {
+				t.Fatal(err)
+			}
 			consumed := false
+			e.mu.Lock()
+			err = e.withResumedRecoveryPublication(context.Background(), destination, saved, recovery, guard, func(context.Context, *os.File) error {
+				consumed = true
+				return nil
+			})
+			e.mu.Unlock()
+			if !errors.Is(err, ErrConflict) || consumed {
+				t.Fatal("corrupted committed stage resumed", err)
+			}
+			var unchanged unix.Stat_t
+			if err := unix.Lstat(stagePath, &unchanged); err != nil || unchanged.Ino != stat.Ino || unchanged.Uid != stat.Uid || unchanged.Gid != stat.Gid {
+				t.Fatal("refused corruption changed ownership", err)
+			}
+			if err := os.WriteFile(stagePath, data, 0600); err != nil {
+				t.Fatal(err)
+			}
 			e.mu.Lock()
 			err = e.withResumedRecoveryPublication(context.Background(), destination, saved, recovery, guard, func(ctx context.Context, resumed *os.File) error {
 				consumed = true

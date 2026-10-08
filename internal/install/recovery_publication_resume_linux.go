@@ -78,6 +78,9 @@ func (e *Engine) withResumedRecoveryPublication(ctx context.Context, destination
 		if err := use(ctx, file); err != nil {
 			return err
 		}
+		if err := verifyRecoveryPublicationDescriptor(ctx, file, intent); err != nil {
+			return err
+		}
 		return guard(ctx)
 	})
 }
