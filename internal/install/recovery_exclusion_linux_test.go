@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -14,7 +15,7 @@ func TestRootRecoveryExclusionRetainsMarkerAcrossConsumer(t *testing.T) {
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_UPDATE_INIT_INTEGRATION") != "1" {
 		t.Skip("explicit disposable Linux root fixture")
 	}
-	for _, fault := range []string{"none", "configuration-drift", "consumer-failed", "marker-replaced", "runtime-returned", "guard-configuration-drift"} {
+	for _, fault := range []string{"none", "configuration-drift", "consumer-failed", "marker-replaced", "runtime-returned", "guard-configuration-drift", "identity-transaction"} {
 		t.Run(fault, func(t *testing.T) {
 			c, _, _, now := configurationFixture(t)
 			c.Maintenance = &MaintenanceAccount{UID: 803, GID: 803}
@@ -36,6 +37,21 @@ func TestRootRecoveryExclusionRetainsMarkerAcrossConsumer(t *testing.T) {
 			original, err := e.journalRoot.Lstat("recovery-blocked")
 			if err != nil {
 				t.Fatal(err)
+			}
+			var identityIntent guestIdentityNameServiceIntent
+			identityOriginal := []byte("passwd: files systemd\ngroup: files\nshadow: files\n")
+			if fault == "identity-transaction" {
+				proposal, err := planGuestIdentityNameServices(identityOriginal)
+				if err != nil {
+					t.Fatal(err)
+				}
+				identityIntent = guestIdentityNameServiceIntent{Version: 1, OwnerID: strings.Repeat("b", 32), Original: string(identityOriginal), Proposal: proposal}
+				if err := os.WriteFile(filepath.Join(host, "etc/nsswitch.conf"), identityOriginal, 0644); err != nil {
+					t.Fatal(err)
+				}
+				if err := e.commitGuestIdentityNameServices(context.Background(), identityIntent.OwnerID, identityOriginal, proposal); err != nil {
+					t.Fatal(err)
+				}
 			}
 			observations, consumers := 0, 0
 			observe := func(context.Context) error {
@@ -64,6 +80,10 @@ func TestRootRecoveryExclusionRetainsMarkerAcrossConsumer(t *testing.T) {
 			}
 			e.mu.Lock()
 			err = e.withRecoveryExclusionGuardedLocked(context.Background(), observe, e.observeRecoveryDestinationVacancy, func(ctx context.Context, guard func(context.Context) error) error {
+				if fault == "identity-transaction" {
+					consumers++
+					return e.applyGuestIdentityNameServicesLocked(ctx, identityIntent, guard)
+				}
 				if fault == "guard-configuration-drift" {
 					if err := e.host.WriteFile("etc/homenode/runtime-policy.json", []byte("drift"), 0600); err != nil {
 						return err
@@ -74,6 +94,15 @@ func TestRootRecoveryExclusionRetainsMarkerAcrossConsumer(t *testing.T) {
 			})
 			e.mu.Unlock()
 			switch fault {
+			case "identity-transaction":
+				if err != nil || observations < 3 || consumers != 1 {
+					t.Fatal("identity mutation did not retain live exclusion checks", err, observations, consumers)
+				}
+				current, readErr := os.ReadFile(filepath.Join(host, "etc/nsswitch.conf"))
+				originalBytes, originalErr := os.ReadFile(filepath.Join(host, "etc/.homenode-nsswitch.stage"))
+				if readErr != nil || originalErr != nil || string(current) != identityIntent.Proposal.Contents || string(originalBytes) != string(identityOriginal) {
+					t.Fatal("excluded identity transaction lost intended or original bytes", readErr, originalErr)
+				}
 			case "none":
 				if err != nil || observations != 2 || consumers != 1 {
 					t.Fatal("retained scope incomplete", observations, consumers, err)
