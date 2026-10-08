@@ -45,7 +45,7 @@ func installedAccountFixtureJournal(t *testing.T) string {
 		}
 		// Remove only known files from this freshly created, retained directory.
 		// Unexpected entries make directory removal fail and remain for inspection.
-		for _, name := range []string{"install.lock", "accounts.json", "maintenance-accounts.json", "guest-identity-nss-intent.json", "guest-uid-intent.json", "guest-storage-intent.json"} {
+		for _, name := range []string{"install.lock", "accounts.json", "maintenance-accounts.json", "guest-identity-nss-intent.json", "guest-uid-intent.json", "guest-storage-intent.json", "guest-uid-allocation-intent.json"} {
 			info, err := root.Lstat(name)
 			if os.IsNotExist(err) {
 				continue

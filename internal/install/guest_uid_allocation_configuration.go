@@ -10,7 +10,9 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
 )
 
-type guestUIDAllocatorRanges struct {
+// GuestUIDAllocatorRanges is an explicit dedicated-host allocator policy.
+// It controls configured defaults only; it cannot constrain privileged overrides.
+type GuestUIDAllocatorRanges struct {
 	NormalFirst      uint32 `json:"normalFirst"`
 	NormalLast       uint32 `json:"normalLast"`
 	SystemFirst      uint32 `json:"systemFirst"`
@@ -18,6 +20,8 @@ type guestUIDAllocatorRanges struct {
 	SubordinateFirst uint32 `json:"subordinateFirst"`
 	SubordinateLast  uint32 `json:"subordinateLast"`
 }
+
+type guestUIDAllocatorRanges = GuestUIDAllocatorRanges
 
 const maxGuestUIDAllocatorConfigurationBytes = 65536
 

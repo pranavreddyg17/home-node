@@ -158,6 +158,29 @@ func TestInstalledAccountInspection(t *testing.T) {
 	if identityErr != nil || identityReplay != identityPreview {
 		t.Fatal("native identity preparation retry changed intent", identityErr)
 	}
+	allocatorBefore, err := os.Lstat("/etc/login.defs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	allocatorBytes, err := os.ReadFile("/etc/login.defs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	allocatorPool := supervisor.GuestUIDPool{First: 2000000000, Last: 2000000001}
+	allocatorSelection := GuestUIDAllocatorRanges{NormalFirst: 1000, NormalLast: 60000, SystemFirst: 100, SystemLast: 999, SubordinateFirst: 100000, SubordinateLast: 600100000}
+	allocatorPreview, err := engine.PrepareGuestUIDAllocationConfiguration(ctx, allocatorPool, allocatorSelection)
+	if err != nil || allocatorPreview.OwnerID != identityOwner || allocatorPreview.OriginalSHA256 != digest(allocatorBytes) || len(allocatorPreview.DesiredSHA256) != 64 || !allocatorPreview.IntentCommitted || allocatorPreview.ConfigurationApplied || allocatorPreview.Selection != allocatorSelection {
+		t.Fatal("native allocator preparation", err)
+	}
+	allocatorReplay, err := engine.PrepareGuestUIDAllocationConfiguration(ctx, allocatorPool, allocatorSelection)
+	if err != nil || allocatorReplay != allocatorPreview {
+		t.Fatal("native allocator preparation retry", err)
+	}
+	allocatorAfter, err := os.Lstat("/etc/login.defs")
+	allocatorCurrent, readErr := os.ReadFile("/etc/login.defs")
+	if err != nil || readErr != nil || !os.SameFile(allocatorBefore, allocatorAfter) || digest(allocatorCurrent) != digest(allocatorBytes) {
+		t.Fatal("allocator preparation changed host configuration", err, readErr)
+	}
 	// This fixture owns accounts, but deliberately has no installed configuration
 	// journal or retained activation barrier. Refusal must precede host mutation.
 	identityBefore, identityErr := os.Lstat("/etc/nsswitch.conf")
