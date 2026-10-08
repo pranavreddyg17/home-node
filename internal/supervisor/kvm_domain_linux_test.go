@@ -192,12 +192,25 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool) {
 		t.Fatal(err)
 	}
 	id := state.Random()
-	domain := Domain{ID: id, GuestUID: uid, GuestGID: deviceStat.Gid, Image: catalog.Image{MemoryMiB: 256, VCPUs: 1, DataBytes: 16 << 20}, SystemPath: filepath.Join(base, "system.raw"), DataPath: filepath.Join(base, id+".raw"), ChannelPath: filepath.Join(base, id, "adapter.sock")}
+	domain := Domain{ID: id, GuestUID: uid, GuestGID: deviceStat.Gid, Image: catalog.Image{MemoryMiB: 256, VCPUs: 1, DataBytes: 16 << 20}, SystemPath: filepath.Join(base, "images", "system.raw"), DataPath: filepath.Join(base, "volumes", id+".raw"), ChannelPath: filepath.Join(base, id, "adapter.sock")}
+	// Exercise the proposed protected storage layout under the sole KVM group.
+	// These are owned fixture directories, not an installed policy publication.
+	for _, directory := range []string{filepath.Dir(domain.SystemPath), filepath.Dir(domain.DataPath)} {
+		if err := os.Mkdir(directory, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chown(directory, 0, int(deviceStat.Gid)); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(directory, 0710); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, disk := range []struct {
 		path  string
 		owner uint32
 		mode  os.FileMode
-	}{{domain.SystemPath, 0, 0640}, {domain.DataPath, uid, 0600}} {
+	}{{domain.SystemPath, 0, 0440}, {domain.DataPath, uid, 0600}} {
 		file, err := os.OpenFile(disk.path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 		if err != nil {
 			t.Fatal(err)
