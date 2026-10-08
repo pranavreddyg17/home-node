@@ -68,6 +68,21 @@ func TestRootGuestIdentityStagingRefusesDriftBeforeCommit(t *testing.T) {
 				if err != nil || stage.Inode == 0 || stage.SourceInode == 0 {
 					t.Fatal("qualified staging refused", err)
 				}
+				parentFile, err := directory.Open(".")
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer parentFile.Close()
+				for attempt := 0; attempt < 2; attempt++ {
+					if err := e.publishGuestIdentityNameServices(ctx, parentFile, stage, intent, guard); err != nil {
+						t.Fatal("record-bound publication or retry refused", attempt, err)
+					}
+				}
+				current, err := os.ReadFile(sourcePath)
+				retained, retainedErr := os.ReadFile(filepath.Join(parent, ".homenode-nsswitch.stage"))
+				if err != nil || retainedErr != nil || string(current) != proposal.Contents || string(retained) != string(original) {
+					t.Fatal("publication lost intended or retained original bytes", err, retainedErr)
+				}
 			} else {
 				expected := ErrConflict
 				if fault == "cancel" {

@@ -32,10 +32,16 @@ func (e *Engine) withGuestIdentityNameServiceIntent(ctx context.Context, intent 
 	if err != nil {
 		return err
 	}
-	if len(expected) > 8192 {
+	return e.withGuestIdentityRecord(ctx, "guest-identity-nss-intent.json", expected, use)
+}
+
+func (e *Engine) withGuestIdentityRecord(ctx context.Context, name string, expected []byte, use func(context.Context) error) (result error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if use == nil || len(expected) == 0 || len(expected) > 8192 || (name != "guest-identity-nss-intent.json" && name != "guest-identity-nss-stage.json") {
 		return ErrPlan
 	}
-	const name = "guest-identity-nss-intent.json"
 	file, err := e.journalRoot.OpenFile(name, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return err
