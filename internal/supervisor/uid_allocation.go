@@ -2,6 +2,7 @@ package supervisor
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"unicode/utf8"
 )
@@ -18,7 +19,7 @@ func validateGuestUIDAutomaticAllocation(ctx context.Context, pool GuestUIDPool,
 		return ErrPolicy
 	}
 	if pool.First <= 1879048191 && pool.Last >= 524288 {
-		return ErrPolicy
+		return fmt.Errorf("guest UID pool overlaps the systemd container allocation range: %w", ErrPolicy)
 	}
 	required := map[string]uint32{"UID_MIN": 0, "UID_MAX": 0, "SYS_UID_MIN": 0, "SYS_UID_MAX": 0, "SUB_UID_MIN": 0, "SUB_UID_MAX": 0}
 	seen := map[string]bool{}
@@ -35,11 +36,11 @@ func validateGuestUIDAutomaticAllocation(ctx context.Context, pool GuestUIDPool,
 			continue
 		}
 		if len(fields) != 2 || seen[fields[0]] {
-			return ErrPolicy
+			return fmt.Errorf("automatic UID allocation requires one explicit %s value: %w", fields[0], ErrPolicy)
 		}
 		value, err := decimalUID(fields[1])
 		if err != nil {
-			return err
+			return fmt.Errorf("automatic UID allocation requires a decimal %s value: %w", fields[0], err)
 		}
 		required[fields[0]] = value
 		seen[fields[0]] = true
@@ -47,8 +48,16 @@ func validateGuestUIDAutomaticAllocation(ctx context.Context, pool GuestUIDPool,
 	for _, prefix := range []string{"UID", "SYS_UID", "SUB_UID"} {
 		min, max := prefix+"_MIN", prefix+"_MAX"
 		first, last := required[min], required[max]
-		if !seen[min] || !seen[max] || first == 0 || last < first || pool.First <= last && pool.Last >= first {
-			return ErrPolicy
+		for _, name := range []string{min, max} {
+			if !seen[name] {
+				return fmt.Errorf("automatic UID allocation requires an explicit %s value: %w", name, ErrPolicy)
+			}
+		}
+		if first == 0 || last < first {
+			return fmt.Errorf("automatic UID allocation requires an ordered nonzero %s range: %w", prefix, ErrPolicy)
+		}
+		if pool.First <= last && pool.Last >= first {
+			return fmt.Errorf("guest UID pool overlaps the %s automatic allocation range: %w", prefix, ErrPolicy)
 		}
 	}
 	return ctx.Err()
