@@ -3651,3 +3651,8 @@ Replaced unbounded startMu acquisition in start and supervisor Shutdown with con
 ### Queued shutdown preserves permanent start exclusion
 
 Added contention regression for successful supervisor shutdown: it cannot bypass held preparation serialization, then after release it reconciles the running fake guest, keeps shuttingDown admission closed and rejects a subsequent start before backend effects. Active inventory must be empty. Combined cancellation/queued-shutdown races passed1.932s, Linux amd64 tests compile and diff checks passed. This qualifies live-manager concurrency with a fake backend, not native service shutdown or cross-process exclusion. CI37726776683 remains confirmed live at2c3b0c3 and excludes queued runtime-profile/lock changes. Complete production provisioning and application acceptance remain unfinished.
+
+
+### Running inspection supplies ownership metadata for binding
+
+Review found Inspect built an identity-only domain; the new saved image/size binding check would therefore refuse a valid running reserved guest with intent. It now supplies the recorded image digest and data size before binding. Manager drift fixtures explicitly inspect the valid running instance and require its reserved UID before injecting each corruption, preventing a refusal-only regression from passing. Full supervisor races passed10.423s, Linux amd64 tests compile and diff checks passed. This is live manager/database orchestration with fake backend, not application guest execution. CI37726776683 remains confirmed live at2c3b0c3 in KVM qualification and excludes queued follow-ups. Full provisioning and end-to-end acceptance remain unfinished.

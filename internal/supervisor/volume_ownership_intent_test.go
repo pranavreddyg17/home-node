@@ -225,6 +225,10 @@ func TestOwnershipMetadataDriftStopsDuringAudit(t *testing.T) {
 			if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET state='running' WHERE id=?`, request.InstanceID); err != nil {
 				t.Fatal(err)
 			}
+			inspected, err := m.Inspect(ctx, request.InstanceID)
+			if err != nil || inspected.GuestUID != intent.UID || inspected.State != "running" {
+				t.Fatal("exact running provenance inspection refused", inspected, err)
+			}
 			changed := intent
 			switch field {
 			case "image":

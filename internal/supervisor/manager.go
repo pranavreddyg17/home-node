@@ -154,6 +154,7 @@ func (m *Manager) Inspect(ctx context.Context, id string) (Instance, error) {
 	}
 	if instance.State == "running" {
 		domain := Domain{ID: instance.ID}
+		domain.Image.SHA256, domain.Image.DataBytes = instance.ImageSHA256, instance.DataBytes
 		if err := m.bindDomainGuestIdentity(ctx, &domain, false); err != nil {
 			return Instance{}, err
 		}
