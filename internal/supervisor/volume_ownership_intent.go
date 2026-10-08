@@ -20,6 +20,17 @@ type VolumeOwnershipIntent struct {
 }
 
 func (m *Manager) recordVolumeOwnershipIntent(ctx context.Context, intent VolumeOwnershipIntent) error {
+	return m.checkVolumeOwnershipIntent(ctx, intent, true)
+}
+
+// verifyVolumeOwnershipIntent rechecks saved provenance and current preparing
+// policy without creating or repairing records. The caller still needs a
+// retained stopped-runtime barrier before changing a file's ownership.
+func (m *Manager) verifyVolumeOwnershipIntent(ctx context.Context, intent VolumeOwnershipIntent) error {
+	return m.checkVolumeOwnershipIntent(ctx, intent, false)
+}
+
+func (m *Manager) checkVolumeOwnershipIntent(ctx context.Context, intent VolumeOwnershipIntent, create bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -53,6 +64,9 @@ func (m *Manager) recordVolumeOwnershipIntent(ctx context.Context, intent Volume
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
+		}
+		if !create {
+			return ErrPolicy
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO runtime_volume_ownership(instance_id,image_sha256,uid,gid,device,inode,size) VALUES(?,?,?,?,?,?,?)`, intent.InstanceID, intent.ImageSHA256, intent.UID, intent.GID, intent.Device, intent.Inode, intent.Size)
 		return err

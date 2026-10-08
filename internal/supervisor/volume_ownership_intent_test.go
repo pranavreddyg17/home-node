@@ -27,6 +27,13 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 		return intent
 	}
 	intent := makeIntent()
+	if err := m.verifyVolumeOwnershipIntent(ctx, intent); !errors.Is(err, ErrPolicy) {
+		t.Fatal("verification created missing intent", err)
+	}
+	var initialCount int
+	if err := m.Store.DB.QueryRow(`SELECT count(*) FROM runtime_volume_ownership`).Scan(&initialCount); err != nil || initialCount != 0 {
+		t.Fatal("verification changed inventory", initialCount, err)
+	}
 	if err := m.recordVolumeOwnershipIntent(ctx, intent); err != nil {
 		t.Fatal(err)
 	}
@@ -46,8 +53,14 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 	if err := replacement.recordVolumeOwnershipIntent(ctx, intent); err != nil {
 		t.Fatal("reopened ownership intent refused", err)
 	}
+	if err := replacement.verifyVolumeOwnershipIntent(ctx, intent); err != nil {
+		t.Fatal("saved intent verification refused", err)
+	}
 	if _, err := m.Store.DB.Exec(`UPDATE runtime_uid_leases SET uid=? WHERE instance_id=?`, intent.UID+1, intent.InstanceID); err != nil {
 		t.Fatal(err)
+	}
+	if err := m.verifyVolumeOwnershipIntent(ctx, intent); err == nil {
+		t.Fatal("corrupted saved intent verified: changed durable UID lease admitted")
 	}
 	if err := m.recordVolumeOwnershipIntent(ctx, intent); err == nil {
 		t.Fatal("changed durable UID lease admitted")
@@ -64,6 +77,9 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 	}
 	if _, err := m.Store.DB.Exec(`DELETE FROM runtime_guest_groups WHERE instance_id=?`, intent.InstanceID); err != nil {
 		t.Fatal(err)
+	}
+	if err := m.verifyVolumeOwnershipIntent(ctx, intent); err == nil {
+		t.Fatal("corrupted saved intent verified: missing durable group admitted")
 	}
 	if err := m.recordVolumeOwnershipIntent(ctx, intent); err == nil {
 		t.Fatal("missing durable group admitted")
@@ -83,6 +99,9 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 	for _, change := range []func(*VolumeOwnershipIntent){func(i *VolumeOwnershipIntent) { i.Inode++ }, func(i *VolumeOwnershipIntent) { i.Device++ }, func(i *VolumeOwnershipIntent) { i.UID++ }, func(i *VolumeOwnershipIntent) { i.GID++ }, func(i *VolumeOwnershipIntent) { i.Size++ }, func(i *VolumeOwnershipIntent) { i.ImageSHA256 = strings.Repeat("b", 64) }} {
 		changed := intent
 		change(&changed)
+		if err := m.verifyVolumeOwnershipIntent(ctx, changed); err == nil {
+			t.Fatal("changed ownership intent verified", changed)
+		}
 		if err := m.recordVolumeOwnershipIntent(ctx, changed); err == nil {
 			t.Fatal("changed ownership intent admitted", changed)
 		}
@@ -93,6 +112,9 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 	}
 	if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET state='running' WHERE id=?`, intent.InstanceID); err != nil {
 		t.Fatal(err)
+	}
+	if err := m.verifyVolumeOwnershipIntent(ctx, intent); err == nil {
+		t.Fatal("running-phase mutation authority verified")
 	}
 	if err := m.recordVolumeOwnershipIntent(ctx, intent); err == nil {
 		t.Fatal("running-phase mutation intent admitted")
