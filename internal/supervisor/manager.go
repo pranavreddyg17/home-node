@@ -239,8 +239,9 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 			return e
 		}
 		var existingWorkload, existingDigest, existingState string
-		var existingRevision int64
-		existingErr := tx.QueryRow("SELECT workload,image_sha256,state,revision FROM runtime_instances WHERE id=?", r.InstanceID).Scan(&existingWorkload, &existingDigest, &existingState, &existingRevision)
+		var existingRevision, existingDataBytes int64
+		var existingMemoryMiB, existingVCPUs int
+		existingErr := tx.QueryRow("SELECT workload,image_sha256,state,revision,memory_mib,vcpus,data_bytes FROM runtime_instances WHERE id=?", r.InstanceID).Scan(&existingWorkload, &existingDigest, &existingState, &existingRevision, &existingMemoryMiB, &existingVCPUs, &existingDataBytes)
 		restarting := existingErr == nil
 		var stopped int
 		if e = tx.QueryRow("SELECT coalesce(max(revision),0) FROM runtime_stops WHERE instance_id=?", r.InstanceID).Scan(&stopped); e != nil {
@@ -252,7 +253,7 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 		if existingErr != nil && !errors.Is(existingErr, sql.ErrNoRows) {
 			return existingErr
 		}
-		if restarting && (r.Workload == "video" || existingWorkload != r.Workload || existingDigest != image.SHA256 || existingState == "running" || existingState == "preparing" || existingState == "stopping" || existingState == "shutting-down") {
+		if restarting && (r.Workload == "video" || existingWorkload != r.Workload || existingDigest != image.SHA256 || existingMemoryMiB != image.MemoryMiB || existingVCPUs != image.VCPUs || existingDataBytes != image.DataBytes || existingState == "running" || existingState == "preparing" || existingState == "stopping" || existingState == "shutting-down") {
 			return ErrPolicy
 		}
 		var count, memory, cpus int
