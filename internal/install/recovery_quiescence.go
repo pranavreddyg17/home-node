@@ -45,6 +45,14 @@ func (e *Engine) observeRecoveryQuiescence(ctx context.Context, observe func(con
 // rather than treating its newly published files as foreign occupied storage.
 // No production publisher is enabled by this composition boundary alone.
 func (e *Engine) withRecoveryExclusionLocked(ctx context.Context, observe, destinations, use func(context.Context) error) (result error) {
+	var guarded func(context.Context, func(context.Context) error) error
+	if use != nil {
+		guarded = func(ctx context.Context, _ func(context.Context) error) error { return use(ctx) }
+	}
+	return e.withRecoveryExclusionGuardedLocked(ctx, observe, destinations, guarded)
+}
+
+func (e *Engine) withRecoveryExclusionGuardedLocked(ctx context.Context, observe, destinations func(context.Context) error, use func(context.Context, func(context.Context) error) error) (result error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Hour)
 	defer cancel()
 	if err := ctx.Err(); err != nil {
@@ -117,7 +125,44 @@ func (e *Engine) withRecoveryExclusionLocked(ctx context.Context, observe, desti
 		if err != nil || !os.SameFile(markerBefore, current) {
 			return ErrConflict
 		}
-		if err = use(ctx); err != nil {
+		verifyRetained := func(ctx context.Context) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			currentInstallation, err := e.load()
+			if err != nil || currentInstallation.ID != installed.ID || currentInstallation.Digest != installed.Digest || currentInstallation.Phase != "installed" {
+				return ErrConflict
+			}
+			for _, record := range installed.Items {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				if err := e.matches(record); err != nil {
+					return ErrConflict
+				}
+			}
+			if err := destinations(ctx); err != nil {
+				return err
+			}
+			if err := e.requireRecoveryActivationBlock(ctx); err != nil {
+				return err
+			}
+			current, err := e.journalRoot.Lstat("recovery-blocked")
+			if err != nil || !os.SameFile(markerBefore, current) {
+				return ErrConflict
+			}
+			return ctx.Err()
+		}
+		retainedGuard := func(ctx context.Context) error {
+			if err := verifyRetained(ctx); err != nil {
+				return err
+			}
+			if err := observe(ctx); err != nil {
+				return err
+			}
+			return verifyRetained(ctx)
+		}
+		if err = use(ctx, retainedGuard); err != nil {
 			return err
 		}
 		if err = observe(ctx); err != nil {

@@ -14,7 +14,7 @@ func TestRootRecoveryExclusionRetainsMarkerAcrossConsumer(t *testing.T) {
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_UPDATE_INIT_INTEGRATION") != "1" {
 		t.Skip("explicit disposable Linux root fixture")
 	}
-	for _, fault := range []string{"none", "configuration-drift", "consumer-failed", "marker-replaced", "runtime-returned"} {
+	for _, fault := range []string{"none", "configuration-drift", "consumer-failed", "marker-replaced", "runtime-returned", "guard-configuration-drift"} {
 		t.Run(fault, func(t *testing.T) {
 			c, _, _, now := configurationFixture(t)
 			c.Maintenance = &MaintenanceAccount{UID: 803, GID: 803}
@@ -63,7 +63,15 @@ func TestRootRecoveryExclusionRetainsMarkerAcrossConsumer(t *testing.T) {
 				return nil
 			}
 			e.mu.Lock()
-			err = e.withRecoveryExclusionLocked(context.Background(), observe, e.observeRecoveryDestinationVacancy, use)
+			err = e.withRecoveryExclusionGuardedLocked(context.Background(), observe, e.observeRecoveryDestinationVacancy, func(ctx context.Context, guard func(context.Context) error) error {
+				if fault == "guard-configuration-drift" {
+					if err := e.host.WriteFile("etc/homenode/runtime-policy.json", []byte("drift"), 0600); err != nil {
+						return err
+					}
+					return guard(ctx)
+				}
+				return use(ctx)
+			})
 			e.mu.Unlock()
 			switch fault {
 			case "none":
