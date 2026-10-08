@@ -1,6 +1,9 @@
 package supervisor
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // ObserveGuestUIDPoolEligibility combines protected NSS, local account/delegation
 // and host task observations before first pool provisioning. It returns conflicts
@@ -16,18 +19,18 @@ func ObserveGuestUIDPoolEligibility(ctx context.Context, pool GuestUIDPool) (Gue
 		return GuestUIDPool{}, err
 	}
 	if err := ObserveGuestUIDNameServiceEligibility(ctx); err != nil {
-		return GuestUIDPool{}, err
+		return GuestUIDPool{}, fmt.Errorf("qualify guest UID name services: %w", err)
 	}
 	if err := ObserveGuestUIDAutomaticAllocation(ctx, pool); err != nil {
-		return GuestUIDPool{}, err
+		return GuestUIDPool{}, fmt.Errorf("qualify automatic UID allocation ranges: %w", err)
 	}
 	observed, err := ObserveLocalGuestUIDConflicts(ctx, pool)
 	if err != nil {
-		return GuestUIDPool{}, err
+		return GuestUIDPool{}, fmt.Errorf("observe local UID conflicts: %w", err)
 	}
 	observed, err = ObserveGuestUIDProcessConflicts(ctx, observed)
 	if err != nil {
-		return GuestUIDPool{}, err
+		return GuestUIDPool{}, fmt.Errorf("observe running UID conflicts: %w", err)
 	}
 	if err := ctx.Err(); err != nil {
 		return GuestUIDPool{}, err
