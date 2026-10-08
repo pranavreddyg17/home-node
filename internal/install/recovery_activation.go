@@ -24,6 +24,11 @@ func (e *Engine) recoveryActivationMarker(ctx context.Context, create bool) (res
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if e.host.Name() == "/" {
+		if err := e.requireRecoveryJournalLocation(ctx); err != nil {
+			return err
+		}
+	}
 	flags := os.O_RDONLY | syscall.O_NOFOLLOW | syscall.O_NONBLOCK
 	if create {
 		flags = os.O_CREATE | os.O_EXCL | os.O_WRONLY | syscall.O_NOFOLLOW
@@ -53,6 +58,29 @@ func (e *Engine) recoveryActivationMarker(ctx context.Context, create bool) (res
 	}
 	if err = syncDirectory(e.journalRoot, "."); err != nil {
 		return err
+	}
+	if e.host.Name() == "/" {
+		if err := e.requireRecoveryJournalLocation(ctx); err != nil {
+			return err
+		}
+		marker, err := e.host.Lstat("var/lib/homenode-install/recovery-blocked")
+		if err != nil || !os.SameFile(info, marker) {
+			return ErrConflict
+		}
+	}
+	return ctx.Err()
+}
+
+// Installed units use this fixed directory in their ConditionPathExists guard.
+// A marker in an unrelated private journal cannot exclude their activation.
+func (e *Engine) requireRecoveryJournalLocation(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	opened, err := e.journalRoot.Stat(".")
+	named, nameErr := e.host.Lstat("var/lib/homenode-install")
+	if err != nil || nameErr != nil || !opened.IsDir() || !named.IsDir() || named.Mode()&os.ModeSymlink != 0 || !os.SameFile(opened, named) || !owned(named, e.owner) || named.Mode().Perm() != 0700 {
+		return ErrConflict
 	}
 	return ctx.Err()
 }

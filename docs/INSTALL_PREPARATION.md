@@ -116,7 +116,9 @@ preserves host configuration and refuses remote or ambiguous identity sources.
 It does not establish UID allocation exclusivity or enable reserved storage.
 `sudo homenode guest-identity-apply` applies that saved proposal to an owned,
 empty installation with an existing durable activation block. It accepts the
-same journal option, validates loaded unit ownership before stopping services,
+same journal option; application requires that journal to be the fixed
+`/var/lib/homenode-install` directory used by the installed unit conditions.
+It validates loaded unit ownership before stopping services,
 and retains the activation block while rechecking service dormancy, guest
 emptiness and account ownership through publication. It holds the shared
 account-writer lock and preserves the original configuration under
