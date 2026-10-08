@@ -67,10 +67,13 @@ func (e *Engine) commitImmutableGuestIntent(ctx context.Context, name, prefix st
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if name != "guest-uid-intent.json" && name != "guest-storage-intent.json" && name != "guest-identity-nss-intent.json" && name != "guest-identity-nss-stage.json" {
+	maximum := int64(8192)
+	if name == "guest-uid-allocation-intent.json" {
+		maximum = 262144
+	} else if name != "guest-uid-intent.json" && name != "guest-storage-intent.json" && name != "guest-identity-nss-intent.json" && name != "guest-identity-nss-stage.json" {
 		return ErrPlan
 	}
-	if len(data) > 8192 {
+	if int64(len(data)) > maximum {
 		return ErrPlan
 	}
 	file, err := e.journalRoot.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0600)
@@ -83,11 +86,11 @@ func (e *Engine) commitImmutableGuestIntent(ctx context.Context, name, prefix st
 	}
 	defer func() { result = errors.Join(result, file.Close()) }()
 	info, err := file.Stat()
-	if err != nil || !accountJournalFileAdmitted(info, e.owner, 8192) {
+	if err != nil || !accountJournalFileAdmitted(info, e.owner, maximum) {
 		return ErrConflict
 	}
 	if existing {
-		contents, err := io.ReadAll(io.LimitReader(file, 8193))
+		contents, err := io.ReadAll(io.LimitReader(file, maximum+1))
 		if err != nil {
 			return err
 		}
@@ -114,7 +117,7 @@ func (e *Engine) commitImmutableGuestIntent(ctx context.Context, name, prefix st
 		return err
 	}
 	final, err := file.Stat()
-	if err != nil || !accountJournalFileAdmitted(final, e.owner, 8192) || final.Size() != int64(len(data)) || !e.accountJournalPathUnchanged(name, final, 8192) {
+	if err != nil || !accountJournalFileAdmitted(final, e.owner, maximum) || final.Size() != int64(len(data)) || !e.accountJournalPathUnchanged(name, final, maximum) {
 		return ErrConflict
 	}
 	if err := file.Sync(); err != nil {

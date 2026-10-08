@@ -11,10 +11,15 @@ import (
 )
 
 type guestUIDAllocatorRanges struct {
-	NormalFirst, NormalLast           uint32
-	SystemFirst, SystemLast           uint32
-	SubordinateFirst, SubordinateLast uint32
+	NormalFirst      uint32 `json:"normalFirst"`
+	NormalLast       uint32 `json:"normalLast"`
+	SystemFirst      uint32 `json:"systemFirst"`
+	SystemLast       uint32 `json:"systemLast"`
+	SubordinateFirst uint32 `json:"subordinateFirst"`
+	SubordinateLast  uint32 `json:"subordinateLast"`
 }
+
+const maxGuestUIDAllocatorConfigurationBytes = 65536
 
 type guestUIDAllocationProposal struct {
 	OriginalSHA256 string `json:"originalSha256"`
@@ -30,7 +35,7 @@ func planGuestUIDAllocatorConfiguration(ctx context.Context, original []byte, po
 	if err := ctx.Err(); err != nil {
 		return empty, err
 	}
-	if len(original) == 0 || len(original) > 8192 || !utf8.Valid(original) || strings.ContainsAny(string(original), "\r\x00") {
+	if len(original) == 0 || len(original) > maxGuestUIDAllocatorConfigurationBytes || !utf8.Valid(original) || strings.ContainsAny(string(original), "\r\x00") {
 		return empty, ErrPlan
 	}
 	names := []string{"UID_MIN", "UID_MAX", "SYS_UID_MIN", "SYS_UID_MAX", "SUB_UID_MIN", "SUB_UID_MAX"}
@@ -86,7 +91,7 @@ func planGuestUIDAllocatorConfiguration(ctx context.Context, original []byte, po
 		}
 	}
 	contents := desired.String()
-	if len(contents) > 8192 {
+	if len(contents) > maxGuestUIDAllocatorConfigurationBytes {
 		return empty, ErrPlan
 	}
 	if err := supervisor.ValidateGuestUIDAutomaticAllocationConfiguration(ctx, pool, []byte(contents)); err != nil {

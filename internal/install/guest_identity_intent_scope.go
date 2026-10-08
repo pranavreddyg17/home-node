@@ -53,7 +53,13 @@ func (e *Engine) withGuestIdentityRecordGuarded(ctx context.Context, name string
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if use == nil || len(expected) == 0 || len(expected) > 8192 || (name != "guest-identity-nss-intent.json" && name != "guest-identity-nss-stage.json") {
+	maximum := int64(8192)
+	if name == "guest-uid-allocation-intent.json" {
+		maximum = 262144
+	} else if name != "guest-identity-nss-intent.json" && name != "guest-identity-nss-stage.json" {
+		return ErrPlan
+	}
+	if use == nil || len(expected) == 0 || int64(len(expected)) > maximum {
 		return ErrPlan
 	}
 	file, err := e.journalRoot.OpenFile(name, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
@@ -62,7 +68,7 @@ func (e *Engine) withGuestIdentityRecordGuarded(ctx context.Context, name string
 	}
 	defer func() { result = errors.Join(result, file.Close()) }()
 	before, err := file.Stat()
-	if err != nil || !accountJournalFileAdmitted(before, e.owner, 8192) || before.Size() != int64(len(expected)) || !e.accountJournalPathUnchanged(name, before, 8192) {
+	if err != nil || !accountJournalFileAdmitted(before, e.owner, maximum) || before.Size() != int64(len(expected)) || !e.accountJournalPathUnchanged(name, before, maximum) {
 		return ErrConflict
 	}
 	check := func() error {
@@ -72,12 +78,12 @@ func (e *Engine) withGuestIdentityRecordGuarded(ctx context.Context, name string
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
-		data, err := io.ReadAll(io.LimitReader(file, 8193))
+		data, err := io.ReadAll(io.LimitReader(file, maximum+1))
 		if err != nil {
 			return err
 		}
 		current, err := file.Stat()
-		if err != nil || !accountJournalFileAdmitted(current, e.owner, 8192) || !os.SameFile(before, current) || current.Size() != before.Size() || !bytes.Equal(data, expected) || !e.accountJournalPathUnchanged(name, before, 8192) {
+		if err != nil || !accountJournalFileAdmitted(current, e.owner, maximum) || !os.SameFile(before, current) || current.Size() != before.Size() || !bytes.Equal(data, expected) || !e.accountJournalPathUnchanged(name, before, maximum) {
 			return ErrConflict
 		}
 		return ctx.Err()
