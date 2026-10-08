@@ -124,8 +124,26 @@ emptiness and account ownership through publication. It holds the shared
 account-writer lock and preserves the original configuration under
 `/etc/.homenode-nsswitch.stage`; retries use the recorded file identities.
 Success reports `configurationApplied: true`. This command does not reserve
-UID ranges, publish runtime policy or release the activation block. Native
-qualification of the complete public application path is still pending.
+UID ranges, publish runtime policy or release the activation block. Native API
+application and packaged CLI retry have been verified in disposable Linux CI;
+supported physical-host acceptance remains pending.
+
+`guest-allocation-prepare` records an explicit `login.defs` proposal using the
+owned accounts and protected host configuration. All boundaries are required:
+
+```sh
+sudo homenode guest-allocation-prepare \
+  --first-uid 2000000000 --last-uid 2000000001 \
+  --uid-min 1000 --uid-max 60000 \
+  --sys-uid-min 100 --sys-uid-max 999 \
+  --sub-uid-min 100000 --sub-uid-max 600100000
+```
+
+These values are an example explicit policy, not detected host defaults. Choose
+ranges for the dedicated host before preparation. The command preserves host
+bytes, reports hashes with `configurationApplied: false`, and accepts
+`--journal-dir` for an existing private journal. Allocator application, future
+drift enforcement and exclusive reservation remain pending.
 
 After account provisioning, inspect a proposed guest UID range on the dedicated
 Linux host. Choose the entire range deliberately; conflicts refuse the proposal

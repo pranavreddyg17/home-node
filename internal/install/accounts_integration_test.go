@@ -220,6 +220,14 @@ func TestInstalledAccountInspection(t *testing.T) {
 	if err := json.Unmarshal(identityOutput, &identityCLI); err != nil || identityCLI != identityPreview {
 		t.Fatal("packaged identity preparation status", err)
 	}
+	allocatorOutput, err := accountCommand(ctx, "/usr/bin/homenode", "guest-allocation-prepare", "--first-uid", "2000000000", "--last-uid", "2000000001", "--uid-min", "1000", "--uid-max", "60000", "--sys-uid-min", "100", "--sys-uid-max", "999", "--sub-uid-min", "100000", "--sub-uid-max", "600100000")
+	if err != nil {
+		t.Fatal("packaged allocator preparation command", err)
+	}
+	var allocatorCLI GuestUIDAllocationPreview
+	if err := json.Unmarshal(allocatorOutput, &allocatorCLI); err != nil || allocatorCLI != allocatorPreview {
+		t.Fatal("packaged allocator preparation status", err)
+	}
 	if _, err := accountCommand(ctx, "/usr/bin/homenode", "guest-identity-apply", "--journal-dir", journalDirectory); err == nil {
 		t.Fatal("packaged apply command admitted uninstalled configuration")
 	}
