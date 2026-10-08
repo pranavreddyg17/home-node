@@ -101,6 +101,27 @@ func TestRootRecoveryPublicationJournalsBeforeOwnershipTransfer(t *testing.T) {
 			if err != nil || string(record) != string(retained) {
 				t.Fatal("refused retry changed ownership intent", err)
 			}
+			finalPath := filepath.Join(destinationPath, "management.db")
+			if err := os.WriteFile(finalPath, data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			occupiedConsumer := false
+			e.mu.Lock()
+			err = e.withResumedRecoveryPublication(context.Background(), destination, saved, recovery, guard, func(context.Context, *os.File) error {
+				occupiedConsumer = true
+				return nil
+			})
+			e.mu.Unlock()
+			if !errors.Is(err, ErrConflict) || occupiedConsumer {
+				t.Fatal("occupied publication target admitted ownership retry", err)
+			}
+			var occupiedStage unix.Stat_t
+			if err := unix.Lstat(stagePath, &occupiedStage); err != nil || occupiedStage.Ino != stat.Ino || occupiedStage.Uid != stat.Uid || occupiedStage.Gid != stat.Gid {
+				t.Fatal("occupied target refusal changed staging", err)
+			}
+			if err := os.Remove(finalPath); err != nil {
+				t.Fatal(err)
+			}
 			calls, replacedConsumer := 0, false
 			detached := stagePath + ".detached"
 			replaceGuard := func(context.Context) error {

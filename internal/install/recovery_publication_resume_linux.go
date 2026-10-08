@@ -75,6 +75,8 @@ func (e *Engine) withResumedRecoveryPublication(ctx context.Context, destination
 				if _, err := destination.Lstat(stage); !errors.Is(err, os.ErrNotExist) {
 					return ErrConflict
 				}
+			} else if _, err := destination.Lstat(intent.FileName); !errors.Is(err, os.ErrNotExist) {
+				return ErrConflict
 			}
 			return nil
 		}
