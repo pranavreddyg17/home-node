@@ -23,6 +23,9 @@ func (e *Engine) ObserveRecoveryQuiescence(ctx context.Context) error {
 	}
 	defer e.mu.Unlock()
 	return e.observeRecoveryQuiescence(ctx, func(ctx context.Context) error {
+		if err := ObserveRecoveryActivationConditions(ctx); err != nil {
+			return err
+		}
 		if err := ObserveRecoveryServicesDormant(ctx); err != nil {
 			return err
 		}
