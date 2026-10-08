@@ -32,6 +32,27 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 		t.Fatal(err)
 	}
 	intent := VolumeOwnershipIntent{InstanceID: state.Random(), ImageSHA256: strings.Repeat("a", 64), UID: 200000, GID: 200000, Device: uint64(stat.Dev), Inode: stat.Ino, Size: size}
+	m, _ := newManager(t)
+	pool := GuestUIDPool{First: 200000, Last: 200002}
+	m.GuestUIDPool, m.GuestGID = &pool, intent.GID
+	d := Domain{ID: intent.InstanceID}
+	d.Image.SHA256, d.Image.DataBytes = intent.ImageSHA256, size
+	if err := m.bindDomainGuestIdentity(context.Background(), &d, true); err != nil {
+		t.Fatal(err)
+	}
+	if d.GuestUID != intent.UID {
+		t.Fatal("fixture identity drift")
+	}
+	if _, err := m.Store.DB.Exec(`INSERT INTO runtime_instances(id,workload,state,desired,image_sha256,memory_mib,vcpus,data_bytes,created_at,revision) VALUES(?,'files','preparing','running',?,256,1,?,0,0)`, d.ID, d.Image.SHA256, size); err != nil {
+		t.Fatal(err)
+	}
+	recorded, err := m.recordPinnedVolumeOwnership(context.Background(), d, file)
+	if err != nil || recorded != intent {
+		t.Fatal("descriptor intent recording", recorded, err)
+	}
+	if err := m.verifyVolumeOwnershipIntent(context.Background(), recorded); err != nil {
+		t.Fatal(err)
+	}
 	for _, change := range []func(*VolumeOwnershipIntent){func(i *VolumeOwnershipIntent) { i.Inode++ }, func(i *VolumeOwnershipIntent) { i.Device++ }, func(i *VolumeOwnershipIntent) { i.Size++ }, func(i *VolumeOwnershipIntent) { i.InstanceID = "invalid" }, func(i *VolumeOwnershipIntent) { i.ImageSHA256 = "invalid" }} {
 		changed := intent
 		change(&changed)
@@ -50,6 +71,9 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	defer other.Close()
 	if err := other.Truncate(size); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := m.recordPinnedVolumeOwnership(context.Background(), d, other); err == nil {
+		t.Fatal("replacement descriptor rewrote provenance")
 	}
 	if err := transferVolumeToGuest(context.Background(), other, intent); !errors.Is(err, ErrPolicy) {
 		t.Fatal("replacement inode admitted", err)
@@ -73,6 +97,10 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	}
 	if err = transfer(context.Background(), file, size, 200000, 200000); err != nil {
 		t.Fatal("ownership retry refused", err)
+	}
+	retried, err := m.recordPinnedVolumeOwnership(context.Background(), d, file)
+	if err != nil || retried != recorded {
+		t.Fatal("guest-owned descriptor retry", retried, err)
 	}
 	if err = transfer(context.Background(), file, size, 200001, 200001); !errors.Is(err, ErrPolicy) {
 		t.Fatal("another guest took ownership", err)
