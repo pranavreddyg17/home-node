@@ -101,6 +101,37 @@ func TestRootRecoveryPublicationJournalsBeforeOwnershipTransfer(t *testing.T) {
 			if err != nil || string(record) != string(retained) {
 				t.Fatal("refused retry changed ownership intent", err)
 			}
+			calls, replacedConsumer := 0, false
+			detached := stagePath + ".detached"
+			replaceGuard := func(context.Context) error {
+				calls++
+				if calls == 2 {
+					if err := os.Rename(stagePath, detached); err != nil {
+						return err
+					}
+					return os.WriteFile(stagePath, data, 0600)
+				}
+				return nil
+			}
+			e.mu.Lock()
+			err = e.withResumedRecoveryPublication(context.Background(), destination, saved, recovery, replaceGuard, func(context.Context, *os.File) error {
+				replacedConsumer = true
+				return nil
+			})
+			e.mu.Unlock()
+			if !errors.Is(err, ErrConflict) || replacedConsumer || calls != 2 {
+				t.Fatal("replaced staging pathname resumed", err, calls)
+			}
+			var detachedStat unix.Stat_t
+			if err := unix.Lstat(detached, &detachedStat); err != nil || detachedStat.Ino != stat.Ino || detachedStat.Uid != stat.Uid || detachedStat.Gid != stat.Gid {
+				t.Fatal("replacement refusal changed recorded ownership", err)
+			}
+			if err := os.Remove(stagePath); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Rename(detached, stagePath); err != nil {
+				t.Fatal(err)
+			}
 			// Equal-size corruption must refuse before either ownership or
 			// the consumer changes the recorded object.
 			corrupt := append([]byte(nil), data...)

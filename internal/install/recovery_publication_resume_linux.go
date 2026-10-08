@@ -56,12 +56,18 @@ func (e *Engine) withResumedRecoveryPublication(ctx context.Context, destination
 		} else if err := verifyRecoveryPublicationDescriptor(ctx, file, intent); err != nil {
 			return err
 		}
-		current, err := destination.Lstat(stage)
-		opened, statErr := file.Stat()
-		if err != nil || statErr != nil || !os.SameFile(current, opened) {
-			return ErrConflict
+		qualifyPath := func() error {
+			current, err := destination.Lstat(stage)
+			opened, statErr := file.Stat()
+			if err != nil || statErr != nil || !os.SameFile(current, opened) {
+				return ErrConflict
+			}
+			return nil
 		}
 		if err := guard(ctx); err != nil {
+			return err
+		}
+		if err := qualifyPath(); err != nil {
 			return err
 		}
 		if original {
@@ -73,6 +79,9 @@ func (e *Engine) withResumedRecoveryPublication(ctx context.Context, destination
 			return err
 		}
 		if err := guard(ctx); err != nil {
+			return err
+		}
+		if err := qualifyPath(); err != nil {
 			return err
 		}
 		if err := use(ctx, file); err != nil {
