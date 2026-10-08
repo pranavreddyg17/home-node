@@ -74,14 +74,26 @@ func applyAccountFixtureIdentity(t *testing.T, engine **Engine, expected GuestId
 						return err
 					}
 					defer func() { result = errors.Join(result, parent.Close()) }()
-					return withGuestIdentityAllocationLock(ctx, directory, func(ctx context.Context, checkLock func() error) error {
+					return withGuestIdentityAllocationLock(ctx, directory, func(ctx context.Context, checkLock func() error) (result error) {
 						guard := func(ctx context.Context) error {
 							for _, check := range []func() error{checkIntent, checkStage, checkLock} {
 								if err := check(); err != nil {
 									return err
 								}
 							}
-							return runtimeGuard(ctx)
+							if err := runtimeGuard(ctx); err != nil {
+								return err
+							}
+							owner, err := cleanup.inspectGuestIdentityAccountsLocked(ctx)
+							if err != nil {
+								return err
+							}
+							opened, statErr := parent.Stat()
+							named, nameErr := cleanup.host.Lstat("etc")
+							if owner != intent.OwnerID || statErr != nil || nameErr != nil || !os.SameFile(opened, named) {
+								return ErrConflict
+							}
+							return checkLock()
 						}
 						// Only the two independently journaled inodes are reversible.
 						reversed := stage
@@ -95,7 +107,7 @@ func applyAccountFixtureIdentity(t *testing.T, engine **Engine, expected GuestId
 						if err != nil {
 							return err
 						}
-						defer pending.Close()
+						defer func() { result = errors.Join(result, pending.Close()) }()
 						var stat unix.Stat_t
 						contents, err := io.ReadAll(io.LimitReader(pending, 8193))
 						opened, statErr := pending.Stat()
