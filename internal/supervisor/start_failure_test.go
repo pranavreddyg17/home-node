@@ -35,6 +35,21 @@ func TestStartFailureJournalUpdatesAreAtomic(t *testing.T) {
 	if operation == "failed" {
 		t.Fatal("refused operation mutation committed")
 	}
+	if _, err := m.Store.DB.Exec("DROP TRIGGER refuse_failed_operation"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Reconcile(context.Background()); err != nil {
+		t.Fatal("failure journal reconciliation", err)
+	}
+	if err := m.Store.DB.QueryRow("SELECT state,desired FROM runtime_instances WHERE id=?", r.InstanceID).Scan(&phase, &desired); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Store.DB.QueryRow("SELECT state FROM runtime_operations WHERE id=?", r.OperationID).Scan(&operation); err != nil {
+		t.Fatal(err)
+	}
+	if phase != "interrupted" || desired != "stopped" || operation != "interrupted" || backend.running || backend.starts != 1 {
+		t.Fatal("uncertain start did not reconcile without relaunch", phase, desired, operation)
+	}
 }
 
 func TestStartFailureKeepsUnconfirmedStopVisible(t *testing.T) {
@@ -56,6 +71,16 @@ func TestStartFailureKeepsUnconfirmedStopVisible(t *testing.T) {
 	}
 	if phase != "stopping" || desired != "stopped" {
 		t.Fatal("unconfirmed teardown lost", phase, desired)
+	}
+	m.Backend = backend
+	if err := m.Audit(context.Background()); err != nil {
+		t.Fatal("failed-start stop retry", err)
+	}
+	if err := m.Store.DB.QueryRow("SELECT state,desired FROM runtime_instances WHERE id=?", r.InstanceID).Scan(&phase, &desired); err != nil {
+		t.Fatal(err)
+	}
+	if phase != "interrupted" || desired != "stopped" || backend.running || backend.starts != 1 || backend.stops != 2 {
+		t.Fatal("audit lost failed-start teardown", phase, desired, backend.starts, backend.stops)
 	}
 }
 
