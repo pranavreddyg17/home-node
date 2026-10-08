@@ -14,6 +14,13 @@ import (
 // Caller holds installer exclusion and independently qualifies host ownership
 // and runtime exclusion. Keep exact intent open and durable through mutation.
 func (e *Engine) withGuestIdentityNameServiceIntent(ctx context.Context, intent guestIdentityNameServiceIntent, use func(context.Context) error) (result error) {
+	if use == nil {
+		return ErrPlan
+	}
+	return e.withGuestIdentityNameServiceIntentGuarded(ctx, intent, func(ctx context.Context, _ func() error) error { return use(ctx) })
+}
+
+func (e *Engine) withGuestIdentityNameServiceIntentGuarded(ctx context.Context, intent guestIdentityNameServiceIntent, use func(context.Context, func() error) error) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -32,10 +39,17 @@ func (e *Engine) withGuestIdentityNameServiceIntent(ctx context.Context, intent 
 	if err != nil {
 		return err
 	}
-	return e.withGuestIdentityRecord(ctx, "guest-identity-nss-intent.json", expected, use)
+	return e.withGuestIdentityRecordGuarded(ctx, "guest-identity-nss-intent.json", expected, use)
 }
 
 func (e *Engine) withGuestIdentityRecord(ctx context.Context, name string, expected []byte, use func(context.Context) error) (result error) {
+	if use == nil {
+		return ErrPlan
+	}
+	return e.withGuestIdentityRecordGuarded(ctx, name, expected, func(ctx context.Context, _ func() error) error { return use(ctx) })
+}
+
+func (e *Engine) withGuestIdentityRecordGuarded(ctx context.Context, name string, expected []byte, use func(context.Context, func() error) error) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -80,7 +94,7 @@ func (e *Engine) withGuestIdentityRecord(ctx context.Context, name string, expec
 	if err := check(); err != nil {
 		return err
 	}
-	if err := use(ctx); err != nil {
+	if err := use(ctx, check); err != nil {
 		return err
 	}
 	return check()

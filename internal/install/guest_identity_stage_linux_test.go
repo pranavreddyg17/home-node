@@ -73,6 +73,36 @@ func TestRootGuestIdentityStagingRefusesDriftBeforeCommit(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer parentFile.Close()
+				for _, recordName := range []string{"guest-identity-nss-intent.json", "guest-identity-nss-stage.json"} {
+					recordPath := filepath.Join(journal, recordName)
+					recordBytes, err := os.ReadFile(recordPath)
+					if err != nil {
+						t.Fatal(err)
+					}
+					before, err := os.Lstat(sourcePath)
+					if err != nil {
+						t.Fatal(err)
+					}
+					replaceRecord := func(context.Context) error {
+						if err := os.Rename(recordPath, recordPath+".held"); err != nil {
+							return err
+						}
+						return os.WriteFile(recordPath, recordBytes, 0600)
+					}
+					if err := e.publishGuestIdentityNameServices(ctx, parentFile, stage, intent, replaceRecord); !errors.Is(err, ErrConflict) {
+						t.Fatal("replaced journal record authorized exchange", recordName, err)
+					}
+					after, err := os.Lstat(sourcePath)
+					if err != nil || !os.SameFile(before, after) {
+						t.Fatal("record refusal changed host configuration", err)
+					}
+					if err := os.Remove(recordPath); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Rename(recordPath+".held", recordPath); err != nil {
+						t.Fatal(err)
+					}
+				}
 				for attempt := 0; attempt < 2; attempt++ {
 					if err := e.publishGuestIdentityNameServices(ctx, parentFile, stage, intent, guard); err != nil {
 						t.Fatal("record-bound publication or retry refused", attempt, err)

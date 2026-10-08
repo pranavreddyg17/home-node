@@ -30,9 +30,24 @@ func (e *Engine) publishGuestIdentityNameServices(ctx context.Context, directory
 	if err != nil {
 		return err
 	}
-	return e.withGuestIdentityNameServiceIntent(ctx, intent, func(ctx context.Context) error {
-		return e.withGuestIdentityRecord(ctx, "guest-identity-nss-stage.json", encodedStage, func(ctx context.Context) error {
-			return exchangeGuestIdentityConfiguration(ctx, directory, stage, []byte(intent.Original), []byte(intent.Proposal.Contents), guard)
+	return e.withGuestIdentityNameServiceIntentGuarded(ctx, intent, func(ctx context.Context, checkIntent func() error) error {
+		return e.withGuestIdentityRecordGuarded(ctx, "guest-identity-nss-stage.json", encodedStage, func(ctx context.Context, checkStage func() error) error {
+			retainedGuard := func(ctx context.Context) error {
+				if err := checkIntent(); err != nil {
+					return err
+				}
+				if err := checkStage(); err != nil {
+					return err
+				}
+				if err := guard(ctx); err != nil {
+					return err
+				}
+				if err := checkIntent(); err != nil {
+					return err
+				}
+				return checkStage()
+			}
+			return exchangeGuestIdentityConfiguration(ctx, directory, stage, []byte(intent.Original), []byte(intent.Proposal.Contents), retainedGuard)
 		})
 	})
 }
