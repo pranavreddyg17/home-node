@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -46,5 +47,22 @@ func TestGuestIdentityIntentBindsOriginalAndRefusesConflictingRetry(t *testing.T
 	retained, readErr := os.ReadFile(path)
 	if err != nil || readErr != nil || !os.SameFile(before, after) || string(retained) != string(data) {
 		t.Fatal("retry changed committed identity", err, readErr)
+	}
+	var saved guestIdentityNameServiceIntent
+	if err := json.Unmarshal(data, &saved); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	if err := e.withGuestIdentityNameServiceIntent(context.Background(), saved, func(context.Context) error { called = true; return nil }); err != nil || !called {
+		t.Fatal("durable intent scope refused", err)
+	}
+	err = e.withGuestIdentityNameServiceIntent(context.Background(), saved, func(context.Context) error {
+		if err := os.Rename(path, path+".retained"); err != nil {
+			return err
+		}
+		return os.WriteFile(path, data, 0600)
+	})
+	if !errors.Is(err, ErrConflict) {
+		t.Fatal("identical-byte replacement survived intent scope", err)
 	}
 }
