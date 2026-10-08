@@ -11,8 +11,34 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// recoveryPublicationIdentity must come from qualified staging and immutable
-// ownership intent. Numeric identity alone is not proof of content or exclusion.
+// publishRecoveryWithIntent composes records, content and the namespace step.
+// Caller holds e.mu, the qualified destination/file descriptors and the retained
+// activation-marker scope. The guard must reobserve loaded units and guests.
+// This private boundary does not enable production recovery orchestration.
+func (e *Engine) publishRecoveryWithIntent(ctx context.Context, directory, file *os.File, stage string, intent recoveryPublicationIntent, recovery recoveryIntent, guard func(context.Context) error) error {
+	if guard == nil {
+		return ErrPlan
+	}
+	return e.withRecoveryPublicationIntent(ctx, intent, recovery, func(ctx context.Context) error {
+		if err := guard(ctx); err != nil {
+			return err
+		}
+		if err := verifyRecoveryPublicationDescriptor(ctx, file, intent); err != nil {
+			return err
+		}
+		if err := guard(ctx); err != nil {
+			return err
+		}
+		if err := publishRecoveryFile(ctx, directory, stage, intent.FileName, intent.Identity); err != nil {
+			return err
+		}
+		if err := verifyRecoveryPublicationDescriptor(ctx, file, intent); err != nil {
+			return err
+		}
+		return guard(ctx)
+	})
+}
+
 // publishRecoveryFile performs only the final no-replacement namespace step.
 // Caller retains the qualified directory, runtime exclusion, source/content
 // verification and durable ownership intent through this call and reconciliation.
