@@ -26,26 +26,39 @@ func (e *Engine) QuiesceRecovery(ctx context.Context) error {
 	}
 	defer e.mu.Unlock()
 	return e.observeRecoveryQuiescence(ctx, func(ctx context.Context) error {
-		if err := observeRecoveryManagerWith(ctx, exec.CommandContext, false); err != nil {
-			return err
-		}
-		if err := ObserveRecoveryActivationConditions(ctx); err != nil {
-			return err
-		}
-		if err := e.requireRecoveryActivationBlock(ctx); err != nil {
-			return err
-		}
-		if err := stopRecoveryServicesWith(ctx, exec.CommandContext); err != nil {
-			return err
-		}
-		if err := ObserveRecoveryServicesDormant(ctx); err != nil {
-			return err
-		}
-		if err := ObserveRecoveryActivationConditions(ctx); err != nil {
-			return err
-		}
-		return ObserveRecoveryGuestsEmpty(ctx)
+		return quiesceRecoveryManagerWith(ctx, exec.CommandContext, e.requireRecoveryActivationBlock, ObserveRecoveryGuestsEmpty)
 	})
+}
+
+func quiesceRecoveryManagerWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd, marker, guests func(context.Context) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if command == nil || marker == nil || guests == nil {
+		return ErrPlan
+	}
+	if err := observeRecoveryManagerWith(ctx, command, false); err != nil {
+		return err
+	}
+	if err := observeActivationConditionsWith(ctx, command); err != nil {
+		return err
+	}
+	if err := marker(ctx); err != nil {
+		return err
+	}
+	if err := stopRecoveryServicesWith(ctx, command); err != nil {
+		return err
+	}
+	if err := observeRecoveryServicesWith(ctx, command); err != nil {
+		return err
+	}
+	if err := observeActivationConditionsWith(ctx, command); err != nil {
+		return err
+	}
+	if err := marker(ctx); err != nil {
+		return err
+	}
+	return guests(ctx)
 }
 
 // stopRecoveryServicesWith is only the bounded manager operation. A caller
