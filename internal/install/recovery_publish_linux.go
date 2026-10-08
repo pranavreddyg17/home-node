@@ -13,14 +13,6 @@ import (
 
 // recoveryPublicationIdentity must come from qualified staging and immutable
 // ownership intent. Numeric identity alone is not proof of content or exclusion.
-type recoveryPublicationIdentity struct {
-	Device uint64
-	Inode  uint64
-	Bytes  int64
-	UID    uint32
-	GID    uint32
-}
-
 // publishRecoveryFile performs only the final no-replacement namespace step.
 // Caller retains the qualified directory, runtime exclusion, source/content
 // verification and durable ownership intent through this call and reconciliation.

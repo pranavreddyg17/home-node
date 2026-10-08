@@ -72,7 +72,7 @@ func (e *Engine) commitRecoveryIntent(ctx context.Context, data []byte) error {
 }
 
 func (e *Engine) commitRecoveryRecord(ctx context.Context, name string, data []byte) (result error) {
-	if name != "recovery.json" && name != "recovery-staged.json" {
+	if !validRecoveryRecordName(name) {
 		return ErrPlan
 	}
 	if err := ctx.Err(); err != nil {

@@ -63,7 +63,7 @@ func (e *Engine) matchRecoveryRecord(ctx context.Context, name string, expected 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if (name != "recovery.json" && name != "recovery-staged.json") || len(expected) == 0 || len(expected) > 8192 {
+	if !validRecoveryRecordName(name) || len(expected) == 0 || len(expected) > 8192 {
 		return ErrPlan
 	}
 	before, err := e.journalRoot.Lstat(name)
