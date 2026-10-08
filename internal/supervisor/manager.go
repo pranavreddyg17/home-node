@@ -584,6 +584,15 @@ func (m *Manager) purge(ctx context.Context, r Request) (Instance, error) {
 	if err != nil {
 		return Instance{}, err
 	}
+	// Reserved ownership requires inode-qualified deletion and durable intent
+	// retirement. The legacy path-only purge cannot establish that authority.
+	var reserved int
+	if err := m.Store.DB.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM runtime_uid_leases WHERE instance_id=?)+(SELECT count(*) FROM runtime_guest_groups WHERE instance_id=?)+(SELECT count(*) FROM runtime_volume_ownership WHERE instance_id=?)`, r.InstanceID, r.InstanceID, r.InstanceID).Scan(&reserved); err != nil {
+		return Instance{}, err
+	}
+	if reserved != 0 {
+		return Instance{}, ErrPolicy
+	}
 	if instance.Workload != "video" || instance.Desired != "stopped" || instance.State == "running" || instance.State == "preparing" || instance.State == "stopping" || instance.State == "shutting-down" {
 		return Instance{}, ErrPolicy
 	}
