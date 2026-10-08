@@ -29,6 +29,14 @@ for line in Path(__file__).with_name("homenode-supervisor.service").read_text().
         properties.append("--property=" + key + "=" + value)
 if seen != allowed | adapted:
     sys.exit("Incomplete supervisor fixture source")
+memory = os.getenv("HOMENODE_SUPERVISOR_MEMORY_PID")
+memory_environment = []
+if memory is not None:
+    for key in ("HOMENODE_SUPERVISOR_MEMORY_PID", "HOMENODE_SUPERVISOR_MEMORY_ID", "HOMENODE_SUPERVISOR_MEMORY_MAX"):
+        value = os.environ.get(key, "")
+        if not value or len(value) > 64 or not value.isalnum():
+            sys.exit("Invalid memory observation fixture input")
+        memory_environment.append("--setenv=" + key + "=" + value)
 created, markers = [], []
 
 def create(path, exclusive=False):
@@ -54,12 +62,12 @@ try:
         hidden = Path(temporary) / "marker"
         hidden.write_text("fixture")
         command = ["/usr/bin/systemd-run", "--quiet", "--wait", "--pipe", "--collect", "--unit=homenode-supervisor-fixture-" + uuid.uuid4().hex,
-                   "--property=Restart=no", *properties,
+                   "--property=Restart=no", *properties, *memory_environment,
                    "--setenv=HOMENODE_VOLUME_INTEGRATION=1", "--setenv=HOMENODE_GUEST_UID_ACCOUNTS_INTEGRATION=1", "--setenv=HOMENODE_SUPERVISOR_SOURCE_FIXTURE=1",
                    "--setenv=HOMENODE_SUPERVISOR_VOLUME_PARENT=/var/lib/homenode/volumes",
                    "--setenv=HOMENODE_SUPERVISOR_HIDDEN_PATH=" + str(hidden),
                    "/usr/lib/homenode-fixtures/supervisor.test",
-                   "-test.run=^(TestNative(FreshVolumeFormattingPreservesExistingData|PreparedVolumeCleanup|VolumePublicationIdentity|GuestUIDVolumeAdmission|GuestChannelDirectoryOwnership|GuestNSSNameServiceEligibility|GuestAutomaticUIDAllocationEligibility|SupervisorServiceIsolation)|TestReadOnlyComponentOpenRetainsParentAndRefusesLinks|TestGuestMemoryDomainRefusesSyntheticFilesystem)$", "-test.count=1"]
+                   "-test.run=^TestNativeSupervisorMemoryObservation$" if memory is not None else "-test.run=^(TestNative(FreshVolumeFormattingPreservesExistingData|PreparedVolumeCleanup|VolumePublicationIdentity|GuestUIDVolumeAdmission|GuestChannelDirectoryOwnership|GuestNSSNameServiceEligibility|GuestAutomaticUIDAllocationEligibility|SupervisorServiceIsolation)|TestReadOnlyComponentOpenRetainsParentAndRefusesLinks|TestGuestMemoryDomainRefusesSyntheticFilesystem)$", "-test.count=1"]
         if subprocess.run(command, timeout=60, check=False).returncode:
             sys.exit("Supervisor source protection fixture failed")
 finally:

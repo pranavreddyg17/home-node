@@ -5,10 +5,14 @@ package supervisor
 import (
 	"context"
 	"errors"
+	"github.com/pranavreddyg17/home-node/internal/guestproto"
+	"github.com/pranavreddyg17/home-node/internal/state"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestGuestMemoryDomainRefusesSyntheticFilesystem(t *testing.T) {
@@ -44,5 +48,40 @@ func TestGuestMemoryDomainRefusesSyntheticFilesystem(t *testing.T) {
 		if err := observeGuestMemoryDomainAt(context.Background(), directory, relative, id, maximum); err == nil {
 			t.Fatal("invalid bound admitted")
 		}
+	}
+}
+
+// The parent native fixture supplies a running QEMU PID; this child only observes it.
+func TestNativeSupervisorMemoryObservation(t *testing.T) {
+	if os.Geteuid() != 0 || os.Getenv("HOMENODE_SUPERVISOR_SOURCE_FIXTURE") != "1" || os.Getenv("HOMENODE_SUPERVISOR_MEMORY_PID") == "" {
+		t.Skip("explicit source-protected native memory fixture")
+	}
+	pid, err := strconv.Atoi(os.Getenv("HOMENODE_SUPERVISOR_MEMORY_PID"))
+	if err != nil || pid <= 0 {
+		t.Fatal("invalid process fixture", err)
+	}
+	id := os.Getenv("HOMENODE_SUPERVISOR_MEMORY_ID")
+	if !guestproto.ValidID(id) {
+		t.Fatal("invalid domain fixture")
+	}
+	maximum, err := strconv.ParseInt(os.Getenv("HOMENODE_SUPERVISOR_MEMORY_MAX"), 10, 64)
+	if err != nil || maximum <= 1 {
+		t.Fatal("invalid memory fixture", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := observeGuestMemoryProcess(ctx, pid, id, maximum); err != nil {
+		t.Fatal("source-protected native memory observation", err)
+	}
+	if err := observeGuestMemoryProcess(ctx, pid, id, maximum-1); err == nil {
+		t.Fatal("excessive memory admitted")
+	}
+	if err := observeGuestMemoryProcess(ctx, pid, state.Random(), maximum); err == nil {
+		t.Fatal("foreign domain admitted")
+	}
+	cancelled, stop := context.WithCancel(ctx)
+	stop()
+	if err := observeGuestMemoryProcess(cancelled, pid, id, maximum); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancellation lost", err)
 	}
 }

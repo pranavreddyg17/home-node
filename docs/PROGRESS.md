@@ -3731,3 +3731,8 @@ CI37728240571 completed successfully at0fb75963eba570424c2069f8d84df462e42f0b22,
 ### Cgroup current path mount rechecks
 
 Added required reported mount-ID equality between each retained cgroup descriptor and its current no-follow path, including the absolute cgroup root. Existing inode/ownership/type/limit checks remain. Extended the disposable native self-bind fixture to prove ordinary path acceptance and same-inode bind rejection by this shared recheck. Final Linux amd64 test compilation, including the fixture extension, passed. Actual native execution remains pending; this is snapshot verification, not continuous runtime exclusion. CI37728874961 is live at e241520 and excludes this change. Full application remains unfinished.
+
+
+### Native QEMU memory observation under source service protections
+
+Extended both disposable firmware VM fixtures to invoke a child observer through the existing strictly parsed source-supervisor systemd properties while each QEMU process is alive. The child runs the production retained-process memory observer with positive exact bound, excessive-bound, foreign-domain and cancellation checks. CI installs its compiled test executable before KVM experiments. The child does not launch, stop or connect to QEMU; source properties remain unchanged. Python syntax validation and Linux amd64 test compilation passed. Native execution remains pending, and this does not qualify installed application images, payload workflows or service-controlled VM launch. CI37728874961 at e241520 remains the preceding qualification run. Full application remains unfinished.
