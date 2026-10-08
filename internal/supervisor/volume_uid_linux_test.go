@@ -217,6 +217,66 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	if verifyErr != nil || closeErr != nil || reservedIntent != recorded {
 		t.Fatal("opened reserved provenance", reservedIntent, verifyErr, closeErr)
 	}
+	aliasPath := reservedPath + ".alias"
+	if err := os.Link(reservedPath, aliasPath); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := openReservedVolume(context.Background(), directory, d); !errors.Is(err, ErrPolicy) || got != nil {
+		if got != nil {
+			got.Close()
+		}
+		t.Fatal("aliased reserved volume admitted", err)
+	}
+	if err := os.Remove(aliasPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Chmod(0640); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := openReservedVolume(context.Background(), directory, d); !errors.Is(err, ErrPolicy) || got != nil {
+		if got != nil {
+			got.Close()
+		}
+		t.Fatal("permissive reserved volume admitted", err)
+	}
+	if err := file.Chmod(0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Chown(int(d.GuestUID), int(d.GuestGID+1)); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := openReservedVolume(context.Background(), directory, d); !errors.Is(err, ErrPolicy) || got != nil {
+		if got != nil {
+			got.Close()
+		}
+		t.Fatal("foreign disk group admitted", err)
+	}
+	if err := file.Chown(int(d.GuestUID), int(d.GuestGID)); err != nil {
+		t.Fatal(err)
+	}
+	originalPath := reservedPath + ".original"
+	if err := os.Rename(reservedPath, originalPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(originalPath, reservedPath); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := openReservedVolume(context.Background(), directory, d); err == nil || got != nil {
+		if got != nil {
+			got.Close()
+		}
+		t.Fatal("symlinked reserved volume admitted", err)
+	}
+	if err := os.Remove(reservedPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(originalPath, reservedPath); err != nil {
+		t.Fatal(err)
+	}
+	preserved, err := m.verifyPinnedVolumeOwnership(context.Background(), d, file)
+	if err != nil || preserved != recorded {
+		t.Fatal("reserved opener refusals changed provenance", preserved, err)
+	}
 	if err := os.Chmod(directory, 0755); err != nil {
 		t.Fatal(err)
 	}
