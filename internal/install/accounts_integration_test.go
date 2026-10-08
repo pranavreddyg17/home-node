@@ -6,6 +6,7 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"strconv"
 	"testing"
 
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
@@ -80,7 +81,13 @@ func TestInstalledAccountInspection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer engine.Close()
+	defer func() {
+		if engine != nil {
+			if err := engine.Close(); err != nil {
+				t.Error("fixture engine close", err)
+			}
+		}
+	}()
 	// Initial vacancy was established above. The fixture cleanup runs only for
 	// these known names; production account removal remains a separate phase.
 	createdGroups = []string{"homenode", "homenode-transfer", "homenode-runtime", "homenode-backup"}
@@ -134,7 +141,7 @@ func TestInstalledAccountInspection(t *testing.T) {
 		t.Fatal("CLI backup identity result", backupResult, err)
 	}
 	storagePrepared := false
-	t.Run("QualifiedGuestStorageIntent", func(t *testing.T) {
+	storageQualified := t.Run("QualifiedGuestStorageIntent", func(t *testing.T) {
 		device, err := os.Lstat("/dev/kvm")
 		if os.IsNotExist(err) {
 			t.Skip("native installed storage intent unverified: KVM is absent")
@@ -158,8 +165,42 @@ func TestInstalledAccountInspection(t *testing.T) {
 		if err != nil || !reflect.DeepEqual(checked, plan) {
 			t.Fatal("native storage revalidation", checked, err)
 		}
+		// Release the real installer flock before invoking its packaged CLI.
+		currentEngine := engine
+		engine = nil
+		if err := currentEngine.Close(); err != nil {
+			t.Fatal("fixture lock release", err)
+		}
+		for _, mode := range []string{"plan", "prepare", "check"} {
+			args := []string{"guest-storage-" + mode, "--journal-dir", journalDirectory}
+			if mode != "check" {
+				args = append(args, "--first-uid", strconv.FormatUint(uint64(pool.First), 10), "--last-uid", strconv.FormatUint(uint64(pool.Last), 10))
+			}
+			output, err := accountCommand(ctx, "/usr/bin/homenode", args...)
+			if err != nil {
+				t.Fatal("packaged storage command", mode, err)
+			}
+			var response struct {
+				Plan                GuestStorageProvisioningPlan `json:"plan"`
+				IntentCommitted     bool                         `json:"intentCommitted"`
+				IntentValid         bool                         `json:"intentValid"`
+				PolicyPublished     *bool                        `json:"policyPublished"`
+				ServicesActivated   *bool                        `json:"servicesActivated"`
+				ActivationQualified *bool                        `json:"activationQualified"`
+			}
+			if err := json.Unmarshal(output, &response); err != nil || !reflect.DeepEqual(response.Plan, plan) || response.IntentCommitted != (mode == "prepare") || response.IntentValid != (mode == "check") || response.PolicyPublished == nil || *response.PolicyPublished || response.ServicesActivated == nil || *response.ServicesActivated || response.ActivationQualified == nil || *response.ActivationQualified {
+				t.Fatal("packaged storage command status", mode, err)
+			}
+		}
+		engine, err = Open("/", journalDirectory)
+		if err != nil {
+			t.Fatal("fixture journal reacquisition", err)
+		}
 		storagePrepared = true
 	})
+	if !storageQualified {
+		t.Fatal("native storage qualification failed")
+	}
 	if _, err = accountCommand(ctx, "/usr/sbin/usermod", "--append", "--groups", "root", "homenode-backup"); err != nil {
 		t.Fatal(err)
 	}
