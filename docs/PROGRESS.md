@@ -3736,3 +3736,8 @@ Added required reported mount-ID equality between each retained cgroup descripto
 ### Native QEMU memory observation under source service protections
 
 Extended both disposable firmware VM fixtures to invoke a child observer through the existing strictly parsed source-supervisor systemd properties while each QEMU process is alive. The child runs the production retained-process memory observer with positive exact bound, excessive-bound, foreign-domain and cancellation checks. CI installs its compiled test executable before KVM experiments. The child does not launch, stop or connect to QEMU; source properties remain unchanged. Python syntax validation and Linux amd64 test compilation passed. Native execution remains pending, and this does not qualify installed application images, payload workflows or service-controlled VM launch. CI37728874961 at e241520 remains the preceding qualification run. Full application remains unfinished.
+
+
+### Require executed native memory qualification evidence
+
+The source-service child now emits verbose test output and its native memory mode requires an explicit PASS marker for TestNativeSupervisorMemoryObservation in addition to successful service exit. A stale executable, unmatched test selector or skipped child must not silently qualify live QEMU observation. Captured diagnostics are checked against a one-MiB limit before printing. Python syntax validation passed; actual native execution remains pending. The preceding e241520 CI run is confirmed live; queued production and native qualification commits have not replaced it. Full application remains unfinished.

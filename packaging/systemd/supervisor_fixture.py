@@ -67,9 +67,16 @@ try:
                    "--setenv=HOMENODE_SUPERVISOR_VOLUME_PARENT=/var/lib/homenode/volumes",
                    "--setenv=HOMENODE_SUPERVISOR_HIDDEN_PATH=" + str(hidden),
                    "/usr/lib/homenode-fixtures/supervisor.test",
-                   "-test.run=^TestNativeSupervisorMemoryObservation$" if memory is not None else "-test.run=^(TestNative(FreshVolumeFormattingPreservesExistingData|PreparedVolumeCleanup|VolumePublicationIdentity|GuestUIDVolumeAdmission|GuestChannelDirectoryOwnership|GuestNSSNameServiceEligibility|GuestAutomaticUIDAllocationEligibility|SupervisorServiceIsolation)|TestReadOnlyComponentOpenRetainsParentAndRefusesLinks|TestGuestMemoryDomainRefusesSyntheticFilesystem)$", "-test.count=1"]
-        if subprocess.run(command, timeout=60, check=False).returncode:
+                   "-test.run=^TestNativeSupervisorMemoryObservation$" if memory is not None else "-test.run=^(TestNative(FreshVolumeFormattingPreservesExistingData|PreparedVolumeCleanup|VolumePublicationIdentity|GuestUIDVolumeAdmission|GuestChannelDirectoryOwnership|GuestNSSNameServiceEligibility|GuestAutomaticUIDAllocationEligibility|SupervisorServiceIsolation)|TestReadOnlyComponentOpenRetainsParentAndRefusesLinks|TestGuestMemoryDomainRefusesSyntheticFilesystem)$", "-test.count=1", "-test.v"]
+        result = subprocess.run(command, timeout=60, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        if len(result.stdout) > 1024 * 1024:
+            sys.exit("Supervisor fixture diagnostic limit exceeded")
+        sys.stdout.buffer.write(result.stdout)
+        sys.stdout.buffer.flush()
+        if result.returncode:
             sys.exit("Supervisor source protection fixture failed")
+        if memory is not None and b"--- PASS: TestNativeSupervisorMemoryObservation " not in result.stdout:
+            sys.exit("Native memory observer did not execute successfully")
 finally:
     for marker in reversed(markers):
         marker.unlink()
