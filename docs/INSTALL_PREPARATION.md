@@ -104,3 +104,43 @@ and reports certificate expiry. It still lists enforcement/VM-overhead,
 allowed/denied tailnet policy, activation and phone-enrollment/sample-job gates.
 A local Tailscale certificate is not evidence of peer access policy. Results
 are current observations rather than saved authorization to skip later checks.
+
+## Reserved guest storage proposal
+
+After account provisioning, inspect a proposed guest UID range on the dedicated
+Linux host. Choose the entire range deliberately; conflicts refuse the proposal
+rather than shrinking it. For example, a two-guest development range is:
+
+```sh
+sudo homenode guest-storage-plan --first-uid 2000000000 --last-uid 2000000001
+sudo homenode guest-storage-prepare --first-uid 2000000000 --last-uid 2000000001
+sudo homenode guest-storage-check
+```
+
+Each command accepts `--journal-dir` for an existing private installer journal.
+`check` derives the range from saved intent and takes no range overrides. The
+commands require root on Linux and completed, live-verified owned account
+journals. They independently observe the standard root-owned mode 0660 KVM
+device, require its group to differ from management and maintenance groups, and
+propose image/volume parents mode 0710, immutable images mode 0440 and private
+volumes mode 0600. These modes appear in the proposal; the commands do not apply
+them to installed storage.
+
+`prepare` writes create-only `guest-storage-intent.json` in the private journal.
+An exact retry preserves the existing inode. Conflicting, partial or ambiguous
+records are preserved and refused; do not delete an intent to bypass refusal.
+`check` retains the original descriptor while repeating live identity, range and
+device observations, then verifies its bytes and pathname identity again.
+Successful JSON reports `intentCommitted` for preparation or `intentValid` for
+checking, while `policyPublished`, `servicesActivated` and
+`activationQualified` remain false.
+
+These commands are preparation tools, not a completed storage migration. The
+installer still needs durable allocation exclusion, a retained runtime activation
+barrier, coordinated storage ownership and runtime policy publication, and native
+application launch/restart/isolation qualification. A dormant-service snapshot or
+an empty guest cgroup observation cannot authorize ownership changes. The check
+is also unsuitable for auditing a running pool: its guest processes intentionally
+occupy leased UIDs. See [guest launch research](GUEST_DAC_LAUNCH_RESEARCH.md) and
+the [product acceptance matrix](PRODUCT_ACCEPTANCE_MATRIX.md) for the remaining
+qualification scope.
