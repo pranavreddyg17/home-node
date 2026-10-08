@@ -88,6 +88,24 @@ func TestNativeRecoveryGuestCgroupObservation(t *testing.T) {
 	if err := command("daemon-reload"); err != nil {
 		t.Fatal(err)
 	}
+	// Read the real manager's typed property, rather than substituting a JSON
+	// fixture. Use only this owned disposable unit and temporary marker.
+	observeGuard := func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "/usr/bin/busctl", "--system", "--no-pager", "--json=short", "--auto-start=no", "--allow-interactive-authorization=no", "--timeout=4", "get-property", "org.freedesktop.systemd1", "/org/freedesktop/systemd1/unit/homenode_2drecovery_2dcgroup_2dfixture_2eservice", "org.freedesktop.systemd1.Unit", "Conditions")
+		cmd.Env = []string{"PATH=/usr/bin:/bin", "LC_ALL=C", "SYSTEMD_PAGER=cat"}
+		cmd.WaitDelay = time.Second
+		output := &activationConditionsOutput{}
+		cmd.Stdout = output
+		if err := cmd.Run(); err != nil {
+			return errors.Join(err, ctx.Err())
+		}
+		return validateActivationConditionsAtPath(output.Bytes(), marker)
+	}
+	if err := observeGuard(); err != nil {
+		t.Fatal("manager-loaded guard refused", err)
+	}
 	if err := command("start", slice); err != nil {
 		t.Fatal(err)
 	}
@@ -96,6 +114,9 @@ func TestNativeRecoveryGuestCgroupObservation(t *testing.T) {
 	}
 	if err := command("start", service); err != nil {
 		t.Fatal(err)
+	}
+	if err := observeGuard(); err != nil {
+		t.Fatal("loaded guard after refused activation", err)
 	}
 	if err := ObserveRecoveryGuestsEmpty(context.Background()); err != nil {
 		t.Fatal("activation marker did not preserve empty hierarchy", err)
@@ -108,6 +129,15 @@ func TestNativeRecoveryGuestCgroupObservation(t *testing.T) {
 	}
 	if err := ObserveRecoveryGuestsEmpty(context.Background()); !errors.Is(err, ErrConflict) {
 		t.Fatal("populated descendant hierarchy admitted", err)
+	}
+	if err := os.WriteFile(marker, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := observeGuard(); err != nil {
+		t.Fatal("active service guard observation", err)
+	}
+	if err := ObserveRecoveryGuestsEmpty(context.Background()); !errors.Is(err, ErrConflict) {
+		t.Fatal("marker mistaken for active guest teardown", err)
 	}
 	if err := command("stop", service); err != nil {
 		t.Fatal(err)

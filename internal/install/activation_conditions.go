@@ -11,6 +11,12 @@ import (
 // snapshot component, never a retained runtime exclusion lease.
 // systemd v255 busctl.c get_property/json_transform_variant emits this shape.
 func validateActivationConditions(data []byte) error {
+	return validateActivationConditionsAtPath(data, "/var/lib/homenode-install/recovery-blocked")
+}
+
+// The parameterized decoder lets a disposable native fixture qualify the wire
+// representation without creating or removing the real installation marker.
+func validateActivationConditionsAtPath(data []byte, marker string) error {
 	if len(data) == 0 || len(data) > 8192 {
 		return ErrConflict
 	}
@@ -66,7 +72,7 @@ func validateActivationConditions(data []byte) error {
 		if json.Unmarshal(c[0], &kind) != nil || json.Unmarshal(c[1], &trigger) != nil || json.Unmarshal(c[2], &negate) != nil || json.Unmarshal(c[3], &path) != nil || json.Unmarshal(c[4], &previousResult) != nil || trigger {
 			return ErrConflict
 		}
-		if kind == "ConditionPathExists" && path == "/var/lib/homenode-install/recovery-blocked" {
+		if kind == "ConditionPathExists" && path == marker {
 			if !negate {
 				return ErrConflict
 			}

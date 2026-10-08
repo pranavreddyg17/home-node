@@ -45,7 +45,7 @@ jobs:
       - name: Test installer ownership with root fixture
         run: sudo env HOMENODE_UPDATE_INIT_INTEGRATION=1 "$(command -v go)" test ./internal/install ./cmd/homenode-supervisor
       - name: Test recovery empty and populated kernel guest cgroup
-        run: sudo env HOMENODE_RECOVERY_CGROUP_INTEGRATION=1 "$(command -v go)" test ./internal/install -run '^TestNativeRecoveryGuestCgroupObservation$' -count=1
+        run: sudo env HOMENODE_RECOVERY_CGROUP_INTEGRATION=1 "$(command -v go)" test ./internal/install -run '^TestNativeRecoveryGuestCgroupObservation$' -count=1 -v
       - name: Test protected local guest UID account observation
         run: sudo env HOMENODE_GUEST_UID_ACCOUNTS_INTEGRATION=1 "$(command -v go)" test ./internal/supervisor -run '^TestNativeGuest(UIDLocalAccountObservation|DACProcessVerification|NSSNameServiceEligibility|AutomaticUIDAllocationEligibility|ChannelDirectoryOwnership|ChannelDACIsolation|ChannelRootListenerRefusal)$' -count=1
       - name: Test inspection completion with local system manager
