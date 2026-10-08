@@ -535,7 +535,7 @@ func (m *Manager) Audit(ctx context.Context) error {
 			return err
 		}
 		image, imageErr := m.Manifest.Image(i.Workload)
-		stop := hostErr != nil || imageErr != nil || !m.Manifest.Expires.After(time.Now()) || i.State == "stopping" || i.Workload == "video" && time.Now().Unix()-i.CreatedAt >= 1800
+		stop := hostErr != nil || imageErr != nil || i.ImageSHA256 != image.SHA256 || i.MemoryMiB != image.MemoryMiB || i.VCPUs != image.VCPUs || i.DataBytes != image.DataBytes || !m.Manifest.Expires.After(time.Now()) || i.State == "stopping" || i.Workload == "video" && time.Now().Unix()-i.CreatedAt >= 1800
 		if i.State == "shutting-down" && !stop {
 			var value string
 			deadlineErr := m.Store.DB.QueryRowContext(ctx, "SELECT value FROM settings WHERE key=?", shutdownDeadlineKey(id)).Scan(&value)

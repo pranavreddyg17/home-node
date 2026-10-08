@@ -193,7 +193,7 @@ func (b *ownershipAuditBackend) Verify(ctx context.Context, d Domain) error {
 }
 
 func TestOwnershipMetadataDriftStopsDuringAudit(t *testing.T) {
-	for _, field := range []string{"image", "size"} {
+	for _, field := range []string{"image", "size", "runtime-image", "runtime-size", "runtime-memory", "runtime-vcpus"} {
 		t.Run(field, func(t *testing.T) {
 			m, original := newManager(t)
 			pool := GuestUIDPool{First: 200000, Last: 200002}
@@ -217,14 +217,32 @@ func TestOwnershipMetadataDriftStopsDuringAudit(t *testing.T) {
 				t.Fatal(err)
 			}
 			changed := intent
-			if field == "image" {
+			switch field {
+			case "image":
 				changed.ImageSHA256 = strings.Repeat("b", 64)
-			} else {
+			case "size":
 				changed.Size++
+			case "runtime-image":
+				if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET image_sha256=? WHERE id=?`, strings.Repeat("b", 64), request.InstanceID); err != nil {
+					t.Fatal(err)
+				}
+			case "runtime-size":
+				if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET data_bytes=data_bytes+1 WHERE id=?`, request.InstanceID); err != nil {
+					t.Fatal(err)
+				}
+			case "runtime-memory":
+				if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET memory_mib=memory_mib+1 WHERE id=?`, request.InstanceID); err != nil {
+					t.Fatal(err)
+				}
+			case "runtime-vcpus":
+				if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET vcpus=vcpus+1 WHERE id=?`, request.InstanceID); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if _, err := m.Store.DB.Exec(`UPDATE runtime_volume_ownership SET image_sha256=?,size=? WHERE instance_id=?`, changed.ImageSHA256, changed.Size, request.InstanceID); err != nil {
 				t.Fatal(err)
 			}
+
 			backend.verifies = 0
 			if err := m.Audit(ctx); err != nil {
 				t.Fatal(err)
