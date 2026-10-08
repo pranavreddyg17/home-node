@@ -144,3 +144,19 @@ is also unsuitable for auditing a running pool: its guest processes intentionall
 occupy leased UIDs. See [guest launch research](GUEST_DAC_LAUNCH_RESEARCH.md) and
 the [product acceptance matrix](PRODUCT_ACCEPTANCE_MATRIX.md) for the remaining
 qualification scope.
+
+## Recovery service quiescence
+
+`sudo homenode recovery-quiesce` operates on an existing recovery installation
+with its durable activation marker already present. It accepts `--journal-dir`,
+requires owned installed configuration and vacant restore destinations, verifies
+the manager's loaded unit identity and activation conditions, then synchronously
+stops the fixed application services/socket. It checks dormancy and guest
+subtree emptiness afterward. A remaining libvirt guest causes refusal rather
+than an arbitrary PID kill.
+
+This command leaves the activation marker in place on success or failure. Its
+JSON reports current dormancy/emptiness observations and explicitly reports no
+publication authorization, migration or activation release. Restored-file
+publication and the retained migration transaction remain unfinished; native
+qualification of this command is pending.
