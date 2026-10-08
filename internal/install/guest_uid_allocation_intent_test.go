@@ -35,6 +35,14 @@ func TestGuestUIDAllocationIntentRetainsLargeConfigurationAndRejectsDrift(t *tes
 	if err := e.commitGuestUIDAllocationIntent(ctx, intent); err != nil {
 		t.Fatal("exact allocator retry", err)
 	}
+	loaded, err := e.loadGuestUIDAllocationIntent(ctx, intent.OwnerID)
+	if err != nil || loaded != intent {
+		t.Fatal("allocator restart intent changed approved selection", err)
+	}
+	loaded, err = e.loadGuestUIDAllocationIntent(ctx, strings.Repeat("b", 32))
+	if !errors.Is(err, ErrConflict) || loaded != (guestUIDAllocationIntent{}) {
+		t.Fatal("allocator restart adopted foreign owner", err)
+	}
 	changed := intent
 	changed.OwnerID = strings.Repeat("b", 32)
 	if err := e.commitGuestUIDAllocationIntent(ctx, changed); !errors.Is(err, ErrConflict) {

@@ -18,7 +18,7 @@ func TestRootGuestUIDAllocatorSourceRejectsDrift(t *testing.T) {
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_UPDATE_INIT_INTEGRATION") != "1" {
 		t.Skip("explicit disposable Linux root fixture")
 	}
-	for _, fault := range []string{"none", "replace-source", "change-source", "replace-intent", "writable-source", "alias-source", "stage-corrupt", "stage-occupied"} {
+	for _, fault := range []string{"none", "transaction", "replace-source", "change-source", "replace-intent", "writable-source", "alias-source", "stage-corrupt", "stage-occupied"} {
 		t.Run(fault, func(t *testing.T) {
 			host, journal := roots(t)
 			e := openEngine(t, host, journal)
@@ -172,7 +172,22 @@ func TestRootGuestUIDAllocatorSourceRejectsDrift(t *testing.T) {
 					t.Fatal("allocator publication or retry lost original bytes", readErr, retainedErr)
 				}
 			}
-			if fault == "none" {
+			if fault == "transaction" && err == nil {
+				e.mu.Lock()
+				for i := 0; i < 2; i++ {
+					err = e.applyGuestUIDAllocationLocked(ctx, intent, func(ctx context.Context) error { return ctx.Err() })
+					if err != nil {
+						break
+					}
+				}
+				e.mu.Unlock()
+				current, readErr := os.ReadFile(path)
+				retained, retainedErr := os.ReadFile(filepath.Join(host, "etc/.homenode-login-defs.stage"))
+				if readErr != nil || retainedErr != nil || string(current) != proposal.Contents || string(retained) != original {
+					t.Fatal("allocator transaction lost exact configuration bytes", readErr, retainedErr)
+				}
+			}
+			if fault == "none" || fault == "transaction" {
 				if err != nil || !called {
 					t.Fatal("qualified allocator source refused", err)
 				}
