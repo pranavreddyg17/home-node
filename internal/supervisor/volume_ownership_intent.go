@@ -38,6 +38,9 @@ func (m *Manager) checkVolumeOwnershipIntent(ctx context.Context, intent VolumeO
 		return ErrPolicy
 	}
 	return m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := requireRuntimeAdmission(tx); err != nil {
+			return err
+		}
 		var uid, gid, first, last uint32
 		if err := tx.QueryRowContext(ctx, `SELECT l.uid,g.gid,p.first_uid,p.last_uid FROM runtime_uid_leases l JOIN runtime_guest_groups g ON g.instance_id=l.instance_id JOIN runtime_uid_pool p ON p.singleton=1 WHERE l.instance_id=?`, intent.InstanceID).Scan(&uid, &gid, &first, &last); err != nil {
 			return errors.Join(ErrPolicy, err)

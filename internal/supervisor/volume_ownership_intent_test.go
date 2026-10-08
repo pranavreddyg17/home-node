@@ -37,6 +37,23 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 	if err := m.recordVolumeOwnershipIntent(ctx, intent); err != nil {
 		t.Fatal(err)
 	}
+	for _, key := range []string{runtimeMaintenanceKey, "runtime.maintenance-job"} {
+		if _, err := m.Store.DB.Exec(`INSERT INTO settings(key,value) VALUES(?,?)`, key, "fixture-owner"); err != nil {
+			t.Fatal(err)
+		}
+		for _, check := range []func(context.Context, VolumeOwnershipIntent) error{m.recordVolumeOwnershipIntent, m.verifyVolumeOwnershipIntent} {
+			if err := check(ctx, intent); !errors.Is(err, ErrPolicy) {
+				t.Fatal("maintenance ownership admission", key, err)
+			}
+		}
+		var savedInode uint64
+		if err := m.Store.DB.QueryRow(`SELECT inode FROM runtime_volume_ownership WHERE instance_id=?`, intent.InstanceID).Scan(&savedInode); err != nil || savedInode != intent.Inode {
+			t.Fatal("maintenance refusal changed intent", savedInode, err)
+		}
+		if _, err := m.Store.DB.Exec(`DELETE FROM settings WHERE key=? AND value=?`, key, "fixture-owner"); err != nil {
+			t.Fatal(err)
+		}
+	}
 	replacement := &Manager{Store: m.Store, GuestUIDPool: &pool, GuestGID: m.GuestGID, Policy: m.Policy}
 	if err := replacement.recordVolumeOwnershipIntent(ctx, intent); err != nil {
 		t.Fatal("immutable retry refused", err)
