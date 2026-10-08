@@ -3831,3 +3831,8 @@ Added PrepareGuestStorageProvisioning under root/real-host guard, installer lock
 ### Storage intent strict load and independent live revalidation
 
 Added CheckGuestStorageProvisioningIntent and retained-file loader: requires bounded owned private single-link regular canonical versioned JSON with fixed identity/gates/group/modes, current path identity unchanged and close success; re-derives installed identity/device group under root/real-host lock/deadline, compares exact proposal, then rereads immutable intent after live observation. It never repairs records or activates guests. Filesystem regressions cover positive load, cancelled and partial-record refusal, noncanonical bytes/private-mode drift and preservation on refusal (uncached races1.414s). Earlier full local installer races passed4.754s after the immutable writer refactor; that full run excludes these later loader additions. Final Linux amd64 installer tests compile. Native installed revalidation/publication remains pending. Full product remains unfinished.
+
+
+### KVM observer parent qualification completed
+
+CI37799951332 succeeded at exact headcaec5fcd538bc4a3d80a4d2293cd79a89403dc67; full log retained /tmp/homenode-ci-37799951332.log. Supervisor Linux races20.344s, native primary-group/API observer with genuine procfs and retained/current protected /dev checks0.086s, protected-storage guest-connect3.945s/libvirt-launch3.298s, root volumes0.079s and selected full packaging/browser stages passed. This excludes queued installed storage proposal/intent/load/revalidation code. Snapshot observation remains separate from persistent group/allocation policy and runtime activation barriers. Full product remains unfinished.
