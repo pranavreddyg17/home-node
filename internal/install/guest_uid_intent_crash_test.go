@@ -36,7 +36,14 @@ func TestGuestUIDIntentCrashChild(t *testing.T) {
 	}
 	engine.checkpoint = func(point, name string) error {
 		if point == phase {
-			return syscall.Kill(os.Getpid(), syscall.SIGKILL)
+			if err := syscall.Kill(os.Getpid(), syscall.SIGKILL); err != nil {
+				return err
+			}
+			// Successful signal submission can return before process termination.
+			// Never resume the writer while the kernel delivers SIGKILL.
+			for {
+				time.Sleep(time.Hour)
+			}
 		}
 		return nil
 	}
@@ -73,6 +80,9 @@ func TestGuestUIDIntentRecoversAfterProcessKill(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if phase == "guest-uid-intent-created" && len(contents) != 0 {
+				t.Fatal("writer advanced beyond creation crash checkpoint")
+			}
 			// Reopening also proves the kernel released the dead installer's flock.
 			engine := openEngine(t, host, jr)
 			defer engine.Close()
@@ -82,7 +92,7 @@ func TestGuestUIDIntentRecoversAfterProcessKill(t *testing.T) {
 			}
 			err = engine.commitGuestUIDIntent(context.Background(), plan)
 			if phase == "guest-uid-intent-created" {
-				if err == nil || len(contents) != 0 {
+				if err == nil {
 					t.Fatal("empty crashed intent adopted", err)
 				}
 			} else if err != nil {
