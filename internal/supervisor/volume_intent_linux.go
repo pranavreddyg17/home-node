@@ -13,6 +13,17 @@ import (
 // then commits it against independently reserved domain identity. It neither
 // changes ownership nor establishes stopped-runtime or pathname authority.
 func (m *Manager) recordPinnedVolumeOwnership(ctx context.Context, d Domain, file *os.File) (VolumeOwnershipIntent, error) {
+	return m.checkPinnedVolumeOwnership(ctx, d, file, true)
+}
+
+// verifyPinnedVolumeOwnership authenticates an existing descriptor's provenance
+// without creating an intent. Runtime exclusion and pathname admission remain
+// separate requirements for the caller.
+func (m *Manager) verifyPinnedVolumeOwnership(ctx context.Context, d Domain, file *os.File) (VolumeOwnershipIntent, error) {
+	return m.checkPinnedVolumeOwnership(ctx, d, file, false)
+}
+
+func (m *Manager) checkPinnedVolumeOwnership(ctx context.Context, d Domain, file *os.File, create bool) (VolumeOwnershipIntent, error) {
 	if err := ctx.Err(); err != nil {
 		return VolumeOwnershipIntent{}, err
 	}
@@ -30,7 +41,11 @@ func (m *Manager) recordPinnedVolumeOwnership(ctx context.Context, d Domain, fil
 		return VolumeOwnershipIntent{}, err
 	}
 	intent := VolumeOwnershipIntent{InstanceID: d.ID, ImageSHA256: d.Image.SHA256, UID: d.GuestUID, GID: d.GuestGID, Device: uint64(before.Dev), Inode: before.Ino, Size: before.Size}
-	if err := m.recordVolumeOwnershipIntent(ctx, intent); err != nil {
+	check := m.verifyVolumeOwnershipIntent
+	if create {
+		check = m.recordVolumeOwnershipIntent
+	}
+	if err := check(ctx, intent); err != nil {
 		return VolumeOwnershipIntent{}, err
 	}
 	var after unix.Stat_t

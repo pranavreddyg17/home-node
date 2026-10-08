@@ -46,9 +46,16 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	if _, err := m.Store.DB.Exec(`INSERT INTO runtime_instances(id,workload,state,desired,image_sha256,memory_mib,vcpus,data_bytes,created_at,revision) VALUES(?,'files','preparing','running',?,256,1,?,0,0)`, d.ID, d.Image.SHA256, size); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := m.verifyPinnedVolumeOwnership(context.Background(), d, file); !errors.Is(err, ErrPolicy) {
+		t.Fatal("missing descriptor provenance verified", err)
+	}
 	recorded, err := m.recordPinnedVolumeOwnership(context.Background(), d, file)
 	if err != nil || recorded != intent {
 		t.Fatal("descriptor intent recording", recorded, err)
+	}
+	verified, err := m.verifyPinnedVolumeOwnership(context.Background(), d, file)
+	if err != nil || verified != recorded {
+		t.Fatal("descriptor provenance verification", verified, err)
 	}
 	if err := m.verifyVolumeOwnershipIntent(context.Background(), recorded); err != nil {
 		t.Fatal(err)
@@ -71,6 +78,9 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	defer other.Close()
 	if err := other.Truncate(size); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := m.verifyPinnedVolumeOwnership(context.Background(), d, other); !errors.Is(err, ErrPolicy) {
+		t.Fatal("replacement provenance verified", err)
 	}
 	if _, err := m.recordPinnedVolumeOwnership(context.Background(), d, other); err == nil {
 		t.Fatal("replacement descriptor rewrote provenance")
