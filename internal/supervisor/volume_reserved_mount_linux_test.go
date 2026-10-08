@@ -96,6 +96,18 @@ func TestNativeReservedVolumeMountRefusal(t *testing.T) {
 	if unix.Stat(target, &restored) != nil || restored.Dev != original.Dev || restored.Ino != original.Ino || restored.Mode != original.Mode || restored.Uid != original.Uid || restored.Gid != original.Gid || restored.Size != original.Size {
 		t.Fatal("mount refusal changed original disk")
 	}
+	retained, err := unix.Open(target, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := unix.Close(retained); err != nil {
+			t.Error(err)
+		}
+	})
+	if !samePathMount(retained, unix.AT_FDCWD, target) {
+		t.Fatal("ordinary path mount mismatch")
+	}
 	if err := unix.Mount(target, target, "", unix.MS_BIND, ""); err != nil {
 		t.Fatal("self bind mount unavailable", err)
 	}
@@ -103,6 +115,9 @@ func TestNativeReservedVolumeMountRefusal(t *testing.T) {
 	var selfBound unix.Stat_t
 	if unix.Stat(target, &selfBound) != nil || selfBound.Dev != original.Dev || selfBound.Ino != original.Ino {
 		t.Fatal("self bind fixture changed inode identity")
+	}
+	if samePathMount(retained, unix.AT_FDCWD, target) {
+		t.Fatal("self-bind admitted by cgroup path mount recheck")
 	}
 	rejected, err = openReservedVolume(ctx, directory, d)
 	if !errors.Is(err, ErrPolicy) || rejected != nil {

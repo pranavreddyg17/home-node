@@ -3726,3 +3726,8 @@ Review identified production memory observation also depended on openat2, which 
 ### Source-service component opener qualification queued
 
 CI37728240571 completed successfully at0fb75963eba570424c2069f8d84df462e42f0b22, including native KVM and source-protected reserved-volume admission. Added the read-only component opener positive/refusal test and synthetic cgroup filesystem refusal test to the source-service fixture selection without changing service properties. This directly exercises the helpers under RestrictSUIDSGID; it does not prove real kernel cgroup observation or an installed service VM launch. Python syntax validation passed; Linux/native execution of the queued changes remains pending. Full provisioning, runtime exclusion and product acceptance remain unfinished.
+
+
+### Cgroup current path mount rechecks
+
+Added required reported mount-ID equality between each retained cgroup descriptor and its current no-follow path, including the absolute cgroup root. Existing inode/ownership/type/limit checks remain. Extended the disposable native self-bind fixture to prove ordinary path acceptance and same-inode bind rejection by this shared recheck. Final Linux amd64 test compilation, including the fixture extension, passed. Actual native execution remains pending; this is snapshot verification, not continuous runtime exclusion. CI37728874961 is live at e241520 and excludes this change. Full application remains unfinished.

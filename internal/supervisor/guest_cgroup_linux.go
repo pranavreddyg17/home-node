@@ -131,6 +131,9 @@ func observeGuestMemoryDomainAt(ctx context.Context, directory, relative, id str
 		if unix.Fstatat(descriptors[i], component, &current, unix.AT_SYMLINK_NOFOLLOW) != nil || current.Dev != snapshots[i].Dev || current.Ino != snapshots[i].Ino || current.Mode != snapshots[i].Mode || current.Uid != snapshots[i].Uid || current.Gid != snapshots[i].Gid {
 			return ErrPolicy
 		}
+		if !samePathMount(descriptors[i+1], descriptors[i], component) {
+			return ErrPolicy
+		}
 	}
 	for i, kind := range types {
 		current, err := read(descriptors[i+1], "cgroup.type")
@@ -152,5 +155,18 @@ func observeGuestMemoryDomainAt(ctx context.Context, directory, relative, id str
 	if unix.Lstat(directory, &currentRoot) != nil || currentRoot.Dev != rootStat.Dev || currentRoot.Ino != rootStat.Ino || currentRoot.Mode != rootStat.Mode || currentRoot.Uid != rootStat.Uid || currentRoot.Gid != rootStat.Gid {
 		return ErrPolicy
 	}
+	if !samePathMount(fd, unix.AT_FDCWD, directory) {
+		return ErrPolicy
+	}
 	return ctx.Err()
+}
+
+// samePathMount requires the current no-follow path and retained descriptor
+// to name the same mount; inode equality alone misses a self-bind replacement.
+func samePathMount(fd, parent int, name string) bool {
+	var retained, current unix.Statx_t
+	return unix.Statx(fd, "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &retained) == nil &&
+		unix.Statx(parent, name, unix.AT_SYMLINK_NOFOLLOW|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &current) == nil &&
+		retained.Mask&unix.STATX_MNT_ID != 0 && current.Mask&unix.STATX_MNT_ID != 0 &&
+		retained.Mnt_id != 0 && retained.Mnt_id == current.Mnt_id
 }
