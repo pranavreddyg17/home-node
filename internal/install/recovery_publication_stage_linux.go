@@ -47,9 +47,21 @@ func (e *Engine) prepareRecoveryPublicationFile(ctx context.Context, destination
 	if !matched {
 		return recoveryPublicationIntent{}, ErrConflict
 	}
-	if err := e.matchRecoveryRecord(ctx, "recovery.json", encoded); err != nil {
+	var staged recoveryPublicationIntent
+	err = e.withRecoveryRecord(ctx, "recovery.json", encoded, func(ctx context.Context) error {
+		var stageErr error
+		staged, stageErr = e.stageRecoveryPublicationFileQualified(ctx, destination, source, intent, guard)
+		return stageErr
+	})
+	if err != nil {
 		return recoveryPublicationIntent{}, err
 	}
+	return staged, nil
+}
+
+func (e *Engine) stageRecoveryPublicationFileQualified(ctx context.Context, destination *os.Root, source backup.PreparedRecoveryFile, proposal recoveryPublicationIntent, guard func(context.Context) error) (intent recoveryPublicationIntent, result error) {
+	intent = proposal
+	uid, gid := proposal.Identity.UID, proposal.Identity.GID
 	if err := guard(ctx); err != nil {
 		return recoveryPublicationIntent{}, err
 	}
@@ -99,22 +111,37 @@ func (e *Engine) prepareRecoveryPublicationFile(ctx context.Context, destination
 	if err := e.commitRecoveryPublicationIntent(ctx, intent); err != nil {
 		return intent, err
 	}
-	if err := guard(ctx); err != nil {
+	name, _ := recoveryPublicationRecordName(intent.FileName)
+	encodedIntent, err := json.Marshal(intent)
+	if err != nil {
 		return intent, err
 	}
-	if err := out.Chown(int(uid), int(gid)); err != nil {
-		return intent, err
-	}
-	if err := verifyRecoveryPublicationDescriptor(ctx, out, intent); err != nil {
-		return intent, err
-	}
-	current, err := destination.Lstat(stage)
-	opened, statErr := out.Stat()
-	if err != nil || statErr != nil || !os.SameFile(current, opened) {
-		return intent, ErrConflict
-	}
-	if err := guard(ctx); err != nil {
-		return intent, err
-	}
-	return intent, ctx.Err()
+	result = e.withRecoveryRecord(ctx, name, encodedIntent, func(ctx context.Context) error {
+		if err := guard(ctx); err != nil {
+			return err
+		}
+		if e.checkpoint != nil {
+			if err := e.checkpoint("recovery-publication-intent", intent.FileName); err != nil {
+				return err
+			}
+		}
+		if err := out.Chown(int(uid), int(gid)); err != nil {
+			return err
+		}
+		if err := verifyRecoveryPublicationDescriptor(ctx, out, intent); err != nil {
+			return err
+		}
+		current, err := destination.Lstat(stage)
+		opened, statErr := out.Stat()
+		if err != nil || statErr != nil || !os.SameFile(current, opened) {
+			return ErrConflict
+		}
+		if e.checkpoint != nil {
+			if err := e.checkpoint("recovery-publication-owned", intent.FileName); err != nil {
+				return err
+			}
+		}
+		return guard(ctx)
+	})
+	return intent, result
 }
