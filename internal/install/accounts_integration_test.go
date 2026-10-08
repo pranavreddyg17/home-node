@@ -176,6 +176,10 @@ func TestInstalledAccountInspection(t *testing.T) {
 	if err != nil || allocatorReplay != allocatorPreview {
 		t.Fatal("native allocator preparation retry", err)
 	}
+	refusedAllocator, allocatorErr := engine.ApplyGuestUIDAllocationConfiguration(ctx)
+	if !errors.Is(allocatorErr, ErrConflict) || refusedAllocator != (GuestUIDAllocationPreview{}) {
+		t.Fatal("uninstalled allocator application gained authority", allocatorErr)
+	}
 	allocatorAfter, err := os.Lstat("/etc/login.defs")
 	allocatorCurrent, readErr := os.ReadFile("/etc/login.defs")
 	if err != nil || readErr != nil || !os.SameFile(allocatorBefore, allocatorAfter) || digest(allocatorCurrent) != digest(allocatorBytes) {
@@ -231,6 +235,14 @@ func TestInstalledAccountInspection(t *testing.T) {
 	if _, err := accountCommand(ctx, "/usr/bin/homenode", "guest-identity-apply", "--journal-dir", journalDirectory); err == nil {
 		t.Fatal("packaged apply command admitted uninstalled configuration")
 	}
+	if _, err := accountCommand(ctx, "/usr/bin/homenode", "guest-allocation-apply"); err == nil {
+		t.Fatal("packaged allocator apply admitted uninstalled configuration")
+	}
+	allocatorAfter, err = os.Lstat("/etc/login.defs")
+	allocatorCurrent, readErr = os.ReadFile("/etc/login.defs")
+	if err != nil || readErr != nil || !os.SameFile(allocatorBefore, allocatorAfter) || digest(allocatorCurrent) != digest(allocatorBytes) {
+		t.Fatal("refused packaged allocator application changed host configuration", err, readErr)
+	}
 	assertIdentityPreserved()
 	engine, err = Open("/", journalDirectory)
 	if err != nil {
@@ -238,6 +250,7 @@ func TestInstalledAccountInspection(t *testing.T) {
 	}
 	installAccountFixtureConfiguration(t, engine, accounts, maintenance)
 	applyAccountFixtureIdentity(t, &engine, identityPreview)
+	applyAccountFixtureAllocator(t, &engine, allocatorPreview)
 	storagePrepared := false
 	storageQualified := t.Run("QualifiedGuestStorageIntent", func(t *testing.T) {
 		device, err := os.Lstat("/dev/kvm")
