@@ -253,6 +253,9 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool) {
 		// A host process with the exact proposed guest DAC identity tests
 		// pathname access only; this is not an in-guest exploit test.
 		probe := exec.CommandContext(ctx, "/usr/bin/python3", "-c", `import errno, os, sys
+uid, gid = int(sys.argv[4]), int(sys.argv[5])
+if os.getresuid() != (uid,uid,uid) or os.getresgid() != (gid,gid,gid) or os.getgroups() != []:
+    raise RuntimeError("guest storage probe credentials differ")
 for path, flags in ((sys.argv[1],os.O_RDONLY),(sys.argv[2],os.O_RDWR)):
     os.close(os.open(path,flags|os.O_NOFOLLOW))
 for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.argv[3],os.O_WRONLY)):
@@ -263,7 +266,7 @@ for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.arg
     else:
         os.close(fd)
         raise RuntimeError("forbidden storage access admitted")
-`, domain.SystemPath, domain.DataPath, otherDisk)
+`, domain.SystemPath, domain.DataPath, otherDisk, strconv.FormatUint(uint64(uid), 10), strconv.FormatUint(uint64(deviceStat.Gid), 10))
 		probe.Env = []string{"PATH=/usr/bin:/bin", "LANG=C"}
 		probe.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: deviceStat.Gid, Groups: []uint32{}}, Pdeathsig: syscall.SIGKILL}
 		probe.WaitDelay = 3 * time.Second
