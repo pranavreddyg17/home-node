@@ -27,6 +27,11 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 		return intent
 	}
 	intent := makeIntent()
+	identityDomain := func() *Domain {
+		d := &Domain{ID: intent.InstanceID}
+		d.Image.SHA256, d.Image.DataBytes = intent.ImageSHA256, intent.Size
+		return d
+	}
 	if err := m.verifyVolumeOwnershipIntent(ctx, intent); !errors.Is(err, ErrPolicy) {
 		t.Fatal("verification created missing intent", err)
 	}
@@ -52,6 +57,19 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 		}
 		if _, err := m.Store.DB.Exec(`DELETE FROM settings WHERE key=? AND value=?`, key, "fixture-owner"); err != nil {
 			t.Fatal(err)
+		}
+	}
+	bound := Domain{ID: intent.InstanceID}
+	bound.Image.SHA256, bound.Image.DataBytes = intent.ImageSHA256, intent.Size
+	if err := m.bindDomainGuestIdentity(ctx, &bound, false); err != nil {
+		t.Fatal("exact ownership domain binding refused", err)
+	}
+	for _, change := range []func(*Domain){func(d *Domain) { d.Image.SHA256 = strings.Repeat("b", 64) }, func(d *Domain) { d.Image.DataBytes++ }} {
+		changed := bound
+		changed.GuestUID, changed.GuestGID = 0, 0
+		change(&changed)
+		if err := m.bindDomainGuestIdentity(ctx, &changed, false); !errors.Is(err, ErrPolicy) || changed.GuestUID != 0 || changed.GuestGID != 0 {
+			t.Fatal("ownership/domain drift bound", changed, err)
 		}
 	}
 	replacement := &Manager{Store: m.Store, GuestUIDPool: &pool, GuestGID: m.GuestGID, Policy: m.Policy}
@@ -82,7 +100,7 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 	if err := m.recordVolumeOwnershipIntent(ctx, intent); err == nil {
 		t.Fatal("changed durable UID lease admitted")
 	}
-	if err := m.bindDomainGuestIdentity(ctx, &Domain{ID: intent.InstanceID}, false); err == nil {
+	if err := m.bindDomainGuestIdentity(ctx, identityDomain(), false); err == nil {
 		t.Fatal("binding admitted intent/lease UID mismatch")
 	}
 	var actualUID uint32
@@ -102,7 +120,7 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 		t.Fatal("missing durable group admitted")
 	}
 	for _, reserve := range []bool{false, true} {
-		if err := m.bindDomainGuestIdentity(ctx, &Domain{ID: intent.InstanceID}, reserve); err == nil {
+		if err := m.bindDomainGuestIdentity(ctx, identityDomain(), reserve); err == nil {
 			t.Fatal("binding admitted missing intent group", reserve)
 		}
 	}

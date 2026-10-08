@@ -3621,3 +3621,8 @@ Hardened production read-only maintenance volume admission: refuse special paren
 ### Re-admit maintenance descriptor after pathname checks
 
 Maintenance disk opening now repeats protected root-owned inode admission and cancellation after final pathname/parent reads, before returning its read-only descriptor. Those reads do not freeze file metadata. Close failures on refusal remain propagated. Linux amd64 tests compile and diff checks passed; native execution of the queued maintenance changes remains pending. CI37726148094 is confirmed live ata86162c, now at go vet; it excludes queued ownership and maintenance follow-ups. This remains snapshot qualification under the caller’s live-manager maintenance exclusion, not physical filesystem freeze or full application acceptance.
+
+
+### Domain binding includes saved image and volume size
+
+Production identity binding now compares saved ownership image digest and size against the domain alongside UID/GID, inside the existing binding transaction. Exact metadata succeeds; changed image or data size refuses without publishing guest identity. Existing corruption tests now supply matching domain image/size so unrelated mismatches cannot mask lease/group refusal. Full supervisor races passed9.020s before that fixture precision adjustment; targeted races with the final fixture passed1.445s. Linux amd64 tests compile and diff checks passed. CI37726148094 remains confirmed live ata86162c, last observed building the Debian package, and excludes queued changes. This does not pin a running domain disk or activate reserved provisioning; full application remains unfinished.

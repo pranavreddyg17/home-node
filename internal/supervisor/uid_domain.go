@@ -65,11 +65,13 @@ func (m *Manager) bindDomainGuestIdentity(ctx context.Context, d *Domain, reserv
 			return ErrPolicy
 		}
 		var ownershipUID, ownershipGID uint32
-		ownershipErr := tx.QueryRowContext(ctx, `SELECT uid,gid FROM runtime_volume_ownership WHERE instance_id=?`, d.ID).Scan(&ownershipUID, &ownershipGID)
+		var ownershipImage string
+		var ownershipSize int64
+		ownershipErr := tx.QueryRowContext(ctx, `SELECT uid,gid,image_sha256,size FROM runtime_volume_ownership WHERE instance_id=?`, d.ID).Scan(&ownershipUID, &ownershipGID, &ownershipImage, &ownershipSize)
 		if ownershipErr != nil && !errors.Is(ownershipErr, sql.ErrNoRows) {
 			return ownershipErr
 		}
-		if ownershipErr == nil && (ownershipUID != uid || ownershipGID != m.GuestGID) {
+		if ownershipErr == nil && (ownershipUID != uid || ownershipGID != m.GuestGID || ownershipImage != d.Image.SHA256 || ownershipSize != d.Image.DataBytes) {
 			return ErrPolicy
 		}
 		err := tx.QueryRowContext(ctx, "SELECT gid FROM runtime_guest_groups WHERE instance_id=?", d.ID).Scan(&gid)
