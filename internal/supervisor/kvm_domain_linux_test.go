@@ -359,18 +359,9 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool) {
 			t.Log("native guest-initiated channel authenticated without payload", attempt)
 			continue
 		}
-		// Measure inherited-listener credentials without sending an adapter frame.
-		// This is an experiment only; production must still reject root peers.
-		inherited, err := (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", domain.ChannelPath)
-		if err != nil {
-			t.Fatal("native inherited listener unavailable", err)
-		}
-		creator, identityErr := PeerUID(inherited.(*net.UnixConn))
-		inheritedCloseErr := inherited.Close()
-		if identityErr != nil || inheritedCloseErr != nil {
-			t.Fatal("native listener credential observation failed", identityErr, inheritedCloseErr)
-		}
-		t.Log("native inherited listener peer UID, without payload", creator)
+		// Production adoption already probes exact QEMU credentials without a
+		// payload. Do not add a diagnostic connection to the firmware-only guest:
+		// it has no adapter to drain the inherited listener's bounded backlog.
 		if err := backend.Verify(ctx, domain); err != nil {
 			nativeDomainDiagnostics(t, domain)
 			t.Fatal("native launch isolation verification refused", err)
