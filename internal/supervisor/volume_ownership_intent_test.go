@@ -185,6 +185,15 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 type ownershipAuditBackend struct {
 	*fakeBackend
 	verifies int
+	stopErr  error
+}
+
+func (b *ownershipAuditBackend) Stop(ctx context.Context, id string) error {
+	if b.stopErr != nil {
+		b.stops++
+		return b.stopErr
+	}
+	return b.fakeBackend.Stop(ctx, id)
 }
 
 func (b *ownershipAuditBackend) Verify(ctx context.Context, d Domain) error {
@@ -259,5 +268,59 @@ func TestOwnershipMetadataDriftStopsDuringAudit(t *testing.T) {
 				t.Fatal("audit repaired provenance", digest, size, err)
 			}
 		})
+	}
+}
+
+func TestOwnershipDriftAuditRetainsFailedTeardown(t *testing.T) {
+	m, original := newManager(t)
+	pool := GuestUIDPool{First: 200000, Last: 200002}
+	m.GuestUIDPool, m.GuestGID = &pool, 64055
+	backend := &ownershipAuditBackend{fakeBackend: original}
+	m.Backend = backend
+	ctx := context.Background()
+	request := startRequest()
+	if _, err := m.Apply(ctx, request); err != nil {
+		t.Fatal(err)
+	}
+	image := m.Manifest.Images[0]
+	intent := VolumeOwnershipIntent{InstanceID: request.InstanceID, ImageSHA256: image.SHA256, UID: pool.First, GID: m.GuestGID, Device: 10, Inode: 100, Size: image.DataBytes}
+	if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET state='preparing' WHERE id=?`, request.InstanceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.recordVolumeOwnershipIntent(ctx, intent); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET state='running' WHERE id=?`, request.InstanceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Store.DB.Exec(`UPDATE runtime_volume_ownership SET size=size+1 WHERE instance_id=?`, request.InstanceID); err != nil {
+		t.Fatal(err)
+	}
+	backend.verifies = 0
+	failure := errors.New("fixture stop failure")
+	backend.stopErr = failure
+	if err := m.Audit(ctx); !errors.Is(err, failure) {
+		t.Fatal("stop failure hidden", err)
+	}
+	var phase, desired string
+	if err := m.Store.DB.QueryRow(`SELECT state,desired FROM runtime_instances WHERE id=?`, request.InstanceID).Scan(&phase, &desired); err != nil || phase != "stopping" || desired != "stopped" {
+		t.Fatal("uncertain stop marked terminal", phase, desired, err)
+	}
+	if !backend.running || backend.stops != 1 || backend.verifies != 0 {
+		t.Fatal("failed teardown behavior", backend)
+	}
+	backend.stopErr = nil
+	if err := m.Audit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Store.DB.QueryRow(`SELECT state,desired FROM runtime_instances WHERE id=?`, request.InstanceID).Scan(&phase, &desired); err != nil || phase != "interrupted" || desired != "stopped" {
+		t.Fatal("teardown retry state", phase, desired, err)
+	}
+	if backend.running || backend.stops != 2 || backend.verifies != 0 {
+		t.Fatal("retry behavior", backend)
+	}
+	var size int64
+	if err := m.Store.DB.QueryRow(`SELECT size FROM runtime_volume_ownership WHERE instance_id=?`, request.InstanceID).Scan(&size); err != nil || size != intent.Size+1 {
+		t.Fatal("retry repaired provenance", size, err)
 	}
 }

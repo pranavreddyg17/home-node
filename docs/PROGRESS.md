@@ -3636,3 +3636,8 @@ Added manager-level regressions for saved image and size drift: a fake-backed ru
 ### Audit enforces recorded runtime profile against catalog
 
 Production audit now refuses saved instance image digest, data size, memory or CPU profile disagreement with the current trusted catalog before backend verification. Expanded manager drift regression to all four runtime fields alongside saved ownership digest/size; each must skip verification, stop once, publish interrupted/stopped state and preserve ownership evidence. Full local supervisor race suite passed10.936s, Linux amd64 tests compile and diff checks passed. Tests use a fake backend and synthetic ownership metadata, not native QEMU teardown or disk inspection. CI37726776683 is confirmed live at2c3b0c3870f104eb21165ee5ac928b675b915859 and excludes this follow-up. Reserved provisioning and full application acceptance remain unfinished.
+
+
+### Ownership drift teardown failure remains retryable
+
+Added manager regression where provenance drift causes backend Stop failure. Audit must return that failure, retain stopping/stopped-desired state rather than claiming terminal teardown, preserve running evidence and skip backend verification. A subsequent successful audit retries stop, reaches interrupted/stopped and leaves corrupted ownership size unchanged. Targeted ownership audit races passed2.176s, Linux amd64 tests compile and diff checks passed. This uses controlled fake backend failure, not native QEMU failure injection. CI37726776683 remains confirmed live at2c3b0c3 and excludes this regression and runtime-profile enforcement. Complete ownership provisioning and end-to-end application acceptance remain unfinished.
