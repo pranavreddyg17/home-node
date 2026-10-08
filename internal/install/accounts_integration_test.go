@@ -147,6 +147,14 @@ func TestInstalledAccountInspection(t *testing.T) {
 	if identityErr != nil || baseErr != nil || identityOwner != baseIdentity.OwnerID {
 		t.Fatal("identity configuration ownership qualification failed", identityErr, baseErr)
 	}
+	identityPreview, identityErr := engine.PrepareGuestIdentityConfiguration(ctx)
+	if identityErr != nil || identityPreview.OwnerID != identityOwner || !identityPreview.IntentCommitted || identityPreview.ConfigurationApplied || len(identityPreview.OriginalSHA256) != 64 || len(identityPreview.DesiredSHA256) != 64 {
+		t.Fatal("native identity preparation failed", identityErr, identityPreview)
+	}
+	identityReplay, identityErr := engine.PrepareGuestIdentityConfiguration(ctx)
+	if identityErr != nil || identityReplay != identityPreview {
+		t.Fatal("native identity preparation retry changed intent", identityErr)
+	}
 	storagePrepared := false
 	storageQualified := t.Run("QualifiedGuestStorageIntent", func(t *testing.T) {
 		device, err := os.Lstat("/dev/kvm")
