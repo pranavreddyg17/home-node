@@ -21,9 +21,6 @@ func TestRootGuestIdentityHostSourceRetention(t *testing.T) {
 			e := openEngine(t, host, journal)
 			defer e.Close()
 			parent := filepath.Join(host, "etc")
-			if err := os.Mkdir(parent, 0755); err != nil {
-				t.Fatal(err)
-			}
 			path := filepath.Join(parent, "nsswitch.conf")
 			data := []byte("passwd: files systemd\ngroup: files\nshadow: files\n")
 			if err := os.WriteFile(path, data, 0644); err != nil {
