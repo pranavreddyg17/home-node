@@ -60,6 +60,12 @@ func (e *Engine) reconcileRecoveryStaging(ctx context.Context, expected recovery
 }
 
 func (e *Engine) matchRecoveryRecord(ctx context.Context, name string, expected []byte) (result error) {
+	return e.withRecoveryRecord(ctx, name, expected, nil)
+}
+
+// withRecoveryRecord retains the original journal descriptor across a consumer.
+// It lends no runtime authority; callers retain installation/activation locks.
+func (e *Engine) withRecoveryRecord(ctx context.Context, name string, expected []byte, use func(context.Context) error) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -89,6 +95,32 @@ func (e *Engine) matchRecoveryRecord(ctx context.Context, name string, expected 
 	current, err := e.journalRoot.Lstat(name)
 	if err != nil || !os.SameFile(opened, current) || current.Size() != int64(len(expected)) || !accountJournalFileAdmitted(current, e.owner, 8192) {
 		return ErrConflict
+	}
+	if use != nil {
+		// Complete a previously interrupted acknowledgement before mutation.
+		if err = file.Sync(); err != nil {
+			return err
+		}
+		if err = syncDirectory(e.journalRoot, "."); err != nil {
+			return err
+		}
+		if err = ctx.Err(); err != nil {
+			return err
+		}
+		if err = use(ctx); err != nil {
+			return err
+		}
+		if _, err = file.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+		actual, err = io.ReadAll(io.LimitReader(file, 8193))
+		if err != nil || !bytes.Equal(actual, expected) {
+			return ErrConflict
+		}
+		retained, err := file.Stat()
+		if err != nil || !os.SameFile(opened, retained) || !accountJournalFileAdmitted(retained, e.owner, 8192) || retained.Size() != int64(len(expected)) || !e.accountJournalPathUnchanged(name, opened, 8192) {
+			return ErrConflict
+		}
 	}
 	return ctx.Err()
 }

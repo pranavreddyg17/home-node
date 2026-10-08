@@ -82,3 +82,39 @@ func (e *Engine) commitRecoveryPublicationIntent(ctx context.Context, intent rec
 	}
 	return e.commitRecoveryRecord(ctx, name, data)
 }
+
+// withRecoveryPublicationIntent requires an independently qualified recovery
+// selection and keeps the exact publication record open across the consumer.
+// The caller still supplies live account, storage and runtime exclusion proof.
+func (e *Engine) withRecoveryPublicationIntent(ctx context.Context, intent recoveryPublicationIntent, recovery recoveryIntent, use func(context.Context) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if use == nil || validateRecoveryPublicationIntent(intent) != nil || recovery.Version != 1 {
+		return ErrPlan
+	}
+	encodedRecovery, err := json.Marshal(recovery)
+	if err != nil {
+		return err
+	}
+	if intent.ConfigurationID != recovery.ConfigurationID || intent.ConfigurationDigest != recovery.ConfigurationDigest || intent.RecoveryIntentSHA256 != digest(encodedRecovery) {
+		return ErrConflict
+	}
+	matched := intent.FileName == "management.db" && intent.ContentSHA256 == recovery.Recovery.ManagementSHA256 && intent.Identity.Bytes == recovery.Recovery.ManagementBytes
+	for _, disk := range recovery.Recovery.Disks {
+		if intent.FileName == disk.InstanceID+".raw" && intent.ContentSHA256 == disk.SourceSHA256 && intent.Identity.Bytes == disk.Bytes {
+			matched = true
+		}
+	}
+	if !matched {
+		return ErrConflict
+	}
+	name, _ := recoveryPublicationRecordName(intent.FileName)
+	data, err := json.Marshal(intent)
+	if err != nil {
+		return err
+	}
+	return e.withRecoveryRecord(ctx, "recovery.json", encodedRecovery, func(ctx context.Context) error {
+		return e.withRecoveryRecord(ctx, name, data, use)
+	})
+}
