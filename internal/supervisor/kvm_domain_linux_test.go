@@ -329,12 +329,14 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool) {
 			nativeDomainDiagnostics(t, domain)
 			t.Fatal("native pinned process memory observation refused", err)
 		}
-		if _, err := command(ctx, "", "/usr/bin/env", "HOMENODE_SUPERVISOR_SYSTEMD_INTEGRATION=1",
+		memoryEvidence, err := command(ctx, "", "/usr/bin/env", "HOMENODE_SUPERVISOR_SYSTEMD_INTEGRATION=1",
 			"HOMENODE_SUPERVISOR_MEMORY_PID="+strconv.Itoa(pid), "HOMENODE_SUPERVISOR_MEMORY_ID="+id,
 			"HOMENODE_SUPERVISOR_MEMORY_MAX="+strconv.FormatInt(maximum, 10),
-			"/usr/bin/python3", "../../packaging/systemd/supervisor_fixture.py"); err != nil {
+			"/usr/bin/python3", "../../packaging/systemd/supervisor_fixture.py")
+		if err != nil {
 			t.Fatal("source-protected native process memory fixture", err)
 		}
+		t.Log(memoryEvidence)
 		t.Log("native per-domain memory observer positive and refusal checks passed")
 		if guestConnect {
 			if err := verifyGuestDACProcess(ctx, pid, uid, domain.GuestGID); err != nil {

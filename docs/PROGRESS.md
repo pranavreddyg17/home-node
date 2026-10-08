@@ -3761,3 +3761,8 @@ CI37728874961 completed successfully at exact head e241520b47034315abfd65688a28e
 ### Failed-start journal and teardown recovery regressions
 
 Extended failed-start SQLite abort regression through explicit reconciliation after removing the injected trigger: uncertain preparing/pending records become interrupted/desired stopped without another backend start. Extended failed teardown regression through audit after restoring a working stop backend: stopping/desired stopped becomes interrupted, with exactly one teardown retry and no relaunch. Targeted uncached race tests passed (1.601s). These use the real SQLite journal and a fake backend; no native teardown, automatic audit of preparing records or power-loss durability is inferred. CI37729522977 is confirmed live at817cef8 and excludes these test extensions. Reserved Prepare, installed policy publication and full owner acceptance remain unfinished.
+
+
+### Retain native source-memory child evidence in CI output
+
+Native firmware experiments now log the bounded source-service child stdout and run verbose in CI, preserving its explicit TestNativeSupervisorMemoryObservation PASS marker in the retained job output instead of discarding it after successful command admission. The child already requires that marker before success. Production command error/diagnostic policy remains unchanged. Linux amd64 test compilation passed; actual execution of this log-retention change is pending. CI37729522977 at817cef8 is confirmed live after successful KVM and source-volume stages, and excludes this follow-up. Full product remains unfinished.
