@@ -101,6 +101,22 @@ func TestRootRecoveryPublicationJournalsBeforeOwnershipTransfer(t *testing.T) {
 			if err != nil || string(record) != string(retained) {
 				t.Fatal("refused retry changed ownership intent", err)
 			}
+			consumed := false
+			e.mu.Lock()
+			err = e.withResumedRecoveryPublication(context.Background(), destination, saved, recovery, guard, func(ctx context.Context, resumed *os.File) error {
+				consumed = true
+				return verifyRecoveryPublicationDescriptor(ctx, resumed, saved)
+			})
+			e.mu.Unlock()
+			if err != nil || !consumed {
+				t.Fatal("committed staging could not resume ownership", err)
+			}
+			if err := unix.Lstat(stagePath, &stat); err != nil || stat.Ino != saved.Identity.Inode || stat.Uid != 801 || stat.Gid != 801 {
+				t.Fatal("resume changed inode or missed ownership", err)
+			}
+			if _, err := os.Stat(filepath.Join(destinationPath, "management.db")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatal("ownership resume published data", err)
+			}
 		})
 	}
 }

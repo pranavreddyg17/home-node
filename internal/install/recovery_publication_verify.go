@@ -13,10 +13,21 @@ import (
 // Verify a retained descriptor without opening a mutable pathname or changing
 // its offset. Caller retains exclusion from writers through publication.
 func verifyRecoveryPublicationDescriptor(ctx context.Context, file *os.File, intent recoveryPublicationIntent) error {
+	return verifyRecoveryPublicationContent(ctx, file, intent, false)
+}
+
+func verifyRecoveryPublicationContent(ctx context.Context, file *os.File, intent recoveryPublicationIntent, rootStaging bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if file == nil || validateRecoveryPublicationIntent(intent) != nil {
+	validation := intent
+	if rootStaging {
+		if intent.Identity.UID != 0 || intent.Identity.GID != 0 {
+			return ErrPlan
+		}
+		validation.Identity.UID, validation.Identity.GID = 1, 1
+	}
+	if file == nil || validateRecoveryPublicationIntent(validation) != nil {
 		return ErrPlan
 	}
 	admitted := func() bool {
