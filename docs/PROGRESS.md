@@ -3616,3 +3616,8 @@ Extended the queued native descriptor fixture to exercise both recording and non
 ### Maintenance volume parent/path admission recheck
 
 Hardened production read-only maintenance volume admission: refuse special parent modes, recheck pathname identity against the pinned disk and parent identity/mode/owner/group against the retained directory before return, and propagate descriptor close failures while closing any would-be returned disk on cleanup failure. Existing root-only volume policy remains; this does not enable reserved guest backup admission or establish filesystem consistency. Added disposable native parent sticky/setgid/group-writable refusal cases with fixture-only mode restoration. Linux amd64 tests compile and diff checks passed; actual native execution awaits publication. CI37726148094 remains confirmed live ata86162c and excludes queued changes. Full application and ownership lifecycle integration remain unfinished.
+
+
+### Re-admit maintenance descriptor after pathname checks
+
+Maintenance disk opening now repeats protected root-owned inode admission and cancellation after final pathname/parent reads, before returning its read-only descriptor. Those reads do not freeze file metadata. Close failures on refusal remain propagated. Linux amd64 tests compile and diff checks passed; native execution of the queued maintenance changes remains pending. CI37726148094 is confirmed live ata86162c, now at go vet; it excludes queued ownership and maintenance follow-ups. This remains snapshot qualification under the caller’s live-manager maintenance exclusion, not physical filesystem freeze or full application acceptance.

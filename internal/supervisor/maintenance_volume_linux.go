@@ -63,5 +63,13 @@ func openMaintenanceVolume(ctx context.Context, directory, id string, size int64
 	if err != nil || pathErr != nil || parentErr != nil || !os.SameFile(pinned, current) || !os.SameFile(before, parentCurrent) || parentCurrent.Mode() != before.Mode() || unix.Fstat(int(parent.Fd()), &finalParent) != nil || finalParent.Dev != native.Dev || finalParent.Ino != native.Ino || finalParent.Uid != native.Uid || finalParent.Gid != native.Gid || finalParent.Mode != native.Mode {
 		return nil, errors.Join(ErrPolicy, file.Close())
 	}
+	// Re-admit the retained disk after the pathname/parent reads; those reads
+	// do not freeze inode metadata or authorize a changed owner/link/mode.
+	if err := admitVolume(file, size); err != nil {
+		return nil, errors.Join(err, file.Close())
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, errors.Join(err, file.Close())
+	}
 	return file, nil
 }
