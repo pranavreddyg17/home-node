@@ -3646,3 +3646,8 @@ Added manager regression where provenance drift causes backend Stop failure. Aud
 ### Cancelled serialized start/shutdown waits release admission
 
 Replaced unbounded startMu acquisition in start and supervisor Shutdown with context-aware TryLock waiting and a post-acquisition cancellation recheck. Cancelled waiters release their outer runtime reader instead of delaying exclusive maintenance; they cause no backend or instance admission effects and do not close future starts. Regression holds the start lock, checks deadline refusal for both external paths, verifies exclusive runtime acquisition succeeds, and then successfully starts after fixture release. Full supervisor races passed10.330s, Linux amd64 tests compile and diff checks passed. This bounds live-manager serialization only; it does not establish cross-process/kernel ownership exclusion. CI37726776683 remains confirmed live at2c3b0c3 and excludes this follow-up. Full provisioning and application acceptance remain unfinished.
+
+
+### Queued shutdown preserves permanent start exclusion
+
+Added contention regression for successful supervisor shutdown: it cannot bypass held preparation serialization, then after release it reconciles the running fake guest, keeps shuttingDown admission closed and rejects a subsequent start before backend effects. Active inventory must be empty. Combined cancellation/queued-shutdown races passed1.932s, Linux amd64 tests compile and diff checks passed. This qualifies live-manager concurrency with a fake backend, not native service shutdown or cross-process exclusion. CI37726776683 remains confirmed live at2c3b0c3 and excludes queued runtime-profile/lock changes. Complete production provisioning and application acceptance remain unfinished.

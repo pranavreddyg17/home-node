@@ -59,3 +59,49 @@ func TestCancelledStartLockWaiterReleasesRuntimeAdmission(t *testing.T) {
 		})
 	}
 }
+
+func TestQueuedShutdownClosesFutureStartsAfterPreparationRelease(t *testing.T) {
+	m, backend := newManager(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if _, err := m.Apply(ctx, startRequest()); err != nil {
+		t.Fatal(err)
+	}
+	m.startMu.Lock()
+	locked := true
+	defer func() {
+		if locked {
+			m.startMu.Unlock()
+		}
+	}()
+	done := make(chan error, 1)
+	go func() { done <- m.Shutdown(ctx) }()
+	select {
+	case err := <-done:
+		t.Fatal("shutdown bypassed preparation lock", err)
+	case <-time.After(80 * time.Millisecond):
+	}
+	m.startMu.Unlock()
+	locked = false
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	if !m.shuttingDown || backend.running || backend.stops != 1 {
+		t.Fatal("queued shutdown did not reconcile")
+	}
+	if _, err := m.Apply(ctx, startRequest()); !errors.Is(err, ErrPolicy) {
+		t.Fatal("shutdown admitted later start", err)
+	}
+	if backend.starts != 1 {
+		t.Fatal("later start reached backend", backend.starts)
+	}
+	var active int
+	if err := m.Store.DB.QueryRow(`SELECT count(*) FROM runtime_instances WHERE desired='running' OR state IN('preparing','running','stopping','shutting-down')`).Scan(&active); err != nil || active != 0 {
+		t.Fatal("shutdown retained active inventory", active, err)
+	}
+}
