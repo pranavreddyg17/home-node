@@ -108,6 +108,12 @@ func openReservedVolume(ctx context.Context, directory string, d Domain) (result
 	if unix.Statx(int(parent.Fd()), "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &finalParentMount) != nil || unix.Statx(reopened, "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &finalDiskMount) != nil || finalParentMount.Mask&unix.STATX_MNT_ID == 0 || finalDiskMount.Mask&unix.STATX_MNT_ID == 0 || finalParentMount.Mnt_id != parentMount.Mnt_id || finalDiskMount.Mnt_id != diskMount.Mnt_id {
 		return fail(ErrPolicy)
 	}
+	// A bind mount can preserve device/inode while changing the current path's
+	// mount. Recheck path mount identity as well as retained descriptor identity.
+	var pathParentMount, pathDiskMount unix.Statx_t
+	if unix.Statx(unix.AT_FDCWD, directory, unix.AT_SYMLINK_NOFOLLOW|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &pathParentMount) != nil || unix.Statx(int(parent.Fd()), name, unix.AT_SYMLINK_NOFOLLOW|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &pathDiskMount) != nil || pathParentMount.Mask&unix.STATX_MNT_ID == 0 || pathDiskMount.Mask&unix.STATX_MNT_ID == 0 || pathParentMount.Mnt_id != parentMount.Mnt_id || pathDiskMount.Mnt_id != diskMount.Mnt_id {
+		return fail(ErrPolicy)
+	}
 	if err := ctx.Err(); err != nil {
 		return fail(err)
 	}

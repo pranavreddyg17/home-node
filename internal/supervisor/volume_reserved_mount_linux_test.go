@@ -96,6 +96,25 @@ func TestNativeReservedVolumeMountRefusal(t *testing.T) {
 	if unix.Stat(target, &restored) != nil || restored.Dev != original.Dev || restored.Ino != original.Ino || restored.Mode != original.Mode || restored.Uid != original.Uid || restored.Gid != original.Gid || restored.Size != original.Size {
 		t.Fatal("mount refusal changed original disk")
 	}
+	if err := unix.Mount(target, target, "", unix.MS_BIND, ""); err != nil {
+		t.Fatal("self bind mount unavailable", err)
+	}
+	mounted = true
+	var selfBound unix.Stat_t
+	if unix.Stat(target, &selfBound) != nil || selfBound.Dev != original.Dev || selfBound.Ino != original.Ino {
+		t.Fatal("self bind fixture changed inode identity")
+	}
+	rejected, err = openReservedVolume(ctx, directory, d)
+	if !errors.Is(err, ErrPolicy) || rejected != nil {
+		if rejected != nil {
+			rejected.Close()
+		}
+		t.Fatal("same-inode bind mount admitted", err)
+	}
+	if err := unix.Unmount(target, 0); err != nil {
+		t.Fatal(err)
+	}
+	mounted = false
 	accepted, err = openReservedVolume(ctx, directory, d)
 	if err != nil {
 		t.Fatal("restored volume refused", err)
