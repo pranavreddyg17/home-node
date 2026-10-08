@@ -152,3 +152,51 @@ func TestGuestStorageIntentLoadRefusesNoncanonicalAndModeDrift(t *testing.T) {
 		})
 	}
 }
+
+func TestGuestStorageIntentRejectsIdenticalReplacementDuringObservation(t *testing.T) {
+	host, jr := roots(t)
+	e := openEngine(t, host, jr)
+	defer e.Close()
+	ctx := context.Background()
+	identity, err := guestUIDProvisioningPlan(ctx, strings.Repeat("a", 32), supervisor.GuestUIDPool{First: 200000, Last: 200002}, []uint32{1001, 1002})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := guestStorageProvisioningPlan(ctx, identity, 993, []int{1001, 1002, 1003})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.commitGuestStorageIntent(ctx, plan); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(jr, "guest-storage-intent.json")
+	original, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observed, err := e.withGuestStorageIntent(ctx, func(context.Context, GuestStorageProvisioningPlan) error {
+		if err := os.Rename(path, path+".old"); err != nil {
+			return err
+		}
+		return os.WriteFile(path, original, 0600)
+	})
+	if !errors.Is(err, ErrConflict) || observed.GuestGID != 0 {
+		t.Fatal("identical replacement qualified", observed, err)
+	}
+	replacement, err := os.Stat(path)
+	if err != nil || os.SameFile(before, replacement) {
+		t.Fatal("fixture did not replace inode", err)
+	}
+	oldBytes, err := os.ReadFile(path + ".old")
+	if err != nil || !bytes.Equal(oldBytes, original) {
+		t.Fatal("original record changed", err)
+	}
+	currentBytes, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(currentBytes, original) {
+		t.Fatal("refusal repaired replacement", err)
+	}
+}

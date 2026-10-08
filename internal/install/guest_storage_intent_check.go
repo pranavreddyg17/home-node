@@ -31,32 +31,32 @@ func (e *Engine) CheckGuestStorageProvisioningIntent(ctx context.Context) (Guest
 		return empty, ErrConflict
 	}
 	defer e.mu.Unlock()
-	intent, err := e.loadGuestStorageIntent(ctx)
-	if err != nil {
-		return empty, err
-	}
-	live, err := e.planInstalledGuestStorageProvisioningLocked(ctx, supervisor.GuestUIDPool{First: intent.Identity.First, Last: intent.Identity.Last})
-	if err != nil {
-		return empty, err
-	}
-	expected, _ := json.Marshal(intent)
-	observed, _ := json.Marshal(live)
-	if !bytes.Equal(expected, observed) {
-		return empty, ErrConflict
-	}
-	// Recheck canonical intent after potentially slow host lookups.
-	current, err := e.loadGuestStorageIntent(ctx)
-	if err != nil {
-		return empty, err
-	}
-	currentBytes, _ := json.Marshal(current)
-	if !bytes.Equal(expected, currentBytes) {
-		return empty, ErrConflict
-	}
-	return live, nil
+	return e.withGuestStorageIntent(ctx, func(ctx context.Context, intent GuestStorageProvisioningPlan) error {
+		live, err := e.planInstalledGuestStorageProvisioningLocked(ctx, supervisor.GuestUIDPool{First: intent.Identity.First, Last: intent.Identity.Last})
+		if err != nil {
+			return err
+		}
+		expected, err := json.Marshal(intent)
+		if err != nil {
+			return err
+		}
+		observed, err := json.Marshal(live)
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(expected, observed) {
+			return ErrConflict
+		}
+		return nil
+	})
 }
 
-func (e *Engine) loadGuestStorageIntent(ctx context.Context) (plan GuestStorageProvisioningPlan, result error) {
+func (e *Engine) loadGuestStorageIntent(ctx context.Context) (GuestStorageProvisioningPlan, error) {
+	return e.withGuestStorageIntent(ctx, nil)
+}
+
+// Keep the original record open through potentially slow live host observation.
+func (e *Engine) withGuestStorageIntent(ctx context.Context, revalidate func(context.Context, GuestStorageProvisioningPlan) error) (plan GuestStorageProvisioningPlan, result error) {
 	if err := ctx.Err(); err != nil {
 		return plan, err
 	}
@@ -92,6 +92,22 @@ func (e *Engine) loadGuestStorageIntent(ctx context.Context) (plan GuestStorageP
 		return plan, err
 	}
 	if !bytes.Equal(canonical, data) || !e.accountJournalPathUnchanged(name, info, 8192) {
+		return plan, ErrConflict
+	}
+	if revalidate != nil {
+		if err := revalidate(ctx, qualified); err != nil {
+			return plan, err
+		}
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return plan, err
+	}
+	currentBytes, err := io.ReadAll(io.LimitReader(file, 8193))
+	if err != nil {
+		return plan, err
+	}
+	current, err := file.Stat()
+	if err != nil || !accountJournalFileAdmitted(current, e.owner, 8192) || !os.SameFile(info, current) || current.Size() != info.Size() || current.Mode() != info.Mode() || !bytes.Equal(currentBytes, data) || !e.accountJournalPathUnchanged(name, info, 8192) {
 		return plan, ErrConflict
 	}
 	if err := ctx.Err(); err != nil {
