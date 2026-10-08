@@ -58,3 +58,36 @@ func TestStartFailureKeepsUnconfirmedStopVisible(t *testing.T) {
 		t.Fatal("unconfirmed teardown lost", phase, desired)
 	}
 }
+
+type cancelledStartVerifyBackend struct {
+	*fakeBackend
+	cancel context.CancelFunc
+}
+
+func (b *cancelledStartVerifyBackend) Verify(context.Context, Domain) error {
+	b.cancel()
+	return context.Canceled
+}
+func TestStartFailureJournalsAfterCallerCancellation(t *testing.T) {
+	m, backend := newManager(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m.Backend = &cancelledStartVerifyBackend{fakeBackend: backend, cancel: cancel}
+	r := startRequest()
+	if _, err := m.Apply(ctx, r); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancellation lost", err)
+	}
+	if backend.running || backend.stops != 1 {
+		t.Fatal("cancelled caller prevented teardown")
+	}
+	var phase, desired, operation string
+	if err := m.Store.DB.QueryRow("SELECT state,desired FROM runtime_instances WHERE id=?", r.InstanceID).Scan(&phase, &desired); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Store.DB.QueryRow("SELECT state FROM runtime_operations WHERE id=?", r.OperationID).Scan(&operation); err != nil {
+		t.Fatal(err)
+	}
+	if phase != "failed" || desired != "stopped" || operation != "failed" {
+		t.Fatal("cancelled caller prevented failure journal", phase, desired, operation)
+	}
+}

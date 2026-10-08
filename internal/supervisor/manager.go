@@ -302,7 +302,9 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 		if stopErr != nil {
 			phase = "stopping"
 		}
-		journalErr := m.Store.Transaction(stopCtx, func(tx *sql.Tx) error {
+		journalCtx, cancelJournal := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancelJournal()
+		journalErr := m.Store.Transaction(journalCtx, func(tx *sql.Tx) error {
 			if _, err := tx.Exec("UPDATE runtime_instances SET state=?,desired='stopped' WHERE id=?", phase, r.InstanceID); err != nil {
 				return err
 			}
