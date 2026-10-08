@@ -50,6 +50,18 @@ func publishRecoveryFile(ctx context.Context, directory *os.File, stage, final s
 		return unix.Fstatat(fd, name, &stat, unix.AT_SYMLINK_NOFOLLOW) == nil && stat.Mode == unix.S_IFREG|0600 && stat.Nlink == 1 && uint64(stat.Dev) == expected.Device && stat.Ino == expected.Inode && stat.Size == expected.Bytes && stat.Uid == expected.UID && stat.Gid == expected.GID
 	}
 	if !admitted(stage) {
+		// An interrupted rename can leave only the final name. The immutable
+		// journaled inode, not matching content alone, authorizes this retry.
+		var missing unix.Stat_t
+		if unix.Fstatat(fd, stage, &missing, unix.AT_SYMLINK_NOFOLLOW) == unix.ENOENT && admitted(final) {
+			if err := directory.Sync(); err != nil {
+				return err
+			}
+			if !admitted(final) || unix.Fstatat(fd, stage, &missing, unix.AT_SYMLINK_NOFOLLOW) != unix.ENOENT {
+				return ErrConflict
+			}
+			return ctx.Err()
+		}
 		return ErrConflict
 	}
 	if err := ctx.Err(); err != nil {

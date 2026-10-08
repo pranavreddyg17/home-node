@@ -77,6 +77,14 @@ func TestRecoveryPublicationDoesNotAdoptOccupiedOrUnqualifiedFiles(t *testing.T)
 				if _, err := os.Stat(stagePath); !errors.Is(err, os.ErrNotExist) {
 					t.Fatal("stage retained after rename", err)
 				}
+				if err := publishRecoveryFile(ctx, directory, stage, final, identity); err != nil {
+					t.Fatal("exact final inode could not retry", err)
+				}
+				foreign := identity
+				foreign.Inode++
+				if err := publishRecoveryFile(ctx, directory, stage, final, foreign); !errors.Is(err, ErrConflict) {
+					t.Fatal("foreign final inode adopted", err)
+				}
 			} else {
 				if err == nil {
 					t.Fatal("unqualified publication admitted")
