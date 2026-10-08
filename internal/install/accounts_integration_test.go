@@ -206,6 +206,7 @@ func TestInstalledAccountInspection(t *testing.T) {
 		t.Fatal("identity CLI journal reacquisition", err)
 	}
 	installAccountFixtureConfiguration(t, engine, accounts, maintenance)
+	applyAccountFixtureIdentity(t, &engine, identityPreview)
 	storagePrepared := false
 	storageQualified := t.Run("QualifiedGuestStorageIntent", func(t *testing.T) {
 		device, err := os.Lstat("/dev/kvm")

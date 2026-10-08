@@ -62,6 +62,10 @@ func installAccountFixtureConfiguration(t *testing.T, e *Engine, accounts Accoun
 			t.Error("native installation authority changed; preserving state", err)
 			return
 		}
+		if _, err := cleanup.journalRoot.Lstat("guest-identity-nss-stage.json"); !os.IsNotExist(err) {
+			t.Error("NSS restoration incomplete; preserving configuration and marker", err)
+			return
+		}
 		if sliceStarted {
 			if err := command("stop", "homenode.slice"); err != nil {
 				t.Error("fixture slice cleanup", err)
