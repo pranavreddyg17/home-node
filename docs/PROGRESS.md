@@ -3691,3 +3691,8 @@ CI37727364236 completed failure at736c65017ea3c204cde3b126a07b1e8ac6b68e6f. Fail
 ### Qualify reserved inode before read/write open
 
 Reserved opener now uses O_PATH/no-follow/no-xdev to qualify the inode before requesting I/O access. It reopens only the pinned descriptor through retained /proc/self/fd verified as procfs, compares full identity/ownership/mode/link/size metadata, and retains final pathname/parent/disk rechecks. Close errors from metadata/proc handles propagate and suppress a returned disk. Added native FIFO refusal with fixture-only pathname restoration; other alias/mode/group/symlink cases remain. Linux amd64 tests compile and diff checks passed; actual native execution of this follow-up is pending. This follows the existing pinned KVM preflight pattern but does not inherit its qualification evidence. CI37727729959 is confirmed live atb4680d0 and excludes this change. Production runtime exclusion and full application acceptance remain unfinished.
+
+
+### Reserved opener bounds the requested disk profile
+
+Added explicit16MiB..512GiB requested-size validation before reserved path access. The general inode admission helper compares observed size but does not independently enforce this profile range, so the opener must do so. Native fixture adds zero/below-minimum/above-maximum refusal cases under a qualified parent before the valid open. Linux amd64 tests compile and diff checks passed; native execution remains pending. CI37727729959 is confirmed live atb4680d0 and excludes pinned-before-I/O and bounds follow-ups. Complete runtime exclusion, production provisioning and application acceptance remain unfinished.

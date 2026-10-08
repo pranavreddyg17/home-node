@@ -20,7 +20,7 @@ func openReservedVolume(ctx context.Context, directory string, d Domain) (result
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if os.Geteuid() != 0 || !guestproto.ValidID(d.ID) || !filepath.IsAbs(directory) || filepath.Clean(directory) != directory || d.GuestUID < 65536 || d.GuestUID > 1<<31-1 || d.GuestGID == 0 || d.GuestGID > 1<<31-1 {
+	if d.Image.DataBytes < 16<<20 || d.Image.DataBytes > 512<<30 || os.Geteuid() != 0 || !guestproto.ValidID(d.ID) || !filepath.IsAbs(directory) || filepath.Clean(directory) != directory || d.GuestUID < 65536 || d.GuestUID > 1<<31-1 || d.GuestGID == 0 || d.GuestGID > 1<<31-1 {
 		return nil, ErrPolicy
 	}
 	before, err := os.Lstat(directory)

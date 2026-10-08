@@ -208,6 +208,16 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	if err := os.Chmod(directory, 0710); err != nil {
 		t.Fatal(err)
 	}
+	for _, size := range []int64{0, 16<<20 - 1, 512<<30 + 1} {
+		invalid := d
+		invalid.Image.DataBytes = size
+		if got, err := openReservedVolume(context.Background(), directory, invalid); !errors.Is(err, ErrPolicy) || got != nil {
+			if got != nil {
+				got.Close()
+			}
+			t.Fatal("invalid reserved volume size admitted", size, err)
+		}
+	}
 	reserved, err := openReservedVolume(context.Background(), directory, d)
 	if err != nil {
 		t.Fatal("reserved parent/volume refused", err)
