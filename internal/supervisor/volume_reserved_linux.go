@@ -49,12 +49,19 @@ func openReservedVolume(ctx context.Context, directory string, d Domain) (result
 		return nil, ErrPolicy
 	}
 	name := d.ID + ".raw"
-	fd, err := unix.Openat2(int(parent.Fd()), name, &unix.OpenHow{Flags: unix.O_PATH | unix.O_CLOEXEC | unix.O_NOFOLLOW, Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS | unix.RESOLVE_NO_XDEV})
+	// name is exactly one validated instance-derived component. O_NOFOLLOW
+	// pins symlinks themselves, which regular-inode admission rejects. Require
+	// mount IDs rather than device equality, so bind mounts also refuse.
+	fd, err := unix.Openat(int(parent.Fd()), name, unix.O_PATH|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 	if err != nil {
 		return nil, err
 	}
 	metadata := os.NewFile(uintptr(fd), name)
 	defer func() { resultErr = errors.Join(resultErr, metadata.Close()) }()
+	var parentMount, diskMount unix.Statx_t
+	if unix.Statx(int(parent.Fd()), "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &parentMount) != nil || unix.Statx(fd, "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &diskMount) != nil || parentMount.Mask&unix.STATX_MNT_ID == 0 || diskMount.Mask&unix.STATX_MNT_ID == 0 || parentMount.Mnt_id == 0 || parentMount.Mnt_id != diskMount.Mnt_id {
+		return nil, ErrPolicy
+	}
 	var disk unix.Stat_t
 	if unix.Fstat(fd, &disk) != nil || disk.Uid != 0 && disk.Uid != d.GuestUID || disk.Uid == 0 && disk.Gid != 0 || disk.Uid == d.GuestUID && disk.Gid != d.GuestGID {
 		return nil, ErrPolicy
@@ -95,6 +102,10 @@ func openReservedVolume(ctx context.Context, directory string, d Domain) (result
 	}
 	var finalDisk unix.Stat_t
 	if unix.Fstat(reopened, &finalDisk) != nil || disk.Dev != finalDisk.Dev || disk.Ino != finalDisk.Ino || disk.Mode != finalDisk.Mode || disk.Uid != finalDisk.Uid || disk.Gid != finalDisk.Gid || disk.Nlink != finalDisk.Nlink || disk.Size != finalDisk.Size {
+		return fail(ErrPolicy)
+	}
+	var finalParentMount, finalDiskMount unix.Statx_t
+	if unix.Statx(int(parent.Fd()), "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &finalParentMount) != nil || unix.Statx(reopened, "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &finalDiskMount) != nil || finalParentMount.Mask&unix.STATX_MNT_ID == 0 || finalDiskMount.Mask&unix.STATX_MNT_ID == 0 || finalParentMount.Mnt_id != parentMount.Mnt_id || finalDiskMount.Mnt_id != diskMount.Mnt_id {
 		return fail(ErrPolicy)
 	}
 	if err := ctx.Err(); err != nil {
