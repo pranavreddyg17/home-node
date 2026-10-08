@@ -62,3 +62,25 @@ func TestRecoveryCredentialSocketMustBeInactive(t *testing.T) {
 		t.Fatal("listening credential socket admitted", err)
 	}
 }
+
+func TestRecoveryLoadedUnitRefusesForeignAuthorityBeforeStop(t *testing.T) {
+	unit := "homenode-supervisor.service"
+	valid := "Id=" + unit + "\nFragmentPath=/etc/systemd/system/" + unit + "\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\nJob=\nLoadState=loaded\n"
+	if err := validateRecoveryLoadedUnit([]byte(valid), unit); err != nil {
+		t.Fatal("owned loaded unit refused", err)
+	}
+	for _, invalid := range []string{
+		strings.Replace(valid, "Id="+unit, "Id=foreign.service", 1),
+		strings.Replace(valid, "/etc/systemd/system/", "/run/systemd/system/", 1),
+		strings.Replace(valid, "DropInPaths=", "DropInPaths=/etc/foreign.conf", 1),
+		strings.Replace(valid, "NeedDaemonReload=no", "NeedDaemonReload=yes", 1),
+		strings.Replace(valid, "Transient=no", "Transient=yes", 1),
+		strings.Replace(valid, "Job=\n", "Job=42\n", 1),
+		strings.Replace(valid, "LoadState=loaded", "LoadState=masked", 1),
+		valid + "Id=" + unit + "\n",
+	} {
+		if err := validateRecoveryLoadedUnit([]byte(invalid), unit); !errors.Is(err, ErrConflict) {
+			t.Fatal("foreign authority admitted before stop", invalid, err)
+		}
+	}
+}

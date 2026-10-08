@@ -27,6 +27,17 @@ func validateRecoveryDormantUnit(data []byte, unit string) error {
 	return validateRecoveryProperties(data, expected)
 }
 
+// Loaded identity admission applies before a stop operation, including when
+// the owned unit is active. State and process emptiness are checked afterward.
+func validateRecoveryLoadedUnit(data []byte, unit string) error {
+	switch unit {
+	case "homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket":
+	default:
+		return ErrPlan
+	}
+	return validateRecoveryProperties(data, map[string]string{"Id": unit, "FragmentPath": "/etc/systemd/system/" + unit, "DropInPaths": "", "NeedDaemonReload": "no", "Transient": "no", "Job": "", "LoadState": "loaded"})
+}
+
 func validateRecoveryProperties(data []byte, expected map[string]string) error {
 	if len(data) == 0 || len(data) > 1024 || !utf8.Valid(data) {
 		return ErrConflict

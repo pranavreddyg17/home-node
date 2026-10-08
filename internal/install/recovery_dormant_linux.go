@@ -23,6 +23,10 @@ func ObserveRecoveryServicesDormant(ctx context.Context) error {
 }
 
 func observeRecoveryServicesWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd) error {
+	return observeRecoveryManagerWith(ctx, command, true)
+}
+
+func observeRecoveryManagerWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd, dormant bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -36,9 +40,12 @@ func observeRecoveryServicesWith(ctx context.Context, command func(context.Conte
 			return err
 		}
 		step, finish := context.WithTimeout(bounded, 5*time.Second)
-		properties := "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,Job,LoadState,ActiveState,SubState"
-		if unit != "homenode-backup-credential.socket" {
-			properties += ",MainPID,ControlPID"
+		properties := "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,Job,LoadState"
+		if dormant {
+			properties += ",ActiveState,SubState"
+			if unit != "homenode-backup-credential.socket" {
+				properties += ",MainPID,ControlPID"
+			}
 		}
 		cmd := command(step, "/usr/bin/systemctl", "--system", "--no-pager", "--all", "show", properties, unit)
 		if cmd == nil {
@@ -56,7 +63,12 @@ func observeRecoveryServicesWith(ctx context.Context, command func(context.Conte
 		if err != nil || contextErr != nil {
 			return errors.Join(ErrConflict, err, contextErr)
 		}
-		if err = validateRecoveryDormantUnit(output.Bytes(), unit); err != nil {
+		if dormant {
+			err = validateRecoveryDormantUnit(output.Bytes(), unit)
+		} else {
+			err = validateRecoveryLoadedUnit(output.Bytes(), unit)
+		}
+		if err != nil {
 			return err
 		}
 	}

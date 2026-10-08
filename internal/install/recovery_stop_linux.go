@@ -6,9 +6,47 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"os/exec"
 	"time"
 )
+
+// QuiesceRecovery stops owned application units behind an existing durable
+// activation block and observes guest emptiness. The marker is never released.
+// This operation does not return a publication lease or migrate any storage.
+func (e *Engine) QuiesceRecovery(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if os.Geteuid() != 0 || e.host.Name() != "/" {
+		return ErrConflict
+	}
+	if !e.mu.TryLock() {
+		return ErrConflict
+	}
+	defer e.mu.Unlock()
+	return e.observeRecoveryQuiescence(ctx, func(ctx context.Context) error {
+		if err := observeRecoveryManagerWith(ctx, exec.CommandContext, false); err != nil {
+			return err
+		}
+		if err := ObserveRecoveryActivationConditions(ctx); err != nil {
+			return err
+		}
+		if err := e.requireRecoveryActivationBlock(ctx); err != nil {
+			return err
+		}
+		if err := stopRecoveryServicesWith(ctx, exec.CommandContext); err != nil {
+			return err
+		}
+		if err := ObserveRecoveryServicesDormant(ctx); err != nil {
+			return err
+		}
+		if err := ObserveRecoveryActivationConditions(ctx); err != nil {
+			return err
+		}
+		return ObserveRecoveryGuestsEmpty(ctx)
+	})
+}
 
 // stopRecoveryServicesWith is only the bounded manager operation. A caller
 // must retain installer/activation exclusion and qualify loaded unit ownership
