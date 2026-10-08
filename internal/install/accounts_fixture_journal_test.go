@@ -32,6 +32,12 @@ func installedAccountFixtureJournal(t *testing.T) string {
 			t.Error("fixture journal changed; preserving its contents", err)
 			return
 		}
+		for _, name := range []string{"install.json", "recovery-blocked"} {
+			if _, err := root.Lstat(name); !os.IsNotExist(err) {
+				t.Error("native installation cleanup incomplete; preserving entire journal", name, err)
+				return
+			}
+		}
 		lock, err := root.Lstat("install.lock")
 		if err != nil || !lock.Mode().IsRegular() || lock.Mode().Perm() != 0600 || !owned(lock, os.Geteuid()) || lock.Size() != 0 {
 			t.Error("fixture lock content changed; preserving journal", err)
