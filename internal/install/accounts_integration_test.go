@@ -75,13 +75,14 @@ func TestInstalledAccountInspection(t *testing.T) {
 		}
 	})
 
-	journalDirectory := t.TempDir()
-	if err := os.Chmod(journalDirectory, 0700); err != nil {
-		t.Fatal(err)
-	}
+	journalDirectory := installedAccountFixtureJournal(t)
 	engine, err := Open("/", journalDirectory)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if err := engine.requireRecoveryJournalLocation(ctx); err != nil {
+		engine.Close()
+		t.Fatal("fixture journal does not bind installed activation path", err)
 	}
 	defer func() {
 		if engine != nil {
