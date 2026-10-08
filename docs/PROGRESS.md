@@ -3606,3 +3606,8 @@ Added Linux recordPinnedVolumeOwnership: qualify root-owned or exact reserved gu
 ### Verify pinned descriptor provenance without first-use recording
 
 Added private verifyPinnedVolumeOwnership alongside recording, sharing descriptor qualification and post-transaction rechecks while using non-creating durable verification. The disposable native volume fixture now refuses verification before first recording, verifies the exact saved descriptor before transfer, and rejects a separate same-sized inode through verification as well as recording. Linux amd64 tests compile and diff checks passed; native execution awaits publication. This is not a retained stopped-runtime or pathname barrier, and reserved-DAC Prepare remains refused pending coordinated activation. CI37726148094 remains confirmed live ata86162c and excludes all queued follow-ups. Full application remains unfinished.
+
+
+### Native provenance refusal matrix
+
+Extended the queued native descriptor fixture to exercise both recording and non-creating verification against hardlinked guest-owned volumes and permissive modes. Both must return ErrPolicy and zero intent. Cancelled contexts and nil descriptors also refuse, and after fixture-only alias removal/mode restoration exact provenance still matches the original saved record. Linux amd64 tests compile and diff checks passed; native execution remains pending, not inferred from compilation. CI37726148094 remains confirmed live ata86162c and excludes this matrix and prior queued descriptor/maintenance changes. Production runtime exclusion, installed permissions and complete application acceptance remain unfinished.

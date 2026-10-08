@@ -142,6 +142,11 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	if err = admitVolumeForUID(file, size, 200000); !errors.Is(err, ErrPolicy) {
 		t.Fatal("aliased guest volume admitted", err)
 	}
+	for _, check := range []func(context.Context, Domain, *os.File) (VolumeOwnershipIntent, error){m.recordPinnedVolumeOwnership, m.verifyPinnedVolumeOwnership} {
+		if got, err := check(context.Background(), d, file); !errors.Is(err, ErrPolicy) || got != (VolumeOwnershipIntent{}) {
+			t.Fatal("aliased provenance admitted", got, err)
+		}
+	}
 	if err = os.Remove(alias); err != nil {
 		t.Fatal(err)
 	}
@@ -151,11 +156,28 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	if err = admitVolumeForUID(file, size, 200000); !errors.Is(err, ErrPolicy) {
 		t.Fatal("permissive guest volume admitted", err)
 	}
+	for _, check := range []func(context.Context, Domain, *os.File) (VolumeOwnershipIntent, error){m.recordPinnedVolumeOwnership, m.verifyPinnedVolumeOwnership} {
+		if got, err := check(context.Background(), d, file); !errors.Is(err, ErrPolicy) || got != (VolumeOwnershipIntent{}) {
+			t.Fatal("permissive provenance admitted", got, err)
+		}
+	}
 	if err = file.Chmod(0600); err != nil {
 		t.Fatal(err)
 	}
 	if err = admitVolumeForUID(file, size, 200000); err != nil {
 		t.Fatal(err)
+	}
+	for _, check := range []func(context.Context, Domain, *os.File) (VolumeOwnershipIntent, error){m.recordPinnedVolumeOwnership, m.verifyPinnedVolumeOwnership} {
+		if got, err := check(ctx, d, file); !errors.Is(err, context.Canceled) || got != (VolumeOwnershipIntent{}) {
+			t.Fatal("cancelled provenance admitted", got, err)
+		}
+		if got, err := check(context.Background(), d, nil); !errors.Is(err, ErrPolicy) || got != (VolumeOwnershipIntent{}) {
+			t.Fatal("nil descriptor admitted", got, err)
+		}
+	}
+	finalIntent, err := m.verifyPinnedVolumeOwnership(context.Background(), d, file)
+	if err != nil || finalIntent != recorded {
+		t.Fatal("refusals changed provenance", finalIntent, err)
 	}
 	for _, uid := range []uint32{1, 65535, 1 << 31} {
 		if err = admitVolumeForUID(file, size, uid); !errors.Is(err, ErrPolicy) {
