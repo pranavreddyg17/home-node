@@ -297,7 +297,7 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 	fail := func(cause error) (Instance, error) {
 		stopCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		stopErr := m.Backend.Stop(stopCtx, r.InstanceID)
+		stopErr := m.stopDomain(stopCtx, r.InstanceID)
 		phase := "failed"
 		if stopErr != nil {
 			phase = "stopping"
@@ -387,7 +387,7 @@ func (m *Manager) stop(ctx context.Context, r Request) (Instance, error) {
 	if err != nil {
 		return Instance{}, err
 	}
-	if err = m.Backend.Stop(ctx, r.InstanceID); err != nil {
+	if err = m.stopDomain(ctx, r.InstanceID); err != nil {
 		return Instance{}, err
 	}
 	err = m.Store.Transaction(ctx, func(tx *sql.Tx) error {
@@ -487,7 +487,7 @@ func (m *Manager) reconcile(ctx context.Context) error {
 			failures = append(failures, ErrPolicy)
 			continue
 		}
-		if err = m.Backend.Stop(ctx, id); err != nil {
+		if err = m.stopDomain(ctx, id); err != nil {
 			failures = append(failures, fmt.Errorf("cannot stop uncertain instance: %w", err))
 			continue
 		}
@@ -603,7 +603,7 @@ func (m *Manager) Audit(ctx context.Context) error {
 			if _, err = m.Store.DB.ExecContext(ctx, "UPDATE runtime_instances SET state='stopping',desired='stopped' WHERE id=?", id); err != nil {
 				return err
 			}
-			if err = m.Backend.Stop(ctx, id); err != nil {
+			if err = m.stopDomain(ctx, id); err != nil {
 				return err
 			}
 			if _, err = m.Store.DB.ExecContext(ctx, "UPDATE runtime_instances SET state='interrupted' WHERE id=?", id); err != nil {
