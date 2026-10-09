@@ -127,7 +127,10 @@ func (e *Engine) withGuestStorageIntentGuarded(ctx context.Context, use func(con
 		return plan, err
 	}
 	if use != nil {
-		if err := use(ctx, qualified, check); err != nil {
+		consumerPlan := qualified
+		consumerPlan.Identity.ServiceUIDs = append([]uint32(nil), qualified.Identity.ServiceUIDs...)
+		consumerPlan.Identity.Pending = append([]string(nil), qualified.Identity.Pending...)
+		if err := use(ctx, consumerPlan, check); err != nil {
 			return plan, err
 		}
 	}

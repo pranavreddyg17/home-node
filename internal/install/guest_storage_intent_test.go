@@ -7,6 +7,7 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -30,6 +31,16 @@ func TestGuestStorageIntentRetainsIdentityAcrossRetryAndConflict(t *testing.T) {
 	loaded, err := e.loadGuestStorageIntent(ctx)
 	if err != nil || loaded.GuestGID != plan.GuestGID || loaded.Identity.OwnerID != plan.Identity.OwnerID {
 		t.Fatal("saved storage intent refused", loaded, err)
+	}
+	returned, err := e.withGuestStorageIntentGuarded(ctx, func(ctx context.Context, consumer GuestStorageProvisioningPlan, check func() error) error {
+		consumer.Identity.ServiceUIDs[0] = 9999
+		if len(consumer.Identity.Pending) > 0 {
+			consumer.Identity.Pending[0] = "altered"
+		}
+		return check()
+	})
+	if err != nil || !reflect.DeepEqual(returned, loaded) {
+		t.Fatal("consumer changed authenticated result", returned, err)
 	}
 	path := filepath.Join(jr, "guest-storage-intent.json")
 	before, err := os.Stat(path)
