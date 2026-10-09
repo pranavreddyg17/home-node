@@ -94,6 +94,12 @@ func (m *Manager) withReservedMaintenanceDisk(ctx context.Context, token string,
 		if err != nil || processes.Blocked[d.GuestUID] {
 			return errors.Join(ErrPolicy, err)
 		}
+		// Host observations can block. Re-authenticate the barrier and receipt
+		// after them before granting copy admission or reporting completion.
+		observed, err = m.loadMaintenanceVolumeIntent(ctx, token, d, instance.Revision)
+		if err != nil || observed != intent {
+			return errors.Join(ErrPolicy, err)
+		}
 		return objects()
 	}
 	if err := guard(); err != nil {

@@ -12,8 +12,24 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/state"
 )
 
+type maintenanceProbeMutationBackend struct {
+	*fakeBackend
+	probes int
+	mutate func() error
+}
+
+func (b *maintenanceProbeMutationBackend) Running(ctx context.Context, id string) (bool, error) {
+	b.probes++
+	if b.probes == 3 {
+		if err := b.mutate(); err != nil {
+			return false, err
+		}
+	}
+	return b.fakeBackend.Running(ctx, id)
+}
+
 func testReservedMaintenanceDisk(t *testing.T) {
-	m, _ := newManager(t)
+	m, backend := newManager(t)
 	ctx := context.Background()
 	pool := GuestUIDPool{First: 1000000000, Last: 1000000001}
 	m.GuestUIDPool, m.GuestGID = &pool, 64054
@@ -94,6 +110,27 @@ func testReservedMaintenanceDisk(t *testing.T) {
 	if err := os.Rename(path+".original", path); err != nil {
 		t.Fatal(err)
 	}
+	if err := m.WithMaintenanceDisk(ctx, token, d.ID, func(context.Context, *os.File, Instance) error {
+		_, err := m.Store.DB.Exec(`UPDATE settings SET value='changed-owner' WHERE key=?`, runtimeMaintenanceKey)
+		return err
+	}); !errors.Is(err, ErrPolicy) {
+		t.Fatal("copy completed after maintenance revocation", err)
+	}
+	if _, err := m.Store.DB.Exec(`UPDATE settings SET value=? WHERE key=?`, token, runtimeMaintenanceKey); err != nil {
+		t.Fatal(err)
+	}
+	probe := &maintenanceProbeMutationBackend{fakeBackend: backend, mutate: func() error {
+		_, err := m.Store.DB.Exec(`UPDATE settings SET value='probe-revocation' WHERE key=?`, runtimeMaintenanceKey)
+		return err
+	}}
+	m.Backend = probe
+	if err := m.WithMaintenanceDisk(ctx, token, d.ID, func(context.Context, *os.File, Instance) error { return nil }); !errors.Is(err, ErrPolicy) || probe.probes != 3 {
+		t.Fatal("late probe revocation admitted", probe.probes, err)
+	}
+	if _, err := m.Store.DB.Exec(`UPDATE settings SET value=? WHERE key=?`, token, runtimeMaintenanceKey); err != nil {
+		t.Fatal(err)
+	}
+	m.Backend = backend
 	called = 0
 	if err := m.WithMaintenanceDisk(ctx, "wrong-token", d.ID, func(context.Context, *os.File, Instance) error { called++; return nil }); !errors.Is(err, ErrPolicy) || called != 0 {
 		t.Fatal("foreign backup token admitted", called, err)
