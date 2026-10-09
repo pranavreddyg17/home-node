@@ -16,19 +16,21 @@ import (
 // an authenticated retry. This does not publish a runnable domain.
 func (m *Manager) transferReservedVolume(ctx context.Context, directory string, d Domain, stopped func(context.Context) error) (VolumeOwnershipIntent, error) {
 	var transferred VolumeOwnershipIntent
-	err := m.withReservedVolume(ctx, directory, d, stopped, func(ctx context.Context, file *os.File, intent VolumeOwnershipIntent, guard func(context.Context) error) error {
+	completed := false
+	err := m.withReservedVolumeOwnership(ctx, directory, d, stopped, func(ctx context.Context, file *os.File, intent VolumeOwnershipIntent, guard func(context.Context) error) error {
 		if err := guard(ctx); err != nil {
 			return err
 		}
 		if err := transferVolumeToGuest(ctx, file, intent); err != nil {
 			return err
 		}
+		completed = true
 		if err := guard(ctx); err != nil {
 			return err
 		}
 		transferred = intent
 		return nil
-	})
+	}, &completed)
 	if err != nil {
 		return VolumeOwnershipIntent{}, err
 	}
@@ -39,6 +41,10 @@ func (m *Manager) transferReservedVolume(ctx context.Context, directory string, 
 // The caller must hold runtime exclusion and supply its live stopped-guest
 // guard. This scope authenticates existing intent; it never creates a lease.
 func (m *Manager) withReservedVolume(ctx context.Context, directory string, d Domain, stopped func(context.Context) error, use func(context.Context, *os.File, VolumeOwnershipIntent, func(context.Context) error) error) (result error) {
+	return m.withReservedVolumeOwnership(ctx, directory, d, stopped, use, nil)
+}
+
+func (m *Manager) withReservedVolumeOwnership(ctx context.Context, directory string, d Domain, stopped func(context.Context) error, use func(context.Context, *os.File, VolumeOwnershipIntent, func(context.Context) error) error, guestOwned *bool) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -110,6 +116,12 @@ func (m *Manager) withReservedVolume(ctx context.Context, directory string, d Do
 		}
 		if verified != intent {
 			return ErrPolicy
+		}
+		if guestOwned != nil && *guestOwned {
+			var owner unix.Stat_t
+			if unix.Fstat(int(file.Fd()), &owner) != nil || owner.Uid != intent.UID || owner.Gid != intent.GID {
+				return ErrPolicy
+			}
 		}
 		return nil
 	}

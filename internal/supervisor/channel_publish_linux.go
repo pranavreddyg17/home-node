@@ -40,7 +40,7 @@ func (m *Manager) publishReservedChannel(ctx context.Context, parentPath string,
 			return ErrPolicy
 		}
 		return guard(ctx)
-	}, publish)
+	}, publish, nil)
 	if err != nil {
 		return ChannelOwnershipIntent{}, err
 	}

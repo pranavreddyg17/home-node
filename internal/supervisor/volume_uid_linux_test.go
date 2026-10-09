@@ -270,6 +270,29 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 			t.Fatal("authenticated transfer retry", retry, transferred, transferErr)
 		}
 	}
+	// Completion must remain guest-owned through both post-transfer guards.
+	for _, revertAt := range []int{4, 5} {
+		checks := 0
+		got, err := m.transferReservedVolume(context.Background(), directory, d, func(ctx context.Context) error {
+			checks++
+			if checks == revertAt {
+				var owner unix.Stat_t
+				if unix.Fstat(int(file.Fd()), &owner) != nil || owner.Uid != d.GuestUID {
+					t.Fatal("fault did not follow ownership transfer", revertAt)
+				}
+				return file.Chown(0, 0)
+			}
+			return ctx.Err()
+		})
+		if !errors.Is(err, ErrPolicy) || got != (VolumeOwnershipIntent{}) {
+			t.Fatal("reverted ownership reported completion", revertAt, got, err)
+		}
+		got, err = m.transferReservedVolume(context.Background(), directory, d, stopped)
+		if err != nil || got != recorded {
+			t.Fatal("ownership reversion retry", revertAt, got, err)
+		}
+	}
+
 	if err := m.withReservedVolume(context.Background(), directory, d, func(context.Context) error { return stopFailure }, func(context.Context, *os.File, VolumeOwnershipIntent, func(context.Context) error) error {
 		consumerCalled = true
 		return nil

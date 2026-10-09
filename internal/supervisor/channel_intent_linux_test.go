@@ -81,6 +81,29 @@ func testPinnedGuestChannelIntent(t *testing.T) {
 			t.Fatal("authenticated channel transfer retry", retry, transferred, transferErr)
 		}
 	}
+	// Completion must remain guest-owned through both post-transfer guards.
+	for _, revertAt := range []int{4, 5} {
+		checks := 0
+		got, err := m.transferReservedChannel(ctx, path, d, func(ctx context.Context) error {
+			checks++
+			if checks == revertAt {
+				var owner unix.Stat_t
+				if unix.Fstat(int(directory.Fd()), &owner) != nil || owner.Uid != d.GuestUID {
+					t.Fatal("fault did not follow ownership transfer", revertAt)
+				}
+				return directory.Chown(0, 0)
+			}
+			return ctx.Err()
+		})
+		if !errors.Is(err, ErrPolicy) || got != (ChannelOwnershipIntent{}) {
+			t.Fatal("reverted ownership reported completion", revertAt, got, err)
+		}
+		got, err = m.transferReservedChannel(ctx, path, d, stopped)
+		if err != nil || got != recorded {
+			t.Fatal("ownership reversion retry", revertAt, got, err)
+		}
+	}
+
 	for _, check := range []func(context.Context, Domain, *os.File) (ChannelOwnershipIntent, error){m.recordPinnedChannelOwnership, m.verifyPinnedChannelOwnership} {
 		if got, err := check(ctx, d, directory); err != nil || got != recorded {
 			t.Fatal("exact directory ownership retry", got, err)

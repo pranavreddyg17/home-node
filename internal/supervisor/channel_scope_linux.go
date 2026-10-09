@@ -16,12 +16,12 @@ import (
 // directory and its root-owned parent. Callers must hold runtime exclusion and
 // provide a live stopped-guest guard. It never adopts an unrecorded directory.
 func (m *Manager) withReservedChannel(ctx context.Context, path string, d Domain, stopped func(context.Context) error, use func(context.Context, *os.File, ChannelOwnershipIntent, func(context.Context) error) error) (result error) {
-	return m.withReservedChannelEntry(ctx, path, d, stopped, use, false)
+	return m.withReservedChannelEntry(ctx, path, d, stopped, use, false, nil)
 }
 
 // Publication uses the same retained objects and guard as ownership transfer;
 // only the exact validated entry name changes after a no-replace rename.
-func (m *Manager) withReservedChannelEntry(ctx context.Context, path string, d Domain, stopped func(context.Context) error, use func(context.Context, *os.File, ChannelOwnershipIntent, func(context.Context) error) error, publish bool) (result error) {
+func (m *Manager) withReservedChannelEntry(ctx context.Context, path string, d Domain, stopped func(context.Context) error, use func(context.Context, *os.File, ChannelOwnershipIntent, func(context.Context) error) error, publish bool, guestOwned *bool) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -95,6 +95,12 @@ func (m *Manager) withReservedChannelEntry(ctx context.Context, path string, d D
 		if verified != intent {
 			return ErrPolicy
 		}
+		if guestOwned != nil && *guestOwned {
+			var owner unix.Stat_t
+			if unix.Fstat(int(directory.Fd()), &owner) != nil || owner.Uid != intent.UID || owner.Gid != intent.AccessGID {
+				return ErrPolicy
+			}
+		}
 		return nil
 	}
 	guard := func(ctx context.Context) error {
@@ -140,7 +146,8 @@ func (m *Manager) withReservedChannelEntry(ctx context.Context, path string, d D
 // authenticated retry. It neither creates a socket nor enables a guest.
 func (m *Manager) transferReservedChannel(ctx context.Context, path string, d Domain, stopped func(context.Context) error) (ChannelOwnershipIntent, error) {
 	var transferred ChannelOwnershipIntent
-	err := m.withReservedChannel(ctx, path, d, stopped, func(ctx context.Context, directory *os.File, intent ChannelOwnershipIntent, guard func(context.Context) error) error {
+	completed := false
+	err := m.withReservedChannelEntry(ctx, path, d, stopped, func(ctx context.Context, directory *os.File, intent ChannelOwnershipIntent, guard func(context.Context) error) error {
 		if err := guard(ctx); err != nil {
 			return err
 		}
@@ -159,12 +166,13 @@ func (m *Manager) transferReservedChannel(ctx context.Context, path string, d Do
 		if err := directory.Sync(); err != nil {
 			return err
 		}
+		completed = true
 		if err := guard(ctx); err != nil {
 			return err
 		}
 		transferred = intent
 		return nil
-	})
+	}, false, &completed)
 	if err != nil {
 		return ChannelOwnershipIntent{}, err
 	}
