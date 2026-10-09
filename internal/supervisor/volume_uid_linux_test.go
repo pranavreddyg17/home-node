@@ -261,8 +261,45 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 		}
 		t.Fatal("stage admission followed redirected inode", err)
 	}
-	if err := errors.Join(os.Remove(stagePath), os.Rename(movedStage, reservedPath)); err != nil {
+	if err := errors.Join(os.Remove(stagePath), os.Rename(movedStage, stagePath)); err != nil {
 		t.Fatal("restore staged volume fixture", err)
+	}
+	if err := os.WriteFile(reservedPath, []byte("preserve occupied destination"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := m.publishReservedVolume(context.Background(), directory, d, func(ctx context.Context) error { return ctx.Err() }); !errors.Is(err, ErrPolicy) || got != (VolumeOwnershipIntent{}) {
+		t.Fatal("publication replaced occupied volume", got, err)
+	}
+	if data, err := os.ReadFile(reservedPath); err != nil || string(data) != "preserve occupied destination" {
+		t.Fatal("publication changed occupied data", err)
+	}
+	if err := os.Remove(reservedPath); err != nil {
+		t.Fatal(err)
+	}
+	publicationChecks := 0
+	publicationFailure := errors.New("volume publication exclusion lost")
+	publishedIntent, publicationErr := m.publishReservedVolume(context.Background(), directory, d, func(ctx context.Context) error {
+		publicationChecks++
+		if publicationChecks == 6 {
+			return publicationFailure
+		}
+		return ctx.Err()
+	})
+	if !errors.Is(publicationErr, publicationFailure) || publishedIntent != (VolumeOwnershipIntent{}) {
+		t.Fatal("interrupted volume publication reported authority", publicationChecks, publishedIntent, publicationErr)
+	}
+	var published unix.Stat_t
+	if unix.Lstat(reservedPath, &published) != nil || published.Ino != recorded.Inode || uint64(published.Dev) != recorded.Device {
+		t.Fatal("interrupted publication lost recorded disk")
+	}
+	if _, err := os.Lstat(stagePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("publication retained ambiguous stage", err)
+	}
+	for retry := 0; retry < 2; retry++ {
+		got, err := m.publishReservedVolume(context.Background(), directory, d, func(ctx context.Context) error { return ctx.Err() })
+		if err != nil || got != recorded {
+			t.Fatal("completed volume publication retry", retry, got, err)
+		}
 	}
 	aliasPath := reservedPath + ".alias"
 	stoppedChecks := 0

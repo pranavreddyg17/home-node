@@ -30,7 +30,7 @@ func (m *Manager) transferReservedVolume(ctx context.Context, directory string, 
 		}
 		transferred = intent
 		return nil
-	}, &completed)
+	}, &completed, false)
 	if err != nil {
 		return VolumeOwnershipIntent{}, err
 	}
@@ -41,10 +41,10 @@ func (m *Manager) transferReservedVolume(ctx context.Context, directory string, 
 // The caller must hold runtime exclusion and supply its live stopped-guest
 // guard. This scope authenticates existing intent; it never creates a lease.
 func (m *Manager) withReservedVolume(ctx context.Context, directory string, d Domain, stopped func(context.Context) error, use func(context.Context, *os.File, VolumeOwnershipIntent, func(context.Context) error) error) (result error) {
-	return m.withReservedVolumeOwnership(ctx, directory, d, stopped, use, nil)
+	return m.withReservedVolumeOwnership(ctx, directory, d, stopped, use, nil, false)
 }
 
-func (m *Manager) withReservedVolumeOwnership(ctx context.Context, directory string, d Domain, stopped func(context.Context) error, use func(context.Context, *os.File, VolumeOwnershipIntent, func(context.Context) error) error, guestOwned *bool) (result error) {
+func (m *Manager) withReservedVolumeOwnership(ctx context.Context, directory string, d Domain, stopped func(context.Context) error, use func(context.Context, *os.File, VolumeOwnershipIntent, func(context.Context) error) error, guestOwned *bool, publish bool) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -54,7 +54,8 @@ func (m *Manager) withReservedVolumeOwnership(ctx context.Context, directory str
 	if err := stopped(ctx); err != nil {
 		return err
 	}
-	file, err := openReservedVolume(ctx, directory, d)
+	staged := publish
+	file, err := openReservedVolumeEntry(ctx, directory, d, staged)
 	if err != nil {
 		return err
 	}
@@ -91,13 +92,20 @@ func (m *Manager) withReservedVolumeOwnership(ctx context.Context, directory str
 		if statErr != nil || pathErr != nil || !os.SameFile(pinnedParent, namedParent) || unix.Fstat(int(parent.Fd()), &current) != nil || current.Dev != original.Dev || current.Ino != original.Ino || current.Mode != original.Mode || current.Uid != original.Uid || current.Gid != original.Gid {
 			return ErrPolicy
 		}
+		other := "." + d.ID + ".volume-prepare"
+		if staged {
+			other = d.ID + ".raw"
+		}
+		if _, err := root.Lstat(other); !errors.Is(err, os.ErrNotExist) {
+			return errors.Join(ErrPolicy, err)
+		}
 		var parentMount, pathMount, diskMount unix.Statx_t
 		if unix.Statx(int(parent.Fd()), "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &parentMount) != nil || unix.Statx(unix.AT_FDCWD, directory, unix.AT_SYMLINK_NOFOLLOW|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &pathMount) != nil || unix.Statx(int(file.Fd()), "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &diskMount) != nil || parentMount.Mask&unix.STATX_MNT_ID == 0 || pathMount.Mask&unix.STATX_MNT_ID == 0 || diskMount.Mask&unix.STATX_MNT_ID == 0 || parentMount.Mnt_id != originalMount.Mnt_id || pathMount.Mnt_id != originalMount.Mnt_id || diskMount.Mnt_id != originalMount.Mnt_id {
 			return ErrPolicy
 		}
 		// Reopening performs complete pathname, mount-ID, allocation, mode and
 		// single-link admission. It must still name the retained consumer inode.
-		probe, err := openReservedVolume(ctx, directory, d)
+		probe, err := openReservedVolumeEntry(ctx, directory, d, staged)
 		if err != nil {
 			return err
 		}
@@ -138,6 +146,27 @@ func (m *Manager) withReservedVolumeOwnership(ctx context.Context, directory str
 		return err
 	}
 	if err := use(ctx, file, intent, guard); err != nil {
+		return err
+	}
+	if publish {
+		if err := guard(ctx); err != nil {
+			return err
+		}
+		if err := file.Sync(); err != nil {
+			return err
+		}
+		if err := guard(ctx); err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := unix.Renameat2(int(parent.Fd()), "."+d.ID+".volume-prepare", int(parent.Fd()), d.ID+".raw", unix.RENAME_NOREPLACE); err != nil {
+			return err
+		}
+		staged = false
+	}
+	if err := parent.Sync(); err != nil {
 		return err
 	}
 	return guard(ctx)
