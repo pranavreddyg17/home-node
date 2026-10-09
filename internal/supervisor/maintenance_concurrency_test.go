@@ -153,6 +153,17 @@ func TestRuntimeMaintenanceWaitsForAuditCapturedBeforeStop(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
 	}
+	// A launch arriving while audit retains an old runtime observation must
+	// wait rather than enter backend preparation before audit teardown finishes.
+	startDeadline, cancelStart := context.WithTimeout(ctx, 80*time.Millisecond)
+	replacement := startRequest()
+	replacement.OperationID = state.Random()
+	replacement.InstanceID = state.Random()
+	_, startErr := m.Apply(startDeadline, replacement)
+	cancelStart()
+	if !errors.Is(startErr, context.DeadlineExceeded) {
+		t.Fatal("launch crossed retained audit observation", startErr)
+	}
 	if _, err := m.Apply(ctx, Request{Version: 1, OperationID: state.Random(), InstanceID: start.InstanceID, Action: "stop", Revision: 2, PolicyGeneration: 1}); err != nil {
 		t.Fatal("audit serialized emergency-compatible mutation", err)
 	}

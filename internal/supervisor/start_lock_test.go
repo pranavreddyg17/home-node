@@ -8,7 +8,7 @@ import (
 )
 
 func TestCancelledStartLockWaiterReleasesRuntimeAdmission(t *testing.T) {
-	for _, action := range []string{"start", "shutdown"} {
+	for _, action := range []string{"start", "shutdown", "audit"} {
 		t.Run(action, func(t *testing.T) {
 			m, backend := newManager(t)
 			m.startMu.Lock()
@@ -22,6 +22,10 @@ func TestCancelledStartLockWaiterReleasesRuntimeAdmission(t *testing.T) {
 			defer cancel()
 			done := make(chan error, 1)
 			go func() {
+				if action == "audit" {
+					done <- m.Audit(ctx)
+					return
+				}
 				if action == "shutdown" {
 					done <- m.Shutdown(ctx)
 					return

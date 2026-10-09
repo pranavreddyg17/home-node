@@ -553,6 +553,13 @@ func (m *Manager) Audit(ctx context.Context) error {
 		return lockErr
 	}
 	defer unlock()
+	// Keep a replacement launch out of the interval between revision admission
+	// and backend teardown. Stop requests remain free to cancel preparation.
+	unlockStart, lockErr := m.lockStart(ctx)
+	if lockErr != nil {
+		return lockErr
+	}
+	defer unlockStart()
 	rows, err := m.Store.DB.QueryContext(ctx, "SELECT id FROM runtime_instances WHERE state IN('running','stopping','shutting-down')")
 	if err != nil {
 		return err
