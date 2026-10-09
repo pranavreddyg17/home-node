@@ -459,6 +459,11 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 		return err
 	}
 	defer unlock()
+	unlockStart, err := m.lockStart(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlockStart()
 	return m.reconcile(ctx)
 }
 
