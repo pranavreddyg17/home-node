@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "sourceRevision": "421de183f7eab0717341c0f1c48f306ec55416fc",
+  "workflowRun": 37962337583,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/37962337583",
+  "workflowConclusion": "success",
+  "environment": "Disposable Linux CI, root-owned fixtures under supervisor source systemd protections",
+  "step": "Test volume operations with supervisor source protections",
+  "command": "sudo env HOMENODE_SUPERVISOR_SYSTEMD_INTEGRATION=1 python3 packaging/systemd/supervisor_fixture.py",
+  "logSHA256": "7b29e821689ab5fa669abba75b0f2fbae12f4ef6f7442886273885d8fea2accf",
+  "test": "TestNativeGuestUIDVolumeAdmission/ReservedMaintenanceDisk",
+  "observedOutcome": "PASS",
+  "qualifiedScope": [
+    "A stopped reserved guest's recorded 16 MiB disk is admitted through Manager.WithMaintenanceDisk under the matching maintenance token",
+    "The retained descriptor reads the fixture marker and refuses writes",
+    "A post-copy mode change causes refusal",
+    "A post-copy pathname replacement causes refusal and preserves replacement contents",
+    "A foreign maintenance token is refused before invoking the copier"
+  ],
+  "limitations": [
+    "The disk is a synthetic fixture, not an application filesystem",
+    "Does not attest clean guest unmount or filesystem consistency",
+    "Does not exercise restic, external-drive registration, encryption or replacement-host restore",
+    "Does not qualify later commits' probe-revocation, mount or channel lookup tests",
+    "Does not enable reserved guest startup or prove cross-VM isolation"
+  ],
+  "releaseQualified": false
+}
