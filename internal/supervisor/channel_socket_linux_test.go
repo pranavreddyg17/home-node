@@ -30,6 +30,7 @@ func testPinnedChannelSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	parent := shortChannelSocketFixtureDir(t)
+	m.Channels = parent
 	channel, err := m.prepareReservedChannel(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() })
 	if err != nil {
 		t.Fatal(err)
@@ -76,6 +77,12 @@ func testPinnedChannelSocket(t *testing.T) {
 		if err != nil || got.Inode != native.Ino {
 			t.Fatal("running pinned socket audit", retry, got, err)
 		}
+		if err := m.qualifyReservedChannelPath(ctx, d, 1); err != nil {
+			t.Fatal("recorded channel lookup", err)
+		}
+	}
+	if err := m.qualifyReservedChannelPath(ctx, d, 2); !errors.Is(err, ErrPolicy) {
+		t.Fatal("wrong revision channel lookup", err)
 	}
 	if got, err := m.recordPinnedChannelSocket(ctx, d, 1, directory, socket); !errors.Is(err, ErrPolicy) || got != (ChannelSocketIntent{}) {
 		t.Fatal("running audit granted preparation authority", got, err)
@@ -97,6 +104,9 @@ func testPinnedChannelSocket(t *testing.T) {
 	}
 	if got, err := m.recordPinnedChannelSocket(ctx, d, 1, directory, socket); !errors.Is(err, ErrPolicy) || got != (ChannelSocketIntent{}) {
 		t.Fatal("unknown channel entry admitted", got, err)
+	}
+	if err := m.qualifyReservedChannelPath(ctx, d, 1); !errors.Is(err, ErrPolicy) {
+		t.Fatal("unknown entry allowed channel lookup", err)
 	}
 	if data, err := os.ReadFile(unknown); err != nil || string(data) != "preserve" {
 		t.Fatal("refusal changed unknown entry", err)

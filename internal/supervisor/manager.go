@@ -509,6 +509,19 @@ func (m *Manager) Channel(ctx context.Context, id string) (string, error) {
 	if err != nil || instance.State != "running" {
 		return "", ErrPolicy
 	}
+	if instance.GuestUID != 0 {
+		image, err := m.Manifest.Image(instance.Workload)
+		if err != nil {
+			return "", err
+		}
+		d := Domain{ID: id, Image: image}
+		if err := m.bindDomainGuestIdentity(ctx, &d, false); err != nil {
+			return "", err
+		}
+		if err := m.qualifyReservedChannelPath(ctx, d, instance.Revision); err != nil {
+			return "", err
+		}
+	}
 	path := filepath.Join(m.Channels, id, "adapter.sock")
 	info, err := os.Lstat(path)
 	if err != nil || info.Mode()&os.ModeSocket == 0 {
