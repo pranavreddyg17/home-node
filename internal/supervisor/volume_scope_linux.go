@@ -1,0 +1,107 @@
+//go:build linux
+
+package supervisor
+
+import (
+	"context"
+	"errors"
+	"os"
+
+	"golang.org/x/sys/unix"
+)
+
+// withReservedVolume retains the admitted parent and disk across a consumer.
+// The caller must hold runtime exclusion and supply its live stopped-guest
+// guard. This scope authenticates existing intent; it never creates a lease.
+func (m *Manager) withReservedVolume(ctx context.Context, directory string, d Domain, stopped func(context.Context) error, use func(context.Context, *os.File, VolumeOwnershipIntent, func(context.Context) error) error) (result error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if m == nil || stopped == nil || use == nil {
+		return ErrPolicy
+	}
+	if err := stopped(ctx); err != nil {
+		return err
+	}
+	file, err := openReservedVolume(ctx, directory, d)
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, file.Close()) }()
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, root.Close()) }()
+	parent, err := root.Open(".")
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, parent.Close()) }()
+	var original unix.Stat_t
+	if unix.Fstat(int(parent.Fd()), &original) != nil || original.Uid != 0 || original.Gid != d.GuestGID || original.Mode&unix.S_IFMT != unix.S_IFDIR || original.Mode&07777 != 0710 {
+		return ErrPolicy
+	}
+	var originalMount unix.Statx_t
+	if unix.Statx(int(parent.Fd()), "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &originalMount) != nil || originalMount.Mask&unix.STATX_MNT_ID == 0 || originalMount.Mnt_id == 0 {
+		return ErrPolicy
+	}
+	intent, err := m.verifyPinnedVolumeOwnership(ctx, d, file)
+	if err != nil {
+		return err
+	}
+	checkObjects := func(ctx context.Context) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		var current unix.Stat_t
+		pinnedParent, statErr := parent.Stat()
+		namedParent, pathErr := os.Lstat(directory)
+		if statErr != nil || pathErr != nil || !os.SameFile(pinnedParent, namedParent) || unix.Fstat(int(parent.Fd()), &current) != nil || current.Dev != original.Dev || current.Ino != original.Ino || current.Mode != original.Mode || current.Uid != original.Uid || current.Gid != original.Gid {
+			return ErrPolicy
+		}
+		var parentMount, pathMount, diskMount unix.Statx_t
+		if unix.Statx(int(parent.Fd()), "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &parentMount) != nil || unix.Statx(unix.AT_FDCWD, directory, unix.AT_SYMLINK_NOFOLLOW|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &pathMount) != nil || unix.Statx(int(file.Fd()), "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &diskMount) != nil || parentMount.Mask&unix.STATX_MNT_ID == 0 || pathMount.Mask&unix.STATX_MNT_ID == 0 || diskMount.Mask&unix.STATX_MNT_ID == 0 || parentMount.Mnt_id != originalMount.Mnt_id || pathMount.Mnt_id != originalMount.Mnt_id || diskMount.Mnt_id != originalMount.Mnt_id {
+			return ErrPolicy
+		}
+		// Reopening performs complete pathname, mount-ID, allocation, mode and
+		// single-link admission. It must still name the retained consumer inode.
+		probe, err := openReservedVolume(ctx, directory, d)
+		if err != nil {
+			return err
+		}
+		pinned, pinnedErr := file.Stat()
+		named, namedErr := probe.Stat()
+		closeErr := probe.Close()
+		if pinnedErr != nil || namedErr != nil || !os.SameFile(pinned, named) {
+			return errors.Join(ErrPolicy, pinnedErr, namedErr, closeErr)
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		verified, err := m.verifyPinnedVolumeOwnership(ctx, d, file)
+		if err != nil {
+			return err
+		}
+		if verified != intent {
+			return ErrPolicy
+		}
+		return nil
+	}
+	guard := func(ctx context.Context) error {
+		if err := checkObjects(ctx); err != nil {
+			return err
+		}
+		if err := stopped(ctx); err != nil {
+			return err
+		}
+		return checkObjects(ctx)
+	}
+	if err := guard(ctx); err != nil {
+		return err
+	}
+	if err := use(ctx, file, intent, guard); err != nil {
+		return err
+	}
+	return guard(ctx)
+}

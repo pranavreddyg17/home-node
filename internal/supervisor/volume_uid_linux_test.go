@@ -228,6 +228,38 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 		t.Fatal("opened reserved provenance", reservedIntent, verifyErr, closeErr)
 	}
 	aliasPath := reservedPath + ".alias"
+	stoppedChecks := 0
+	stopped := func(ctx context.Context) error {
+		stoppedChecks++
+		return ctx.Err()
+	}
+	if err := m.withReservedVolume(context.Background(), directory, d, stopped, func(ctx context.Context, pinned *os.File, intent VolumeOwnershipIntent, guard func(context.Context) error) error {
+		if intent != recorded {
+			t.Fatal("scope changed authenticated intent", intent)
+		}
+		if err := guard(ctx); err != nil {
+			return err
+		}
+		return transferVolumeToGuest(ctx, pinned, intent)
+	}); err != nil || stoppedChecks < 4 {
+		t.Fatal("retained reserved scope", stoppedChecks, err)
+	}
+	consumerCalled := false
+	stopFailure := errors.New("guest exclusion lost")
+	if err := m.withReservedVolume(context.Background(), directory, d, func(context.Context) error { return stopFailure }, func(context.Context, *os.File, VolumeOwnershipIntent, func(context.Context) error) error {
+		consumerCalled = true
+		return nil
+	}); !errors.Is(err, stopFailure) || consumerCalled {
+		t.Fatal("scope ignored stopped guest refusal", consumerCalled, err)
+	}
+	if err := m.withReservedVolume(context.Background(), directory, d, stopped, func(ctx context.Context, pinned *os.File, intent VolumeOwnershipIntent, guard func(context.Context) error) error {
+		return pinned.Chmod(0640)
+	}); !errors.Is(err, ErrPolicy) {
+		t.Fatal("scope accepted consumer metadata drift", err)
+	}
+	if err := file.Chmod(0600); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Link(reservedPath, aliasPath); err != nil {
 		t.Fatal(err)
 	}
