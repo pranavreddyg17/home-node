@@ -53,8 +53,28 @@ func testPinnedGuestChannelIntent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := directory.Chown(int(d.GuestUID), 64055); err != nil {
-		t.Fatal(err)
+	checks := 0
+	interruption := errors.New("channel runtime exclusion lost")
+	transferred, transferErr := m.transferReservedChannel(ctx, path, d, func(ctx context.Context) error {
+		checks++
+		if checks == 4 {
+			return interruption
+		}
+		return ctx.Err()
+	})
+	if !errors.Is(transferErr, interruption) || transferred != (ChannelOwnershipIntent{}) {
+		t.Fatal("uncertain channel transfer reported success", transferred, transferErr)
+	}
+	var changed unix.Stat_t
+	if unix.Fstat(int(directory.Fd()), &changed) != nil || changed.Ino != recorded.Inode || changed.Uid != d.GuestUID || changed.Gid != recorded.AccessGID {
+		t.Fatal("uncertain channel effects did not preserve exact directory")
+	}
+	stopped := func(ctx context.Context) error { return ctx.Err() }
+	for retry := 0; retry < 2; retry++ {
+		transferred, transferErr = m.transferReservedChannel(ctx, path, d, stopped)
+		if transferErr != nil || transferred != recorded {
+			t.Fatal("authenticated channel transfer retry", retry, transferred, transferErr)
+		}
 	}
 	for _, check := range []func(context.Context, Domain, *os.File) (ChannelOwnershipIntent, error){m.recordPinnedChannelOwnership, m.verifyPinnedChannelOwnership} {
 		if got, err := check(ctx, d, directory); err != nil || got != recorded {
@@ -87,5 +107,24 @@ func testPinnedGuestChannelIntent(t *testing.T) {
 	}
 	if got, err := m.verifyPinnedChannelOwnership(ctx, d, directory); err != nil || got != recorded {
 		t.Fatal("refusals damaged original directory provenance", got, err)
+	}
+	if err := m.withReservedChannel(ctx, path, d, stopped, func(ctx context.Context, pinned *os.File, intent ChannelOwnershipIntent, guard func(context.Context) error) error {
+		moved := path + ".displaced"
+		if err := os.Rename(path, moved); err != nil {
+			return err
+		}
+		if err := os.Symlink(moved, path); err != nil {
+			return errors.Join(err, os.Rename(moved, path))
+		}
+		guardErr := guard(ctx)
+		if err := errors.Join(os.Remove(path), os.Rename(moved, path)); err != nil {
+			t.Fatal("restore redirected channel fixture", err)
+		}
+		if !errors.Is(guardErr, ErrPolicy) {
+			t.Fatal("scope accepted redirected channel directory", guardErr)
+		}
+		return guardErr
+	}); !errors.Is(err, ErrPolicy) {
+		t.Fatal("scope lost directory redirection refusal", err)
 	}
 }
