@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"reflect"
 	"runtime"
 	"syscall"
 	"time"
@@ -53,6 +54,12 @@ func (e *Engine) withRecoveryExclusionLocked(ctx context.Context, observe, desti
 }
 
 func (e *Engine) withRecoveryExclusionGuardedLocked(ctx context.Context, observe, destinations func(context.Context) error, use func(context.Context, func(context.Context) error) error) (result error) {
+	return e.withRecoveryInstallationExclusionGuardedLocked(ctx, observe, destinations, nil, use)
+}
+
+// A transition publisher may provide exact installation admission backed by
+// retained immutable provenance. The ordinary recovery API remains strict.
+func (e *Engine) withRecoveryInstallationExclusionGuardedLocked(ctx context.Context, observe, destinations func(context.Context) error, admit func(context.Context, journal) error, use func(context.Context, func(context.Context) error) error) (result error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Hour)
 	defer cancel()
 	if err := ctx.Err(); err != nil {
@@ -64,6 +71,30 @@ func (e *Engine) withRecoveryExclusionGuardedLocked(ctx context.Context, observe
 	installed, err := e.load()
 	if err != nil || installed.Phase != "installed" {
 		return ErrConflict
+	}
+	checkInstalled := func(ctx context.Context) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		current, err := e.load()
+		if err != nil || current.Phase != "installed" {
+			return ErrConflict
+		}
+		if admit != nil {
+			return admit(ctx, current)
+		}
+		if !reflect.DeepEqual(current, installed) {
+			return ErrConflict
+		}
+		for _, record := range installed.Items {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if err := e.matches(record); err != nil {
+				return ErrConflict
+			}
+		}
+		return ctx.Err()
 	}
 	if err = e.requireRecoveryActivationBlock(ctx); err != nil {
 		return err
@@ -77,13 +108,8 @@ func (e *Engine) withRecoveryExclusionGuardedLocked(ctx context.Context, observe
 	if err != nil {
 		return err
 	}
-	for _, record := range installed.Items {
-		if err = ctx.Err(); err != nil {
-			return err
-		}
-		if err = e.matches(record); err != nil {
-			return ErrConflict
-		}
+	if err := checkInstalled(ctx); err != nil {
+		return err
 	}
 	for _, unit := range []string{"homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket"} {
 		if err = ctx.Err(); err != nil {
@@ -101,17 +127,8 @@ func (e *Engine) withRecoveryExclusionGuardedLocked(ctx context.Context, observe
 		return err
 	}
 	if use != nil {
-		currentInstallation, err := e.load()
-		if err != nil || currentInstallation.ID != installed.ID || currentInstallation.Digest != installed.Digest || currentInstallation.Phase != "installed" {
-			return ErrConflict
-		}
-		for _, record := range installed.Items {
-			if err = ctx.Err(); err != nil {
-				return err
-			}
-			if err = e.matches(record); err != nil {
-				return ErrConflict
-			}
+		if err := checkInstalled(ctx); err != nil {
+			return err
 		}
 		if err = destinations(ctx); err != nil {
 			return err
@@ -129,17 +146,8 @@ func (e *Engine) withRecoveryExclusionGuardedLocked(ctx context.Context, observe
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			currentInstallation, err := e.load()
-			if err != nil || currentInstallation.ID != installed.ID || currentInstallation.Digest != installed.Digest || currentInstallation.Phase != "installed" {
-				return ErrConflict
-			}
-			for _, record := range installed.Items {
-				if err := ctx.Err(); err != nil {
-					return err
-				}
-				if err := e.matches(record); err != nil {
-					return ErrConflict
-				}
+			if err := checkInstalled(ctx); err != nil {
+				return err
 			}
 			if err := destinations(ctx); err != nil {
 				return err
@@ -171,17 +179,8 @@ func (e *Engine) withRecoveryExclusionGuardedLocked(ctx context.Context, observe
 	}
 	// Configuration may have changed while querying the manager. Retain the
 	// original journal identity and reverify its owned bytes before success.
-	currentInstallation, err := e.load()
-	if err != nil || currentInstallation.ID != installed.ID || currentInstallation.Digest != installed.Digest || currentInstallation.Phase != "installed" {
-		return ErrConflict
-	}
-	for _, record := range installed.Items {
-		if err = ctx.Err(); err != nil {
-			return err
-		}
-		if err = e.matches(record); err != nil {
-			return ErrConflict
-		}
+	if err := checkInstalled(ctx); err != nil {
+		return err
 	}
 	if err = destinations(ctx); err != nil {
 		return err

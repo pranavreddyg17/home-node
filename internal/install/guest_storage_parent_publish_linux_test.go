@@ -20,9 +20,12 @@ func TestRootGuestStorageParentPublicationRecoversOwnershipInterruption(t *testi
 	if os.Geteuid() != 0 {
 		t.Skip("owned disposable root fixture")
 	}
-	e, c, _, journalDirectory, _, _ := imagePlacementFixture(t)
+	e, c, _, journalDirectory, _, _ := imagePlacementFixtureWithMaintenance(t, &MaintenanceAccount{UID: 803, GID: 803})
 	defer e.Close()
 	ctx := context.Background()
+	if err := e.blockRecoveryActivation(ctx); err != nil {
+		t.Fatal(err)
+	}
 	installed, err := e.load()
 	if err != nil {
 		t.Fatal(err)
@@ -60,16 +63,24 @@ func TestRootGuestStorageParentPublicationRecoversOwnershipInterruption(t *testi
 		return nil
 	}
 	publish := func() error {
+		e.mu.Lock()
+		defer e.mu.Unlock()
 		current, err := e.load()
 		if err != nil {
 			return err
 		}
 		return e.withGuestStorageParentJournalIntent(ctx, current, intent.SourceGID, plan.GuestGID, digest(encoded), func(transition guestStorageParentJournalIntent, check func() error) error {
-			return e.publishGuestStorageImageParentLocked(ctx, intent, transition, parent, func(ctx context.Context) error {
-				if err := ctx.Err(); err != nil {
+			admit := func(ctx context.Context, current journal) error {
+				if err := check(); err != nil {
+					return err
+				}
+				if err := e.admitGuestStorageParentInstallation(ctx, current, intent, transition, parent); err != nil {
 					return err
 				}
 				return check()
+			}
+			return e.withRecoveryInstallationExclusionGuardedLocked(ctx, func(ctx context.Context) error { return ctx.Err() }, e.observeRecoveryDestinationVacancy, admit, func(ctx context.Context, guard func(context.Context) error) error {
+				return e.publishGuestStorageImageParentLocked(ctx, intent, transition, parent, guard)
 			})
 		})
 	}
@@ -125,5 +136,8 @@ func TestRootGuestStorageParentPublicationRecoversOwnershipInterruption(t *testi
 	}
 	if err := unix.Fstat(int(parent.Fd()), &st); err != nil || st.Gid != intent.SourceGID {
 		t.Fatal("refusal repaired reverted parent", err)
+	}
+	if err := e.requireRecoveryActivationBlock(ctx); err != nil {
+		t.Fatal("publication released activation marker", err)
 	}
 }
