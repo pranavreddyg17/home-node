@@ -80,8 +80,10 @@ type Manager struct {
 	Images, Volumes, Channels string
 	Backend                   Backend
 	startMu                   sync.Mutex
-	runtimeMu                 sync.RWMutex // external calls versus maintenance acquisition
-	shuttingDown              bool         // guarded by startMu
+	stopMu                    sync.Mutex
+	activeStops               map[string]int // guarded by stopMu; retained through backend effects
+	runtimeMu                 sync.RWMutex   // external calls versus maintenance acquisition
+	shuttingDown              bool           // guarded by startMu
 }
 
 func (m *Manager) Initialize(ctx context.Context) error {
@@ -218,6 +220,12 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 		return Instance{}, lockErr
 	}
 	defer unlockStart()
+	m.stopMu.Lock()
+	stopping := m.activeStops[r.InstanceID] != 0
+	m.stopMu.Unlock()
+	if stopping {
+		return Instance{}, ErrPolicy
+	}
 	if m.shuttingDown {
 		return Instance{}, ErrPolicy
 	}
@@ -365,6 +373,20 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 	return m.Inspect(ctx, r.InstanceID)
 }
 func (m *Manager) stop(ctx context.Context, r Request) (Instance, error) {
+	m.stopMu.Lock()
+	if m.activeStops == nil {
+		m.activeStops = make(map[string]int)
+	}
+	m.activeStops[r.InstanceID]++
+	m.stopMu.Unlock()
+	defer func() {
+		m.stopMu.Lock()
+		m.activeStops[r.InstanceID]--
+		if m.activeStops[r.InstanceID] == 0 {
+			delete(m.activeStops, r.InstanceID)
+		}
+		m.stopMu.Unlock()
+	}()
 	var existed bool
 	err := m.Store.Transaction(ctx, func(tx *sql.Tx) error {
 		if _, err := m.operation(tx, r); err != nil {
