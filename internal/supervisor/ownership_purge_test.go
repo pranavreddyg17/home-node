@@ -35,7 +35,7 @@ func TestLegacyPurgeRefusesReservedOwnershipEvidence(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "socket":
-				_, err := m.Store.DB.Exec(`INSERT INTO runtime_channel_sockets VALUES(?,1,10,101,0,?,200000,64055,64056,10,100)`, id, m.Manifest.Images[0].SHA256)
+				_, err := m.Store.DB.Exec(`INSERT INTO runtime_channel_sockets(instance_id,revision,device,inode,retired,image_sha256,uid,guest_gid,access_gid,parent_device,parent_inode) VALUES(?,1,10,101,0,?,200000,64055,64056,10,100)`, id, m.Manifest.Images[0].SHA256)
 				if err != nil {
 					t.Fatal(err)
 				}

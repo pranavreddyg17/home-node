@@ -35,6 +35,16 @@ func TestChannelSocketIntentBindsRuntimeRevision(t *testing.T) {
 	if err := m.recordChannelSocketIntent(ctx, intent); err != nil {
 		t.Fatal(err)
 	}
+	// Upgrade the original socket schema without replacing its active proof.
+	if _, err := m.Store.DB.Exec(`ALTER TABLE runtime_channel_sockets DROP COLUMN retirement_started`); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.initializeGuestUIDLeases(ctx); err != nil {
+		t.Fatal("socket retirement schema migration", err)
+	}
+	if err := m.verifyChannelSocketIntent(ctx, intent); err != nil {
+		t.Fatal("migration changed active proof", err)
+	}
 	if err := m.Store.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -102,6 +112,40 @@ func TestChannelSocketIntentBindsRuntimeRevision(t *testing.T) {
 	cancel()
 	if got, err := m.loadChannelSocketRetirementIntent(canceled, d); !errors.Is(err, context.Canceled) || got != (ChannelSocketIntent{}) {
 		t.Fatal("canceled retirement receipt", got, err)
+	}
+	interruption := errors.New("retirement exclusion lost")
+	checks := 0
+	got, err := m.beginChannelSocketRetirement(ctx, d, func(ctx context.Context) error {
+		checks++
+		if checks == 2 {
+			return interruption
+		}
+		return ctx.Err()
+	})
+	if !errors.Is(err, interruption) || got != (ChannelSocketIntent{}) {
+		t.Fatal("uncertain retirement checkpoint reported authority", got, err)
+	}
+	var started int
+	if err := m.Store.DB.QueryRow(`SELECT retirement_started FROM runtime_channel_sockets WHERE instance_id=? AND revision=?`, d.ID, intent.Revision).Scan(&started); err != nil || started != 1 {
+		t.Fatal("uncertain checkpoint not preserved", started, err)
+	}
+	if err := m.Store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	afterCheckpoint, err := state.Open(filepath.Join(m.Images, "journal"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = afterCheckpoint.Close() })
+	m.Store = afterCheckpoint
+	for retry := 0; retry < 2; retry++ {
+		got, err := m.beginChannelSocketRetirement(ctx, d, func(ctx context.Context) error { return ctx.Err() })
+		if err != nil || got != intent {
+			t.Fatal("reopened retirement checkpoint", retry, got, err)
+		}
+	}
+	if err := m.recordChannelSocketIntent(ctx, next); !errors.Is(err, ErrPolicy) {
+		t.Fatal("checkpoint bypassed physical retirement", err)
 	}
 	if _, err := m.Store.DB.Exec(`DELETE FROM runtime_channel_ownership WHERE instance_id=?`, d.ID); err != nil {
 		t.Fatal(err)

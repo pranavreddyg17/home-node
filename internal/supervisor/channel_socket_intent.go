@@ -108,10 +108,10 @@ func (m *Manager) checkChannelSocketIntent(ctx context.Context, intent ChannelSo
 			return ErrPolicy
 		}
 		var device, inode uint64
-		var retired int
-		err := tx.QueryRowContext(ctx, `SELECT device,inode,retired FROM runtime_channel_sockets WHERE instance_id=? AND revision=?`, channel.InstanceID, revision).Scan(&device, &inode, &retired)
+		var retired, started int
+		err := tx.QueryRowContext(ctx, `SELECT device,inode,retired,retirement_started FROM runtime_channel_sockets WHERE instance_id=? AND revision=?`, channel.InstanceID, revision).Scan(&device, &inode, &retired, &started)
 		if err == nil {
-			if retired != 0 || device != intent.Device || inode != intent.Inode {
+			if retired != 0 || started != 0 || device != intent.Device || inode != intent.Inode {
 				return ErrPolicy
 			}
 			return nil
@@ -142,7 +142,7 @@ func validateChannelSocketInventory(ctx context.Context, tx *sql.Tx) error {
 	if invalid == 0 {
 		return nil
 	}
-	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM runtime_channel_sockets s LEFT JOIN runtime_channel_ownership c ON c.instance_id=s.instance_id LEFT JOIN runtime_instances r ON r.id=s.instance_id WHERE c.instance_id IS NULL OR r.id IS NULL OR s.revision<1 OR s.revision>r.revision OR s.device<0 OR s.inode<1 OR s.retired NOT IN (0,1) OR s.image_sha256!=c.image_sha256 OR s.uid!=c.uid OR s.guest_gid!=c.guest_gid OR s.access_gid!=c.access_gid OR s.parent_device!=c.device OR s.parent_inode!=c.inode`).Scan(&invalid); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM runtime_channel_sockets s LEFT JOIN runtime_channel_ownership c ON c.instance_id=s.instance_id LEFT JOIN runtime_instances r ON r.id=s.instance_id WHERE c.instance_id IS NULL OR r.id IS NULL OR s.revision<1 OR s.revision>r.revision OR s.device<0 OR s.inode<1 OR s.retired NOT IN (0,1) OR s.retirement_started NOT IN (0,1) OR s.retired>s.retirement_started OR s.image_sha256!=c.image_sha256 OR s.uid!=c.uid OR s.guest_gid!=c.guest_gid OR s.access_gid!=c.access_gid OR s.parent_device!=c.device OR s.parent_inode!=c.inode`).Scan(&invalid); err != nil {
 		return err
 	}
 	if invalid != 0 {
