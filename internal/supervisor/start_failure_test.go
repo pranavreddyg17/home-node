@@ -113,6 +113,50 @@ type cancelledStartVerifyBackend struct {
 	cancel context.CancelFunc
 }
 
+type supersededCleanupBackend struct {
+	*fakeBackend
+	verify         func() error
+	cleanupFailure error
+}
+
+func (b *supersededCleanupBackend) Verify(context.Context, Domain) error { return b.verify() }
+func (b *supersededCleanupBackend) Stop(ctx context.Context, id string) error {
+	if b.stops != 0 {
+		return b.cleanupFailure
+	}
+	return b.fakeBackend.Stop(ctx, id)
+}
+
+func TestSupersededLaunchCleanupFailureRemainsAuditable(t *testing.T) {
+	m, original := newManager(t)
+	ctx := context.Background()
+	r := startRequest()
+	failure := errors.New("cleanup teardown unconfirmed")
+	b := &supersededCleanupBackend{fakeBackend: original, cleanupFailure: failure}
+	b.verify = func() error {
+		stop := r
+		stop.Action, stop.OperationID, stop.Revision = "stop", state.Random(), 2
+		_, err := m.Apply(ctx, stop)
+		return errors.Join(errors.New("launch superseded"), err)
+	}
+	m.Backend = b
+	if _, err := m.Apply(ctx, r); !errors.Is(err, failure) {
+		t.Fatal("cleanup uncertainty hidden", err)
+	}
+	i, err := m.Inspect(ctx, r.InstanceID)
+	if err != nil || i.Revision != 2 || i.State != "stopping" || i.Desired != "stopped" {
+		t.Fatal("cleanup uncertainty lost", i, err)
+	}
+	m.Backend = original
+	if err := m.Audit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	i, err = m.Inspect(ctx, r.InstanceID)
+	if err != nil || i.Revision != 2 || i.State != "interrupted" || original.stops != 2 {
+		t.Fatal("audit skipped uncertain teardown", i, err, original.stops)
+	}
+}
+
 func (b *cancelledStartVerifyBackend) Verify(context.Context, Domain) error {
 	b.cancel()
 	return context.Canceled
