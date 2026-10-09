@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -59,6 +61,44 @@ func TestGuestStoragePolicyPlanBindsInstalledBytesAndPreservesOtherRecords(t *te
 	if _, _, err := planGuestStorageRuntimePolicy(ctx, installed, append(source, ' '), plan); !errors.Is(err, ErrConflict) {
 		t.Fatal("unbound source admitted", err)
 	}
+	t.Run("immutable configuration intent", func(t *testing.T) {
+		host, journalDir := roots(t)
+		e := openEngine(t, host, journalDir)
+		defer e.Close()
+		guard := func(ctx context.Context) error { return ctx.Err() }
+		if err := e.commitGuestStorageConfigurationIntent(ctx, installed, source, env, plan, guard); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(journalDir, "guest-storage-configuration-intent.json")
+		before, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := e.commitGuestStorageConfigurationIntent(ctx, installed, source, env, plan, guard); err != nil {
+			t.Fatal("exact retry refused", err)
+		}
+		after, err := os.Stat(path)
+		if err != nil || !os.SameFile(before, after) {
+			t.Fatal("retry replaced intent", err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var intent guestStorageConfigurationIntent
+		if json.Unmarshal(data, &intent) != nil || !reflect.DeepEqual(intent.Original, installed) || !reflect.DeepEqual(intent.Desired, configuration) || string(intent.Policy) != string(nextPolicy) || string(intent.Environment) != string(nextEnv) {
+			t.Fatal("configuration transition lost authority")
+		}
+		changed := plan
+		changed.GuestGID++
+		if err := e.commitGuestStorageConfigurationIntent(ctx, installed, source, env, changed, guard); !errors.Is(err, ErrConflict) {
+			t.Fatal("conflicting proposal replaced intent", err)
+		}
+		current, err := os.ReadFile(path)
+		if err != nil || string(current) != string(data) {
+			t.Fatal("conflict changed evidence", err)
+		}
+	})
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
 	if _, data, err := planGuestStorageRuntimePolicy(cancelled, installed, source, plan); !errors.Is(err, context.Canceled) || data != nil {

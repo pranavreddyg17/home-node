@@ -68,7 +68,7 @@ func (e *Engine) commitImmutableGuestIntent(ctx context.Context, name, prefix st
 		return err
 	}
 	maximum := int64(8192)
-	if name == "guest-uid-allocation-intent.json" {
+	if name == "guest-uid-allocation-intent.json" || name == "guest-storage-configuration-intent.json" {
 		maximum = 262144
 	} else if name == "guest-storage-image-parent-journal.json" {
 		maximum = 131072
