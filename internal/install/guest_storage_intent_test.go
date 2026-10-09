@@ -178,11 +178,20 @@ func TestGuestStorageIntentRejectsIdenticalReplacementDuringObservation(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	observed, err := e.withGuestStorageIntent(ctx, func(context.Context, GuestStorageProvisioningPlan) error {
+	observed, err := e.withGuestStorageIntentGuarded(ctx, func(ctx context.Context, plan GuestStorageProvisioningPlan, check func() error) error {
+		if err := check(); err != nil {
+			return err
+		}
 		if err := os.Rename(path, path+".old"); err != nil {
 			return err
 		}
-		return os.WriteFile(path, original, 0600)
+		if err := os.WriteFile(path, original, 0600); err != nil {
+			return err
+		}
+		if err := check(); !errors.Is(err, ErrConflict) {
+			t.Fatal("consumer guard admitted replacement", err)
+		}
+		return nil
 	})
 	if !errors.Is(err, ErrConflict) || observed.GuestGID != 0 {
 		t.Fatal("identical replacement qualified", observed, err)

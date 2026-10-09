@@ -57,6 +57,18 @@ func (e *Engine) loadGuestStorageIntent(ctx context.Context) (GuestStorageProvis
 
 // Keep the original record open through potentially slow live host observation.
 func (e *Engine) withGuestStorageIntent(ctx context.Context, revalidate func(context.Context, GuestStorageProvisioningPlan) error) (plan GuestStorageProvisioningPlan, result error) {
+	return e.withGuestStorageIntentGuarded(ctx, func(ctx context.Context, plan GuestStorageProvisioningPlan, check func() error) error {
+		if revalidate != nil {
+			return revalidate(ctx, plan)
+		}
+		return nil
+	})
+}
+
+// The check closure authenticates the original retained record, never a
+// replacement with matching bytes. Consumers must separately retain runtime,
+// account-allocation and storage authority before mutation.
+func (e *Engine) withGuestStorageIntentGuarded(ctx context.Context, use func(context.Context, GuestStorageProvisioningPlan, func() error) error) (plan GuestStorageProvisioningPlan, result error) {
 	if err := ctx.Err(); err != nil {
 		return plan, err
 	}
@@ -94,23 +106,32 @@ func (e *Engine) withGuestStorageIntent(ctx context.Context, revalidate func(con
 	if !bytes.Equal(canonical, data) || !e.accountJournalPathUnchanged(name, info, 8192) {
 		return plan, ErrConflict
 	}
-	if revalidate != nil {
-		if err := revalidate(ctx, qualified); err != nil {
+	check := func() error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+		currentBytes, err := io.ReadAll(io.LimitReader(file, 8193))
+		if err != nil {
+			return err
+		}
+		current, err := file.Stat()
+		if err != nil || !accountJournalFileAdmitted(current, e.owner, 8192) || !os.SameFile(info, current) || current.Size() != info.Size() || current.Mode() != info.Mode() || !bytes.Equal(currentBytes, data) || !e.accountJournalPathUnchanged(name, info, 8192) {
+			return ErrConflict
+		}
+		return ctx.Err()
+	}
+	if err := check(); err != nil {
+		return plan, err
+	}
+	if use != nil {
+		if err := use(ctx, qualified, check); err != nil {
 			return plan, err
 		}
 	}
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return plan, err
-	}
-	currentBytes, err := io.ReadAll(io.LimitReader(file, 8193))
-	if err != nil {
-		return plan, err
-	}
-	current, err := file.Stat()
-	if err != nil || !accountJournalFileAdmitted(current, e.owner, 8192) || !os.SameFile(info, current) || current.Size() != info.Size() || current.Mode() != info.Mode() || !bytes.Equal(currentBytes, data) || !e.accountJournalPathUnchanged(name, info, 8192) {
-		return plan, ErrConflict
-	}
-	if err := ctx.Err(); err != nil {
+	if err := check(); err != nil {
 		return plan, err
 	}
 	return qualified, nil
