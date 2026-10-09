@@ -9,6 +9,7 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -118,6 +119,10 @@ func TestRootGuestStorageConfigurationSourcesRetainBothFiles(t *testing.T) {
 	if err != nil || stage.Version != 1 || len(stage.Files) != 2 {
 		t.Fatal("configuration staging failed", err)
 	}
+	loaded, err := e.loadGuestStorageConfigurationStage(ctx, installed, plan)
+	if err != nil || !reflect.DeepEqual(loaded, stage) {
+		t.Fatal("recorded stage could not be authenticated", err)
+	}
 	for _, receipt := range stage.Files {
 		data, err := os.ReadFile(filepath.Join(directory, receipt.Name))
 		if err != nil || digest(data) != receipt.SHA256 || int64(len(data)) != receipt.Bytes {
@@ -146,4 +151,19 @@ func TestRootGuestStorageConfigurationSourcesRetainBothFiles(t *testing.T) {
 	if err != nil || string(data) != string(env) {
 		t.Fatal("environment changed on refusal", err)
 	}
+	recordPath := filepath.Join(journalDir, "guest-storage-configuration-stage.json")
+	bad := stage
+	bad.Files = append([]guestStorageConfigurationStageFile(nil), stage.Files...)
+	bad.Files[1].Inode = bad.Files[0].Inode
+	encodedBad, err := json.Marshal(bad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(recordPath, encodedBad, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, err := e.loadGuestStorageConfigurationStage(ctx, installed, plan); !errors.Is(err, ErrConflict) || loaded.Version != 0 {
+		t.Fatal("aliased replacement receipt admitted", err)
+	}
+
 }
