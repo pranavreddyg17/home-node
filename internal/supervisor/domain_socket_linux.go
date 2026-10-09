@@ -21,6 +21,10 @@ import (
 // It joins live domain confinement to durable socket provenance. Existing
 // receipts are audited without queuing another adapter connection.
 func (m *Manager) verifyReservedDomainSocket(ctx context.Context, d Domain, revision int64) (result error) {
+	return m.checkReservedDomainSocket(ctx, d, revision, true)
+}
+
+func (m *Manager) checkReservedDomainSocket(ctx context.Context, d Domain, revision int64, allowCreate bool) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -42,6 +46,9 @@ func (m *Manager) verifyReservedDomainSocket(ctx context.Context, d Domain, revi
 	var existing int
 	err := m.Store.DB.QueryRowContext(ctx, `SELECT 1 FROM runtime_channel_sockets WHERE instance_id=? AND revision=?`, d.ID, revision).Scan(&existing)
 	create := errors.Is(err, sql.ErrNoRows)
+	if create && !allowCreate {
+		return ErrPolicy
+	}
 	var channel ChannelOwnershipIntent
 	if create {
 		channel, err = m.loadChannelOwnershipIntent(ctx, d)

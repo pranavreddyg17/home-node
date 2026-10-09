@@ -72,7 +72,8 @@ type cooperativeShutdownBackend interface {
 	Shutdown(context.Context, string) error
 }
 
-func shutdownOwnerKey(id string) string { return "runtime.shutdown-owner." + id }
+func shutdownOwnerKey(id string) string          { return "runtime.shutdown-owner." + id }
+func shutdownSocketRevisionKey(id string) string { return "runtime.shutdown-socket-revision." + id }
 
 func (m *Manager) shutdown(ctx context.Context, r Request) (Instance, error) {
 	backend, ok := m.Backend.(cooperativeShutdownBackend)
@@ -107,6 +108,24 @@ func (m *Manager) shutdown(ctx context.Context, r Request) (Instance, error) {
 		}
 		if phase != "running" || r.Revision <= revision {
 			return ErrPolicy
+		}
+		if m.GuestUIDPool != nil {
+			switch m.Backend.(type) {
+			case LinuxBackend, *LinuxBackend:
+				if err := m.validateChannelOwnershipInventory(ctx, tx); err != nil {
+					return err
+				}
+				var count int
+				if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM runtime_channel_sockets WHERE instance_id=? AND revision=? AND retired=0 AND retirement_started=0`, r.InstanceID, revision).Scan(&count); err != nil {
+					return err
+				}
+				if count != 1 {
+					return ErrPolicy
+				}
+				if _, err := tx.ExecContext(ctx, `INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, shutdownSocketRevisionKey(r.InstanceID), strconv.FormatInt(revision, 10)); err != nil {
+					return err
+				}
+			}
 		}
 		deadline = time.Now().Unix() + 90
 		if _, err = tx.Exec("INSERT INTO runtime_stops VALUES(?,?) ON CONFLICT(instance_id) DO UPDATE SET revision=max(revision,excluded.revision)", r.InstanceID, r.Revision); err != nil {

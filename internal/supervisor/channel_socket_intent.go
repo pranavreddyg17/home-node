@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"math"
+	"strconv"
+	"time"
 )
 
 // ChannelSocketIntent binds one observed socket to a recorded directory and
@@ -24,7 +26,8 @@ func (m *Manager) verifyChannelSocketIntent(ctx context.Context, intent ChannelS
 }
 
 // loadActiveChannelSocketIntent is read-only and accepts the current preparing
-// or running revision. It cannot create preparation or retirement authority.
+// or running revision, or a launch receipt bound to an authorized pending
+// shutdown. It cannot create preparation or retirement authority.
 func (m *Manager) loadActiveChannelSocketIntent(ctx context.Context, d Domain, revision int64) (ChannelSocketIntent, error) {
 	if err := ctx.Err(); err != nil {
 		return ChannelSocketIntent{}, err
@@ -141,12 +144,38 @@ func (m *Manager) checkChannelSocketIntent(ctx context.Context, intent ChannelSo
 		if err := tx.QueryRowContext(ctx, `SELECT revision,state,desired FROM runtime_instances WHERE id=?`, channel.InstanceID).Scan(&revision, &phase, &desired); err != nil {
 			return errors.Join(ErrPolicy, err)
 		}
-		if revision != intent.Revision || desired != "running" || phase != "preparing" && phase != "running" {
+		if phase == "shutting-down" && !create {
+			if desired != "stopped" || revision <= intent.Revision {
+				return ErrPolicy
+			}
+			var boundRevision, deadlineText string
+			if err := tx.QueryRowContext(ctx, `SELECT value FROM settings WHERE key=?`, shutdownSocketRevisionKey(channel.InstanceID)).Scan(&boundRevision); err != nil {
+				return errors.Join(ErrPolicy, err)
+			}
+			if boundRevision != strconv.FormatInt(intent.Revision, 10) {
+				return ErrPolicy
+			}
+			if err := tx.QueryRowContext(ctx, `SELECT value FROM settings WHERE key=?`, shutdownDeadlineKey(channel.InstanceID)).Scan(&deadlineText); err != nil {
+				return errors.Join(ErrPolicy, err)
+			}
+			deadline, err := strconv.ParseInt(deadlineText, 10, 64)
+			now := time.Now().Unix()
+			if err != nil || deadline <= now || deadline > now+90 {
+				return ErrPolicy
+			}
+			var authorized int
+			if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM runtime_stops s JOIN settings owner ON owner.key=? JOIN runtime_operations o ON o.id=owner.value WHERE s.instance_id=? AND s.revision=? AND o.instance_id=s.instance_id AND o.state='pending'`, shutdownOwnerKey(channel.InstanceID), channel.InstanceID, revision).Scan(&authorized); err != nil {
+				return err
+			}
+			if authorized != 1 {
+				return ErrPolicy
+			}
+		} else if revision != intent.Revision || desired != "running" || phase != "preparing" && phase != "running" {
 			return ErrPolicy
 		}
 		var device, inode uint64
 		var retired, started int
-		err := tx.QueryRowContext(ctx, `SELECT device,inode,retired,retirement_started FROM runtime_channel_sockets WHERE instance_id=? AND revision=?`, channel.InstanceID, revision).Scan(&device, &inode, &retired, &started)
+		err := tx.QueryRowContext(ctx, `SELECT device,inode,retired,retirement_started FROM runtime_channel_sockets WHERE instance_id=? AND revision=?`, channel.InstanceID, intent.Revision).Scan(&device, &inode, &retired, &started)
 		if err == nil {
 			if retired != 0 || started != 0 || device != intent.Device || inode != intent.Inode {
 				return ErrPolicy

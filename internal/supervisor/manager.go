@@ -569,7 +569,11 @@ func (m *Manager) Audit(ctx context.Context) error {
 			d := Domain{ID: id, Image: image, DiskReserveBytes: m.Policy.DiskReserveBytes, SystemPath: filepath.Join(m.Images, image.SHA256+".raw"), DataPath: filepath.Join(m.Volumes, id+".raw"), ChannelPath: filepath.Join(m.Channels, id, "adapter.sock")}
 			stop = m.bindDomainGuestIdentity(ctx, &d, false) != nil
 			if !stop {
-				stop = m.Backend.Verify(ctx, d) != nil
+				if i.State == "running" {
+					stop = m.verifyRunningDomain(ctx, d, i.Revision) != nil
+				} else {
+					stop = m.verifyShuttingDownDomain(ctx, d, i.Revision) != nil
+				}
 			}
 		}
 		if stop {

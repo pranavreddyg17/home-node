@@ -21,6 +21,9 @@ func TestPreparedDomainVerificationDispatch(t *testing.T) {
 	if err := m.verifyPreparedDomain(ctx, Domain{GuestUID: 200000}, 1); !errors.Is(err, ErrPolicy) {
 		t.Fatal("unconfigured Linux backend admitted reserved socket", err)
 	}
+	if err := m.verifyRunningDomain(ctx, Domain{GuestUID: 200000}, 1); !errors.Is(err, ErrPolicy) {
+		t.Fatal("audit established missing receipt", err)
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	cancel()
 	if err := m.verifyPreparedDomain(ctx, Domain{}, 1); !errors.Is(err, context.Canceled) {
