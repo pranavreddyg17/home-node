@@ -4,14 +4,33 @@ package supervisor
 
 import (
 	"context"
+	"errors"
 	"os"
 )
 
 // prepareReservedDomain is entered only while the caller retains start and
 // maintenance exclusion. It connects resource preparation to live host checks.
-func (m *Manager) prepareReservedDomain(ctx context.Context, d Domain) error {
-	_, err := m.prepareReservedResources(ctx, d, func(ctx context.Context) error { return m.checkReservedDomainStopped(ctx, d) })
-	return err
+func (m *Manager) prepareReservedDomain(ctx context.Context, d Domain) (result error) {
+	if err := m.checkReservedDomainStopped(ctx, d); err != nil {
+		return err
+	}
+	host, err := os.OpenRoot("/")
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, host.Close()) }()
+	return withReservedAccountDirectory(ctx, host, func(ctx context.Context, checkAccounts func(context.Context) error) error {
+		_, err := m.prepareReservedResources(ctx, d, func(ctx context.Context) error {
+			if err := checkAccounts(ctx); err != nil {
+				return err
+			}
+			if err := m.checkReservedDomainStopped(ctx, d); err != nil {
+				return err
+			}
+			return checkAccounts(ctx)
+		})
+		return err
+	})
 }
 
 // checkReservedDomainStopped supplies the live checks used while the manager
