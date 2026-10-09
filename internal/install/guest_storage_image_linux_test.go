@@ -63,4 +63,32 @@ func TestRootGuestStorageImageIdentity(t *testing.T) {
 	if got, err := qualifyGuestStorageImage(ctx, plan, image, 993, file); !errors.Is(err, catalog.ErrUntrusted) || got != (guestStorageImageIdentity{}) {
 		t.Fatal("corrupt image admitted", got, err)
 	}
+	if err := os.WriteFile(path, data, 0440); err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := qualifyGuestStorageImage(ctx, plan, image, 993, file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refused := errors.New("migration exclusion revoked")
+	if err := migrateGuestStorageImage(ctx, plan, receipt, file, func(context.Context) error { return refused }); !errors.Is(err, refused) {
+		t.Fatal("revoked migration admitted", err)
+	}
+	if _, err := qualifyGuestStorageImage(ctx, plan, image, 993, file); err != nil {
+		t.Fatal("refusal changed ownership", err)
+	}
+	check := func(ctx context.Context) error { return ctx.Err() }
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := migrateGuestStorageImage(ctx, plan, receipt, file, check); err != nil {
+			t.Fatal("recorded migration/retry refused", attempt, err)
+		}
+	}
+	if _, err := qualifyGuestStorageImage(ctx, plan, image, 994, file); err != nil {
+		t.Fatal("destination ownership not qualified", err)
+	}
+	foreign := receipt
+	foreign.Inode++
+	if err := migrateGuestStorageImage(ctx, plan, foreign, file, check); !errors.Is(err, ErrConflict) {
+		t.Fatal("foreign provenance admitted", err)
+	}
 }
