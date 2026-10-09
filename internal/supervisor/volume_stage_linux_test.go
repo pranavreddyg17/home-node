@@ -4,6 +4,8 @@ package supervisor
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -48,6 +50,29 @@ func testReservedVolumeStage(t *testing.T) {
 				d.DataPath = filepath.Join(parent, d.ID+".raw")
 				d.ChannelPath = filepath.Join(m.Channels, d.ID, "adapter.sock")
 				d.DiskReserveBytes = m.Policy.DiskReserveBytes
+				m.Images = volumeFixtureDir(t)
+				base := []byte("immutable resource image fixture")
+				digest := sha256.Sum256(base)
+				d.Image.SHA256, d.Image.Bytes = hex.EncodeToString(digest[:]), int64(len(base))
+				d.SystemPath = filepath.Join(m.Images, d.Image.SHA256+".raw")
+				if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET image_sha256=? WHERE id=?`, d.Image.SHA256, d.ID); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chown(m.Images, 0, int(d.GuestGID)); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chmod(m.Images, 0710); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(d.SystemPath, base, 0600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chown(d.SystemPath, 0, int(d.GuestGID)); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chmod(d.SystemPath, 0440); err != nil {
+					t.Fatal(err)
+				}
 				final := filepath.Join(parent, d.ID+".raw")
 				interrupted := errors.New("composed volume transfer interrupted")
 				observed := false
@@ -103,6 +128,37 @@ func testReservedVolumeStage(t *testing.T) {
 				}
 				if got, err = m.prepareReservedResources(ctx, d, func(ctx context.Context) error { return ctx.Err() }); err != nil || got.Volume != saved {
 					t.Fatal("coupled ownership retry", got, err)
+				}
+				imageFaultChecks := 0
+				got, err = m.prepareReservedResources(ctx, d, func(ctx context.Context) error {
+					imageFaultChecks++
+					if imageFaultChecks == completeChecks {
+						altered := append([]byte(nil), base...)
+						altered[0] ^= 1
+						if err := os.Chmod(d.SystemPath, 0600); err != nil {
+							return err
+						}
+						if err := os.WriteFile(d.SystemPath, altered, 0600); err != nil {
+							return err
+						}
+						return os.Chmod(d.SystemPath, 0440)
+					}
+					return ctx.Err()
+				})
+				if imageFaultChecks != completeChecks || !errors.Is(err, ErrPolicy) || got != (reservedResourceIntent{}) {
+					t.Fatal("final preparation image digest fence", completeChecks, imageFaultChecks, got, err)
+				}
+				if err := os.Chmod(d.SystemPath, 0600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(d.SystemPath, base, 0600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chmod(d.SystemPath, 0440); err != nil {
+					t.Fatal(err)
+				}
+				if got, err = m.prepareReservedResources(ctx, d, func(ctx context.Context) error { return ctx.Err() }); err != nil || got.Volume != saved {
+					t.Fatal("restored owned image retry", got, err)
 				}
 				var disk unix.Stat_t
 				if unix.Lstat(final, &disk) != nil || disk.Uid != saved.UID || disk.Gid != saved.GID || disk.Ino != saved.Inode || uint64(disk.Dev) != saved.Device {
