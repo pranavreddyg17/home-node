@@ -240,6 +240,13 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 		return Instance{}, err
 	}
 	var replay bool
+	// Host validation may have overlapped a stop. Serialize journal admission
+	// with stop registration so no delayed stop can target a newly admitted VM.
+	m.stopMu.Lock()
+	if m.activeStops[r.InstanceID] != 0 {
+		m.stopMu.Unlock()
+		return Instance{}, ErrPolicy
+	}
 	err = m.Store.Transaction(ctx, func(tx *sql.Tx) error {
 		var e error
 		replay, e = m.operation(tx, r)
@@ -296,6 +303,7 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 		}
 		return e
 	})
+	m.stopMu.Unlock()
 	if err != nil {
 		return Instance{}, err
 	}
