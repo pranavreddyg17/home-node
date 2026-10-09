@@ -260,6 +260,59 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	if err := file.Chmod(0600); err != nil {
 		t.Fatal(err)
 	}
+	// Retained descriptors must not authorize a pathname redirected after
+	// admission, even when the replacement points at the exact original disk.
+	if err := m.withReservedVolume(context.Background(), directory, d, stopped, func(ctx context.Context, pinned *os.File, intent VolumeOwnershipIntent, guard func(context.Context) error) error {
+		moved := reservedPath + ".displaced"
+		if err := os.Rename(reservedPath, moved); err != nil {
+			return err
+		}
+		if err := os.Symlink(moved, reservedPath); err != nil {
+			return errors.Join(err, os.Rename(moved, reservedPath))
+		}
+		guardErr := guard(ctx)
+		restoreErr := errors.Join(os.Remove(reservedPath), os.Rename(moved, reservedPath))
+		if restoreErr != nil {
+			t.Fatal("restore redirected volume fixture", restoreErr)
+		}
+		if !errors.Is(guardErr, ErrPolicy) {
+			t.Fatal("scope accepted redirected disk pathname", guardErr)
+		}
+		return guardErr
+	}); !errors.Is(err, ErrPolicy) {
+		t.Fatal("scope lost redirected pathname refusal", err)
+	}
+	if _, err := m.verifyPinnedVolumeOwnership(context.Background(), d, file); err != nil {
+		t.Fatal("pathname refusal changed durable volume provenance", err)
+	}
+	parentChecks := 0
+	consumerCalled = false
+	parentMoved := directory + ".displaced"
+	parentRedirected := false
+	err = m.withReservedVolume(context.Background(), directory, d, func(ctx context.Context) error {
+		parentChecks++
+		if parentChecks == 2 {
+			if err := os.Rename(directory, parentMoved); err != nil {
+				return err
+			}
+			if err := os.Symlink(parentMoved, directory); err != nil {
+				return errors.Join(err, os.Rename(parentMoved, directory))
+			}
+			parentRedirected = true
+		}
+		return ctx.Err()
+	}, func(context.Context, *os.File, VolumeOwnershipIntent, func(context.Context) error) error {
+		consumerCalled = true
+		return nil
+	})
+	if parentRedirected {
+		if restoreErr := errors.Join(os.Remove(directory), os.Rename(parentMoved, directory)); restoreErr != nil {
+			t.Fatal("restore redirected volume parent", restoreErr)
+		}
+	}
+	if !errors.Is(err, ErrPolicy) || consumerCalled || !parentRedirected {
+		t.Fatal("scope admitted redirected parent during runtime observation", consumerCalled, parentChecks, err)
+	}
 	if err := os.Link(reservedPath, aliasPath); err != nil {
 		t.Fatal(err)
 	}
