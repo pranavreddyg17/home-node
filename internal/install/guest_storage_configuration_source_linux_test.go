@@ -387,4 +387,22 @@ func TestRootGuestStorageConfigurationPublicationRecoversJournalInterruption(t *
 	if err != nil || !os.SameFile(before, after) {
 		t.Fatal("completed retry replaced journal", err)
 	}
+	if err := unix.Renameat2(int(directoryFD.Fd()), "runtime-policy.json", int(directoryFD.Fd()), ".homenode-runtime-policy.stage", unix.RENAME_EXCHANGE); err != nil {
+		t.Fatal(err)
+	}
+	reverted, err := os.Stat(policyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.publishGuestStorageConfigurationLocked(ctx, directoryFD, plan, guard); !errors.Is(err, ErrConflict) {
+		t.Fatal("committed journal authorized repair of reverted configuration", err)
+	}
+	preserved, err := os.Stat(policyPath)
+	if err != nil || !os.SameFile(reverted, preserved) {
+		t.Fatal("refusal rewrote reverted namespace", err)
+	}
+	observed, err = e.load()
+	if err != nil || !reflect.DeepEqual(observed, desired) {
+		t.Fatal("refusal reverted committed journal", err)
+	}
 }

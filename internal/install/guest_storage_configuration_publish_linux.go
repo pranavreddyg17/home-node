@@ -66,9 +66,6 @@ func (e *Engine) publishGuestStorageConfigurationLocked(ctx context.Context, dir
 				}
 				return guard(ctx)
 			}
-			if err := exchangeGuestStorageConfigurationBatch(ctx, directory, stage, intent, check); err != nil {
-				return err
-			}
 			completed := func() error {
 				if err := check(ctx); err != nil {
 					return err
@@ -93,6 +90,14 @@ func (e *Engine) publishGuestStorageConfigurationLocked(ctx context.Context, dir
 					}
 				}
 				return check(ctx)
+			}
+			// A committed destination journal admits only completed host publication.
+			// Do not repair a reverted namespace using stale transition authority.
+			if reflect.DeepEqual(current, intent.Desired) {
+				return completed()
+			}
+			if err := exchangeGuestStorageConfigurationBatch(ctx, directory, stage, intent, check); err != nil {
+				return err
 			}
 			if err := completed(); err != nil {
 				return err
