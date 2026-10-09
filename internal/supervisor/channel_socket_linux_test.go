@@ -35,6 +35,7 @@ func testPinnedChannelSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(parent, d.ID, "adapter.sock")
+	d.ChannelPath = path
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
 	if err != nil {
 		t.Fatal(err)
@@ -102,4 +103,48 @@ func testPinnedChannelSocket(t *testing.T) {
 	if got, err := m.recordPinnedChannelSocket(ctx, d, 1, directory, socket); err != nil || got.Inode != native.Ino {
 		t.Fatal("refusal damaged socket provenance", got, err)
 	}
+	// An unknown retirement destination must be preserved without a rename.
+	stage := filepath.Join(filepath.Dir(path), ".adapter-retire-1")
+	if err := os.WriteFile(stage, []byte("preserve"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := m.quarantineChannelSocket(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() }); !errors.Is(err, ErrPolicy) || got != (ChannelSocketIntent{}) {
+		t.Fatal("occupied quarantine adopted", got, err)
+	}
+	if data, err := os.ReadFile(stage); err != nil || string(data) != "preserve" {
+		t.Fatal("quarantine replaced unknown destination", err)
+	}
+	if err := os.Remove(stage); err != nil {
+		t.Fatal(err)
+	}
+	interruption := errors.New("socket quarantine exclusion lost")
+	checks := 0
+	got, err := m.quarantineChannelSocket(ctx, parent, d, func(ctx context.Context) error {
+		checks++
+		if checks == 4 {
+			return interruption
+		}
+		return ctx.Err()
+	})
+	if !errors.Is(err, interruption) || got != (ChannelSocketIntent{}) {
+		t.Fatal("uncertain quarantine reported completion", checks, got, err)
+	}
+	var moved unix.Stat_t
+	if unix.Lstat(stage, &moved) != nil || moved.Ino != native.Ino || moved.Dev != native.Dev || moved.Mode != native.Mode {
+		t.Fatal("uncertain quarantine lost admitted socket")
+	}
+	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("quarantine left active socket name", err)
+	}
+	for retry := 0; retry < 2; retry++ {
+		got, err := m.quarantineChannelSocket(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() })
+		if err != nil || got.Channel != channel || got.Inode != native.Ino {
+			t.Fatal("authenticated quarantine retry", retry, got, err)
+		}
+	}
+	var retired int
+	if err := m.Store.DB.QueryRow(`SELECT retired FROM runtime_channel_sockets WHERE instance_id=? AND revision=1`, d.ID).Scan(&retired); err != nil || retired != 0 {
+		t.Fatal("quarantine falsely completed retirement", retired, err)
+	}
+
 }
