@@ -90,6 +90,11 @@ func TestGuestStoragePolicyPlanBindsInstalledBytesAndPreservesOtherRecords(t *te
 			t.Fatal("configuration transition lost authority")
 		}
 		changed := plan
+		for _, current := range []journal{installed, configuration} {
+			if err := e.withGuestStorageConfigurationIntent(ctx, current, plan, func(intent guestStorageConfigurationIntent, check func() error) error { return check() }); err != nil {
+				t.Fatal("authenticated configuration state refused", err)
+			}
+		}
 		changed.GuestGID++
 		if err := e.commitGuestStorageConfigurationIntent(ctx, installed, source, env, changed, guard); !errors.Is(err, ErrConflict) {
 			t.Fatal("conflicting proposal replaced intent", err)
@@ -97,6 +102,26 @@ func TestGuestStoragePolicyPlanBindsInstalledBytesAndPreservesOtherRecords(t *te
 		current, err := os.ReadFile(path)
 		if err != nil || string(current) != string(data) {
 			t.Fatal("conflict changed evidence", err)
+		}
+		if err := e.withGuestStorageConfigurationIntent(ctx, installed, plan, func(intent guestStorageConfigurationIntent, check func() error) error {
+			if err := os.Rename(path, path+".original"); err != nil {
+				return err
+			}
+			if err := os.WriteFile(path, data, 0600); err != nil {
+				return err
+			}
+			if err := check(); !errors.Is(err, ErrConflict) {
+				t.Fatal("identical replacement admitted", err)
+			}
+			return nil
+		}); !errors.Is(err, ErrConflict) {
+			t.Fatal("replaced scope succeeded", err)
+		}
+		for _, name := range []string{path, path + ".original"} {
+			contents, err := os.ReadFile(name)
+			if err != nil || string(contents) != string(data) {
+				t.Fatal("replacement evidence changed", err)
+			}
 		}
 	})
 	cancelled, cancel := context.WithCancel(ctx)
