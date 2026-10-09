@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pranavreddyg17/home-node/internal/state"
@@ -63,6 +64,46 @@ func TestNativeReservedVolumeMountRefusal(t *testing.T) {
 	}
 	if err := accepted.Close(); err != nil {
 		t.Fatal(err)
+	}
+	m, _ := newManager(t)
+	pool := GuestUIDPool{First: d.GuestUID, Last: d.GuestUID + 1}
+	m.GuestUIDPool, m.GuestGID = &pool, d.GuestGID
+	d.GuestUID, d.GuestGID = 0, 0
+	d.Image.SHA256 = strings.Repeat("a", 64)
+	if err := m.bindDomainGuestIdentity(ctx, &d, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Store.DB.Exec(`INSERT INTO runtime_instances(id,workload,state,desired,image_sha256,memory_mib,vcpus,data_bytes,created_at,revision) VALUES(?,'files','preparing','running',?,256,1,?,0,0)`, d.ID, d.Image.SHA256, d.Image.DataBytes); err != nil {
+		t.Fatal(err)
+	}
+	provenance, err := openReservedVolume(ctx, directory, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, recordErr := m.recordPinnedVolumeOwnership(ctx, d, provenance)
+	if err := errors.Join(recordErr, provenance.Close()); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.withReservedVolume(ctx, directory, d, func(ctx context.Context) error { return ctx.Err() }, func(ctx context.Context, file *os.File, intent VolumeOwnershipIntent, guard func(context.Context) error) error {
+		if err := unix.Mount(target, target, "", unix.MS_BIND, ""); err != nil {
+			return err
+		}
+		mounted = true
+		var sameInode unix.Stat_t
+		if unix.Stat(target, &sameInode) != nil || sameInode.Dev != original.Dev || sameInode.Ino != original.Ino {
+			t.Error("self-bind fixture changed inode")
+		}
+		guardErr := guard(ctx)
+		if err := unix.Unmount(target, 0); err != nil {
+			return errors.Join(guardErr, err)
+		}
+		mounted = false
+		if !errors.Is(guardErr, ErrPolicy) {
+			t.Fatal("retained scope accepted same-inode bind mount", guardErr)
+		}
+		return guardErr
+	}); !errors.Is(err, ErrPolicy) || mounted {
+		t.Fatal("retained scope mount refusal", mounted, err)
 	}
 	if err := unix.Mount(source, target, "", unix.MS_BIND, ""); err != nil {
 		t.Fatal("native bind mount unavailable", err)
