@@ -22,3 +22,18 @@ func TestReservedDomainStoppedGuardRequiresQualifiedBackend(t *testing.T) {
 		t.Fatal("canceled stopped observation", err)
 	}
 }
+
+func TestPreparedReservedDomainScopeRefusesUnqualifiedConsumer(t *testing.T) {
+	m := &Manager{}
+	if err := m.withPreparedReservedDomain(context.Background(), Domain{}, nil); !errors.Is(err, ErrPolicy) {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := m.withPreparedReservedDomain(ctx, Domain{}, func(context.Context, func(context.Context) error, func(context.Context) error) error {
+		t.Fatal("cancelled preparation invoked consumer")
+		return nil
+	}); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+}

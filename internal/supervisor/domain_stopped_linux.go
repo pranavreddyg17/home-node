@@ -10,7 +10,23 @@ import (
 
 // prepareReservedDomain is entered only while the caller retains start and
 // maintenance exclusion. It connects resource preparation to live host checks.
-func (m *Manager) prepareReservedDomain(ctx context.Context, d Domain) (result error) {
+func (m *Manager) prepareReservedDomain(ctx context.Context, d Domain) error {
+	return m.withPreparedReservedDomain(ctx, d, func(ctx context.Context, checkAccounts, checkPrepared func(context.Context) error) error {
+		return checkPrepared(ctx)
+	})
+}
+
+// Keep account authority retained while the caller consumes prepared storage.
+// checkPrepared requires a stopped guest and is valid before activation only.
+// checkAccounts remains valid during launch; the consumer must independently
+// verify the running domain before publishing its runtime state.
+func (m *Manager) withPreparedReservedDomain(ctx context.Context, d Domain, use func(context.Context, func(context.Context) error, func(context.Context) error) error) (result error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if use == nil {
+		return ErrPolicy
+	}
 	if err := m.checkReservedDomainStopped(ctx, d); err != nil {
 		return err
 	}
@@ -20,7 +36,7 @@ func (m *Manager) prepareReservedDomain(ctx context.Context, d Domain) (result e
 	}
 	defer func() { result = errors.Join(result, host.Close()) }()
 	return withReservedAccountDirectory(ctx, host, func(ctx context.Context, checkAccounts func(context.Context) error) error {
-		_, err := m.prepareReservedResources(ctx, d, func(ctx context.Context) error {
+		stopped := func(ctx context.Context) error {
 			if err := checkAccounts(ctx); err != nil {
 				return err
 			}
@@ -28,8 +44,21 @@ func (m *Manager) prepareReservedDomain(ctx context.Context, d Domain) (result e
 				return err
 			}
 			return checkAccounts(ctx)
-		})
-		return err
+		}
+		prepared, err := m.prepareReservedResources(ctx, d, stopped)
+		if err != nil {
+			return err
+		}
+		checkPrepared := func(ctx context.Context) error {
+			return m.qualifyReservedResources(ctx, d, prepared, stopped)
+		}
+		if err := checkPrepared(ctx); err != nil {
+			return err
+		}
+		if err := use(ctx, checkAccounts, checkPrepared); err != nil {
+			return err
+		}
+		return checkAccounts(ctx)
 	})
 }
 
