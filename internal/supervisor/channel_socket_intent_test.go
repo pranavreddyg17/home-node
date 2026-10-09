@@ -2,6 +2,7 @@ package supervisor
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"strconv"
@@ -178,9 +179,28 @@ func TestChannelSocketIntentBindsRuntimeRevision(t *testing.T) {
 	}
 }
 
-func testShutdownSocketReceipt(t *testing.T, m *Manager, d Domain, intent ChannelSocketIntent) {
+func testShutdownSocketReceipt(t *testing.T, m *Manager, d Domain, intent ChannelSocketIntent, audits ...func()) {
 	t.Helper()
 	ctx := context.Background()
+	rollback := errors.New("interrupt stop transaction")
+	if err := m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := m.bindShutdownSocketRevision(ctx, tx, d.ID, 1); err != nil {
+			return err
+		}
+		return rollback
+	}); !errors.Is(err, rollback) {
+		t.Fatal("binding rollback", err)
+	}
+	var count int
+	if err := m.Store.DB.QueryRow(`SELECT count(*) FROM settings WHERE key=?`, shutdownSocketRevisionKey(d.ID)).Scan(&count); err != nil || count != 0 {
+		t.Fatal("rolled back shutdown binding escaped", count, err)
+	}
+	if err := m.Store.Transaction(ctx, func(tx *sql.Tx) error { return m.bindShutdownSocketRevision(ctx, tx, d.ID, 2) }); !errors.Is(err, ErrPolicy) {
+		t.Fatal("wrong launch revision bound", err)
+	}
+	if err := m.Store.Transaction(ctx, func(tx *sql.Tx) error { return m.bindShutdownSocketRevision(ctx, tx, d.ID, 1) }); err != nil {
+		t.Fatal("bind actual launch receipt", err)
+	}
 	operation := state.Random()
 	if _, err := m.Store.DB.Exec(`INSERT INTO runtime_operations(id,request_hash,instance_id,state) VALUES(?,'fixture',?,'pending')`, operation, d.ID); err != nil {
 		t.Fatal(err)
@@ -188,7 +208,7 @@ func testShutdownSocketReceipt(t *testing.T, m *Manager, d Domain, intent Channe
 	if _, err := m.Store.DB.Exec(`INSERT INTO runtime_stops(instance_id,revision) VALUES(?,2)`, d.ID); err != nil {
 		t.Fatal(err)
 	}
-	for key, value := range map[string]string{shutdownOwnerKey(d.ID): operation, shutdownSocketRevisionKey(d.ID): "1", shutdownDeadlineKey(d.ID): strconv.FormatInt(time.Now().Unix()+90, 10)} {
+	for key, value := range map[string]string{shutdownOwnerKey(d.ID): operation, shutdownDeadlineKey(d.ID): strconv.FormatInt(time.Now().Unix()+90, 10)} {
 		if _, err := m.Store.DB.Exec(`INSERT INTO settings(key,value) VALUES(?,?)`, key, value); err != nil {
 			t.Fatal(err)
 		}
@@ -198,6 +218,9 @@ func testShutdownSocketReceipt(t *testing.T, m *Manager, d Domain, intent Channe
 	}
 	if got, err := m.loadActiveChannelSocketIntent(ctx, d, 1); err != nil || got != intent {
 		t.Fatal("shutdown receipt", got, err)
+	}
+	for _, audit := range audits {
+		audit()
 	}
 	if err := m.recordChannelSocketIntent(ctx, intent); !errors.Is(err, ErrPolicy) {
 		t.Fatal("shutdown granted socket creation", err)
@@ -221,6 +244,21 @@ func testShutdownSocketReceipt(t *testing.T, m *Manager, d Domain, intent Channe
 	}
 	if _, err := m.Store.DB.Exec(`UPDATE runtime_operations SET state='pending' WHERE id=?`, operation); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := m.Store.DB.Exec(`UPDATE runtime_stops SET revision=3 WHERE instance_id=?`, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.loadActiveChannelSocketIntent(ctx, d, 1); !errors.Is(err, ErrPolicy) {
+		t.Fatal("unmatched stop revision admitted", err)
+	}
+	if _, err := m.Store.DB.Exec(`UPDATE runtime_stops SET revision=2 WHERE instance_id=?`, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Store.DB.Exec(`UPDATE settings SET value=? WHERE key=?`, strconv.FormatInt(time.Now().Unix()+1000, 10), shutdownDeadlineKey(d.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.loadActiveChannelSocketIntent(ctx, d, 1); !errors.Is(err, ErrPolicy) {
+		t.Fatal("extended shutdown deadline admitted", err)
 	}
 	if _, err := m.Store.DB.Exec(`UPDATE settings SET value='1' WHERE key=?`, shutdownDeadlineKey(d.ID)); err != nil {
 		t.Fatal(err)

@@ -112,17 +112,7 @@ func (m *Manager) shutdown(ctx context.Context, r Request) (Instance, error) {
 		if m.GuestUIDPool != nil {
 			switch m.Backend.(type) {
 			case LinuxBackend, *LinuxBackend:
-				if err := m.validateChannelOwnershipInventory(ctx, tx); err != nil {
-					return err
-				}
-				var count int
-				if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM runtime_channel_sockets WHERE instance_id=? AND revision=? AND retired=0 AND retirement_started=0`, r.InstanceID, revision).Scan(&count); err != nil {
-					return err
-				}
-				if count != 1 {
-					return ErrPolicy
-				}
-				if _, err := tx.ExecContext(ctx, `INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, shutdownSocketRevisionKey(r.InstanceID), strconv.FormatInt(revision, 10)); err != nil {
+				if err := m.bindShutdownSocketRevision(ctx, tx, r.InstanceID, revision); err != nil {
 					return err
 				}
 			}
@@ -184,11 +174,37 @@ func (m *Manager) shutdown(ctx context.Context, r Request) (Instance, error) {
 		if count != 1 {
 			return ErrPolicy
 		}
-		_, err = tx.Exec("DELETE FROM settings WHERE key IN(?,?)", shutdownOwnerKey(r.InstanceID), shutdownDeadlineKey(r.InstanceID))
+		_, err = tx.Exec("DELETE FROM settings WHERE key IN(?,?,?)", shutdownOwnerKey(r.InstanceID), shutdownDeadlineKey(r.InstanceID), shutdownSocketRevisionKey(r.InstanceID))
 		return err
 	})
 	if err != nil {
 		return Instance{}, err
 	}
 	return m.Inspect(ctx, r.InstanceID)
+}
+
+// bindShutdownSocketRevision runs in the same transaction as the stop request.
+// It requires existing launch provenance; it cannot create a socket receipt.
+func (m *Manager) bindShutdownSocketRevision(ctx context.Context, tx *sql.Tx, id string, revision int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if m == nil || tx == nil || revision < 1 {
+		return ErrPolicy
+	}
+	if err := requireRuntimeAdmission(tx); err != nil {
+		return err
+	}
+	if err := m.validateChannelOwnershipInventory(ctx, tx); err != nil {
+		return err
+	}
+	var count int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM runtime_channel_sockets s JOIN runtime_instances r ON r.id=s.instance_id WHERE s.instance_id=? AND s.revision=? AND s.retired=0 AND s.retirement_started=0 AND r.revision=s.revision AND r.state='running' AND r.desired='running'`, id, revision).Scan(&count); err != nil {
+		return err
+	}
+	if count != 1 {
+		return ErrPolicy
+	}
+	_, err := tx.ExecContext(ctx, `INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, shutdownSocketRevisionKey(id), strconv.FormatInt(revision, 10))
+	return err
 }

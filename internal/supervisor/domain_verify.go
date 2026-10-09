@@ -56,6 +56,14 @@ func (m *Manager) verifyShuttingDownDomain(ctx context.Context, d Domain, revisi
 			if m.Store == nil {
 				return ErrPolicy
 			}
+			var current int64
+			var phase, desired string
+			if err := m.Store.DB.QueryRowContext(ctx, `SELECT revision,state,desired FROM runtime_instances WHERE id=?`, d.ID).Scan(&current, &phase, &desired); err != nil {
+				return err
+			}
+			if current != revision || phase != "shutting-down" || desired != "stopped" {
+				return ErrPolicy
+			}
 			var saved string
 			if err := m.Store.DB.QueryRowContext(ctx, `SELECT value FROM settings WHERE key=?`, shutdownSocketRevisionKey(d.ID)).Scan(&saved); err != nil {
 				return err

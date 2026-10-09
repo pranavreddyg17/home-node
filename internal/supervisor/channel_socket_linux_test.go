@@ -80,6 +80,14 @@ func testPinnedChannelSocket(t *testing.T) {
 	if got, err := m.recordPinnedChannelSocket(ctx, d, 1, directory, socket); !errors.Is(err, ErrPolicy) || got != (ChannelSocketIntent{}) {
 		t.Fatal("running audit granted preparation authority", got, err)
 	}
+	testShutdownSocketReceipt(t, m, d, ChannelSocketIntent{Channel: channel, Revision: 1, Device: uint64(native.Dev), Inode: native.Ino}, func() {
+		for retry := 0; retry < 2; retry++ {
+			got, err := m.checkPinnedChannelSocket(ctx, 1, channel, directory, socket, false)
+			if err != nil || got.Inode != native.Ino {
+				t.Fatal("shutdown pinned socket audit", retry, got, err)
+			}
+		}
+	})
 	if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET state='preparing' WHERE id=?`, d.ID); err != nil {
 		t.Fatal(err)
 	}
