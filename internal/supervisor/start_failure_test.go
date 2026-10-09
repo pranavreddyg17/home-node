@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/pranavreddyg17/home-node/internal/state"
 )
 
 func TestStartFailureJournalUpdatesAreAtomic(t *testing.T) {
@@ -49,6 +51,28 @@ func TestStartFailureJournalUpdatesAreAtomic(t *testing.T) {
 	}
 	if phase != "interrupted" || desired != "stopped" || operation != "interrupted" || backend.running || backend.starts != 1 {
 		t.Fatal("uncertain start did not reconcile without relaunch", phase, desired, operation)
+	}
+}
+
+func TestCancelledStartPreservesNewerConfirmedStop(t *testing.T) {
+	m, backend := newManager(t)
+	ctx := context.Background()
+	r := startRequest()
+	m.Backend = &changingAuditBackend{fakeBackend: backend, change: func() error {
+		stop := r
+		stop.Action, stop.OperationID, stop.Revision = "stop", state.Random(), 2
+		_, err := m.Apply(ctx, stop)
+		return errors.Join(errors.New("launch superseded by stop"), err)
+	}}
+	if _, err := m.Apply(ctx, r); err == nil {
+		t.Fatal("superseded launch succeeded")
+	}
+	i, err := m.Inspect(ctx, r.InstanceID)
+	if err != nil || i.Revision != 2 || i.State != "stopped" || i.Desired != "stopped" {
+		t.Fatal("old launch overwrote confirmed stop", i, err)
+	}
+	if backend.running {
+		t.Fatal("superseded guest remained running")
 	}
 }
 

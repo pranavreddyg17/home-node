@@ -321,7 +321,9 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 		journalCtx, cancelJournal := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancelJournal()
 		journalErr := m.Store.Transaction(journalCtx, func(tx *sql.Tx) error {
-			if _, err := tx.Exec("UPDATE runtime_instances SET state=?,desired='stopped' WHERE id=?", phase, r.InstanceID); err != nil {
+			// Preserve a newer confirmed stop. If cleanup itself is uncertain,
+			// retain stopping even for newer stop intent so audit must retry it.
+			if _, err := tx.Exec("UPDATE runtime_instances SET state=?,desired='stopped' WHERE id=? AND (revision=? OR (? AND revision>? AND desired='stopped'))", phase, r.InstanceID, r.Revision, stopErr != nil, r.Revision); err != nil {
 				return err
 			}
 			_, err := tx.Exec("UPDATE runtime_operations SET state='failed' WHERE id=?", r.OperationID)
@@ -344,7 +346,7 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 	if err != nil {
 		return fail(err)
 	}
-	if current.Desired != "running" {
+	if current.Desired != "running" || current.Revision != r.Revision || current.State != "preparing" {
 		return fail(errors.New("start cancelled"))
 	}
 	if err = m.Backend.Start(ctx, domain); err != nil {
@@ -357,11 +359,11 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 	if err != nil {
 		return fail(err)
 	}
-	if current.Desired != "running" {
+	if current.Desired != "running" || current.Revision != r.Revision || current.State != "preparing" {
 		return fail(errors.New("start cancelled"))
 	}
 	err = m.Store.Transaction(ctx, func(tx *sql.Tx) error {
-		result, e := tx.Exec("UPDATE runtime_instances SET state='running' WHERE id=? AND desired='running'", r.InstanceID)
+		result, e := tx.Exec("UPDATE runtime_instances SET state='running' WHERE id=? AND revision=? AND state='preparing' AND desired='running'", r.InstanceID, r.Revision)
 		if e != nil {
 			return e
 		}
