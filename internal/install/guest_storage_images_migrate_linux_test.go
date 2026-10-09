@@ -79,6 +79,23 @@ func TestRootGuestStorageImagesMigrationRecoversInterruptedBatch(t *testing.T) {
 	if err := e.migrateGuestStorageImagesLocked(ctx, plan, manifest, 993, check); err != nil {
 		t.Fatal("completed batch retry refused", err)
 	}
+	migrated := 0
+	e.checkpoint = func(phase, path string) error {
+		if phase == "guest-storage-image-migrated" {
+			migrated++
+			if migrated == len(manifest.Images) {
+				return os.Chown(filepath.Join(directory, manifest.Images[0].SHA256+".raw"), 0, 993)
+			}
+		}
+		return nil
+	}
+	if err := e.migrateGuestStorageImagesLocked(ctx, plan, manifest, 993, check); !errors.Is(err, ErrConflict) {
+		t.Fatal("batch completion admitted reverted image ownership", err)
+	}
+	e.checkpoint = nil
+	if err := e.migrateGuestStorageImagesLocked(ctx, plan, manifest, 993, check); err != nil {
+		t.Fatal("recorded reverted ownership could not reconcile", err)
+	}
 	current, err := os.ReadFile(filepath.Join(journal, "guest-storage-images-intent.json"))
 	if err != nil || !bytes.Equal(saved, current) {
 		t.Fatal("retry changed provenance", err)

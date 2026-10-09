@@ -52,8 +52,14 @@ func migrateGuestStorageImage(ctx context.Context, plan GuestStorageProvisioning
 	if err := qualify(false); err != nil {
 		return err
 	}
-	if err := unix.Fchown(int(file.Fd()), 0, int(receipt.GuestGID)); err != nil {
-		return err
+	var current unix.Stat_t
+	if unix.Fstat(int(file.Fd()), &current) != nil || uint64(current.Dev) != receipt.Device || current.Ino != receipt.Inode || current.Mode != unix.S_IFREG|0440 || current.Uid != 0 || current.Nlink != 1 || current.Size != receipt.Bytes || (current.Gid != receipt.SourceGID && current.Gid != receipt.GuestGID) {
+		return ErrConflict
+	}
+	if current.Gid != receipt.GuestGID {
+		if err := unix.Fchown(int(file.Fd()), 0, int(receipt.GuestGID)); err != nil {
+			return err
+		}
 	}
 	if err := file.Sync(); err != nil {
 		return err
