@@ -292,6 +292,16 @@ func TestRootGuestStorageConfigurationPublicationRecoversJournalInterruption(t *
 		t.Fatal(err)
 	}
 
+	imagesPath := filepath.Join(host, "var", "lib", "homenode", "images")
+	if err := os.MkdirAll(imagesPath, 0710); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(imagesPath, 0, 994); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(imagesPath, 0710); err != nil {
+		t.Fatal(err)
+	}
 	if err := e.save(installed); err != nil {
 		t.Fatal(err)
 	}
@@ -303,6 +313,21 @@ func TestRootGuestStorageConfigurationPublicationRecoversJournalInterruption(t *
 		t.Fatal(err)
 	}
 	defer directoryFD.Close()
+	if err := os.Chmod(imagesPath, 0777); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.publishGuestStorageConfigurationLocked(ctx, directoryFD, plan, guard); !errors.Is(err, ErrConflict) {
+		t.Fatal("unrelated installation drift admitted", err)
+	}
+	for path, expected := range map[string][]byte{policyPath: source, envPath: env} {
+		data, err := os.ReadFile(path)
+		if err != nil || string(data) != string(expected) {
+			t.Fatal("unrelated drift refusal published configuration", err)
+		}
+	}
+	if err := os.Chmod(imagesPath, 0710); err != nil {
+		t.Fatal(err)
+	}
 	interrupted := errors.New("journal publication interrupted")
 	fault := func(context.Context) error {
 		data, err := os.ReadFile(envPath)
