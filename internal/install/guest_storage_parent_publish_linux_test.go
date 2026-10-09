@@ -81,16 +81,18 @@ func TestRootGuestStorageParentPublicationRecoversOwnershipInterruption(t *testi
 					return check()
 				}
 				return e.withRecoveryInstallationExclusionGuardedLocked(ctx, func(ctx context.Context) error { return ctx.Err() }, e.observeRecoveryDestinationVacancy, admit, func(ctx context.Context, guard func(context.Context) error) error {
-					combined := func(ctx context.Context) error {
-						if err := checkPath(ctx); err != nil {
-							return err
+					return e.withGuestStorageAccountExclusionLocked(ctx, guard, func(ctx context.Context, guard func(context.Context) error) error {
+						combined := func(ctx context.Context) error {
+							if err := checkPath(ctx); err != nil {
+								return err
+							}
+							if err := guard(ctx); err != nil {
+								return err
+							}
+							return checkPath(ctx)
 						}
-						if err := guard(ctx); err != nil {
-							return err
-						}
-						return checkPath(ctx)
-					}
-					return e.publishGuestStorageImageParentLocked(ctx, intent, transition, pinned, combined)
+						return e.publishGuestStorageImageParentLocked(ctx, intent, transition, pinned, combined)
+					})
 				})
 			})
 		})
