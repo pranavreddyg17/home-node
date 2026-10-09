@@ -246,6 +246,30 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	}
 	consumerCalled := false
 	stopFailure := errors.New("guest exclusion lost")
+	if err := file.Chown(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	transferChecks := 0
+	transferred, transferErr := m.transferReservedVolume(context.Background(), directory, d, func(ctx context.Context) error {
+		transferChecks++
+		if transferChecks == 4 {
+			return stopFailure
+		}
+		return ctx.Err()
+	})
+	if !errors.Is(transferErr, stopFailure) || transferred != (VolumeOwnershipIntent{}) {
+		t.Fatal("uncertain transfer reported success", transferred, transferErr)
+	}
+	var uncertainOwner unix.Stat_t
+	if unix.Fstat(int(file.Fd()), &uncertainOwner) != nil || uncertainOwner.Uid != d.GuestUID || uncertainOwner.Gid != d.GuestGID || uncertainOwner.Ino != recorded.Inode {
+		t.Fatal("uncertain transfer did not preserve exact owned disk")
+	}
+	for retry := 0; retry < 2; retry++ {
+		transferred, transferErr = m.transferReservedVolume(context.Background(), directory, d, stopped)
+		if transferErr != nil || transferred != recorded {
+			t.Fatal("authenticated transfer retry", retry, transferred, transferErr)
+		}
+	}
 	if err := m.withReservedVolume(context.Background(), directory, d, func(context.Context) error { return stopFailure }, func(context.Context, *os.File, VolumeOwnershipIntent, func(context.Context) error) error {
 		consumerCalled = true
 		return nil

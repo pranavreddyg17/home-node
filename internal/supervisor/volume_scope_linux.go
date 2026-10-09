@@ -10,6 +10,31 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// transferReservedVolume composes durable lease authentication, namespace
+// admission and the caller's retained runtime barrier with ownership transfer.
+// Failures return no successful intent and preserve uncertain disk effects for
+// an authenticated retry. This does not publish a runnable domain.
+func (m *Manager) transferReservedVolume(ctx context.Context, directory string, d Domain, stopped func(context.Context) error) (VolumeOwnershipIntent, error) {
+	var transferred VolumeOwnershipIntent
+	err := m.withReservedVolume(ctx, directory, d, stopped, func(ctx context.Context, file *os.File, intent VolumeOwnershipIntent, guard func(context.Context) error) error {
+		if err := guard(ctx); err != nil {
+			return err
+		}
+		if err := transferVolumeToGuest(ctx, file, intent); err != nil {
+			return err
+		}
+		if err := guard(ctx); err != nil {
+			return err
+		}
+		transferred = intent
+		return nil
+	})
+	if err != nil {
+		return VolumeOwnershipIntent{}, err
+	}
+	return transferred, nil
+}
+
 // withReservedVolume retains the admitted parent and disk across a consumer.
 // The caller must hold runtime exclusion and supply its live stopped-guest
 // guard. This scope authenticates existing intent; it never creates a lease.
