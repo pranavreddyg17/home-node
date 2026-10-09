@@ -17,6 +17,10 @@ import (
 // through immutable intent commitment and every ownership change. Parent and
 // runtime policy publication are separate journaled transitions.
 func (e *Engine) migrateGuestStorageImagesLocked(ctx context.Context, plan GuestStorageProvisioningPlan, manifest catalog.Manifest, sourceGID uint32, checkMigration func(context.Context) error) error {
+	return e.migrateGuestStorageImagesWithCompletionLocked(ctx, plan, manifest, sourceGID, checkMigration, nil)
+}
+
+func (e *Engine) migrateGuestStorageImagesWithCompletionLocked(ctx context.Context, plan GuestStorageProvisioningPlan, manifest catalog.Manifest, sourceGID uint32, checkMigration func(context.Context) error, finish func(context.Context, guestStorageImagesIntent, *os.File, func(context.Context) error) error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -140,7 +144,18 @@ func (e *Engine) migrateGuestStorageImagesLocked(ctx context.Context, plan Guest
 						return ErrConflict
 					}
 				}
-				return e.prepareGuestStorageImageParentIntent(ctx, intent, sourceGID, parent, guard)
+				if err := e.prepareGuestStorageImageParentIntent(ctx, intent, sourceGID, parent, guard); err != nil {
+					return err
+				}
+				if finish != nil {
+					if err := guard(ctx); err != nil {
+						return err
+					}
+					if err := finish(ctx, intent, parent, guard); err != nil {
+						return err
+					}
+				}
+				return guard(ctx)
 			})
 		}
 		var retain func(int) error

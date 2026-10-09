@@ -5,6 +5,8 @@ package install
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/json"
+	"os"
 	"reflect"
 	"time"
 )
@@ -31,6 +33,30 @@ func (e *Engine) migrateInstalledGuestStorageImagesLocked(ctx context.Context, p
 			}
 			return checkMigration(ctx)
 		}
-		return e.migrateGuestStorageImagesLocked(ctx, plan, manifest, sourceGID, guard)
+		return e.migrateGuestStorageImagesWithCompletionLocked(ctx, plan, manifest, sourceGID, guard, func(ctx context.Context, images guestStorageImagesIntent, parent *os.File, checkImages func(context.Context) error) error {
+			return e.withGuestStorageImageParentIntent(ctx, images, sourceGID, func(intent guestStorageImageParentIntent, checkParentIntent func() error) error {
+				if err := checkParentIntent(); err != nil {
+					return err
+				}
+				if err := checkImages(ctx); err != nil {
+					return err
+				}
+				installed, err := e.load()
+				if err != nil {
+					return err
+				}
+				encoded, err := json.Marshal(intent)
+				if err != nil {
+					return err
+				}
+				if err := e.commitGuestStorageParentJournalIntent(ctx, installed, sourceGID, plan.GuestGID, digest(encoded)); err != nil {
+					return err
+				}
+				if err := checkImages(ctx); err != nil {
+					return err
+				}
+				return checkParentIntent()
+			})
+		})
 	})
 }

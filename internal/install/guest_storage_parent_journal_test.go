@@ -1,10 +1,14 @@
 package install
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -29,6 +33,46 @@ func TestGuestStorageParentJournalPreservesUnrelatedRecords(t *testing.T) {
 	if installed.Items[0].GID != 993 {
 		t.Fatal("planner mutated installed authority")
 	}
+	t.Run("immutable transition", func(t *testing.T) {
+		host, journal := roots(t)
+		e := openEngine(t, host, journal)
+		defer e.Close()
+		ctx := context.Background()
+		sha := strings.Repeat("b", 64)
+		if err := e.commitGuestStorageParentJournalIntent(ctx, installed, 993, 994, sha); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(journal, "guest-storage-image-parent-journal.json")
+		before, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		saved, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var intent guestStorageParentJournalIntent
+		if json.Unmarshal(saved, &intent) != nil || !reflect.DeepEqual(intent.Original, installed) || !reflect.DeepEqual(intent.Desired, changed) || intent.ParentIntentSHA256 != sha {
+			t.Fatal("transition not bound to exact states")
+		}
+		if err := e.commitGuestStorageParentJournalIntent(ctx, installed, 993, 994, sha); err != nil {
+			t.Fatal("exact retry refused", err)
+		}
+		if err := e.commitGuestStorageParentJournalIntent(ctx, installed, 993, 995, sha); !errors.Is(err, ErrConflict) {
+			t.Fatal("changed destination admitted", err)
+		}
+		if err := e.commitGuestStorageParentJournalIntent(ctx, installed, 993, 994, strings.Repeat("c", 64)); !errors.Is(err, ErrConflict) {
+			t.Fatal("changed parent binding admitted", err)
+		}
+		after, err := os.Stat(path)
+		if err != nil || !os.SameFile(before, after) {
+			t.Fatal("transition inode changed", err)
+		}
+		current, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(saved, current) {
+			t.Fatal("transition bytes changed", err)
+		}
+	})
 	if _, err := planGuestStorageImageParentJournal(context.Background(), installed, 992, 994); !errors.Is(err, ErrConflict) {
 		t.Fatal("wrong source group admitted", err)
 	}
