@@ -502,11 +502,14 @@ func (m *Manager) reconcile(ctx context.Context) error {
 	return err
 }
 func (m *Manager) Channel(ctx context.Context, id string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if !guestproto.ValidID(id) {
 		return "", ErrPolicy
 	}
 	instance, err := m.Inspect(ctx, id)
-	if err != nil || instance.State != "running" {
+	if err != nil || instance.State != "running" || instance.Desired != "running" {
 		return "", ErrPolicy
 	}
 	if instance.GuestUID != 0 {
@@ -526,6 +529,13 @@ func (m *Manager) Channel(ctx context.Context, id string) (string, error) {
 	info, err := os.Lstat(path)
 	if err != nil || info.Mode()&os.ModeSocket == 0 {
 		return "", ErrPolicy
+	}
+	current, err := m.Inspect(ctx, id)
+	if err != nil || current != instance || current.State != "running" || current.Desired != "running" {
+		return "", errors.Join(ErrPolicy, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
 	}
 	return path, nil
 }
