@@ -27,7 +27,9 @@ func TestGuestStoragePolicyPlanBindsInstalledBytesAndPreservesOtherRecords(t *te
 		t.Fatal(err)
 	}
 	source = append(source, '\n')
+	env := []byte("TAILNET_IP=100.100.1.2\nHTTPS_PORT=8787\nHTTPS_ORIGIN=https://home.example.ts.net:8787\nPOLICY_GENERATION=1\nCONTROLLER_UID=1001\nRUNTIME_GID=1003\nTRANSFER_GID=1002\n")
 	items := []record{{Path: "etc/homenode/runtime-policy.json", UID: 0, GID: 0, Mode: 0600, SHA256: digest(source), State: "pending"}, {Path: "var/lib/homenode/images", Directory: true, Mode: 0710, GID: 994, State: "pending"}}
+	items = append(items, record{Path: "etc/homenode/services.env", Mode: 0644, SHA256: digest(env), State: "pending"})
 	encoded, _ := json.Marshal(items)
 	installed := journal{Version: 1, ID: strings.Repeat("a", 32), Phase: "installed", Digest: digest(encoded), Items: items}
 	for i := range installed.Items {
@@ -44,6 +46,15 @@ func TestGuestStoragePolicyPlanBindsInstalledBytesAndPreservesOtherRecords(t *te
 	}
 	if !reflect.DeepEqual(installed.Items, before) || !reflect.DeepEqual(desired.Items[1], before[1]) || desired.Items[0].SHA256 != digest(data) {
 		t.Fatal("unrelated authority changed")
+	}
+	configuration, nextPolicy, nextEnv, err := planGuestStorageConfiguration(ctx, installed, source, env, plan)
+	if err != nil || string(nextEnv) != strings.Replace(string(env), "POLICY_GENERATION=1\n", "POLICY_GENERATION=2\n", 1) || configuration.Items[0].SHA256 != digest(nextPolicy) || configuration.Items[2].SHA256 != digest(nextEnv) || !reflect.DeepEqual(configuration.Items[1], before[1]) {
+		t.Fatal("configuration generations diverged", err)
+	}
+	for _, invalidEnv := range [][]byte{append(append([]byte(nil), env...), '\n'), []byte(strings.Replace(string(env), "POLICY_GENERATION=1", "POLICY_GENERATION=3", 1)), []byte(strings.Replace(string(env), "RUNTIME_GID=1003", "RUNTIME_GID=994", 1))} {
+		if _, p, e, err := planGuestStorageConfiguration(ctx, installed, source, invalidEnv, plan); !errors.Is(err, ErrConflict) || p != nil || e != nil {
+			t.Fatal("unbound environment returned transition", err)
+		}
 	}
 	if _, _, err := planGuestStorageRuntimePolicy(ctx, installed, append(source, ' '), plan); !errors.Is(err, ErrConflict) {
 		t.Fatal("unbound source admitted", err)
