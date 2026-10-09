@@ -16,6 +16,7 @@ func TestNativeGuestChannelDirectoryOwnership(t *testing.T) {
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_GUEST_UID_ACCOUNTS_INTEGRATION") != "1" {
 		t.Skip("explicit disposable Linux root fixture")
 	}
+	t.Run("PinnedOwnershipIntent", testPinnedGuestChannelIntent)
 	parent := filepath.Join(t.TempDir(), "channels")
 	if err := os.Mkdir(parent, 0755); err != nil {
 		t.Fatal(err)
