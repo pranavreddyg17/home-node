@@ -53,6 +53,9 @@ func (m *Manager) stageReservedVolume(ctx context.Context, parentPath string, d 
 	stage := "." + d.ID + ".volume-prepare"
 	var file *os.File
 	checkObjects := func() error {
+		if _, err := root.Lstat(d.ID + ".raw"); !errors.Is(err, os.ErrNotExist) {
+			return errors.Join(ErrPolicy, err)
+		}
 		var current unix.Stat_t
 		opened, openedErr := parent.Stat()
 		named, namedErr := os.Lstat(parentPath)

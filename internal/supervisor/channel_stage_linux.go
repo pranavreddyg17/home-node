@@ -52,6 +52,9 @@ func (m *Manager) stageReservedChannel(ctx context.Context, parentPath string, d
 	stage := "." + d.ID + ".channel-prepare"
 	var directory *os.File
 	checkObjects := func() error {
+		if _, err := root.Lstat(d.ID); !errors.Is(err, os.ErrNotExist) {
+			return errors.Join(ErrPolicy, err)
+		}
 		var current unix.Stat_t
 		opened, openedErr := parent.Stat()
 		named, namedErr := os.Lstat(parentPath)
@@ -59,6 +62,10 @@ func (m *Manager) stageReservedChannel(ctx context.Context, parentPath string, d
 			return ErrPolicy
 		}
 		if directory != nil {
+			var metadata unix.Stat_t
+			if unix.Fstat(int(directory.Fd()), &metadata) != nil || metadata.Uid != 0 || metadata.Gid != 0 || metadata.Mode&unix.S_IFMT != unix.S_IFDIR || metadata.Mode&07777 != 0700 && metadata.Mode&07777 != 0710 {
+				return ErrPolicy
+			}
 			pinned, pinnedErr := directory.Stat()
 			named, namedErr := root.Lstat(stage)
 			var parentMount, childMount unix.Statx_t

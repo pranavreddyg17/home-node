@@ -15,7 +15,7 @@ import (
 )
 
 func testReservedChannelStage(t *testing.T) {
-	for _, fault := range []string{"none", "occupied-stage", "occupied-final", "before-intent", "after-intent", "composed-fresh"} {
+	for _, fault := range []string{"none", "occupied-stage", "occupied-final", "before-intent", "after-intent", "composed-fresh", "late-destination"} {
 		t.Run(fault, func(t *testing.T) {
 			m, _ := newManager(t)
 			pool := GuestUIDPool{First: 1000000000, Last: 1000000001}
@@ -79,6 +79,12 @@ func testReservedChannelStage(t *testing.T) {
 			interruption := errors.New("channel staging exclusion lost")
 			intent, err := m.stageReservedChannel(ctx, parent, d, func(ctx context.Context) error {
 				calls++
+				if fault == "late-destination" && calls == 2 {
+					if err := os.Mkdir(final, 0700); err != nil {
+						return err
+					}
+					return os.WriteFile(filepath.Join(final, "unknown"), []byte("preserve"), 0600)
+				}
 				if fault == "before-intent" && calls == 2 || fault == "after-intent" && calls == 3 {
 					return interruption
 				}
@@ -87,6 +93,18 @@ func testReservedChannelStage(t *testing.T) {
 			var records int
 			if countErr := m.Store.DB.QueryRow(`SELECT count(*) FROM runtime_channel_ownership`).Scan(&records); countErr != nil {
 				t.Fatal(countErr)
+			}
+			if fault == "late-destination" {
+				if !errors.Is(err, ErrPolicy) || intent != (ChannelOwnershipIntent{}) || records != 0 {
+					t.Fatal("late channel destination adopted", intent, records, err)
+				}
+				if data, err := os.ReadFile(filepath.Join(final, "unknown")); err != nil || string(data) != "preserve" {
+					t.Fatal("late channel destination changed", err)
+				}
+				if _, err := os.Lstat(stage); err != nil {
+					t.Fatal("partial stage not retained", err)
+				}
+				return
 			}
 			if fault != "none" {
 				if err == nil || intent != (ChannelOwnershipIntent{}) {

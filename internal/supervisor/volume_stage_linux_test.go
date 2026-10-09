@@ -15,7 +15,7 @@ import (
 )
 
 func testReservedVolumeStage(t *testing.T) {
-	for _, fault := range []string{"none", "occupied", "before-format", "after-intent", "composed-fresh"} {
+	for _, fault := range []string{"none", "occupied", "before-format", "after-intent", "composed-fresh", "late-destination"} {
 		t.Run(fault, func(t *testing.T) {
 			m, _ := newManager(t)
 			pool := GuestUIDPool{First: 1000000000, Last: 1000000001}
@@ -97,6 +97,9 @@ func testReservedVolumeStage(t *testing.T) {
 			interruption := errors.New("volume staging interrupted")
 			got, err := m.stageReservedVolume(ctx, parent, d, 4<<30, func(ctx context.Context) error {
 				calls++
+				if fault == "late-destination" && calls == 2 {
+					return os.WriteFile(filepath.Join(parent, d.ID+".raw"), []byte("preserve late destination"), 0600)
+				}
 				if fault == "before-format" && calls == 2 || fault == "after-intent" && calls == 4 {
 					return interruption
 				}
@@ -112,6 +115,24 @@ func testReservedVolumeStage(t *testing.T) {
 				}
 				if data, err := os.ReadFile(stage); err != nil || string(data) != "preserve" {
 					t.Fatal("occupied volume changed", err)
+				}
+				return
+			}
+			if fault == "late-destination" {
+				if !errors.Is(err, ErrPolicy) || got != (VolumeOwnershipIntent{}) || count != 0 {
+					t.Fatal("late destination admitted", got, count, err)
+				}
+				if data, err := os.ReadFile(filepath.Join(parent, d.ID+".raw")); err != nil || string(data) != "preserve late destination" {
+					t.Fatal("late destination changed", err)
+				}
+				file, err := os.Open(stage)
+				if err != nil {
+					t.Fatal(err)
+				}
+				magic := make([]byte, 2)
+				_, readErr := file.ReadAt(magic, 1024+56)
+				if closeErr := file.Close(); readErr != nil || closeErr != nil || magic[0] != 0 || magic[1] != 0 {
+					t.Fatal("namespace refusal formatted partial disk", readErr, closeErr, magic)
 				}
 				return
 			}
