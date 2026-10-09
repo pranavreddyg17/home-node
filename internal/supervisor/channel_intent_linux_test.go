@@ -46,6 +46,11 @@ func testPinnedGuestChannelIntent(t *testing.T) {
 		return file
 	}
 	directory := open(path)
+	// The shipped supervisor mask is 0077. Establish the fixture's exact
+	// intended mode through its retained descriptor before strict admission.
+	if err := directory.Chmod(0710); err != nil {
+		t.Fatal(err)
+	}
 	if got, err := m.verifyPinnedChannelOwnership(ctx, d, directory); !errors.Is(err, ErrPolicy) || got != (ChannelOwnershipIntent{}) {
 		t.Fatal("missing pinned directory provenance admitted", got, err)
 	}
@@ -99,6 +104,9 @@ func testPinnedGuestChannelIntent(t *testing.T) {
 		t.Fatal(err)
 	}
 	other := open(otherPath)
+	if err := other.Chmod(0710); err != nil {
+		t.Fatal(err)
+	}
 	if err := other.Chown(int(d.GuestUID), 64055); err != nil {
 		t.Fatal(err)
 	}
