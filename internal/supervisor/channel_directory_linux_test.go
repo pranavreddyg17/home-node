@@ -18,6 +18,7 @@ func TestNativeGuestChannelDirectoryOwnership(t *testing.T) {
 	}
 	t.Run("PinnedOwnershipIntent", testPinnedGuestChannelIntent)
 	t.Run("ReservedStage", testReservedChannelStage)
+	t.Run("PinnedSocket", testPinnedChannelSocket)
 	parent := filepath.Join(t.TempDir(), "channels")
 	if err := os.Mkdir(parent, 0755); err != nil {
 		t.Fatal(err)
