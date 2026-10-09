@@ -52,6 +52,34 @@ func TestChannelOwnershipIntentBindsLeaseAndDirectory(t *testing.T) {
 		if err := manager.verifyChannelOwnershipIntent(ctx, intent); err != nil {
 			t.Fatal("restart authentication", err)
 		}
+		if loaded, err := manager.loadChannelOwnershipIntent(ctx, d); err != nil || loaded != intent {
+			t.Fatal("reopened directory intent loading", loaded, err)
+		}
+	}
+	for _, change := range []func(*Domain){
+		func(d *Domain) { d.GuestUID++ },
+		func(d *Domain) { d.GuestGID++ },
+		func(d *Domain) { d.Image.SHA256 = strings.Repeat("b", 64) },
+	} {
+		changed := d
+		change(&changed)
+		if loaded, err := m.loadChannelOwnershipIntent(ctx, changed); !errors.Is(err, ErrPolicy) || loaded != (ChannelOwnershipIntent{}) {
+			t.Fatal("foreign domain loaded directory authority", loaded, err)
+		}
+	}
+	if _, err := m.Store.DB.Exec(`INSERT INTO settings(key,value) VALUES(?,?)`, runtimeMaintenanceKey, "fixture-owner"); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, err := m.loadChannelOwnershipIntent(ctx, d); !errors.Is(err, ErrPolicy) || loaded != (ChannelOwnershipIntent{}) {
+		t.Fatal("maintenance admitted directory intent", loaded, err)
+	}
+	if _, err := m.Store.DB.Exec(`DELETE FROM settings WHERE key=?`, runtimeMaintenanceKey); err != nil {
+		t.Fatal(err)
+	}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if loaded, err := m.loadChannelOwnershipIntent(canceled, d); !errors.Is(err, context.Canceled) || loaded != (ChannelOwnershipIntent{}) {
+		t.Fatal("canceled loading returned directory authority", loaded, err)
 	}
 	for _, change := range []func(*ChannelOwnershipIntent){
 		func(i *ChannelOwnershipIntent) { i.Inode++ },

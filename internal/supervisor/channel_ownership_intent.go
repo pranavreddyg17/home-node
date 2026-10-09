@@ -45,6 +45,32 @@ func (m *Manager) verifyChannelOwnershipIntent(ctx context.Context, intent Chann
 	return m.checkChannelOwnershipIntent(ctx, intent, false)
 }
 
+// loadChannelOwnershipIntent authenticates a saved record against a domain
+// whose identity was independently bound. The result does not admit any path;
+// preparation must match a retained directory descriptor to this exact inode.
+func (m *Manager) loadChannelOwnershipIntent(ctx context.Context, d Domain) (ChannelOwnershipIntent, error) {
+	if err := ctx.Err(); err != nil {
+		return ChannelOwnershipIntent{}, err
+	}
+	if m == nil || m.Store == nil || !guestproto.ValidID(d.ID) || d.GuestUID < 65536 || d.GuestGID == 0 {
+		return ChannelOwnershipIntent{}, ErrPolicy
+	}
+	intent := ChannelOwnershipIntent{InstanceID: d.ID}
+	if err := m.Store.DB.QueryRowContext(ctx, `SELECT image_sha256,uid,guest_gid,access_gid,device,inode FROM runtime_channel_ownership WHERE instance_id=?`, d.ID).Scan(&intent.ImageSHA256, &intent.UID, &intent.GuestGID, &intent.AccessGID, &intent.Device, &intent.Inode); err != nil {
+		return ChannelOwnershipIntent{}, errors.Join(ErrPolicy, err)
+	}
+	if intent.UID != d.GuestUID || intent.GuestGID != d.GuestGID || intent.ImageSHA256 != d.Image.SHA256 {
+		return ChannelOwnershipIntent{}, ErrPolicy
+	}
+	if err := m.verifyChannelOwnershipIntent(ctx, intent); err != nil {
+		return ChannelOwnershipIntent{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return ChannelOwnershipIntent{}, err
+	}
+	return intent, nil
+}
+
 func (m *Manager) checkChannelOwnershipIntent(ctx context.Context, intent ChannelOwnershipIntent, create bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
