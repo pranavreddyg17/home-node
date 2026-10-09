@@ -43,10 +43,15 @@ func testReservedVolumeStage(t *testing.T) {
 				}
 			}
 			if fault == "composed-fresh" {
+				m.Backend = LinuxBackend{TransferGID: 64055}
+				m.Volumes, m.Channels = parent, volumeFixtureDir(t)
+				d.DataPath = filepath.Join(parent, d.ID+".raw")
+				d.ChannelPath = filepath.Join(m.Channels, d.ID, "adapter.sock")
+				d.DiskReserveBytes = m.Policy.DiskReserveBytes
 				final := filepath.Join(parent, d.ID+".raw")
 				interrupted := errors.New("composed volume transfer interrupted")
 				observed := false
-				got, err := m.prepareReservedVolume(ctx, parent, d, 4<<30, func(ctx context.Context) error {
+				got, err := m.prepareReservedResources(ctx, d, func(ctx context.Context) error {
 					var disk unix.Stat_t
 					if unix.Lstat(final, &disk) == nil && disk.Uid == d.GuestUID && !observed {
 						observed = true
@@ -54,7 +59,7 @@ func testReservedVolumeStage(t *testing.T) {
 					}
 					return ctx.Err()
 				})
-				if !observed || !errors.Is(err, interrupted) || got != (VolumeOwnershipIntent{}) {
+				if !observed || !errors.Is(err, interrupted) || got != (reservedResourceIntent{}) {
 					t.Fatal("composed transfer boundary", observed, got, err)
 				}
 				saved, err := m.loadVolumeOwnershipIntent(ctx, d)
@@ -73,8 +78,8 @@ func testReservedVolumeStage(t *testing.T) {
 					t.Fatal(err)
 				}
 				for retry := 0; retry < 2; retry++ {
-					got, err = m.prepareReservedVolume(ctx, parent, d, 4<<30, func(ctx context.Context) error { return ctx.Err() })
-					if err != nil || got != saved {
+					got, err = m.prepareReservedResources(ctx, d, func(ctx context.Context) error { return ctx.Err() })
+					if err != nil || got.Volume != saved || got.Channel.InstanceID != d.ID {
 						t.Fatal("composed volume retry", retry, got, err)
 					}
 				}
