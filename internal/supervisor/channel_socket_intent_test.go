@@ -77,6 +77,32 @@ func TestChannelSocketIntentBindsRuntimeRevision(t *testing.T) {
 	if err := m.verifyChannelSocketIntent(ctx, intent); !errors.Is(err, ErrPolicy) {
 		t.Fatal("old revision admitted for active use", err)
 	}
+	if got, err := m.loadChannelSocketRetirementIntent(ctx, d); err != nil || got != intent {
+		t.Fatal("historical retirement receipt", got, err)
+	}
+	if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET state='running' WHERE id=?`, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := m.loadChannelSocketRetirementIntent(ctx, d); !errors.Is(err, ErrPolicy) || got != (ChannelSocketIntent{}) {
+		t.Fatal("running guest obtained retirement receipt", got, err)
+	}
+	if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET state='preparing' WHERE id=?`, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Store.DB.Exec(`INSERT INTO settings(key,value) VALUES(?,?)`, runtimeMaintenanceKey, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := m.loadChannelSocketRetirementIntent(ctx, d); !errors.Is(err, ErrPolicy) || got != (ChannelSocketIntent{}) {
+		t.Fatal("maintenance retirement admission", got, err)
+	}
+	if _, err := m.Store.DB.Exec(`DELETE FROM settings WHERE key=?`, runtimeMaintenanceKey); err != nil {
+		t.Fatal(err)
+	}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if got, err := m.loadChannelSocketRetirementIntent(canceled, d); !errors.Is(err, context.Canceled) || got != (ChannelSocketIntent{}) {
+		t.Fatal("canceled retirement receipt", got, err)
+	}
 	if _, err := m.Store.DB.Exec(`DELETE FROM runtime_channel_ownership WHERE instance_id=?`, d.ID); err != nil {
 		t.Fatal(err)
 	}

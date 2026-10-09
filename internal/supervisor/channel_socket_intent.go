@@ -23,6 +23,53 @@ func (m *Manager) verifyChannelSocketIntent(ctx context.Context, intent ChannelS
 	return m.checkChannelSocketIntent(ctx, intent, false)
 }
 
+// loadChannelSocketRetirementIntent authenticates the active historical socket
+// record against current preparing policy. It permits neither unlink nor
+// retirement publication; callers must retain the exact inode and runtime barrier.
+func (m *Manager) loadChannelSocketRetirementIntent(ctx context.Context, d Domain) (intent ChannelSocketIntent, result error) {
+	if err := ctx.Err(); err != nil {
+		return intent, err
+	}
+	if m == nil || m.Store == nil {
+		return intent, ErrPolicy
+	}
+	bound := Domain{ID: d.ID, Image: d.Image}
+	if err := m.bindDomainGuestIdentity(ctx, &bound, false); err != nil {
+		return intent, err
+	}
+	if bound.GuestUID != d.GuestUID || bound.GuestGID != d.GuestGID {
+		return intent, ErrPolicy
+	}
+	result = m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := requireRuntimeAdmission(tx); err != nil {
+			return err
+		}
+		if err := m.validateChannelOwnershipInventory(ctx, tx); err != nil {
+			return err
+		}
+		var revision int64
+		var phase, desired, image string
+		if err := tx.QueryRowContext(ctx, `SELECT revision,state,desired,image_sha256 FROM runtime_instances WHERE id=?`, d.ID).Scan(&revision, &phase, &desired, &image); err != nil {
+			return errors.Join(ErrPolicy, err)
+		}
+		if phase != "preparing" || desired != "running" || image != d.Image.SHA256 {
+			return ErrPolicy
+		}
+		intent.Channel.InstanceID = d.ID
+		if err := tx.QueryRowContext(ctx, `SELECT revision,device,inode,image_sha256,uid,guest_gid,access_gid,parent_device,parent_inode FROM runtime_channel_sockets WHERE instance_id=? AND retired=0`, d.ID).Scan(&intent.Revision, &intent.Device, &intent.Inode, &intent.Channel.ImageSHA256, &intent.Channel.UID, &intent.Channel.GuestGID, &intent.Channel.AccessGID, &intent.Channel.Device, &intent.Channel.Inode); err != nil {
+			return errors.Join(ErrPolicy, err)
+		}
+		if intent.Revision > revision || intent.Channel.UID != d.GuestUID || intent.Channel.GuestGID != d.GuestGID || intent.Channel.ImageSHA256 != d.Image.SHA256 {
+			return ErrPolicy
+		}
+		return ctx.Err()
+	})
+	if result != nil {
+		return ChannelSocketIntent{}, result
+	}
+	return intent, nil
+}
+
 func (m *Manager) checkChannelSocketIntent(ctx context.Context, intent ChannelSocketIntent, create bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
