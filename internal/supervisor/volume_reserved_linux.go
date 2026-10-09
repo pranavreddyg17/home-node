@@ -24,6 +24,15 @@ func openReservedVolume(ctx context.Context, directory string, d Domain) (*os.Fi
 // the same descriptor, mount and metadata checks as a published disk. It does
 // not adopt the inode or authorize formatting or namespace publication.
 func openReservedVolumeEntry(ctx context.Context, directory string, d Domain, staged bool) (result *os.File, resultErr error) {
+	return openReservedVolumeAccess(ctx, directory, d, staged, false)
+}
+
+// Maintenance access is read-only and requires completed guest ownership.
+func openReservedMaintenanceVolume(ctx context.Context, directory string, d Domain) (*os.File, error) {
+	return openReservedVolumeAccess(ctx, directory, d, false, true)
+}
+
+func openReservedVolumeAccess(ctx context.Context, directory string, d Domain, staged, readOnly bool) (result *os.File, resultErr error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -76,6 +85,9 @@ func openReservedVolumeEntry(ctx context.Context, directory string, d Domain, st
 	if unix.Fstat(fd, &disk) != nil || disk.Uid != 0 && disk.Uid != d.GuestUID || disk.Uid == 0 && disk.Gid != 0 || disk.Uid == d.GuestUID && disk.Gid != d.GuestGID {
 		return nil, ErrPolicy
 	}
+	if readOnly && disk.Uid != d.GuestUID {
+		return nil, ErrPolicy
+	}
 	if err := admitVolumeForUID(metadata, d.Image.DataBytes, disk.Uid); err != nil {
 		return nil, err
 	}
@@ -90,7 +102,11 @@ func openReservedVolumeEntry(ctx context.Context, directory string, d Domain, st
 	if unix.Fstatfs(proc, &filesystem) != nil || filesystem.Type != unix.PROC_SUPER_MAGIC {
 		return nil, ErrPolicy
 	}
-	reopened, err := unix.Openat(proc, strconv.Itoa(fd), unix.O_RDWR|unix.O_CLOEXEC|unix.O_NONBLOCK, 0)
+	access := unix.O_RDWR
+	if readOnly {
+		access = unix.O_RDONLY
+	}
+	reopened, err := unix.Openat(proc, strconv.Itoa(fd), access|unix.O_CLOEXEC|unix.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, err
 	}

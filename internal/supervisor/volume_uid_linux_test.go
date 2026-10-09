@@ -19,6 +19,7 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	}
 	t.Run("ReservedStage", testReservedVolumeStage)
 	t.Run("ReservedSystemImage", testReservedSystemImage)
+	t.Run("ReservedMaintenanceDisk", testReservedMaintenanceDisk)
 	path := filepath.Join(volumeFixtureDir(t), "guest.raw")
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
 	if err != nil {

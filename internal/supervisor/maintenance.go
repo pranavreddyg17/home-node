@@ -87,6 +87,9 @@ func (m *Manager) WithMaintenanceDisk(ctx context.Context, token, id string, cop
 	if running {
 		return ErrPolicy
 	}
+	if instance.GuestUID != 0 {
+		return m.withReservedMaintenanceDisk(ctx, token, instance, copyDisk)
+	}
 	file, err := openMaintenanceVolume(ctx, m.Volumes, id, instance.DataBytes)
 	if err != nil {
 		return err
