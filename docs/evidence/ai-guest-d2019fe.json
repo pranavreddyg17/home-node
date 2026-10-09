@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "sourceRevision": "d2019fe986f184b6103f9e094d4809cf18584536",
+  "workflowRun": 37871274380,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/37871274380",
+  "workflowStatusAtObservation": "in_progress; qualification steps completed, disk upload pending",
+  "environment": "ubuntu-24.04 disposable CI; QEMU TCG guest and separate loopback-only unprivileged runtime fixture",
+  "qualification": "unsigned development inference only",
+  "limitations": [
+    "Not a signed or promoted release",
+    "Does not exercise installed controller authentication, transfer services or chat UI",
+    "No model quality, licensing approval or reference-hardware performance claim",
+    "Does not qualify reserved guest ownership, competing workloads or cross-VM isolation"
+  ],
+  "records": [
+    {
+      "artifactId": 11589884091,
+      "artifactName": "homenode-development-boot-ai",
+      "qualificationStep": "Boot AI guest and exercise actual adapter inference",
+      "stepConclusion": "success",
+      "evidenceSHA256": "dea6e4cb787dd28b5b17011e6ef56e43a2ff788818ebe16aa72a636028fa1304",
+      "evidence": {
+        "schema": 1,
+        "profile": "ai",
+        "imageSHA256": "4f57fb8d6af81d5876a2b17034aee53028872f9f2e7d167efdb7630ccaf13ded",
+        "tcgBootAndObjectRoundTrip": true,
+        "objectTransfer": {
+          "bytes": 1048579,
+          "chunkBytes": 262144,
+          "acknowledgedChunkReplay": true
+        },
+        "videoPresets": [],
+        "videoCancellation": null,
+        "aiInference": {
+          "generationSucceeded": true,
+          "textBytes": 182,
+          "taskDeletionAcknowledged": true,
+          "cancellation": {
+            "cancelled": true,
+            "taskDeletionAcknowledged": true
+          }
+        },
+        "shutdown": {
+          "guestInitiated": true,
+          "reason": "guest-shutdown",
+          "qemuExitCode": 0,
+          "readOnlyFilesystemCheck": true
+        },
+        "releaseQualified": false
+      }
+    },
+    {
+      "artifactId": 11590951529,
+      "artifactName": "homenode-development-ai-inference",
+      "qualificationStep": "Verify isolated offline streaming inference",
+      "stepConclusion": "success",
+      "evidenceSHA256": "c20788bd377d80fa4b3ea20a4eace2ee5107054015184aa71ad99465a36a7efd",
+      "evidence": {
+        "schema": 1,
+        "runtimeSHA256": "1f8b8183270b7ea94a223a7f1c8e1e1f0026e2072f843770848944e9309d1fa9",
+        "modelSHA256": "5a1395716f7913741cc51d98581b9b1228d80987a9f7d3664106742eb06bba83",
+        "isolatedLoopbackStreamingInference": true,
+        "textBytes": 57,
+        "contextTokens": 512,
+        "requestedOutputTokens": 16,
+        "releaseQualified": false
+      }
+    }
+  ]
+}
