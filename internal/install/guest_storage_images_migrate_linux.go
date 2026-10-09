@@ -140,7 +140,7 @@ func (e *Engine) migrateGuestStorageImagesLocked(ctx context.Context, plan Guest
 						return ErrConflict
 					}
 				}
-				return ctx.Err()
+				return e.prepareGuestStorageImageParentIntent(ctx, intent, sourceGID, parent, guard)
 			})
 		}
 		var retain func(int) error

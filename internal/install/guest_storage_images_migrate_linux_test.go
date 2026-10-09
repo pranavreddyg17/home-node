@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -76,8 +77,21 @@ func TestRootGuestStorageImagesMigrationRecoversInterruptedBatch(t *testing.T) {
 	if err := e.migrateGuestStorageImagesLocked(ctx, plan, manifest, 993, check); err != nil {
 		t.Fatal("interrupted batch retry refused", err)
 	}
+	parentPath := filepath.Join(journal, "guest-storage-image-parent-intent.json")
+	parentBytes, err := os.ReadFile(parentPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parentIntent guestStorageImageParentIntent
+	if err := json.Unmarshal(parentBytes, &parentIntent); err != nil || parentIntent.Version != 1 || parentIntent.Inode == 0 || parentIntent.SourceGID != 993 || parentIntent.Plan.GuestGID != 994 || parentIntent.ImagesIntentSHA256 != digest(saved) {
+		t.Fatal("parent provenance not bound to images", parentIntent, err)
+	}
 	if err := e.migrateGuestStorageImagesLocked(ctx, plan, manifest, 993, check); err != nil {
 		t.Fatal("completed batch retry refused", err)
+	}
+	parentRetry, err := os.ReadFile(parentPath)
+	if err != nil || !bytes.Equal(parentBytes, parentRetry) {
+		t.Fatal("retry changed parent provenance", err)
 	}
 	migrated := 0
 	e.checkpoint = func(phase, path string) error {
