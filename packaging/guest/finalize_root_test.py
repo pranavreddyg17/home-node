@@ -30,7 +30,7 @@ def fixture(base, profile):
         path.write_bytes(content)
         path.chmod(mode)
     record = {"schema": 1, "profile": profile, "sourceRevision": "a" * 40,
-              "goToolchain": "go1.26.8", "guestUID": 900, "guestGID": 900,
+              "goToolchain": "go1.26.9", "guestUID": 900, "guestGID": 900,
               "bootable": False, "files": overlay.inventory(source, profile)}
     (source / "overlay.json").write_text(json.dumps(record))
     (source / "overlay.json").chmod(0o644)

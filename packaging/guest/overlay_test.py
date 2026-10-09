@@ -28,7 +28,7 @@ class OverlayTests(unittest.TestCase):
                     content = b"QUOTA_BYTES=17179869184\n"
                 path.write_bytes(content)
                 path.chmod(mode)
-            record = {"schema": 1, "profile": "files", "sourceRevision": "a" * 40, "goToolchain": "go1.26.8",
+            record = {"schema": 1, "profile": "files", "sourceRevision": "a" * 40, "goToolchain": "go1.26.9",
                       "guestUID": 900, "guestGID": 900, "bootable": False, "files": overlay.inventory(root, "files")}
             metadata = root / "overlay.json"
             metadata.write_text(json.dumps(record))

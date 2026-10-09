@@ -1,8 +1,6 @@
 module github.com/pranavreddyg17/home-node
 
-go 1.26.0
-
-toolchain go1.26.8
+go 1.26.9
 
 require (
 	github.com/go-webauthn/webauthn v0.18.2
