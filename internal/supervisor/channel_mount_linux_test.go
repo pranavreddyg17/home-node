@@ -14,7 +14,7 @@ import (
 )
 
 func testChannelSocketMountRefusal(t *testing.T) {
-	directory := filepath.Join(t.TempDir(), "guest")
+	directory := filepath.Join(shortChannelSocketFixtureDir(t), "guest")
 	const uid, gid = 200000, 64055
 	ctx := context.Background()
 	if err := prepareGuestChannelDirectory(ctx, directory, uid, gid); err != nil {

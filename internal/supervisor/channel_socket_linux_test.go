@@ -29,7 +29,7 @@ func testPinnedChannelSocket(t *testing.T) {
 	if _, err := m.Store.DB.Exec(`INSERT INTO runtime_instances(id,workload,state,desired,image_sha256,memory_mib,vcpus,data_bytes,created_at,revision) VALUES(?,'files','preparing','running',?,256,1,?,0,1)`, d.ID, d.Image.SHA256, 16<<20); err != nil {
 		t.Fatal(err)
 	}
-	parent := t.TempDir()
+	parent := shortChannelSocketFixtureDir(t)
 	channel, err := m.prepareReservedChannel(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() })
 	if err != nil {
 		t.Fatal(err)
@@ -243,4 +243,19 @@ func testPinnedChannelSocket(t *testing.T) {
 		t.Fatal("old retirement changed new provenance", err)
 	}
 
+}
+
+// Leave room for the instance ID and socket name within sockaddr_un.sun_path.
+func shortChannelSocketFixtureDir(t *testing.T) string {
+	t.Helper()
+	path, err := os.MkdirTemp("", "hn-socket-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(path); err != nil {
+			t.Error(err)
+		}
+	})
+	return path
 }
