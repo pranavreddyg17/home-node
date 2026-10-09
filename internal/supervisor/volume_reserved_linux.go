@@ -16,7 +16,14 @@ import (
 // openReservedVolume admits the proposed root:guest-group 0710 volume parent
 // and retains the exact regular disk. It does not authenticate durable intent
 // or exclude a running guest; callers must establish both before mutation.
-func openReservedVolume(ctx context.Context, directory string, d Domain) (result *os.File, resultErr error) {
+func openReservedVolume(ctx context.Context, directory string, d Domain) (*os.File, error) {
+	return openReservedVolumeEntry(ctx, directory, d, false)
+}
+
+// Staged admission uses only the fixed instance-derived preparation name and
+// the same descriptor, mount and metadata checks as a published disk. It does
+// not adopt the inode or authorize formatting or namespace publication.
+func openReservedVolumeEntry(ctx context.Context, directory string, d Domain, staged bool) (result *os.File, resultErr error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -49,6 +56,9 @@ func openReservedVolume(ctx context.Context, directory string, d Domain) (result
 		return nil, ErrPolicy
 	}
 	name := d.ID + ".raw"
+	if staged {
+		name = "." + d.ID + ".volume-prepare"
+	}
 	// name is exactly one validated instance-derived component. O_NOFOLLOW
 	// pins symlinks themselves, which regular-inode admission rejects. Require
 	// mount IDs rather than device equality, so bind mounts also refuse.

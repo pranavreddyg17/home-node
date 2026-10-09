@@ -227,6 +227,43 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	if verifyErr != nil || closeErr != nil || reservedIntent != recorded {
 		t.Fatal("opened reserved provenance", reservedIntent, verifyErr, closeErr)
 	}
+	stagePath := filepath.Join(directory, "."+d.ID+".volume-prepare")
+	if err := os.Rename(reservedPath, stagePath); err != nil {
+		t.Fatal(err)
+	}
+	staged, err := openReservedVolumeEntry(context.Background(), directory, d, true)
+	if err != nil {
+		t.Fatal("qualified preparation inode refused", err)
+	}
+	stagedIntent, verifyErr := m.verifyPinnedVolumeOwnership(context.Background(), d, staged)
+	if err := staged.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if verifyErr != nil || stagedIntent != recorded {
+		t.Fatal("staged inode provenance", stagedIntent, verifyErr)
+	}
+	if got, err := openReservedVolume(context.Background(), directory, d); err == nil || got != nil {
+		if got != nil {
+			got.Close()
+		}
+		t.Fatal("published admission adopted stage", err)
+	}
+	movedStage := stagePath + ".displaced"
+	if err := os.Rename(stagePath, movedStage); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(movedStage, stagePath); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := openReservedVolumeEntry(context.Background(), directory, d, true); err == nil || got != nil {
+		if got != nil {
+			got.Close()
+		}
+		t.Fatal("stage admission followed redirected inode", err)
+	}
+	if err := errors.Join(os.Remove(stagePath), os.Rename(movedStage, reservedPath)); err != nil {
+		t.Fatal("restore staged volume fixture", err)
+	}
 	aliasPath := reservedPath + ".alias"
 	stoppedChecks := 0
 	stopped := func(ctx context.Context) error {
