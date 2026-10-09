@@ -46,6 +46,51 @@ func testReservedSystemImage(t *testing.T) {
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
 	}
+	stopped := func(ctx context.Context) error { return ctx.Err() }
+	if err := withReservedSystemImage(context.Background(), parent, d, stopped, func(ctx context.Context, file *os.File, guard func(context.Context) error) error { return guard(ctx) }); err != nil {
+		t.Fatal("retained image scope", err)
+	}
+	if err := withReservedSystemImage(context.Background(), parent, d, stopped, func(ctx context.Context, file *os.File, guard func(context.Context) error) error {
+		moved := path + ".displaced"
+		if err := os.Rename(path, moved); err != nil {
+			return err
+		}
+		if err := os.Symlink(moved, path); err != nil {
+			return errors.Join(err, os.Rename(moved, path))
+		}
+		guardErr := guard(ctx)
+		if err := errors.Join(os.Remove(path), os.Rename(moved, path)); err != nil {
+			t.Fatal("restore redirected image", err)
+		}
+		if !errors.Is(guardErr, ErrPolicy) {
+			t.Fatal("image guard followed redirected inode", guardErr)
+		}
+		return guardErr
+	}); !errors.Is(err, ErrPolicy) {
+		t.Fatal("image scope lost redirection refusal", err)
+	}
+	if err := withReservedSystemImage(context.Background(), parent, d, stopped, func(ctx context.Context, file *os.File, guard func(context.Context) error) error {
+		if err := os.Chmod(path, 0600); err != nil {
+			return err
+		}
+		altered := append([]byte(nil), data...)
+		altered[0] ^= 1
+		if err := os.WriteFile(path, altered, 0600); err != nil {
+			return err
+		}
+		return os.Chmod(path, 0440)
+	}); !errors.Is(err, ErrPolicy) {
+		t.Fatal("scope accepted content change with restored metadata", err)
+	}
+	if err := os.Chmod(path, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0440); err != nil {
+		t.Fatal(err)
+	}
 	alias := path + ".alias"
 	if err := os.Link(path, alias); err != nil {
 		t.Fatal(err)
