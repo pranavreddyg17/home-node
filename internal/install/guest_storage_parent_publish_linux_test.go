@@ -20,9 +20,12 @@ func TestRootGuestStorageParentPublicationRecoversOwnershipInterruption(t *testi
 	if os.Geteuid() != 0 {
 		t.Skip("owned disposable root fixture")
 	}
-	e, c, _, journalDirectory, _, _ := imagePlacementFixtureWithMaintenance(t, &MaintenanceAccount{UID: 803, GID: 803})
+	e, c, _, journalDirectory, source, now := imagePlacementFixtureWithMaintenance(t, &MaintenanceAccount{UID: 803, GID: 803})
 	defer e.Close()
 	ctx := context.Background()
+	if err := e.placeImages(ctx, source, c.Publisher, c.MinimumCatalogVersion, now); err != nil {
+		t.Fatal(err)
+	}
 	if err := e.blockRecoveryActivation(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -38,6 +41,19 @@ func TestRootGuestStorageParentPublicationRecoversOwnershipInterruption(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := e.commitGuestStorageIntent(ctx, plan); err != nil {
+		t.Fatal(err)
+	}
+	manifest, sourceGID, err := e.installedGuestStorageCatalog(ctx, c.Publisher, c.MinimumCatalogVersion, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.mu.Lock()
+	migrationErr := e.migrateGuestStorageImagesLocked(ctx, plan, manifest, sourceGID, func(ctx context.Context) error { return ctx.Err() })
+	e.mu.Unlock()
+	if migrationErr != nil {
+		t.Fatal(migrationErr)
+	}
 	parent, err := e.host.Open("var/lib/homenode/images")
 	if err != nil {
 		t.Fatal(err)
@@ -47,10 +63,13 @@ func TestRootGuestStorageParentPublicationRecoversOwnershipInterruption(t *testi
 	if err := unix.Fstat(int(parent.Fd()), &st); err != nil {
 		t.Fatal(err)
 	}
-	intent := guestStorageImageParentIntent{Version: 1, Plan: plan, ImagesIntentSHA256: strings.Repeat("b", 64), SourceGID: uint32(c.Accounts.QEMUGID), Device: uint64(st.Dev), Inode: st.Ino}
-	encoded, err := json.Marshal(intent)
+	encoded, err := os.ReadFile(filepath.Join(journalDirectory, "guest-storage-image-parent-intent.json"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	var intent guestStorageImageParentIntent
+	if json.Unmarshal(encoded, &intent) != nil {
+		t.Fatal("invalid prepared parent intent")
 	}
 	if err := e.commitGuestStorageParentJournalIntent(ctx, installed, intent.SourceGID, plan.GuestGID, digest(encoded)); err != nil {
 		t.Fatal(err)
@@ -65,34 +84,29 @@ func TestRootGuestStorageParentPublicationRecoversOwnershipInterruption(t *testi
 	publish := func() error {
 		e.mu.Lock()
 		defer e.mu.Unlock()
-		current, err := e.load()
-		if err != nil {
-			return err
-		}
-		return e.withGuestStorageParentJournalIntent(ctx, current, intent.SourceGID, plan.GuestGID, digest(encoded), func(transition guestStorageParentJournalIntent, check func() error) error {
-			return e.withRecordedGuestStorageImageParent(ctx, intent, func(ctx context.Context) error { return check() }, func(root *os.Root, pinned *os.File, checkPath func(context.Context) error) error {
-				admit := func(ctx context.Context, current journal) error {
-					if err := check(); err != nil {
-						return err
-					}
-					if err := e.admitGuestStorageParentInstallation(ctx, current, intent, transition, pinned); err != nil {
-						return err
-					}
-					return check()
+		return e.withGuestStorageParentAuthorityLocked(ctx, func(ctx context.Context, authority guestStorageParentAuthority, root *os.Root, pinned *os.File, checkPath func(context.Context) error) error {
+			transition := authority.Transition
+			admit := func(ctx context.Context, current journal) error {
+				if err := checkPath(ctx); err != nil {
+					return err
 				}
-				return e.withRecoveryInstallationExclusionGuardedLocked(ctx, func(ctx context.Context) error { return ctx.Err() }, e.observeRecoveryDestinationVacancy, admit, func(ctx context.Context, guard func(context.Context) error) error {
-					return e.withGuestStorageAccountExclusionLocked(ctx, guard, func(ctx context.Context, guard func(context.Context) error) error {
-						combined := func(ctx context.Context) error {
-							if err := checkPath(ctx); err != nil {
-								return err
-							}
-							if err := guard(ctx); err != nil {
-								return err
-							}
-							return checkPath(ctx)
+				if err := e.admitGuestStorageParentInstallation(ctx, current, intent, transition, pinned); err != nil {
+					return err
+				}
+				return checkPath(ctx)
+			}
+			return e.withRecoveryInstallationExclusionGuardedLocked(ctx, func(ctx context.Context) error { return ctx.Err() }, e.observeRecoveryDestinationVacancy, admit, func(ctx context.Context, guard func(context.Context) error) error {
+				return e.withGuestStorageAccountExclusionLocked(ctx, guard, func(ctx context.Context, guard func(context.Context) error) error {
+					combined := func(ctx context.Context) error {
+						if err := checkPath(ctx); err != nil {
+							return err
 						}
-						return e.publishGuestStorageImageParentLocked(ctx, intent, transition, pinned, combined)
-					})
+						if err := guard(ctx); err != nil {
+							return err
+						}
+						return checkPath(ctx)
+					}
+					return e.publishGuestStorageImageParentLocked(ctx, intent, transition, pinned, combined)
 				})
 			})
 		})
@@ -152,5 +166,35 @@ func TestRootGuestStorageParentPublicationRecoversOwnershipInterruption(t *testi
 	}
 	if err := e.requireRecoveryActivationBlock(ctx); err != nil {
 		t.Fatal("publication released activation marker", err)
+	}
+	proposalPath := filepath.Join(journalDirectory, "guest-storage-intent.json")
+	proposal, err := os.ReadFile(proposalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authorityErr := func() error {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		return e.withGuestStorageParentAuthorityLocked(ctx, func(ctx context.Context, authority guestStorageParentAuthority, root *os.Root, pinned *os.File, check func(context.Context) error) error {
+			if err := os.Rename(proposalPath, proposalPath+".original"); err != nil {
+				return err
+			}
+			if err := os.WriteFile(proposalPath, proposal, 0600); err != nil {
+				return err
+			}
+			if err := check(ctx); !errors.Is(err, ErrConflict) {
+				t.Fatal("composed authority admitted proposal replacement", err)
+			}
+			return nil
+		})
+	}()
+	if !errors.Is(authorityErr, ErrConflict) {
+		t.Fatal("composed authority returned replaced proposal", authorityErr)
+	}
+	for _, path := range []string{proposalPath, proposalPath + ".original"} {
+		current, err := os.ReadFile(path)
+		if err != nil || string(current) != string(proposal) {
+			t.Fatal("proposal refusal modified provenance", err)
+		}
 	}
 }
