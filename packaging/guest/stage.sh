@@ -11,7 +11,7 @@ cd "$repo"
 [ -z "$(git status --porcelain)" ] || { echo 'Build from a clean committed checkout' >&2; exit 2; }
 revision=$(git rev-parse HEAD)
 toolchain=$(go env GOVERSION)
-expected=$(awk '$1 == "toolchain" { print $2 }' go.mod)
+expected=$(awk '$1 == "go" { minimum = "go" $2 } $1 == "toolchain" { selected = $2 } END { print (selected != "" ? selected : minimum) }' go.mod)
 [ "$toolchain" = "$expected" ] || { echo 'Use the committed Go toolchain' >&2; exit 2; }
 staging=$(mktemp -d)
 trap 'rmdir "$staging" 2>/dev/null || :' EXIT HUP INT TERM
