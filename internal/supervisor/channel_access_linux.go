@@ -65,6 +65,20 @@ func grantGuestChannelAccessWithPeer(ctx context.Context, path string, uid uint3
 	if unix.Fstat(int(file.Fd()), &socket) != nil || socket.Mode&unix.S_IFMT != unix.S_IFSOCK || (socket.Uid != uid && !(peer != nil && socket.Uid == 0 && socket.Gid == 0 && socket.Mode&07777 == 0775)) || socket.Nlink != 1 {
 		return ErrPolicy
 	}
+	var originalParentMount, originalSocketMount unix.Statx_t
+	if unix.Statx(int(parent.Fd()), "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &originalParentMount) != nil || unix.Statx(int(file.Fd()), "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &originalSocketMount) != nil || originalParentMount.Mask&unix.STATX_MNT_ID == 0 || originalSocketMount.Mask&unix.STATX_MNT_ID == 0 || originalParentMount.Mnt_id == 0 || originalParentMount.Mnt_id != originalSocketMount.Mnt_id {
+		return ErrPolicy
+	}
+	checkMounts := func() error {
+		var currentParent, currentSocket unix.Statx_t
+		if !samePathMount(int(parent.Fd()), unix.AT_FDCWD, parentPath) || !samePathMount(int(file.Fd()), int(parent.Fd()), "adapter.sock") || unix.Statx(int(parent.Fd()), "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &currentParent) != nil || unix.Statx(int(file.Fd()), "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &currentSocket) != nil || currentParent.Mask&unix.STATX_MNT_ID == 0 || currentSocket.Mask&unix.STATX_MNT_ID == 0 || currentParent.Mnt_id != originalParentMount.Mnt_id || currentSocket.Mnt_id != originalSocketMount.Mnt_id {
+			return ErrPolicy
+		}
+		return nil
+	}
+	if err := checkMounts(); err != nil {
+		return err
+	}
 	original, err := file.Stat()
 	if err != nil {
 		return err
@@ -100,6 +114,9 @@ func grantGuestChannelAccessWithPeer(ctx context.Context, path string, uid uint3
 	if err != nil || !os.SameFile(opened, currentDirectory) || currentDirectory.Mode() != opened.Mode() || unix.Fstat(int(parent.Fd()), &directory) != nil || directory.Uid != uid || directory.Gid != uint32(gid) {
 		return ErrPolicy
 	}
+	if err := checkMounts(); err != nil {
+		return err
+	}
 	ownerUID := -1
 	if socket.Uid == 0 {
 		ownerUID = int(uid)
@@ -111,6 +128,9 @@ func grantGuestChannelAccessWithPeer(ctx context.Context, path string, uid uint3
 		return err
 	}
 	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := checkMounts(); err != nil {
 		return err
 	}
 	if err := unix.Fchmodat(int(file.Fd()), "", 0660, unix.AT_EMPTY_PATH); err != nil {
@@ -125,6 +145,9 @@ func grantGuestChannelAccessWithPeer(ctx context.Context, path string, uid uint3
 	owner, ok = openedSysUID(currentParent)
 	if err != nil || !ok || owner != uid || !os.SameFile(opened, currentParent) || currentParent.Mode() != opened.Mode() || unix.Fstat(int(parent.Fd()), &directory) != nil || directory.Uid != uid || directory.Gid != uint32(gid) {
 		return ErrPolicy
+	}
+	if err := checkMounts(); err != nil {
+		return err
 	}
 	return ctx.Err()
 }

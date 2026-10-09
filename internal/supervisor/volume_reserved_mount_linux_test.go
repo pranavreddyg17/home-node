@@ -18,6 +18,7 @@ func TestNativeReservedVolumeMountRefusal(t *testing.T) {
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_VOLUME_INTEGRATION") != "1" {
 		t.Skip("explicit disposable Linux root mount fixture")
 	}
+	t.Run("ChannelSocket", testChannelSocketMountRefusal)
 	directory, err := os.MkdirTemp("", "homenode-volume-mount-")
 	if err != nil {
 		t.Fatal(err)
