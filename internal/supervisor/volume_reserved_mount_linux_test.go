@@ -179,4 +179,37 @@ func TestNativeReservedVolumeMountRefusal(t *testing.T) {
 	if err := accepted.Close(); err != nil {
 		t.Fatal(err)
 	}
+	// Maintenance must qualify the same mount boundary with read-only access
+	// after ownership has moved to the independently reserved guest identity.
+	if err := os.Chown(target, int(d.GuestUID), int(d.GuestGID)); err != nil {
+		t.Fatal(err)
+	}
+	readOnly, err := openReservedMaintenanceVolume(ctx, directory, d)
+	if err != nil {
+		t.Fatal("ordinary maintenance disk refused", err)
+	}
+	if _, err := readOnly.WriteAt([]byte("forbidden"), 0); err == nil {
+		t.Fatal("maintenance descriptor writable")
+	}
+	if err := readOnly.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := unix.Mount(target, target, "", unix.MS_BIND, ""); err != nil {
+		t.Fatal(err)
+	}
+	mounted = true
+	readOnly, err = openReservedMaintenanceVolume(ctx, directory, d)
+	if !errors.Is(err, ErrPolicy) || readOnly != nil {
+		if readOnly != nil {
+			_ = readOnly.Close()
+		}
+		t.Fatal("maintenance admitted self-bind", err)
+	}
+	if err := unix.Unmount(target, 0); err != nil {
+		t.Fatal(err)
+	}
+	mounted = false
+	if err := os.Chown(target, 0, 0); err != nil {
+		t.Fatal(err)
+	}
 }
