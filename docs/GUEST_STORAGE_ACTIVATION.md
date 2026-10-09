@@ -1,8 +1,8 @@
 # Storage migration activation exclusion
 
-The recorded guest storage proposal is not runtime authority. Production
-reserved-DAC preparation remains refused while the following transaction is
-unfinished. This document identifies the implementation boundary, not a passed
+The recorded guest storage proposal is not runtime authority. The shipped
+supervisor does not configure a reserved guest pool while the following
+transaction is unfinished. This document identifies the implementation boundary, not a passed
 qualification gate.
 
 ## Manager semantics
@@ -98,3 +98,12 @@ exercise a queued start while the marker is
 present, an already-running service, a live guest after supervisor stop, marker
 replacement, cancellation and crash at every publication boundary. Run those
 tests only on disposable Linux hosts, never on the developer's desktop.
+
+An explicitly configured manager now joins reserved resource preparation and
+launch publication under retained account-allocation exclusion. It requalifies
+prepared ownership before starting and retains account authority through live
+domain/socket verification and revision-bound publication. Failed launch cleanup
+inside the consumer retains that scope. Direct Linux backend preparation still
+refuses reserved domains: callers must enter through the manager lifecycle.
+This composition is pending native manager-launch qualification, and the shipped
+CLI still requires immutable pool policy and installation activation integration.

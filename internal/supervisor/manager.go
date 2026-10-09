@@ -339,6 +339,30 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 	if err = m.bindDomainGuestIdentity(ctx, &domain, true); err != nil {
 		return fail(err)
 	}
+	if domain.GuestUID != 0 {
+		switch m.Backend.(type) {
+		case LinuxBackend, *LinuxBackend:
+			cleanupHandled := false
+			err = m.withPreparedReservedDomain(ctx, domain, func(ctx context.Context, checkAccounts, checkPrepared func(context.Context) error) error {
+				if err := checkPrepared(ctx); err != nil {
+					return err
+				}
+				if err := m.launchPreparedDomain(ctx, r, domain, checkAccounts); err != nil {
+					cleanupHandled = true
+					_, cleanupErr := fail(err)
+					return cleanupErr
+				}
+				return nil
+			})
+			if err != nil {
+				if cleanupHandled {
+					return Instance{}, err
+				}
+				return fail(err)
+			}
+			return m.Inspect(ctx, r.InstanceID)
+		}
+	}
 	if err = m.Backend.Prepare(ctx, domain); err != nil {
 		return fail(err)
 	}
