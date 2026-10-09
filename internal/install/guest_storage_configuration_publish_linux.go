@@ -65,6 +65,13 @@ func (e *Engine) publishGuestStorageConfigurationLocked(ctx context.Context, dir
 				if err := check(ctx); err != nil {
 					return err
 				}
+				originals := [][]byte{intent.SourcePolicy, intent.SourceEnvironment}
+				desired := [][]byte{intent.Policy, intent.Environment}
+				for i, receipt := range stage.Files {
+					if err := reconcileGuestStorageConfigurationFile(ctx, directory, receipt, originals[i], desired[i], check, false); err != nil {
+						return err
+					}
+				}
 				names := []string{"runtime-policy.json", "services.env"}
 				for i, name := range names {
 					receipt := stage.Files[i]

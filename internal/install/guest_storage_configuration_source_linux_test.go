@@ -321,6 +321,25 @@ func TestRootGuestStorageConfigurationPublicationRecoversJournalInterruption(t *
 	if err != nil || !reflect.DeepEqual(observed, installed) {
 		t.Fatal("journal changed before configuration exchange acknowledgement", err)
 	}
+	publishedPolicy, err := os.ReadFile(policyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	corruptPolicy := append([]byte(nil), publishedPolicy...)
+	corruptPolicy[0] ^= 1
+	if err := os.WriteFile(policyPath, corruptPolicy, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.publishGuestStorageConfigurationLocked(ctx, directoryFD, plan, guard); !errors.Is(err, ErrConflict) {
+		t.Fatal("corrupt exchanged policy authorized journal publication", err)
+	}
+	observed, err = e.load()
+	if err != nil || !reflect.DeepEqual(observed, installed) {
+		t.Fatal("corrupt exchanged bytes changed journal", err)
+	}
+	if err := os.WriteFile(policyPath, publishedPolicy, 0600); err != nil {
+		t.Fatal(err)
+	}
 	if err := e.publishGuestStorageConfigurationLocked(ctx, directoryFD, plan, guard); err != nil {
 		t.Fatal("interrupted publication retry failed", err)
 	}
