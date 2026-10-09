@@ -90,6 +90,15 @@ retain those outcomes. These disposable-root fixtures do not invoke the full
 installed image command against actual account, KVM and manager authority, and
 do not establish runtime policy publication or activation qualification.
 
+The subsequent uncached run [38004410342](https://github.com/pranavreddyg17/home-node/actions/runs/38004410342)
+passed at `94650df538b8a7da6799ec6d5f5ed2a9ff4b3cc2` and explicitly reports
+`TestRootGuestStorageImagesMigrationRecoversInterruptedBatch` and
+`TestRootGuestStorageParentPublicationRecoversOwnershipInterruption` as passed.
+This confirms execution of those interruption/retry fixtures rather than only
+their compilation. Their synthetic runtime observers still do not qualify the
+full installed image command against the actual system manager or account/KVM
+authority.
+
 The private parent publisher records and reconciles its exact ownership/journal
 intermediate state, while preserving the activation block. Owned guest teardown,
 other storage/configuration transitions, immutable policy publication and
