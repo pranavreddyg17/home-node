@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "sourceRevision": "d2019fe986f184b6103f9e094d4809cf18584536",
+  "workflowRun": 37871274381,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/37871274381",
+  "environment": "ubuntu-24.04 disposable CI, QEMU TCG",
+  "qualification": "unsigned development images only",
+  "limitations": [
+    "Not a signed or promoted release",
+    "Does not exercise installed controller authentication or transfer services",
+    "Does not prove 1 GB reconnect/resume or physical host performance",
+    "Does not qualify reserved guest ownership or cross-VM isolation"
+  ],
+  "records": [
+    {
+      "artifactId": 11590746202,
+      "artifactName": "homenode-development-boot-files",
+      "evidenceSHA256": "0270fafbdb014ed444a89d191e0745c1c8f086dfc980ab9918d0f88f6cdef362",
+      "evidence": {
+        "schema": 1,
+        "profile": "files",
+        "imageSHA256": "d3c23a41d07e6480fe3dfcdfea50c8d8b8cfbbe9d3b2189dfe2e1dfb461c5710",
+        "tcgBootAndObjectRoundTrip": true,
+        "objectTransfer": {
+          "bytes": 1048579,
+          "chunkBytes": 262144,
+          "acknowledgedChunkReplay": true
+        },
+        "videoPresets": [],
+        "videoCancellation": null,
+        "aiInference": null,
+        "shutdown": {
+          "guestInitiated": true,
+          "reason": "guest-shutdown",
+          "qemuExitCode": 0,
+          "readOnlyFilesystemCheck": true
+        },
+        "releaseQualified": false
+      }
+    },
+    {
+      "artifactId": 11590293314,
+      "artifactName": "homenode-development-boot-video",
+      "evidenceSHA256": "8668de71aa0684ea5bd7781a8f4293d2682c8967ec7260ffd6ea36a7c93ab700",
+      "evidence": {
+        "schema": 1,
+        "profile": "video",
+        "imageSHA256": "4ec2e227ad7fa0f9fdfdaa1bf837d9a6bf1276250dc563104ff93568da60ad18",
+        "tcgBootAndObjectRoundTrip": true,
+        "objectTransfer": {
+          "bytes": 1048579,
+          "chunkBytes": 262144,
+          "acknowledgedChunkReplay": true
+        },
+        "videoPresets": [
+          {
+            "preset": "mp4-720p",
+            "width": 1280,
+            "height": 720,
+            "codec": "h264",
+            "bytes": 3248
+          },
+          {
+            "preset": "mp4-1080p",
+            "width": 1920,
+            "height": 1080,
+            "codec": "h264",
+            "bytes": 4364
+          }
+        ],
+        "videoCancellation": {
+          "cancelled": true,
+          "taskDeletionAcknowledged": true
+        },
+        "aiInference": null,
+        "shutdown": {
+          "guestInitiated": true,
+          "reason": "guest-shutdown",
+          "qemuExitCode": 0,
+          "readOnlyFilesystemCheck": true
+        },
+        "releaseQualified": false
+      }
+    }
+  ]
+}
