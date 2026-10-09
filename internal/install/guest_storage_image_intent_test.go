@@ -61,6 +61,40 @@ func TestGuestStorageImagesIntentPreservesProvenance(t *testing.T) {
 	if err != nil || !bytes.Equal(data, current) {
 		t.Fatal("provenance bytes changed", err)
 	}
+	called := false
+	if err := e.withGuestStorageImagesIntentGuarded(ctx, func(ctx context.Context, intent guestStorageImagesIntent, check func() error) error {
+		called = true
+		if len(intent.Images) != 1 || intent.Images[0] != image {
+			t.Fatal("loaded identity changed")
+		}
+		intent.Images[0].Inode++
+		intent.Plan.Identity.ServiceUIDs[0]++
+		return check()
+	}); err != nil || !called {
+		t.Fatal("qualified provenance refused", err)
+	}
+	if err := e.withGuestStorageImagesIntentGuarded(ctx, func(ctx context.Context, intent guestStorageImagesIntent, check func() error) error {
+		if err := os.Rename(path, path+".original"); err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, data, 0600); err != nil {
+			return err
+		}
+		if err := check(); !errors.Is(err, ErrConflict) {
+			t.Fatal("identical replacement admitted", err)
+		}
+		return nil
+	}); !errors.Is(err, ErrConflict) {
+		t.Fatal("final guard admitted replacement", err)
+	}
+	original, err := os.ReadFile(path + ".original")
+	if err != nil || !bytes.Equal(original, data) {
+		t.Fatal("original provenance modified", err)
+	}
+	replacement, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(replacement, data) {
+		t.Fatal("replacement provenance modified", err)
+	}
 	t.Run("interrupted creation", func(t *testing.T) {
 		host, journal := roots(t)
 		e := openEngine(t, host, journal)

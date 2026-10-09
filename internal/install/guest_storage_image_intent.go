@@ -27,26 +27,30 @@ type guestStorageImagesIntent struct {
 // migration exclusion. This records pre-mutation provenance, never authorizes
 // adopting an unrecorded image that already has the destination ownership.
 func (e *Engine) commitGuestStorageImagesIntent(ctx context.Context, plan GuestStorageProvisioningPlan, images []guestStorageImageIdentity) error {
-	qualified, err := canonicalGuestStoragePlan(ctx, plan)
+	data, err := canonicalGuestStorageImagesIntent(ctx, plan, images)
 	if err != nil {
 		return err
 	}
+	return e.commitImmutableGuestIntent(ctx, "guest-storage-images-intent.json", "guest-storage-images-intent", data)
+}
+
+func canonicalGuestStorageImagesIntent(ctx context.Context, plan GuestStorageProvisioningPlan, images []guestStorageImageIdentity) ([]byte, error) {
+	qualified, err := canonicalGuestStoragePlan(ctx, plan)
+	if err != nil {
+		return nil, err
+	}
 	if len(images) == 0 {
-		return ErrPlan
+		return nil, ErrPlan
 	}
 	seen := make(map[[2]uint64]bool)
 	previous := ""
 	for _, image := range images {
 		key := [2]uint64{image.Device, image.Inode}
 		if image.OwnerID != qualified.Identity.OwnerID || image.GuestGID != qualified.GuestGID || image.SourceGID == 0 || image.SourceGID > math.MaxInt32 || image.Bytes < 1 || image.Bytes > 64<<30 || len(image.SHA256) != 64 || strings.Trim(image.SHA256, "0123456789abcdef") != "" || image.SHA256 <= previous || image.Device > math.MaxInt64 || image.Inode == 0 || image.Inode > math.MaxInt64 || seen[key] {
-			return ErrPlan
+			return nil, ErrPlan
 		}
 		previous = image.SHA256
 		seen[key] = true
 	}
-	data, err := json.Marshal(guestStorageImagesIntent{Version: 1, Plan: qualified, Images: images})
-	if err != nil {
-		return err
-	}
-	return e.commitImmutableGuestIntent(ctx, "guest-storage-images-intent.json", "guest-storage-images-intent", data)
+	return json.Marshal(guestStorageImagesIntent{Version: 1, Plan: qualified, Images: images})
 }
