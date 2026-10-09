@@ -28,6 +28,20 @@ func TestRootGuestStorageCatalogRequiresReleaseTrustAndPlacement(t *testing.T) {
 	if err != nil || len(manifest.Images) != 3 || gid != uint32(c.Accounts.QEMUGID) {
 		t.Fatal("placed trusted catalog refused", gid, err)
 	}
+	installed, err := e.load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	observations := 0
+	if result, group, err := e.guestStorageCatalogForJournal(ctx, installed, c.Publisher, c.MinimumCatalogVersion, now, func(context.Context) error {
+		observations++
+		if observations == 2 {
+			return ErrConflict
+		}
+		return nil
+	}); !errors.Is(err, ErrConflict) || group != 0 || len(result.Images) != 0 {
+		t.Fatal("revoked installation guard returned catalog authority", group, err)
+	}
 	wrong := append(ed25519.PublicKey(nil), c.Publisher...)
 	wrong[0] ^= 1
 	if _, _, err := e.installedGuestStorageCatalog(ctx, wrong, c.MinimumCatalogVersion, now); !errors.Is(err, ErrConflict) {
@@ -49,5 +63,17 @@ func TestRootGuestStorageCatalogRequiresReleaseTrustAndPlacement(t *testing.T) {
 	}
 	if _, _, err := e.installedGuestStorageCatalog(ctx, c.Publisher, c.MinimumCatalogVersion, now); !errors.Is(err, ErrConflict) {
 		t.Fatal("incomplete placement admitted", err)
+	}
+}
+
+func TestGuestStorageCatalogRequiresTransitionGuard(t *testing.T) {
+	e := &Engine{}
+	if _, _, err := e.guestStorageCatalogForJournal(context.Background(), journal{Phase: "installed"}, make(ed25519.PublicKey, ed25519.PublicKeySize), 1, time.Now(), nil); !errors.Is(err, ErrPlan) {
+		t.Fatal("missing transition guard admitted", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, _, err := e.guestStorageCatalogForJournal(ctx, journal{}, nil, 0, time.Now(), nil); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled transition catalog admitted", err)
 	}
 }

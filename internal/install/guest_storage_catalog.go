@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -27,11 +28,39 @@ func (e *Engine) installedGuestStorageCatalog(ctx context.Context, publisher ed2
 	if installed.Phase != "installed" {
 		return catalog.Manifest{}, 0, ErrConflict
 	}
+	checkInstalled := func(ctx context.Context) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		current, err := e.load()
+		if err != nil || !reflect.DeepEqual(current, installed) {
+			return ErrConflict
+		}
+		for _, item := range installed.Items {
+			if err := e.matches(item); err != nil {
+				return ErrConflict
+			}
+		}
+		return ctx.Err()
+	}
+	return e.guestStorageCatalogForJournal(ctx, installed, publisher, minimum, now, checkInstalled)
+}
+
+// A transition caller must retain exact installation admission independently.
+// This authenticates catalog bytes against its original configuration journal;
+// it cannot by itself qualify changed parent ownership or runtime exclusion.
+func (e *Engine) guestStorageCatalogForJournal(ctx context.Context, installed journal, publisher ed25519.PublicKey, minimum int64, now time.Time, checkInstallation func(context.Context) error) (catalog.Manifest, uint32, error) {
+	if err := ctx.Err(); err != nil {
+		return catalog.Manifest{}, 0, err
+	}
+	if checkInstallation == nil || installed.Phase != "installed" || len(publisher) != ed25519.PublicKeySize || minimum < 1 {
+		return catalog.Manifest{}, 0, ErrPlan
+	}
+	if err := checkInstallation(ctx); err != nil {
+		return catalog.Manifest{}, 0, err
+	}
 	var sourceGID uint32
 	for _, item := range installed.Items {
-		if err := e.matches(item); err != nil {
-			return catalog.Manifest{}, 0, ErrConflict
-		}
 		if item.Path == "var/lib/homenode/images" {
 			if !item.Directory || item.UID != 0 || item.GID <= 0 || item.GID > 1<<31-1 || item.Mode != 0710 || sourceGID != 0 {
 				return catalog.Manifest{}, 0, ErrConflict
@@ -65,6 +94,9 @@ func (e *Engine) installedGuestStorageCatalog(ctx context.Context, publisher ed2
 	placed, err := e.loadImageJournal()
 	if err != nil || placed.ConfigurationID != installed.ID || placed.CatalogDigest != digest(data) || placed.Completed != len(manifest.Images) {
 		return catalog.Manifest{}, 0, ErrConflict
+	}
+	if err := checkInstallation(ctx); err != nil {
+		return catalog.Manifest{}, 0, err
 	}
 	if err := ctx.Err(); err != nil {
 		return catalog.Manifest{}, 0, err
