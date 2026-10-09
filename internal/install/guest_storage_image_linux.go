@@ -7,20 +7,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
+	"math"
 	"os"
 	"strings"
 
 	"github.com/pranavreddyg17/home-node/internal/catalog"
 	"golang.org/x/sys/unix"
 )
-
-type guestStorageImageIdentity struct {
-	OwnerID             string `json:"ownerId"`
-	SHA256              string `json:"sha256"`
-	Bytes               int64  `json:"bytes"`
-	SourceGID, GuestGID uint32
-	Device, Inode       uint64
-}
 
 // Caller authenticates the catalog, installed source group and retained image
 // pathname under migration exclusion. This derives descriptor identity only;
@@ -40,7 +33,7 @@ func qualifyGuestStorageImage(ctx context.Context, plan GuestStorageProvisioning
 		return guestStorageImageIdentity{}, ErrConflict
 	}
 	var before unix.Stat_t
-	if unix.Fstat(int(file.Fd()), &before) != nil || before.Mode != unix.S_IFREG|0440 || before.Uid != 0 || before.Gid != sourceGID || before.Nlink != 1 || before.Size != image.Bytes {
+	if unix.Fstat(int(file.Fd()), &before) != nil || before.Mode != unix.S_IFREG|0440 || before.Uid != 0 || before.Gid != sourceGID || before.Nlink != 1 || before.Size != image.Bytes || uint64(before.Dev) > math.MaxInt64 || before.Ino == 0 || before.Ino > math.MaxInt64 {
 		return guestStorageImageIdentity{}, ErrConflict
 	}
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
