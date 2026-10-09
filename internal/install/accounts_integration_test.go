@@ -276,6 +276,42 @@ func TestInstalledAccountInspection(t *testing.T) {
 		if err != nil || !reflect.DeepEqual(checked, plan) {
 			t.Fatal("native storage revalidation", checked, err)
 		}
+		observe := func(ctx context.Context) error {
+			if err := ObserveRecoveryActivationConditions(ctx); err != nil {
+				return err
+			}
+			if err := ObserveRecoveryServicesDormant(ctx); err != nil {
+				return err
+			}
+			return ObserveRecoveryGuestsEmpty(ctx)
+		}
+		engine.mu.Lock()
+		called := false
+		migrationErr := engine.withQualifiedGuestStorageMigrationLocked(ctx, observe, engine.observeRecoveryDestinationVacancy, func(ctx context.Context, current GuestStorageProvisioningPlan, guard func(context.Context) error) error {
+			called = true
+			if !reflect.DeepEqual(current, plan) {
+				return ErrConflict
+			}
+			return guard(ctx)
+		})
+		engine.mu.Unlock()
+		if migrationErr != nil || !called {
+			t.Fatal("native qualified migration scope", called, migrationErr)
+		}
+		interrupted, cancelMigration := context.WithCancel(ctx)
+		engine.mu.Lock()
+		migrationErr = engine.withQualifiedGuestStorageMigrationLocked(interrupted, observe, engine.observeRecoveryDestinationVacancy, func(ctx context.Context, current GuestStorageProvisioningPlan, guard func(context.Context) error) error {
+			cancelMigration()
+			return guard(ctx)
+		})
+		engine.mu.Unlock()
+		cancelMigration()
+		if !errors.Is(migrationErr, context.Canceled) {
+			t.Fatal("native migration cancellation lost", migrationErr)
+		}
+		if err := engine.requireRecoveryActivationBlock(ctx); err != nil {
+			t.Fatal("native migration released activation", err)
+		}
 		// Release the real installer flock before invoking its packaged CLI.
 		currentEngine := engine
 		engine = nil
