@@ -158,6 +158,9 @@ func (m *Manager) checkChannelOwnershipIntent(ctx context.Context, intent Channe
 // validateChannelOwnershipInventory prevents orphan records or a changed
 // independently configured transfer group from authorizing future admission.
 func (m *Manager) validateChannelOwnershipInventory(ctx context.Context, tx *sql.Tx) error {
+	if err := validateChannelSocketInventory(ctx, tx); err != nil {
+		return err
+	}
 	var count int
 	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM runtime_channel_ownership`).Scan(&count); err != nil {
 		return err

@@ -11,7 +11,7 @@ import (
 )
 
 func TestLegacyPurgeRefusesReservedOwnershipEvidence(t *testing.T) {
-	for _, evidence := range []string{"lease", "group", "intent", "channel"} {
+	for _, evidence := range []string{"lease", "group", "intent", "channel", "socket"} {
 		t.Run(evidence, func(t *testing.T) {
 			m, backend := newManager(t)
 			id := state.Random()
@@ -31,6 +31,11 @@ func TestLegacyPurgeRefusesReservedOwnershipEvidence(t *testing.T) {
 				}
 			case "intent":
 				_, err := m.Store.DB.Exec(`INSERT INTO runtime_volume_ownership VALUES(?,?,200000,64055,10,100,?)`, id, m.Manifest.Images[0].SHA256, 16<<20)
+				if err != nil {
+					t.Fatal(err)
+				}
+			case "socket":
+				_, err := m.Store.DB.Exec(`INSERT INTO runtime_channel_sockets VALUES(?,1,10,101,0,?,200000,64055,64056,10,100)`, id, m.Manifest.Images[0].SHA256)
 				if err != nil {
 					t.Fatal(err)
 				}
