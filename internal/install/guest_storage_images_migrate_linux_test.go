@@ -68,7 +68,11 @@ func TestRootGuestStorageImagesMigrationRecoversInterruptedBatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e.checkpoint = nil
+	if err := e.Close(); err != nil {
+		t.Fatal(err)
+	}
+	e = openEngine(t, host, journal)
+	defer e.Close()
 	if err := e.migrateGuestStorageImagesLocked(ctx, plan, manifest, 993, check); err != nil {
 		t.Fatal("interrupted batch retry refused", err)
 	}
@@ -89,5 +93,55 @@ func TestRootGuestStorageImagesMigrationRecoversInterruptedBatch(t *testing.T) {
 		if err != nil || closeErr != nil {
 			t.Fatal("migrated image not qualified", err, closeErr)
 		}
+	}
+	path := filepath.Join(directory, manifest.Images[0].SHA256+".raw")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(path, path+".original"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0440); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(path, 0, 994); err != nil {
+		t.Fatal(err)
+	}
+	mutations := 0
+	e.checkpoint = func(phase, path string) error {
+		if phase == "guest-storage-image-migrated" {
+			mutations++
+		}
+		return nil
+	}
+	if err := e.migrateGuestStorageImagesLocked(ctx, plan, manifest, 993, check); !errors.Is(err, ErrConflict) || mutations != 0 {
+		t.Fatal("replacement inode adopted", mutations, err)
+	}
+	for _, retained := range []string{path, path + ".original"} {
+		current, err := os.ReadFile(retained)
+		if err != nil || !bytes.Equal(current, data) {
+			t.Fatal("refusal modified retained image", err)
+		}
+	}
+	if err := os.Rename(path, path+".foreign"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(path+".original", path); err != nil {
+		t.Fatal(err)
+	}
+	intentPath := filepath.Join(journal, "guest-storage-images-intent.json")
+	if err := os.Rename(intentPath, intentPath+".original"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.migrateGuestStorageImagesLocked(ctx, plan, manifest, 993, check); !errors.Is(err, ErrConflict) || mutations != 0 {
+		t.Fatal("unrecorded destination ownership adopted", mutations, err)
+	}
+	if _, err := os.Lstat(intentPath); !os.IsNotExist(err) {
+		t.Fatal("missing provenance synthesized", err)
+	}
+	retained, err := os.ReadFile(intentPath + ".original")
+	if err != nil || !bytes.Equal(retained, saved) {
+		t.Fatal("retained provenance changed", err)
 	}
 }

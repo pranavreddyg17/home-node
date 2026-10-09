@@ -118,7 +118,29 @@ func (e *Engine) migrateGuestStorageImagesLocked(ctx context.Context, plan Guest
 						}
 					}
 				}
-				return guard(ctx)
+				for i, receipt := range intent.Images {
+					if err := guard(ctx); err != nil {
+						return err
+					}
+					got, err := qualifyGuestStorageImage(ctx, plan, images[i], receipt.GuestGID, files[i])
+					if err != nil {
+						return err
+					}
+					got.SourceGID = receipt.SourceGID
+					if got != receipt {
+						return ErrConflict
+					}
+				}
+				if err := guard(ctx); err != nil {
+					return err
+				}
+				for i, receipt := range intent.Images {
+					var st unix.Stat_t
+					if unix.Fstat(int(files[i].Fd()), &st) != nil || uint64(st.Dev) != receipt.Device || st.Ino != receipt.Inode || st.Mode != unix.S_IFREG|0440 || st.Uid != 0 || st.Gid != receipt.GuestGID || st.Nlink != 1 || st.Size != receipt.Bytes {
+						return ErrConflict
+					}
+				}
+				return ctx.Err()
 			})
 		}
 		var retain func(int) error
