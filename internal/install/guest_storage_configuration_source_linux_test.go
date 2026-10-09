@@ -4,9 +4,11 @@ package install
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
+	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -190,4 +192,48 @@ func TestRootGuestStorageConfigurationSourcesRetainBothFiles(t *testing.T) {
 		t.Fatal("aliased replacement receipt admitted", err)
 	}
 
+}
+
+func TestRootGuestStorageConfigurationSourceRefusesDefaultACLDrift(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("disposable Linux root fixture required")
+	}
+	host, journalDir := roots(t)
+	directory := filepath.Join(host, "etc", "homenode")
+	if err := os.MkdirAll(directory, 0755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(directory, "runtime-policy.json")
+	original := "owned configuration\n"
+	if err := os.WriteFile(path, []byte(original), 0600); err != nil {
+		t.Fatal(err)
+	}
+	e := openEngine(t, host, journalDir)
+	defer e.Close()
+	// A valid base default ACL leaves existing directory mode bits unchanged.
+	acl := make([]byte, 28)
+	binary.LittleEndian.PutUint32(acl, 2)
+	for i, entry := range []struct{ tag, perm uint16 }{{1, 7}, {4, 5}, {32, 5}} {
+		offset := 4 + i*8
+		binary.LittleEndian.PutUint16(acl[offset:], entry.tag)
+		binary.LittleEndian.PutUint16(acl[offset+2:], entry.perm)
+		binary.LittleEndian.PutUint32(acl[offset+4:], 0xffffffff)
+	}
+	err := e.withGuestStorageConfigurationSource(context.Background(), "runtime-policy.json", original, func(_ context.Context, _ *os.File, check func() error) error {
+		if err := unix.Setxattr(directory, "system.posix_acl_default", acl, 0); err != nil {
+			return err
+		}
+		return check()
+	})
+	if !errors.Is(err, ErrConflict) {
+		t.Fatal("default ACL drift admitted", err)
+	}
+	observed, err := os.Stat(directory)
+	if err != nil || observed.Mode().Perm() != 0755 {
+		t.Fatal("ACL fixture changed ordinary mode", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != original {
+		t.Fatal("refusal changed source", err)
+	}
 }

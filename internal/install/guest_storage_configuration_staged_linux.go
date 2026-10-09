@@ -88,6 +88,11 @@ func (e *Engine) withGuestStorageConfigurationStaged(ctx context.Context, curren
 				if unix.Fstat(int(file.Fd()), &observed) != nil || unix.Fstatat(int(parent.Fd()), receipt.Name, &named, unix.AT_SYMLINK_NOFOLLOW) != nil || uint64(observed.Dev) != receipt.Device || observed.Ino != receipt.Inode || observed.Mode != unix.S_IFREG|0600 || observed.Uid != 0 || observed.Gid != 0 || observed.Nlink != 1 || observed.Size != receipt.Bytes || named.Dev != observed.Dev || named.Ino != observed.Ino {
 					return ErrConflict
 				}
+				for _, attribute := range []string{"system.posix_acl_access", "system.posix_acl_default"} {
+					if _, err := unix.Fgetxattr(int(file.Fd()), attribute, nil); !errors.Is(err, unix.ENODATA) {
+						return ErrConflict
+					}
+				}
 				data, err := io.ReadAll(io.NewSectionReader(file, 0, receipt.Bytes+1))
 				if err != nil {
 					return err

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -73,6 +74,18 @@ func (e *Engine) withGuestStorageConfigurationSource(ctx context.Context, name, 
 		var currentDirectory unix.Stat_t
 		if unix.Fstat(int(parentFile.Fd()), &currentDirectory) != nil || currentDirectory.Dev != directory.Dev || currentDirectory.Ino != directory.Ino || currentDirectory.Mode != directory.Mode || currentDirectory.Uid != 0 || currentDirectory.Gid != 0 || err != nil || pathErr != nil || !os.SameFile(opened, path) || path.Mode().Perm()&0022 != 0 || !owned(path, 0) {
 			return ErrConflict
+		}
+		var parentMount, pathMount, fileMount, namedMount unix.Statx_t
+		flags := unix.AT_EMPTY_PATH | unix.AT_SYMLINK_NOFOLLOW
+		if unix.Statx(int(parentFile.Fd()), "", flags, unix.STATX_MNT_ID, &parentMount) != nil || unix.Statx(unix.AT_FDCWD, filepath.Join(e.host.Name(), "etc/homenode"), unix.AT_SYMLINK_NOFOLLOW, unix.STATX_MNT_ID, &pathMount) != nil || unix.Statx(int(file.Fd()), "", flags, unix.STATX_MNT_ID, &fileMount) != nil || unix.Statx(int(parentFile.Fd()), name, unix.AT_SYMLINK_NOFOLLOW, unix.STATX_MNT_ID, &namedMount) != nil || parentMount.Mask&unix.STATX_MNT_ID == 0 || pathMount.Mask&unix.STATX_MNT_ID == 0 || fileMount.Mask&unix.STATX_MNT_ID == 0 || namedMount.Mask&unix.STATX_MNT_ID == 0 || parentMount.Mnt_id == 0 || parentMount.Mnt_id != pathMount.Mnt_id || parentMount.Mnt_id != fileMount.Mnt_id || fileMount.Mnt_id != namedMount.Mnt_id {
+			return ErrConflict
+		}
+		for _, descriptor := range []*os.File{parentFile, file} {
+			for _, attribute := range []string{"system.posix_acl_access", "system.posix_acl_default"} {
+				if _, err := unix.Fgetxattr(int(descriptor.Fd()), attribute, nil); !errors.Is(err, unix.ENODATA) {
+					return ErrConflict
+				}
+			}
 		}
 		return ctx.Err()
 	}
