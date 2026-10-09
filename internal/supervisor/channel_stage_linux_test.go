@@ -31,6 +31,7 @@ func testReservedChannelStage(t *testing.T) {
 				t.Fatal(err)
 			}
 			parent := t.TempDir()
+			qualifyReservedChannelParentFixture(t, parent, 64055)
 			stage := filepath.Join(parent, "."+d.ID+".channel-prepare")
 			final := filepath.Join(parent, d.ID)
 			occupied := stage

@@ -29,6 +29,7 @@ func testPinnedGuestChannelIntent(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), d.ID)
+	qualifyReservedChannelParentFixture(t, filepath.Dir(path), 64055)
 	if err := os.Mkdir(path, 0710); err != nil {
 		t.Fatal(err)
 	}

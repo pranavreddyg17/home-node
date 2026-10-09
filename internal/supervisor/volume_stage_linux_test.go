@@ -48,6 +48,7 @@ func testReservedVolumeStage(t *testing.T) {
 			if fault == "composed-fresh" {
 				m.Backend = LinuxBackend{TransferGID: 64055}
 				m.Volumes, m.Channels = parent, shortChannelSocketFixtureDir(t)
+				qualifyReservedChannelParentFixture(t, m.Channels, 64055)
 				d.DataPath = filepath.Join(parent, d.ID+".raw")
 				d.ChannelPath = filepath.Join(m.Channels, d.ID, "adapter.sock")
 				d.DiskReserveBytes = m.Policy.DiskReserveBytes

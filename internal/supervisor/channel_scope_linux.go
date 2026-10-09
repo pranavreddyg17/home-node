@@ -49,7 +49,7 @@ func (m *Manager) withReservedChannelEntry(ctx context.Context, path string, d D
 	}
 	defer func() { result = errors.Join(result, parent.Close()) }()
 	var originalParent unix.Stat_t
-	if unix.Fstat(int(parent.Fd()), &originalParent) != nil || originalParent.Uid != 0 || originalParent.Gid != 0 || originalParent.Mode&unix.S_IFMT != unix.S_IFDIR || originalParent.Mode&07022 != 0 {
+	if unix.Fstat(int(parent.Fd()), &originalParent) != nil || !m.reservedChannelParentAdmitted(originalParent) {
 		return ErrPolicy
 	}
 	directory, err := root.OpenFile(name, os.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)

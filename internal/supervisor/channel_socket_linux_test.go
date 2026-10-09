@@ -32,6 +32,7 @@ func testPinnedChannelSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	parent := shortChannelSocketFixtureDir(t)
+	qualifyReservedChannelParentFixture(t, parent, 64055)
 	m.Channels = parent
 	channel, err := m.prepareReservedChannel(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() })
 	if err != nil {

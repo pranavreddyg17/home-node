@@ -74,7 +74,7 @@ func (m *Manager) withRetiringChannelSocket(ctx context.Context, parentPath stri
 	}
 	defer func() { result = errors.Join(result, parent.Close()) }()
 	var original unix.Stat_t
-	if unix.Fstat(int(parent.Fd()), &original) != nil || original.Uid != 0 || original.Gid != 0 || original.Mode&unix.S_IFMT != unix.S_IFDIR || original.Mode&07022 != 0 {
+	if unix.Fstat(int(parent.Fd()), &original) != nil || !m.reservedChannelParentAdmitted(original) {
 		return intent, ErrPolicy
 	}
 	directory, err := root.OpenFile(d.ID, os.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW, 0)
