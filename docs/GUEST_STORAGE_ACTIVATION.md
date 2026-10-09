@@ -74,11 +74,17 @@ activation records and the shared account-allocation lock while rechecking live
 eligibility. Image helpers record immutable pre-change inode/content provenance,
 retain image and parent descriptors, check pathname and mount identity, and
 perform descriptor-based group migration with provenance-bound retry. These
-helpers have cross-compiled; their new Linux root fixtures remain pending native
-execution. They do not yet form the complete installation migration command.
+helpers have cross-compiled. The installed image-phase API now joins those
+records with live account/KVM eligibility, independently trusted catalog
+verification, retained image descriptors and exact parent journal publication.
+It requires an existing activation block and vacant controller, supervisor and
+volume destinations; populated runtime storage migration is still unfinished.
+The current composition remains pending native qualification.
 
-Owned guest teardown, coordinated parent/configuration journal transitions,
-immutable policy publication and activation release remain unimplemented. Native tests must
+The private parent publisher records and reconciles its exact ownership/journal
+intermediate state, while preserving the activation block. Owned guest teardown,
+other storage/configuration transitions, immutable policy publication and
+activation release remain unfinished. Native tests must
 exercise a queued start while the marker is
 present, an already-running service, a live guest after supervisor stop, marker
 replacement, cancellation and crash at every publication boundary. Run those
