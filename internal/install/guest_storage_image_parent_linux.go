@@ -5,6 +5,7 @@ package install
 import (
 	"context"
 	"errors"
+	"math"
 	"os"
 
 	"golang.org/x/sys/unix"
@@ -14,10 +15,29 @@ import (
 // source parent without changing it; parent ownership publication requires its
 // separate coordinated journal transition.
 func (e *Engine) withGuestStorageImageParent(ctx context.Context, sourceGID uint32, checkMigration func(context.Context) error, use func(*os.Root, *os.File, func(context.Context) error) error) (result error) {
+	return e.withGuestStorageImageParentState(ctx, sourceGID, sourceGID, 0, 0, false, checkMigration, use)
+}
+
+// Retained parent provenance authorizes only the exact recorded inode and its
+// source/destination groups. Installation-state admission remains separate.
+func (e *Engine) withRecordedGuestStorageImageParent(ctx context.Context, intent guestStorageImageParentIntent, checkMigration func(context.Context) error, use func(*os.Root, *os.File, func(context.Context) error) error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if sourceGID == 0 || sourceGID > 1<<31-1 || checkMigration == nil || use == nil || os.Geteuid() != 0 {
+	if intent.Version != 1 || intent.Device > math.MaxInt64 || intent.Inode == 0 || intent.Inode > math.MaxInt64 {
+		return ErrPlan
+	}
+	if _, err := canonicalGuestStoragePlan(ctx, intent.Plan); err != nil {
+		return err
+	}
+	return e.withGuestStorageImageParentState(ctx, intent.SourceGID, intent.Plan.GuestGID, intent.Device, intent.Inode, true, checkMigration, use)
+}
+
+func (e *Engine) withGuestStorageImageParentState(ctx context.Context, sourceGID, guestGID uint32, device, inode uint64, recorded bool, checkMigration func(context.Context) error, use func(*os.Root, *os.File, func(context.Context) error) error) (result error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if sourceGID == 0 || sourceGID > 1<<31-1 || guestGID == 0 || guestGID > 1<<31-1 || checkMigration == nil || use == nil || os.Geteuid() != 0 {
 		return ErrPlan
 	}
 	if err := checkMigration(ctx); err != nil {
@@ -35,7 +55,7 @@ func (e *Engine) withGuestStorageImageParent(ctx context.Context, sourceGID uint
 	}
 	defer func() { result = errors.Join(result, parent.Close()) }()
 	var original unix.Stat_t
-	if unix.Fstat(int(parent.Fd()), &original) != nil || original.Mode != unix.S_IFDIR|0710 || original.Uid != 0 || original.Gid != sourceGID {
+	if unix.Fstat(int(parent.Fd()), &original) != nil || original.Mode != unix.S_IFDIR|0710 || original.Uid != 0 || (original.Gid != sourceGID && original.Gid != guestGID) || (recorded && (uint64(original.Dev) != device || original.Ino != inode)) {
 		return ErrConflict
 	}
 	var mount unix.Statx_t
@@ -56,7 +76,7 @@ func (e *Engine) withGuestStorageImageParent(ctx context.Context, sourceGID uint
 		}
 		defer func() { result = errors.Join(result, named.Close()) }()
 		var current, namedStat unix.Stat_t
-		if unix.Fstat(int(parent.Fd()), &current) != nil || unix.Fstat(int(named.Fd()), &namedStat) != nil || current.Dev != original.Dev || current.Ino != original.Ino || current.Mode != original.Mode || current.Uid != original.Uid || current.Gid != original.Gid || namedStat.Dev != current.Dev || namedStat.Ino != current.Ino || namedStat.Mode != current.Mode || namedStat.Uid != current.Uid || namedStat.Gid != current.Gid {
+		if unix.Fstat(int(parent.Fd()), &current) != nil || unix.Fstat(int(named.Fd()), &namedStat) != nil || current.Dev != original.Dev || current.Ino != original.Ino || current.Mode != original.Mode || current.Uid != original.Uid || (current.Gid != sourceGID && current.Gid != guestGID) || namedStat.Dev != current.Dev || namedStat.Ino != current.Ino || namedStat.Mode != current.Mode || namedStat.Uid != current.Uid || namedStat.Gid != current.Gid {
 			return ErrConflict
 		}
 		var currentMount, namedMount unix.Statx_t

@@ -70,17 +70,28 @@ func TestRootGuestStorageParentPublicationRecoversOwnershipInterruption(t *testi
 			return err
 		}
 		return e.withGuestStorageParentJournalIntent(ctx, current, intent.SourceGID, plan.GuestGID, digest(encoded), func(transition guestStorageParentJournalIntent, check func() error) error {
-			admit := func(ctx context.Context, current journal) error {
-				if err := check(); err != nil {
-					return err
+			return e.withRecordedGuestStorageImageParent(ctx, intent, func(ctx context.Context) error { return check() }, func(root *os.Root, pinned *os.File, checkPath func(context.Context) error) error {
+				admit := func(ctx context.Context, current journal) error {
+					if err := check(); err != nil {
+						return err
+					}
+					if err := e.admitGuestStorageParentInstallation(ctx, current, intent, transition, pinned); err != nil {
+						return err
+					}
+					return check()
 				}
-				if err := e.admitGuestStorageParentInstallation(ctx, current, intent, transition, parent); err != nil {
-					return err
-				}
-				return check()
-			}
-			return e.withRecoveryInstallationExclusionGuardedLocked(ctx, func(ctx context.Context) error { return ctx.Err() }, e.observeRecoveryDestinationVacancy, admit, func(ctx context.Context, guard func(context.Context) error) error {
-				return e.publishGuestStorageImageParentLocked(ctx, intent, transition, parent, guard)
+				return e.withRecoveryInstallationExclusionGuardedLocked(ctx, func(ctx context.Context) error { return ctx.Err() }, e.observeRecoveryDestinationVacancy, admit, func(ctx context.Context, guard func(context.Context) error) error {
+					combined := func(ctx context.Context) error {
+						if err := checkPath(ctx); err != nil {
+							return err
+						}
+						if err := guard(ctx); err != nil {
+							return err
+						}
+						return checkPath(ctx)
+					}
+					return e.publishGuestStorageImageParentLocked(ctx, intent, transition, pinned, combined)
+				})
 			})
 		})
 	}
