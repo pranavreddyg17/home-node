@@ -15,7 +15,7 @@ import (
 )
 
 func testReservedVolumeStage(t *testing.T) {
-	for _, fault := range []string{"none", "occupied", "before-format", "after-intent"} {
+	for _, fault := range []string{"none", "occupied", "before-format", "after-intent", "composed-fresh"} {
 		t.Run(fault, func(t *testing.T) {
 			m, _ := newManager(t)
 			pool := GuestUIDPool{First: 1000000000, Last: 1000000001}
@@ -41,6 +41,57 @@ func testReservedVolumeStage(t *testing.T) {
 				if err := os.WriteFile(stage, []byte("preserve"), 0600); err != nil {
 					t.Fatal(err)
 				}
+			}
+			if fault == "composed-fresh" {
+				final := filepath.Join(parent, d.ID+".raw")
+				interrupted := errors.New("composed volume transfer interrupted")
+				observed := false
+				got, err := m.prepareReservedVolume(ctx, parent, d, 4<<30, func(ctx context.Context) error {
+					var disk unix.Stat_t
+					if unix.Lstat(final, &disk) == nil && disk.Uid == d.GuestUID && !observed {
+						observed = true
+						return interrupted
+					}
+					return ctx.Err()
+				})
+				if !observed || !errors.Is(err, interrupted) || got != (VolumeOwnershipIntent{}) {
+					t.Fatal("composed transfer boundary", observed, got, err)
+				}
+				saved, err := m.loadVolumeOwnershipIntent(ctx, d)
+				if err != nil {
+					t.Fatal(err)
+				}
+				file, err := os.OpenFile(final, os.O_RDWR, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				marker := []byte("preserve guest data across retry")
+				if _, err := file.WriteAt(marker, 8<<20); err != nil {
+					t.Fatal(err)
+				}
+				if err := errors.Join(file.Sync(), file.Close()); err != nil {
+					t.Fatal(err)
+				}
+				for retry := 0; retry < 2; retry++ {
+					got, err = m.prepareReservedVolume(ctx, parent, d, 4<<30, func(ctx context.Context) error { return ctx.Err() })
+					if err != nil || got != saved {
+						t.Fatal("composed volume retry", retry, got, err)
+					}
+				}
+				var disk unix.Stat_t
+				if unix.Lstat(final, &disk) != nil || disk.Uid != saved.UID || disk.Gid != saved.GID || disk.Ino != saved.Inode || uint64(disk.Dev) != saved.Device {
+					t.Fatal("completed volume lost ownership or inode")
+				}
+				file, err = os.Open(final)
+				if err != nil {
+					t.Fatal(err)
+				}
+				actual := make([]byte, len(marker))
+				_, readErr := file.ReadAt(actual, 8<<20)
+				if closeErr := file.Close(); readErr != nil || closeErr != nil || string(actual) != string(marker) {
+					t.Fatal("retry changed guest data", readErr, closeErr)
+				}
+				return
 			}
 			calls := 0
 			interruption := errors.New("volume staging interrupted")
@@ -79,6 +130,9 @@ func testReservedVolumeStage(t *testing.T) {
 				t.Fatal("fresh retry adopted staged disk", got, err)
 			}
 			if count == 0 {
+				if got, err := m.prepareReservedVolume(ctx, parent, d, 4<<30, func(ctx context.Context) error { return ctx.Err() }); err == nil || got != (VolumeOwnershipIntent{}) {
+					t.Fatal("composed retry adopted unrecorded data", got, err)
+				}
 				return
 			}
 			file, err := os.Open(stage)
@@ -90,7 +144,7 @@ func testReservedVolumeStage(t *testing.T) {
 			if closeErr := file.Close(); readErr != nil || closeErr != nil || magic[0] != 0x53 || magic[1] != 0xef {
 				t.Fatal("recorded disk lacks ext4 superblock", readErr, closeErr, magic)
 			}
-			published, err := m.publishReservedVolume(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() })
+			published, err := m.prepareReservedVolume(ctx, parent, d, 4<<30, func(ctx context.Context) error { return ctx.Err() })
 			if err != nil || published.Inode != disk.Ino || published.Device != uint64(disk.Dev) {
 				t.Fatal("formatted inode publication", published, err)
 			}
