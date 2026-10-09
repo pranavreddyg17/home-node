@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -48,6 +49,31 @@ func TestRootGuestStorageScopeRetainsIntentDuringRuntimeObservation(t *testing.T
 		return guard(ctx)
 	}); err != nil || !called {
 		t.Fatal("retained storage scope", called, err)
+	}
+	if runtime.GOOS == "linux" {
+		if err := e.withGuestStorageAllocationExclusionLocked(ctx, func(context.Context) error { return nil }, e.observeRecoveryDestinationVacancy, func(ctx context.Context, p GuestStorageProvisioningPlan, guard func(context.Context) error) error {
+			return guard(ctx)
+		}); err != nil {
+			t.Fatal("account-locked storage scope", err)
+		}
+		err := e.withGuestStorageAllocationExclusionLocked(ctx, func(context.Context) error { return nil }, e.observeRecoveryDestinationVacancy, func(ctx context.Context, p GuestStorageProvisioningPlan, guard func(context.Context) error) error {
+			if err := e.host.Rename("etc/.pwd.lock", "etc/.pwd.lock.original"); err != nil {
+				return err
+			}
+			if err := e.host.WriteFile("etc/.pwd.lock", nil, 0600); err != nil {
+				return err
+			}
+			if err := guard(ctx); !errors.Is(err, ErrConflict) {
+				t.Fatal("replacement account lock admitted", err)
+			}
+			return nil
+		})
+		if !errors.Is(err, ErrConflict) {
+			t.Fatal("storage consumer lost account exclusion", err)
+		}
+		if err := e.requireRecoveryActivationBlock(ctx); err != nil {
+			t.Fatal("account conflict removed block", err)
+		}
 	}
 	data, err := e.journalRoot.ReadFile("guest-storage-intent.json")
 	if err != nil {
