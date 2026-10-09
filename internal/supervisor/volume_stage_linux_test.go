@@ -83,6 +83,27 @@ func testReservedVolumeStage(t *testing.T) {
 						t.Fatal("composed volume retry", retry, got, err)
 					}
 				}
+				// Observe a complete retry, then invalidate the channel during
+				// its last runtime check. The coupled final fence must catch it.
+				completeChecks := 0
+				if _, err := m.prepareReservedResources(ctx, d, func(ctx context.Context) error { completeChecks++; return ctx.Err() }); err != nil {
+					t.Fatal(err)
+				}
+				faultChecks := 0
+				channelDirectory := filepath.Dir(d.ChannelPath)
+				got, err = m.prepareReservedResources(ctx, d, func(ctx context.Context) error {
+					faultChecks++
+					if faultChecks == completeChecks {
+						return os.Chown(channelDirectory, 0, 0)
+					}
+					return ctx.Err()
+				})
+				if faultChecks != completeChecks || !errors.Is(err, ErrPolicy) || got != (reservedResourceIntent{}) {
+					t.Fatal("final coupled ownership fence", completeChecks, faultChecks, got, err)
+				}
+				if got, err = m.prepareReservedResources(ctx, d, func(ctx context.Context) error { return ctx.Err() }); err != nil || got.Volume != saved {
+					t.Fatal("coupled ownership retry", got, err)
+				}
 				var disk unix.Stat_t
 				if unix.Lstat(final, &disk) != nil || disk.Uid != saved.UID || disk.Gid != saved.GID || disk.Ino != saved.Inode || uint64(disk.Dev) != saved.Device {
 					t.Fatal("completed volume lost ownership or inode")

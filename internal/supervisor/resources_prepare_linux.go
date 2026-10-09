@@ -4,7 +4,6 @@ package supervisor
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 )
@@ -30,16 +29,22 @@ func (m *Manager) prepareReservedResources(ctx context.Context, d Domain, stoppe
 		return reservedResourceIntent{}, err
 	}
 	guestOwned := true
-	err = m.withReservedVolumeOwnership(ctx, m.Volumes, d, stopped, func(ctx context.Context, file *os.File, current VolumeOwnershipIntent, volumeGuard func(context.Context) error) error {
-		if current != volume {
-			return ErrPolicy
-		}
-		return m.withReservedChannelEntry(ctx, filepath.Dir(d.ChannelPath), d, func(ctx context.Context) error { return volumeGuard(ctx) }, func(ctx context.Context, directory *os.File, current ChannelOwnershipIntent, channelGuard func(context.Context) error) error {
+	// Each volume runtime check first requalifies the channel with its own
+	// retained scope. Channel checks call only the original exclusion guard,
+	// avoiding recursive cross-guards and covering the volume's final guard.
+	pairedStopped := func(ctx context.Context) error {
+		return m.withReservedChannelEntry(ctx, filepath.Dir(d.ChannelPath), d, stopped, func(ctx context.Context, directory *os.File, current ChannelOwnershipIntent, guard func(context.Context) error) error {
 			if current != channel {
 				return ErrPolicy
 			}
-			return errors.Join(volumeGuard(ctx), channelGuard(ctx))
+			return guard(ctx)
 		}, false, &guestOwned)
+	}
+	err = m.withReservedVolumeOwnership(ctx, m.Volumes, d, pairedStopped, func(ctx context.Context, file *os.File, current VolumeOwnershipIntent, guard func(context.Context) error) error {
+		if current != volume {
+			return ErrPolicy
+		}
+		return guard(ctx)
 	}, &guestOwned, false)
 	if err != nil {
 		return reservedResourceIntent{}, err
