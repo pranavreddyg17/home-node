@@ -103,4 +103,39 @@ func TestRootGuestStorageImageIdentity(t *testing.T) {
 			t.Fatal("post-migration source ownership admitted", revokeAt, probes, err)
 		}
 	}
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	parent, err := root.Open(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer parent.Close()
+	if err := withGuestStorageImagePath(ctx, root, parent, image.SHA256, check, func(pinned *os.File, guard func(context.Context) error) error {
+		return migrateGuestStorageImage(ctx, plan, receipt, pinned, guard)
+	}); err != nil {
+		t.Fatal("path-qualified migration refused", err)
+	}
+	if err := withGuestStorageImagePath(ctx, root, parent, image.SHA256, check, func(pinned *os.File, guard func(context.Context) error) error {
+		if err := os.Rename(path, path+".original"); err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, data, 0440); err != nil {
+			return err
+		}
+		if err := guard(ctx); !errors.Is(err, ErrConflict) {
+			t.Fatal("replacement image path admitted", err)
+		}
+		return nil
+	}); !errors.Is(err, ErrConflict) {
+		t.Fatal("final path guard admitted replacement", err)
+	}
+	for _, retained := range []string{path, path + ".original"} {
+		current, err := os.ReadFile(retained)
+		if err != nil || string(current) != string(data) {
+			t.Fatal("path refusal modified image", retained, err)
+		}
+	}
 }
