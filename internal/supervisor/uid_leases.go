@@ -24,7 +24,7 @@ func (p GuestUIDPool) validate() error {
 }
 
 func (m *Manager) initializeGuestUIDLeases(ctx context.Context) error {
-	_, err := m.Store.DB.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS runtime_uid_leases(instance_id TEXT PRIMARY KEY, uid INTEGER NOT NULL UNIQUE CHECK(uid>=65536 AND uid<=2147483647)); CREATE TABLE IF NOT EXISTS runtime_guest_groups(instance_id TEXT PRIMARY KEY, gid INTEGER NOT NULL CHECK(gid>0 AND gid<=2147483647)); CREATE TABLE IF NOT EXISTS runtime_uid_pool(singleton INTEGER PRIMARY KEY CHECK(singleton=1), first_uid INTEGER NOT NULL, last_uid INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS runtime_volume_ownership(instance_id TEXT PRIMARY KEY, image_sha256 TEXT NOT NULL, uid INTEGER NOT NULL, gid INTEGER NOT NULL, device INTEGER NOT NULL, inode INTEGER NOT NULL, size INTEGER NOT NULL, UNIQUE(device,inode));`)
+	_, err := m.Store.DB.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS runtime_uid_leases(instance_id TEXT PRIMARY KEY, uid INTEGER NOT NULL UNIQUE CHECK(uid>=65536 AND uid<=2147483647)); CREATE TABLE IF NOT EXISTS runtime_guest_groups(instance_id TEXT PRIMARY KEY, gid INTEGER NOT NULL CHECK(gid>0 AND gid<=2147483647)); CREATE TABLE IF NOT EXISTS runtime_uid_pool(singleton INTEGER PRIMARY KEY CHECK(singleton=1), first_uid INTEGER NOT NULL, last_uid INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS runtime_volume_ownership(instance_id TEXT PRIMARY KEY, image_sha256 TEXT NOT NULL, uid INTEGER NOT NULL, gid INTEGER NOT NULL, device INTEGER NOT NULL, inode INTEGER NOT NULL, size INTEGER NOT NULL, UNIQUE(device,inode)); CREATE TABLE IF NOT EXISTS runtime_channel_ownership(instance_id TEXT PRIMARY KEY, image_sha256 TEXT NOT NULL, uid INTEGER NOT NULL, guest_gid INTEGER NOT NULL, access_gid INTEGER NOT NULL, device INTEGER NOT NULL, inode INTEGER NOT NULL, UNIQUE(device,inode));`)
 	return err
 }
 
@@ -40,6 +40,9 @@ func (m *Manager) ReserveGuestUID(ctx context.Context, id string, pool GuestUIDP
 	}
 	var assigned uint32
 	err := m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := m.validateChannelOwnershipInventory(ctx, tx); err != nil {
+			return err
+		}
 		var orphaned int
 		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM runtime_volume_ownership o LEFT JOIN runtime_uid_leases l ON l.instance_id=o.instance_id LEFT JOIN runtime_guest_groups g ON g.instance_id=o.instance_id WHERE l.instance_id IS NULL OR g.instance_id IS NULL OR o.uid!=l.uid OR o.gid!=g.gid`).Scan(&orphaned); err != nil {
 			return err
@@ -51,7 +54,7 @@ func (m *Manager) ReserveGuestUID(ctx context.Context, id string, pool GuestUIDP
 		err := tx.QueryRowContext(ctx, "SELECT first_uid,last_uid FROM runtime_uid_pool WHERE singleton=1").Scan(&first, &last)
 		if errors.Is(err, sql.ErrNoRows) {
 			var assignedRecords int
-			if err = tx.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_leases)+(SELECT count(*) FROM runtime_guest_groups)+(SELECT count(*) FROM runtime_volume_ownership)").Scan(&assignedRecords); err != nil {
+			if err = tx.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_leases)+(SELECT count(*) FROM runtime_guest_groups)+(SELECT count(*) FROM runtime_volume_ownership)+(SELECT count(*) FROM runtime_channel_ownership)").Scan(&assignedRecords); err != nil {
 				return err
 			}
 			if assignedRecords != 0 {

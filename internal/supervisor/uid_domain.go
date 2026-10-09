@@ -28,7 +28,7 @@ func (m *Manager) bindDomainGuestIdentity(ctx context.Context, d *Domain, reserv
 			return err
 		}
 		var reserved int
-		if err := m.Store.DB.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_pool)+(SELECT count(*) FROM runtime_guest_groups WHERE instance_id=?)+(SELECT count(*) FROM runtime_volume_ownership)", d.ID).Scan(&reserved); err != nil {
+		if err := m.Store.DB.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_pool)+(SELECT count(*) FROM runtime_guest_groups WHERE instance_id=?)+(SELECT count(*) FROM runtime_volume_ownership)+(SELECT count(*) FROM runtime_channel_ownership)", d.ID).Scan(&reserved); err != nil {
 			return err
 		}
 		if reserved != 0 {
@@ -57,6 +57,16 @@ func (m *Manager) bindDomainGuestIdentity(ctx context.Context, d *Domain, reserv
 	}
 	var gid uint32
 	err = m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := m.validateChannelOwnershipInventory(ctx, tx); err != nil {
+			return err
+		}
+		var channelConflicts int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM runtime_channel_ownership WHERE instance_id=? AND image_sha256!=?`, d.ID, d.Image.SHA256).Scan(&channelConflicts); err != nil {
+			return err
+		}
+		if channelConflicts != 0 {
+			return ErrPolicy
+		}
 		var currentUID, currentFirst, currentLast uint32
 		if err := tx.QueryRowContext(ctx, `SELECT l.uid,p.first_uid,p.last_uid FROM runtime_uid_leases l JOIN runtime_uid_pool p ON p.singleton=1 WHERE l.instance_id=?`, d.ID).Scan(&currentUID, &currentFirst, &currentLast); err != nil {
 			return err
@@ -115,6 +125,9 @@ func (m *Manager) validateGuestIdentityPolicy(ctx context.Context) error {
 		return ErrPolicy
 	}
 	return m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := m.validateChannelOwnershipInventory(ctx, tx); err != nil {
+			return err
+		}
 		var first, last uint32
 		err := tx.QueryRowContext(ctx, "SELECT first_uid,last_uid FROM runtime_uid_pool WHERE singleton=1").Scan(&first, &last)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -125,7 +138,7 @@ func (m *Manager) validateGuestIdentityPolicy(ctx context.Context) error {
 		}
 		var conflicts int
 		if errors.Is(err, sql.ErrNoRows) {
-			if err = tx.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_leases)+(SELECT count(*) FROM runtime_guest_groups)+(SELECT count(*) FROM runtime_volume_ownership)").Scan(&conflicts); err != nil {
+			if err = tx.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_leases)+(SELECT count(*) FROM runtime_guest_groups)+(SELECT count(*) FROM runtime_volume_ownership)+(SELECT count(*) FROM runtime_channel_ownership)").Scan(&conflicts); err != nil {
 				return err
 			}
 			if conflicts != 0 {
@@ -133,7 +146,7 @@ func (m *Manager) validateGuestIdentityPolicy(ctx context.Context) error {
 			}
 		}
 		if m.GuestUIDPool == nil {
-			if err := tx.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_leases)+(SELECT count(*) FROM runtime_guest_groups)+(SELECT count(*) FROM runtime_volume_ownership)").Scan(&conflicts); err != nil {
+			if err := tx.QueryRowContext(ctx, "SELECT (SELECT count(*) FROM runtime_uid_leases)+(SELECT count(*) FROM runtime_guest_groups)+(SELECT count(*) FROM runtime_volume_ownership)+(SELECT count(*) FROM runtime_channel_ownership)").Scan(&conflicts); err != nil {
 				return err
 			}
 			if conflicts != 0 {
