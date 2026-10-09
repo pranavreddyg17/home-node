@@ -25,6 +25,18 @@ func TestChannelOwnershipIntentBindsLeaseAndDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	intent := ChannelOwnershipIntent{InstanceID: d.ID, ImageSHA256: d.Image.SHA256, UID: d.GuestUID, GuestGID: d.GuestGID, AccessGID: 64056, Device: 10, Inode: 100}
+	if err := m.checkChannelPreparationDomain(ctx, d); err != nil {
+		t.Fatal("bound preparation domain refused", err)
+	}
+	if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET state='running' WHERE id=?`, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.checkChannelPreparationDomain(ctx, d); !errors.Is(err, ErrPolicy) {
+		t.Fatal("running domain admitted fresh channel preparation", err)
+	}
+	if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET state='preparing' WHERE id=?`, d.ID); err != nil {
+		t.Fatal(err)
+	}
 	if err := m.verifyChannelOwnershipIntent(ctx, intent); !errors.Is(err, ErrPolicy) {
 		t.Fatal("verification adopted missing directory intent", err)
 	}

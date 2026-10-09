@@ -17,6 +17,7 @@ func TestNativeGuestChannelDirectoryOwnership(t *testing.T) {
 		t.Skip("explicit disposable Linux root fixture")
 	}
 	t.Run("PinnedOwnershipIntent", testPinnedGuestChannelIntent)
+	t.Run("ReservedStage", testReservedChannelStage)
 	parent := filepath.Join(t.TempDir(), "channels")
 	if err := os.Mkdir(parent, 0755); err != nil {
 		t.Fatal(err)

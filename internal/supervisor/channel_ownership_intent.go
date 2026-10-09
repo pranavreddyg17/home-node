@@ -45,6 +45,38 @@ func (m *Manager) verifyChannelOwnershipIntent(ctx context.Context, intent Chann
 	return m.checkChannelOwnershipIntent(ctx, intent, false)
 }
 
+func (m *Manager) checkChannelPreparationDomain(ctx context.Context, d Domain) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if m == nil || m.Store == nil || m.GuestUIDPool == nil {
+		return ErrPolicy
+	}
+	bound := Domain{ID: d.ID, Image: d.Image}
+	if err := m.bindDomainGuestIdentity(ctx, &bound, false); err != nil {
+		return err
+	}
+	if bound.GuestUID != d.GuestUID || bound.GuestGID != d.GuestGID || len(d.Image.SHA256) != 64 || strings.Trim(d.Image.SHA256, "0123456789abcdef") != "" {
+		return ErrPolicy
+	}
+	if _, err := m.channelAccessGID(); err != nil {
+		return err
+	}
+	return m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := requireRuntimeAdmission(tx); err != nil {
+			return err
+		}
+		var phase, desired, image string
+		if err := tx.QueryRowContext(ctx, `SELECT state,desired,image_sha256 FROM runtime_instances WHERE id=?`, d.ID).Scan(&phase, &desired, &image); err != nil {
+			return errors.Join(ErrPolicy, err)
+		}
+		if phase != "preparing" || desired != "running" || image != d.Image.SHA256 {
+			return ErrPolicy
+		}
+		return ctx.Err()
+	})
+}
+
 // loadChannelOwnershipIntent authenticates a saved record against a domain
 // whose identity was independently bound. The result does not admit any path;
 // preparation must match a retained directory descriptor to this exact inode.
