@@ -15,7 +15,12 @@ import (
 // Caller retains both durable intent records, a qualified directory and
 // allocation/runtime exclusion. Exchange preserves the original under the
 // staging name. An interrupted exchange reconciles only both recorded inodes.
-func exchangeGuestStorageConfigurationFile(ctx context.Context, directory *os.File, stage guestStorageConfigurationStageFile, original, desired []byte, guard func(context.Context) error) (result error) {
+func exchangeGuestStorageConfigurationFile(ctx context.Context, directory *os.File, stage guestStorageConfigurationStageFile, original, desired []byte, guard func(context.Context) error) error {
+	return reconcileGuestStorageConfigurationFile(ctx, directory, stage, original, desired, guard, true)
+}
+
+// Read-only admission accepts only the recorded before or after exchange pair.
+func reconcileGuestStorageConfigurationFile(ctx context.Context, directory *os.File, stage guestStorageConfigurationStageFile, original, desired []byte, guard func(context.Context) error, publish bool) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -82,6 +87,9 @@ func exchangeGuestStorageConfigurationFile(ctx context.Context, directory *os.Fi
 	// A completed exchange leaves the new inode at the final name and the
 	// exact original at the pending name. Preserve both and finish durability.
 	if qualify(current, final, stage.Device, stage.Inode, desired, false) && qualify(replacement, pending, stage.SourceDevice, stage.SourceInode, original, false) {
+		if !publish {
+			return ctx.Err()
+		}
 		if err := directory.Sync(); err != nil {
 			return err
 		}
@@ -95,6 +103,9 @@ func exchangeGuestStorageConfigurationFile(ctx context.Context, directory *os.Fi
 	}
 	if !qualify(current, final, stage.SourceDevice, stage.SourceInode, original, false) || !qualify(replacement, pending, stage.Device, stage.Inode, desired, true) {
 		return ErrConflict
+	}
+	if !publish {
+		return ctx.Err()
 	}
 	if err := ctx.Err(); err != nil {
 		return err
