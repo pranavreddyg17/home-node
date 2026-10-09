@@ -237,3 +237,110 @@ func TestRootGuestStorageConfigurationSourceRefusesDefaultACLDrift(t *testing.T)
 		t.Fatal("refusal changed source", err)
 	}
 }
+
+func TestRootGuestStorageConfigurationPublicationRecoversJournalInterruption(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("disposable Linux root fixture required")
+	}
+	ctx := context.Background()
+	identity, err := guestUIDProvisioningPlan(ctx, strings.Repeat("a", 32), supervisor.GuestUIDPool{First: 200000, Last: 200002}, []uint32{1001, 1002})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := guestStorageProvisioningPlan(ctx, identity, 994, []int{1001, 1002, 1003})
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := supervisor.Policy{Generation: 1, MemoryMiB: 1024, VCPUs: 1, MaxInstances: 1, DiskReserveBytes: 4 << 30, ControllerUID: 1001, TransferUID: 1002}
+	source, err := json.MarshalIndent(policy, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source = append(source, '\n')
+	env := []byte("TAILNET_IP=100.100.1.2\nHTTPS_PORT=8787\nHTTPS_ORIGIN=https://home.example.ts.net:8787\nPOLICY_GENERATION=1\nCONTROLLER_UID=1001\nRUNTIME_GID=1003\nTRANSFER_GID=1002\n")
+	items := []record{{Path: "etc/homenode/runtime-policy.json", UID: 0, GID: 0, Mode: 0600, SHA256: digest(source), State: "pending"}, {Path: "var/lib/homenode/images", Directory: true, Mode: 0710, GID: 994, State: "pending"}}
+	items = append(items, record{Path: "etc/homenode/services.env", Mode: 0644, SHA256: digest(env), State: "pending"})
+	encoded, _ := json.Marshal(items)
+	installed := journal{Version: 1, ID: strings.Repeat("a", 32), Phase: "installed", Digest: digest(encoded), Items: items}
+	for i := range installed.Items {
+		installed.Items[i].State = "created"
+	}
+
+	host, journalDir := roots(t)
+	directory := filepath.Join(host, "etc", "homenode")
+	if err := os.MkdirAll(directory, 0755); err != nil {
+		t.Fatal(err)
+	}
+	policyPath := filepath.Join(directory, "runtime-policy.json")
+	envPath := filepath.Join(directory, "services.env")
+	if err := os.WriteFile(policyPath, source, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(envPath, env, 0644); err != nil {
+		t.Fatal(err)
+	}
+	e := openEngine(t, host, journalDir)
+	defer e.Close()
+	guard := func(ctx context.Context) error { return ctx.Err() }
+	if err := e.commitGuestStorageConfigurationIntent(ctx, installed, source, env, plan, guard); err != nil {
+		t.Fatal(err)
+	}
+	consume := func(_ context.Context, _ guestStorageConfigurationIntent, _ *os.File, _ *os.File, check func() error) error {
+		return check()
+	}
+	if err := e.withGuestStorageConfigurationSources(ctx, installed, plan, guard, consume); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := e.save(installed); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.stageGuestStorageConfiguration(ctx, installed, plan, guard); err != nil {
+		t.Fatal(err)
+	}
+	directoryFD, err := os.Open(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer directoryFD.Close()
+	interrupted := errors.New("journal publication interrupted")
+	fault := func(context.Context) error {
+		data, err := os.ReadFile(envPath)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(data), "POLICY_GENERATION=2\n") {
+			return interrupted
+		}
+		return nil
+	}
+	if err := e.publishGuestStorageConfigurationLocked(ctx, directoryFD, plan, fault); !errors.Is(err, interrupted) {
+		t.Fatal("missing journal interruption", err)
+	}
+	observed, err := e.load()
+	if err != nil || !reflect.DeepEqual(observed, installed) {
+		t.Fatal("journal changed before configuration exchange acknowledgement", err)
+	}
+	if err := e.publishGuestStorageConfigurationLocked(ctx, directoryFD, plan, guard); err != nil {
+		t.Fatal("interrupted publication retry failed", err)
+	}
+	desired, _, _, err := planGuestStorageConfiguration(ctx, installed, source, env, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observed, err = e.load()
+	if err != nil || !reflect.DeepEqual(observed, desired) {
+		t.Fatal("destination journal not committed", err)
+	}
+	before, err := os.Stat(filepath.Join(journalDir, "install.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.publishGuestStorageConfigurationLocked(ctx, directoryFD, plan, guard); err != nil {
+		t.Fatal("completed retry refused", err)
+	}
+	after, err := os.Stat(filepath.Join(journalDir, "install.json"))
+	if err != nil || !os.SameFile(before, after) {
+		t.Fatal("completed retry replaced journal", err)
+	}
+}
