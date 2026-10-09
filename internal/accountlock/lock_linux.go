@@ -51,6 +51,12 @@ func With(ctx context.Context, directory *os.Root, use func(context.Context, fun
 			return err
 		}
 		var current, named unix.Stat_t
+		var currentParent unix.Stat_t
+		parentInfo, parentErr := parent.Stat()
+		namedParent, namedParentErr := directory.Stat(".")
+		if parentErr != nil || namedParentErr != nil || !os.SameFile(parentInfo, namedParent) || unix.Fstat(int(parent.Fd()), &currentParent) != nil || currentParent.Dev != parentStat.Dev || currentParent.Ino != parentStat.Ino || currentParent.Mode != parentStat.Mode || currentParent.Uid != parentStat.Uid || currentParent.Gid != parentStat.Gid {
+			return ErrConflict
+		}
 		if unix.Fstat(int(file.Fd()), &current) != nil || unix.Fstatat(int(parent.Fd()), ".pwd.lock", &named, unix.AT_SYMLINK_NOFOLLOW) != nil || current.Dev != initial.Dev || current.Ino != initial.Ino || named.Dev != current.Dev || named.Ino != current.Ino || current.Mode != initial.Mode || current.Nlink != 1 || current.Uid != 0 || current.Gid != 0 || current.Size != 0 {
 			return ErrConflict
 		}
