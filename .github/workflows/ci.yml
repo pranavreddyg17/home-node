@@ -37,6 +37,7 @@ jobs:
             sudo systemctl start libvirtd
             sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 "$(command -v go)" test ./internal/supervisor -run '^TestNativeReservedDACGuestConnect$' -count=1 -v
             sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 "$(command -v go)" test ./internal/supervisor -run '^TestNativeReservedDACLibvirtLaunch$' -count=1 -v
+            sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 "$(command -v go)" test ./internal/supervisor -run '^TestNativeReservedDACManagerLaunch$' -count=1 -v
           else
             echo 'Native KVM API NOT VERIFIED: runner exposes no character device at /dev/kvm.'
           fi

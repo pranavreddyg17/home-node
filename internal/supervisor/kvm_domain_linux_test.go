@@ -4,6 +4,8 @@ package supervisor
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net"
@@ -30,7 +32,11 @@ func TestNativeReservedDACGuestConnect(t *testing.T) {
 	runNativeReservedDACLaunch(t, true)
 }
 
-func runNativeReservedDACLaunch(t *testing.T, guestConnect bool) {
+func TestNativeReservedDACManagerLaunch(t *testing.T) {
+	runNativeReservedDACLaunch(t, false, true)
+}
+
+func runNativeReservedDACLaunch(t *testing.T, guestConnect bool, managerLaunch ...bool) {
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_KVM_DOMAIN_INTEGRATION") != "1" {
 		t.Skip("explicit disposable Linux libvirt/KVM experiment")
 	}
@@ -474,6 +480,73 @@ for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.arg
 			t.Fatal("stopped channel retry refused", err)
 		}
 	}
+	if len(managerLaunch) != 0 && managerLaunch[0] {
+		runNativeReservedManagerLifecycle(t, ctx, base, domain, backend, &safeCleanup)
+	}
+}
+
+func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base string, previous Domain, backend LinuxBackend, safeCleanup *bool) {
+	t.Helper()
+	contents, err := os.ReadFile(previous.SystemPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(contents)
+	image := previous.Image
+	image.ID, image.SHA256, image.Bytes, image.Protocol = "files", hex.EncodeToString(sum[:]), int64(len(contents)), 1
+	images := filepath.Dir(previous.SystemPath)
+	if err := os.Rename(previous.SystemPath, filepath.Join(images, image.SHA256+".raw")); err != nil {
+		t.Fatal(err)
+	}
+	channels := filepath.Join(base, "manager-channels")
+	if err := os.Mkdir(channels, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(channels, 0, backend.TransferGID); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(channels, 0710); err != nil {
+		t.Fatal(err)
+	}
+	store, err := state.Open(filepath.Join(base, "manager-journal"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	pool := GuestUIDPool{First: previous.GuestUID, Last: previous.GuestUID}
+	m := &Manager{Store: store, Backend: backend, Images: images, Volumes: filepath.Dir(previous.DataPath), Channels: channels,
+		GuestUIDPool: &pool, GuestGID: previous.GuestGID,
+		Policy:   Policy{Generation: 1, MemoryMiB: 1024, VCPUs: 1, MaxInstances: 1, DiskReserveBytes: 4 * catalog.GiB, ControllerUID: 1, TransferUID: 2},
+		Manifest: catalog.Manifest{Schema: 1, Version: 1, Expires: time.Now().Add(time.Hour), Images: []catalog.Image{image}}}
+	if err := m.Initialize(ctx); err != nil {
+		t.Fatal("native manager initialization", err)
+	}
+	r := startRequest()
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := m.stopDomain(cleanup, r.InstanceID); err != nil {
+			*safeCleanup = false
+			t.Errorf("native manager teardown: %v", err)
+		}
+	}()
+	for attempt := int64(0); attempt < 2; attempt++ {
+		r.OperationID, r.Revision = state.Random(), attempt*2+1
+		instance, err := m.Apply(ctx, r)
+		if err != nil || instance.State != "running" || instance.GuestUID != previous.GuestUID {
+			t.Fatal("native manager launch", instance, err)
+		}
+		if err := m.Audit(ctx); err != nil {
+			t.Fatal("native manager audit", err)
+		}
+		stop := r
+		stop.Action, stop.OperationID, stop.Revision = "stop", state.Random(), r.Revision+1
+		instance, err = m.Apply(ctx, stop)
+		if err != nil || instance.State != "stopped" {
+			t.Fatal("native manager stop", instance, err)
+		}
+	}
+	t.Log("synthetic native manager launch, audit, stop and identity-retaining restart completed")
 }
 
 // Diagnostics are limited to this synthetic domain's process credentials and log.
