@@ -17,17 +17,23 @@ import (
 // fixed revision-derived name. Callers retain runtime exclusion throughout.
 // This preserves interrupted effects and neither unlinks nor marks retirement complete.
 func (m *Manager) quarantineChannelSocket(ctx context.Context, parentPath string, d Domain, stopped func(context.Context) error) (ChannelSocketIntent, error) {
-	return m.withRetiringChannelSocket(ctx, parentPath, d, stopped, false)
+	return m.withRetiringChannelSocket(ctx, parentPath, d, stopped, false, nil)
 }
 
 // removeQuarantinedChannelSocket removes only the journaled quarantined inode.
 // An absent retry is admitted only under its durable retirement checkpoint.
 // Completion publication remains separate from this physical, synced removal.
 func (m *Manager) removeQuarantinedChannelSocket(ctx context.Context, parentPath string, d Domain, stopped func(context.Context) error) (ChannelSocketIntent, error) {
-	return m.withRetiringChannelSocket(ctx, parentPath, d, stopped, true)
+	return m.withRetiringChannelSocket(ctx, parentPath, d, stopped, true, nil)
 }
 
-func (m *Manager) withRetiringChannelSocket(ctx context.Context, parentPath string, d Domain, stopped func(context.Context) error, remove bool) (intent ChannelSocketIntent, result error) {
+// retireChannelSocket completes only the explicitly selected historical record.
+// A completed retry requires both socket names absent under the same directory.
+func (m *Manager) retireChannelSocket(ctx context.Context, parentPath string, d Domain, expected ChannelSocketIntent, stopped func(context.Context) error) (ChannelSocketIntent, error) {
+	return m.withRetiringChannelSocket(ctx, parentPath, d, stopped, true, &expected)
+}
+
+func (m *Manager) withRetiringChannelSocket(ctx context.Context, parentPath string, d Domain, stopped func(context.Context) error, remove bool, expected *ChannelSocketIntent) (intent ChannelSocketIntent, result error) {
 	defer func() {
 		if result != nil {
 			intent = ChannelSocketIntent{}
@@ -36,9 +42,26 @@ func (m *Manager) withRetiringChannelSocket(ctx context.Context, parentPath stri
 	if !filepath.IsAbs(parentPath) || filepath.Clean(parentPath) != parentPath || d.ChannelPath != filepath.Join(parentPath, d.ID, "adapter.sock") || os.Geteuid() != 0 {
 		return intent, ErrPolicy
 	}
-	saved, err := m.beginChannelSocketRetirement(ctx, d, stopped)
-	if err != nil {
-		return intent, err
+	var saved ChannelSocketIntent
+	var err error
+	completed := false
+	if expected != nil {
+		if stopped == nil {
+			return intent, ErrPolicy
+		}
+		if err := stopped(ctx); err != nil {
+			return intent, err
+		}
+		saved, completed, err = m.loadChannelSocketRetirementRecord(ctx, d, expected.Revision, true)
+		if err != nil || saved != *expected {
+			return intent, errors.Join(ErrPolicy, err)
+		}
+	}
+	if !completed {
+		saved, err = m.beginChannelSocketRetirement(ctx, d, stopped)
+		if err != nil || expected != nil && saved != *expected {
+			return intent, errors.Join(ErrPolicy, err)
+		}
 	}
 	root, err := os.OpenRoot(parentPath)
 	if err != nil {
@@ -76,6 +99,9 @@ func (m *Manager) withRetiringChannelSocket(ctx context.Context, parentPath stri
 		name, publish, removed = stage, false, true
 	} else {
 		return intent, errors.Join(ErrPolicy, sourceErr, stageErr)
+	}
+	if completed && !removed {
+		return intent, ErrPolicy
 	}
 	var socket *os.File
 	if !removed {
@@ -155,8 +181,8 @@ func (m *Manager) withRetiringChannelSocket(ctx context.Context, parentPath stri
 				return ErrPolicy
 			}
 		}
-		verified, err := m.loadChannelSocketRetirementIntent(ctx, d)
-		if err != nil || verified != saved {
+		verified, retired, err := m.loadChannelSocketRetirementRecord(ctx, d, saved.Revision, expected != nil)
+		if err != nil || verified != saved || retired != completed {
 			return errors.Join(ErrPolicy, err)
 		}
 		var started int
@@ -203,6 +229,18 @@ func (m *Manager) withRetiringChannelSocket(ctx context.Context, parentPath stri
 		if err := directory.Sync(); err != nil {
 			return intent, err
 		}
+		if err := guard(); err != nil {
+			return intent, err
+		}
+	}
+	if expected != nil && !completed {
+		if !removed {
+			return intent, ErrPolicy
+		}
+		if err := m.publishChannelSocketRetirement(ctx, d, saved); err != nil {
+			return intent, err
+		}
+		completed = true
 		if err := guard(); err != nil {
 			return intent, err
 		}

@@ -187,4 +187,60 @@ func testPinnedChannelSocket(t *testing.T) {
 		t.Fatal("physical removal published unqualified retirement", retired, err)
 	}
 
+	expected := ChannelSocketIntent{Channel: channel, Revision: 1, Device: uint64(native.Dev), Inode: native.Ino}
+	completionChecks := 0
+	got, err = m.retireChannelSocket(ctx, parent, d, expected, func(ctx context.Context) error {
+		completionChecks++
+		if completionChecks == 6 {
+			return interruption
+		}
+		return ctx.Err()
+	})
+	if !errors.Is(err, interruption) || got != (ChannelSocketIntent{}) {
+		t.Fatal("interrupted completion reported authority", completionChecks, got, err)
+	}
+	if err := m.Store.DB.QueryRow(`SELECT retired FROM runtime_channel_sockets WHERE instance_id=? AND revision=1`, d.ID).Scan(&retired); err != nil || retired != 1 {
+		t.Fatal("qualified retirement not preserved", retired, err)
+	}
+	for retry := 0; retry < 2; retry++ {
+		got, err := m.retireChannelSocket(ctx, parent, d, expected, func(ctx context.Context) error { return ctx.Err() })
+		if err != nil || got != expected {
+			t.Fatal("completed retirement retry", retry, got, err)
+		}
+	}
+	if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET revision=2 WHERE id=?`, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	replacement, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement.SetUnlinkOnClose(false)
+	defer replacement.Close()
+	if err := os.Chown(path, int(d.GuestUID), 64055); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0660); err != nil {
+		t.Fatal(err)
+	}
+	newSocket, err := os.OpenFile(path, unix.O_PATH|unix.O_NOFOLLOW, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer newSocket.Close()
+	newIntent, err := m.recordPinnedChannelSocket(ctx, d, 2, directory, newSocket)
+	if err != nil || newIntent.Revision != 2 {
+		t.Fatal("new revision after completed retirement", newIntent, err)
+	}
+	if got, err := m.retireChannelSocket(ctx, parent, d, expected, func(ctx context.Context) error { return ctx.Err() }); !errors.Is(err, ErrPolicy) || got != (ChannelSocketIntent{}) {
+		t.Fatal("old retirement retry touched newer socket", got, err)
+	}
+	var preserved unix.Stat_t
+	if unix.Lstat(path, &preserved) != nil || preserved.Ino != newIntent.Inode || uint64(preserved.Dev) != newIntent.Device {
+		t.Fatal("old retirement lost new socket")
+	}
+	if err := m.verifyChannelSocketIntent(ctx, newIntent); err != nil {
+		t.Fatal("old retirement changed new provenance", err)
+	}
+
 }

@@ -26,19 +26,24 @@ func (m *Manager) verifyChannelSocketIntent(ctx context.Context, intent ChannelS
 // loadChannelSocketRetirementIntent authenticates the active historical socket
 // record against current preparing policy. It permits neither unlink nor
 // retirement publication; callers must retain the exact inode and runtime barrier.
-func (m *Manager) loadChannelSocketRetirementIntent(ctx context.Context, d Domain) (intent ChannelSocketIntent, result error) {
+func (m *Manager) loadChannelSocketRetirementIntent(ctx context.Context, d Domain) (ChannelSocketIntent, error) {
+	intent, _, err := m.loadChannelSocketRetirementRecord(ctx, d, 0, false)
+	return intent, err
+}
+
+func (m *Manager) loadChannelSocketRetirementRecord(ctx context.Context, d Domain, exactRevision int64, allowRetired bool) (intent ChannelSocketIntent, retired bool, result error) {
 	if err := ctx.Err(); err != nil {
-		return intent, err
+		return intent, false, err
 	}
-	if m == nil || m.Store == nil {
-		return intent, ErrPolicy
+	if m == nil || m.Store == nil || exactRevision < 0 || allowRetired && exactRevision < 1 {
+		return intent, false, ErrPolicy
 	}
 	bound := Domain{ID: d.ID, Image: d.Image}
 	if err := m.bindDomainGuestIdentity(ctx, &bound, false); err != nil {
-		return intent, err
+		return intent, false, err
 	}
 	if bound.GuestUID != d.GuestUID || bound.GuestGID != d.GuestGID {
-		return intent, ErrPolicy
+		return intent, false, ErrPolicy
 	}
 	result = m.Store.Transaction(ctx, func(tx *sql.Tx) error {
 		if err := requireRuntimeAdmission(tx); err != nil {
@@ -56,18 +61,20 @@ func (m *Manager) loadChannelSocketRetirementIntent(ctx context.Context, d Domai
 			return ErrPolicy
 		}
 		intent.Channel.InstanceID = d.ID
-		if err := tx.QueryRowContext(ctx, `SELECT revision,device,inode,image_sha256,uid,guest_gid,access_gid,parent_device,parent_inode FROM runtime_channel_sockets WHERE instance_id=? AND retired=0`, d.ID).Scan(&intent.Revision, &intent.Device, &intent.Inode, &intent.Channel.ImageSHA256, &intent.Channel.UID, &intent.Channel.GuestGID, &intent.Channel.AccessGID, &intent.Channel.Device, &intent.Channel.Inode); err != nil {
+		var completed int
+		if err := tx.QueryRowContext(ctx, `SELECT revision,device,inode,image_sha256,uid,guest_gid,access_gid,parent_device,parent_inode,retired FROM runtime_channel_sockets WHERE instance_id=? AND (?=0 OR revision=?) AND (? OR retired=0)`, d.ID, exactRevision, exactRevision, allowRetired).Scan(&intent.Revision, &intent.Device, &intent.Inode, &intent.Channel.ImageSHA256, &intent.Channel.UID, &intent.Channel.GuestGID, &intent.Channel.AccessGID, &intent.Channel.Device, &intent.Channel.Inode, &completed); err != nil {
 			return errors.Join(ErrPolicy, err)
 		}
 		if intent.Revision > revision || intent.Channel.UID != d.GuestUID || intent.Channel.GuestGID != d.GuestGID || intent.Channel.ImageSHA256 != d.Image.SHA256 {
 			return ErrPolicy
 		}
+		retired = completed == 1
 		return ctx.Err()
 	})
 	if result != nil {
-		return ChannelSocketIntent{}, result
+		return ChannelSocketIntent{}, false, result
 	}
-	return intent, nil
+	return intent, retired, nil
 }
 
 func (m *Manager) checkChannelSocketIntent(ctx context.Context, intent ChannelSocketIntent, create bool) error {
