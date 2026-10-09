@@ -180,7 +180,29 @@ Successful JSON reports `intentCommitted` for preparation or `intentValid` for
 checking, while `policyPublished`, `servicesActivated` and
 `activationQualified` remain false.
 
-These commands are preparation tools, not a completed storage migration. The
+After preparing storage intent, the image phase is available through:
+
+```sh
+sudo homenode guest-storage-migrate-images \
+  --publisher-key "$VERIFIED_PUBLISHER_KEY_HEX" \
+  --minimum-catalog-version "$VERIFIED_MINIMUM_CATALOG_VERSION"
+```
+
+Supply the independently verified publisher Ed25519 public key as 64 hexadecimal
+characters and a positive minimum catalog version. The installed key alone is
+not a trust source. This command requires an existing durable recovery activation
+block, quiesced owned services and vacant control, supervisor and volume
+destinations. It retains account allocation exclusion, signed catalog and image
+provenance while migrating the three immutable images and publishing the image
+parent's ownership in the installation journal. Exact interrupted retries use
+the retained migration records; conflicting records are preserved and refused.
+The command neither creates nor releases the activation block. Successful JSON
+reports `imageOwnershipMigrated` and `parentJournalPublished`; `policyPublished`,
+`servicesActivated` and `activationQualified` remain false. Native qualification
+of this assembled command remains pending; this phase does not migrate a
+populated runtime or publish the guest runtime policy.
+
+These commands do not constitute a completed storage migration. The
 installer still needs durable allocation exclusion, a retained runtime activation
 barrier, coordinated storage ownership and runtime policy publication, and native
 application launch/restart/isolation qualification. A dormant-service snapshot or
