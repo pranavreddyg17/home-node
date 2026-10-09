@@ -93,6 +93,61 @@ func testReservedChannelStage(t *testing.T) {
 			if retried, err := m.stageReservedChannel(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() }); err == nil || retried != (ChannelOwnershipIntent{}) {
 				t.Fatal("fresh staging adopted existing effects", retried, err)
 			}
+			if records == 0 {
+				if got, err := m.publishReservedChannel(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() }); err == nil || got != (ChannelOwnershipIntent{}) {
+					t.Fatal("publication adopted unrecorded stage", got, err)
+				}
+				return
+			}
+			if err := os.Mkdir(final, 0700); err != nil {
+				t.Fatal(err)
+			}
+			if got, err := m.publishReservedChannel(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() }); !errors.Is(err, ErrPolicy) || got != (ChannelOwnershipIntent{}) {
+				t.Fatal("publication replaced occupied destination", got, err)
+			}
+			if err := os.Remove(final); err != nil {
+				t.Fatal(err)
+			}
+			displaced := stage + ".displaced"
+			if err := os.Rename(stage, displaced); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Mkdir(stage, 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(stage, 0710); err != nil {
+				t.Fatal(err)
+			}
+			if got, err := m.publishReservedChannel(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() }); !errors.Is(err, ErrPolicy) || got != (ChannelOwnershipIntent{}) {
+				t.Fatal("publication adopted replacement stage inode", got, err)
+			}
+			if err := errors.Join(os.Remove(stage), os.Rename(displaced, stage)); err != nil {
+				t.Fatal("restore replaced stage fixture", err)
+			}
+			publicationChecks := 0
+			got, err := m.publishReservedChannel(ctx, parent, d, func(ctx context.Context) error {
+				publicationChecks++
+				if publicationChecks == 6 {
+					return interruption
+				}
+				return ctx.Err()
+			})
+			if !errors.Is(err, interruption) || got != (ChannelOwnershipIntent{}) {
+				t.Fatal("interrupted publication reported success", publicationChecks, got, err)
+			}
+			var published unix.Stat_t
+			if unix.Lstat(final, &published) != nil || published.Dev != pinned.Dev || published.Ino != pinned.Ino || published.Uid != 0 || published.Gid != 0 || published.Mode != pinned.Mode {
+				t.Fatal("interrupted publication lost journaled directory inode")
+			}
+			if _, err := os.Lstat(stage); !errors.Is(err, os.ErrNotExist) {
+				t.Fatal("completed publication retained ambiguous stage", err)
+			}
+			for retry := 0; retry < 2; retry++ {
+				got, err := m.publishReservedChannel(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() })
+				if err != nil || got.Device != uint64(pinned.Dev) || got.Inode != pinned.Ino {
+					t.Fatal("completed publication retry", retry, got, err)
+				}
+			}
 		})
 	}
 }

@@ -16,10 +16,22 @@ import (
 // directory and its root-owned parent. Callers must hold runtime exclusion and
 // provide a live stopped-guest guard. It never adopts an unrecorded directory.
 func (m *Manager) withReservedChannel(ctx context.Context, path string, d Domain, stopped func(context.Context) error, use func(context.Context, *os.File, ChannelOwnershipIntent, func(context.Context) error) error) (result error) {
+	return m.withReservedChannelEntry(ctx, path, d, stopped, use, false)
+}
+
+// Publication uses the same retained objects and guard as ownership transfer;
+// only the exact validated entry name changes after a no-replace rename.
+func (m *Manager) withReservedChannelEntry(ctx context.Context, path string, d Domain, stopped func(context.Context) error, use func(context.Context, *os.File, ChannelOwnershipIntent, func(context.Context) error) error, publish bool) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if m == nil || stopped == nil || use == nil || os.Geteuid() != 0 || !guestproto.ValidID(d.ID) || !filepath.IsAbs(path) || filepath.Clean(path) != path || filepath.Base(path) != d.ID {
+	stage := "." + d.ID + ".channel-prepare"
+	expected := d.ID
+	if publish {
+		expected = stage
+	}
+	name := filepath.Base(path)
+	if m == nil || stopped == nil || use == nil || os.Geteuid() != 0 || !guestproto.ValidID(d.ID) || !filepath.IsAbs(path) || filepath.Clean(path) != path || name != expected {
 		return ErrPolicy
 	}
 	if err := stopped(ctx); err != nil {
@@ -40,7 +52,7 @@ func (m *Manager) withReservedChannel(ctx context.Context, path string, d Domain
 	if unix.Fstat(int(parent.Fd()), &originalParent) != nil || originalParent.Uid != 0 || originalParent.Gid != 0 || originalParent.Mode&unix.S_IFMT != unix.S_IFDIR || originalParent.Mode&07022 != 0 {
 		return ErrPolicy
 	}
-	directory, err := root.OpenFile(d.ID, os.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+	directory, err := root.OpenFile(name, os.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 	if err != nil {
 		return err
 	}
@@ -61,12 +73,19 @@ func (m *Manager) withReservedChannel(ctx context.Context, path string, d Domain
 		parentInfo, parentErr := parent.Stat()
 		parentPathInfo, parentPathErr := os.Lstat(parentPath)
 		childInfo, childErr := directory.Stat()
-		childPathInfo, childPathErr := root.Lstat(d.ID)
+		childPathInfo, childPathErr := root.Lstat(name)
 		if parentErr != nil || parentPathErr != nil || childErr != nil || childPathErr != nil || !os.SameFile(parentInfo, parentPathInfo) || !os.SameFile(childInfo, childPathInfo) || unix.Fstat(int(parent.Fd()), &currentParent) != nil || currentParent.Dev != originalParent.Dev || currentParent.Ino != originalParent.Ino || currentParent.Mode != originalParent.Mode || currentParent.Uid != originalParent.Uid || currentParent.Gid != originalParent.Gid {
 			return ErrPolicy
 		}
+		other := stage
+		if name == stage {
+			other = d.ID
+		}
+		if _, err := root.Lstat(other); !errors.Is(err, os.ErrNotExist) {
+			return errors.Join(ErrPolicy, err)
+		}
 		var parentMount, parentPathMount, childMount, childPathMount unix.Statx_t
-		if unix.Statx(int(parent.Fd()), "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &parentMount) != nil || unix.Statx(unix.AT_FDCWD, parentPath, unix.AT_SYMLINK_NOFOLLOW|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &parentPathMount) != nil || unix.Statx(int(directory.Fd()), "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &childMount) != nil || unix.Statx(int(parent.Fd()), d.ID, unix.AT_SYMLINK_NOFOLLOW|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &childPathMount) != nil || parentMount.Mask&unix.STATX_MNT_ID == 0 || parentPathMount.Mask&unix.STATX_MNT_ID == 0 || childMount.Mask&unix.STATX_MNT_ID == 0 || childPathMount.Mask&unix.STATX_MNT_ID == 0 || parentMount.Mnt_id != originalMount.Mnt_id || parentPathMount.Mnt_id != originalMount.Mnt_id || childMount.Mnt_id != originalMount.Mnt_id || childPathMount.Mnt_id != originalMount.Mnt_id {
+		if unix.Statx(int(parent.Fd()), "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &parentMount) != nil || unix.Statx(unix.AT_FDCWD, parentPath, unix.AT_SYMLINK_NOFOLLOW|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &parentPathMount) != nil || unix.Statx(int(directory.Fd()), "", unix.AT_EMPTY_PATH|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &childMount) != nil || unix.Statx(int(parent.Fd()), name, unix.AT_SYMLINK_NOFOLLOW|unix.AT_STATX_DONT_SYNC, unix.STATX_MNT_ID, &childPathMount) != nil || parentMount.Mask&unix.STATX_MNT_ID == 0 || parentPathMount.Mask&unix.STATX_MNT_ID == 0 || childMount.Mask&unix.STATX_MNT_ID == 0 || childPathMount.Mask&unix.STATX_MNT_ID == 0 || parentMount.Mnt_id != originalMount.Mnt_id || parentPathMount.Mnt_id != originalMount.Mnt_id || childMount.Mnt_id != originalMount.Mnt_id || childPathMount.Mnt_id != originalMount.Mnt_id {
 			return ErrPolicy
 		}
 		verified, err := m.verifyPinnedChannelOwnership(ctx, d, directory)
@@ -92,6 +111,24 @@ func (m *Manager) withReservedChannel(ctx context.Context, path string, d Domain
 	}
 	if err := use(ctx, directory, intent, guard); err != nil {
 		return err
+	}
+	if publish {
+		if err := guard(ctx); err != nil {
+			return err
+		}
+		if err := directory.Sync(); err != nil {
+			return err
+		}
+		if err := guard(ctx); err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := unix.Renameat2(int(parent.Fd()), name, int(parent.Fd()), d.ID, unix.RENAME_NOREPLACE); err != nil {
+			return err
+		}
+		name = d.ID
 	}
 	if err := parent.Sync(); err != nil {
 		return err
