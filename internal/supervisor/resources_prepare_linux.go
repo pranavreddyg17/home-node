@@ -4,6 +4,8 @@ package supervisor
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 )
@@ -32,6 +34,15 @@ func (m *Manager) prepareReservedResources(ctx context.Context, d Domain, stoppe
 		return stopped(ctx)
 	}
 	err := withReservedSystemImage(ctx, m.Images, d, imageStopped, func(ctx context.Context, image *os.File, imageGuard func(context.Context) error) error {
+		oldSocket, err := m.loadChannelSocketRetirementIntent(ctx, d)
+		if err == nil {
+			retired, retireErr := m.retireChannelSocket(ctx, m.Channels, d, oldSocket, imageGuard)
+			if retireErr != nil || retired != oldSocket {
+				return errors.Join(ErrPolicy, retireErr)
+			}
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
 		volume, err := m.prepareReservedVolume(ctx, m.Volumes, d, d.DiskReserveBytes, imageGuard)
 		if err != nil {
 			return err

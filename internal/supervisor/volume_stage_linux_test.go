@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,7 +47,7 @@ func testReservedVolumeStage(t *testing.T) {
 			}
 			if fault == "composed-fresh" {
 				m.Backend = LinuxBackend{TransferGID: 64055}
-				m.Volumes, m.Channels = parent, volumeFixtureDir(t)
+				m.Volumes, m.Channels = parent, shortChannelSocketFixtureDir(t)
 				d.DataPath = filepath.Join(parent, d.ID+".raw")
 				d.ChannelPath = filepath.Join(m.Channels, d.ID, "adapter.sock")
 				d.DiskReserveBytes = m.Policy.DiskReserveBytes
@@ -55,7 +56,7 @@ func testReservedVolumeStage(t *testing.T) {
 				digest := sha256.Sum256(base)
 				d.Image.SHA256, d.Image.Bytes = hex.EncodeToString(digest[:]), int64(len(base))
 				d.SystemPath = filepath.Join(m.Images, d.Image.SHA256+".raw")
-				if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET image_sha256=? WHERE id=?`, d.Image.SHA256, d.ID); err != nil {
+				if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET image_sha256=?,revision=1 WHERE id=?`, d.Image.SHA256, d.ID); err != nil {
 					t.Fatal(err)
 				}
 				if err := os.Chown(m.Images, 0, int(d.GuestGID)); err != nil {
@@ -172,6 +173,51 @@ func testReservedVolumeStage(t *testing.T) {
 				_, readErr := file.ReadAt(actual, 8<<20)
 				if closeErr := file.Close(); readErr != nil || closeErr != nil || string(actual) != string(marker) {
 					t.Fatal("retry changed guest data", readErr, closeErr)
+				}
+				listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: d.ChannelPath, Net: "unix"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				listener.SetUnlinkOnClose(false)
+				if err := os.Chown(d.ChannelPath, int(d.GuestUID), 64055); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chmod(d.ChannelPath, 0660); err != nil {
+					t.Fatal(err)
+				}
+				channelDirectoryFD, err := os.Open(filepath.Dir(d.ChannelPath))
+				if err != nil {
+					t.Fatal(err)
+				}
+				socketFD, err := os.OpenFile(d.ChannelPath, unix.O_PATH|unix.O_NOFOLLOW, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				oldSocket, recordErr := m.recordPinnedChannelSocket(ctx, d, 1, channelDirectoryFD, socketFD)
+				if err := errors.Join(recordErr, socketFD.Close(), channelDirectoryFD.Close(), listener.Close()); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET revision=2 WHERE id=?`, d.ID); err != nil {
+					t.Fatal(err)
+				}
+				got, err = m.prepareReservedResources(ctx, d, func(ctx context.Context) error { return ctx.Err() })
+				if err != nil || got.Volume != saved || got.Channel != oldSocket.Channel {
+					t.Fatal("resource restart socket retirement", got, err)
+				}
+				var retired int
+				if err := m.Store.DB.QueryRow(`SELECT retired FROM runtime_channel_sockets WHERE instance_id=? AND revision=1`, d.ID).Scan(&retired); err != nil || retired != 1 {
+					t.Fatal("resource restart did not retire socket", retired, err)
+				}
+				if _, err := os.Lstat(d.ChannelPath); !errors.Is(err, os.ErrNotExist) {
+					t.Fatal("resource restart retained old socket", err)
+				}
+				file, err = os.Open(final)
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, readErr = file.ReadAt(actual, 8<<20)
+				if closeErr := file.Close(); readErr != nil || closeErr != nil || string(actual) != string(marker) {
+					t.Fatal("resource restart changed guest data", readErr, closeErr)
 				}
 				return
 			}
