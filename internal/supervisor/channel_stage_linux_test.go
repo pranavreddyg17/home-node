@@ -15,7 +15,7 @@ import (
 )
 
 func testReservedChannelStage(t *testing.T) {
-	for _, fault := range []string{"none", "occupied-stage", "occupied-final", "before-intent", "after-intent"} {
+	for _, fault := range []string{"none", "occupied-stage", "occupied-final", "before-intent", "after-intent", "composed-fresh"} {
 		t.Run(fault, func(t *testing.T) {
 			m, _ := newManager(t)
 			pool := GuestUIDPool{First: 1000000000, Last: 1000000001}
@@ -44,6 +44,36 @@ func testReservedChannelStage(t *testing.T) {
 				if err := os.WriteFile(filepath.Join(occupied, "unknown"), []byte("preserve"), 0600); err != nil {
 					t.Fatal(err)
 				}
+			}
+			if fault == "composed-fresh" {
+				interrupted := errors.New("composed transfer interrupted")
+				observed := false
+				got, err := m.prepareReservedChannel(ctx, parent, d, func(ctx context.Context) error {
+					var owner unix.Stat_t
+					if unix.Lstat(final, &owner) == nil && owner.Uid == d.GuestUID && !observed {
+						observed = true
+						return interrupted
+					}
+					return ctx.Err()
+				})
+				if !observed || !errors.Is(err, interrupted) || got != (ChannelOwnershipIntent{}) {
+					t.Fatal("composed interruption reported completion", observed, got, err)
+				}
+				saved, err := m.loadChannelOwnershipIntent(ctx, d)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for retry := 0; retry < 2; retry++ {
+					got, err = m.prepareReservedChannel(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() })
+					if err != nil || got != saved {
+						t.Fatal("composed preparation retry", retry, got, err)
+					}
+				}
+				var completed unix.Stat_t
+				if unix.Lstat(final, &completed) != nil || completed.Uid != saved.UID || completed.Gid != saved.AccessGID || completed.Ino != saved.Inode || uint64(completed.Dev) != saved.Device {
+					t.Fatal("composed retry lost guest-owned receipt inode")
+				}
+				return
 			}
 			calls := 0
 			interruption := errors.New("channel staging exclusion lost")
@@ -94,6 +124,9 @@ func testReservedChannelStage(t *testing.T) {
 				t.Fatal("fresh staging adopted existing effects", retried, err)
 			}
 			if records == 0 {
+				if got, err := m.prepareReservedChannel(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() }); err == nil || got != (ChannelOwnershipIntent{}) {
+					t.Fatal("composed preparation adopted unrecorded stage", got, err)
+				}
 				if got, err := m.publishReservedChannel(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() }); err == nil || got != (ChannelOwnershipIntent{}) {
 					t.Fatal("publication adopted unrecorded stage", got, err)
 				}
@@ -148,6 +181,15 @@ func testReservedChannelStage(t *testing.T) {
 					t.Fatal("completed publication retry", retry, got, err)
 				}
 			}
+			prepared, err := m.prepareReservedChannel(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() })
+			if err != nil || prepared.Device != uint64(pinned.Dev) || prepared.Inode != pinned.Ino {
+				t.Fatal("composed preparation could not resume publication", fault, prepared, err)
+			}
+			var owner unix.Stat_t
+			if unix.Lstat(final, &owner) != nil || owner.Uid != prepared.UID || owner.Gid != prepared.AccessGID {
+				t.Fatal("resumed preparation did not transfer ownership")
+			}
+
 		})
 	}
 }
