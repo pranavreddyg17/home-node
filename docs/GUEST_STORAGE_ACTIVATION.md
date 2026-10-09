@@ -69,8 +69,16 @@ emptiness afterward; it still returns no publication authority. Its Linux wire
 query and native activation fixture have compiled but remain unverified by
 native execution at this revision.
 
-Owned guest teardown, the retained migration transaction, immutable policy
-publication and activation release remain unimplemented. Native tests must
+Private migration scopes now retain the storage proposal, installation and
+activation records and the shared account-allocation lock while rechecking live
+eligibility. Image helpers record immutable pre-change inode/content provenance,
+retain image and parent descriptors, check pathname and mount identity, and
+perform descriptor-based group migration with provenance-bound retry. These
+helpers have cross-compiled; their new Linux root fixtures remain pending native
+execution. They do not yet form the complete installation migration command.
+
+Owned guest teardown, coordinated parent/configuration journal transitions,
+immutable policy publication and activation release remain unimplemented. Native tests must
 exercise a queued start while the marker is
 present, an already-running service, a live guest after supervisor stop, marker
 replacement, cancellation and crash at every publication boundary. Run those
