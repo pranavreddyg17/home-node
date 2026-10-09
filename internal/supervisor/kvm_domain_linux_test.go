@@ -538,6 +538,8 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 		r.OperationID, r.Revision = state.Random(), attempt*2+1
 		instance, err := m.Apply(ctx, r)
 		if err != nil || instance.State != "running" || instance.GuestUID != previous.GuestUID {
+			observed, inspectErr := m.Inspect(ctx, r.InstanceID)
+			t.Log("native manager journal after refusal", observed, inspectErr)
 			t.Fatal("native manager launch", instance, err)
 		}
 		if err := m.Audit(ctx); err != nil {

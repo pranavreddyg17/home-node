@@ -248,7 +248,7 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 		return Instance{}, err
 	}
 	if err = m.Backend.ValidateHost(ctx, m.Policy); err != nil {
-		return Instance{}, err
+		return Instance{}, fmt.Errorf("validate launch host: %w", err)
 	}
 	var replay bool
 	// Host validation may have overlapped a stop. Serialize journal admission
@@ -344,11 +344,11 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 	}
 	systemPath, err := catalog.VerifyImage(m.Images, image)
 	if err != nil {
-		return fail(err)
+		return fail(fmt.Errorf("verify launch image: %w", err))
 	}
 	domain := Domain{ID: r.InstanceID, Image: image, DiskReserveBytes: m.Policy.DiskReserveBytes, SystemPath: systemPath, DataPath: filepath.Join(m.Volumes, r.InstanceID+".raw"), ChannelPath: filepath.Join(m.Channels, r.InstanceID, "adapter.sock")}
 	if err = m.bindDomainGuestIdentity(ctx, &domain, true); err != nil {
-		return fail(err)
+		return fail(fmt.Errorf("bind launch guest identity: %w", err))
 	}
 	if domain.GuestUID != 0 {
 		switch m.Backend.(type) {
@@ -369,7 +369,7 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 				if cleanupHandled {
 					return Instance{}, err
 				}
-				return fail(err)
+				return fail(fmt.Errorf("prepare and launch reserved domain: %w", err))
 			}
 			return m.Inspect(ctx, r.InstanceID)
 		}

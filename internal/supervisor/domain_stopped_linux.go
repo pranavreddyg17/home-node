@@ -5,6 +5,7 @@ package supervisor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 )
 
@@ -28,7 +29,7 @@ func (m *Manager) withPreparedReservedDomain(ctx context.Context, d Domain, use 
 		return ErrPolicy
 	}
 	if err := m.checkReservedDomainStopped(ctx, d); err != nil {
-		return err
+		return fmt.Errorf("qualify stopped reserved domain: %w", err)
 	}
 	host, err := os.OpenRoot("/")
 	if err != nil {
@@ -47,10 +48,13 @@ func (m *Manager) withPreparedReservedDomain(ctx context.Context, d Domain, use 
 		}
 		prepared, err := m.prepareReservedResources(ctx, d, stopped)
 		if err != nil {
-			return err
+			return fmt.Errorf("prepare reserved storage and channel: %w", err)
 		}
 		checkPrepared := func(ctx context.Context) error {
-			return m.qualifyReservedResources(ctx, d, prepared, stopped)
+			if err := m.qualifyReservedResources(ctx, d, prepared, stopped); err != nil {
+				return fmt.Errorf("recheck prepared reserved resources: %w", err)
+			}
+			return nil
 		}
 		if err := checkPrepared(ctx); err != nil {
 			return err

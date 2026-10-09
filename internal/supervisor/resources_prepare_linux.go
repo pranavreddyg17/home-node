@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -45,11 +46,11 @@ func (m *Manager) prepareReservedResources(ctx context.Context, d Domain, stoppe
 		}
 		volume, err := m.prepareReservedVolume(ctx, m.Volumes, d, d.DiskReserveBytes, imageGuard)
 		if err != nil {
-			return err
+			return fmt.Errorf("prepare reserved data volume: %w", err)
 		}
 		channel, err := m.prepareReservedChannel(ctx, m.Channels, d, imageGuard)
 		if err != nil {
-			return err
+			return fmt.Errorf("prepare reserved channel: %w", err)
 		}
 		prepared = reservedResourceIntent{Volume: volume, Channel: channel}
 		complete = true
