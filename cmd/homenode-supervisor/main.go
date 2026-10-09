@@ -95,6 +95,9 @@ func main() {
 	if err = policy.Validate(); err != nil {
 		fatal(err)
 	}
+	if policy.GuestIdentity != nil {
+		fatal(errors.New("reserved guest policy requires qualified storage and host-policy loading"))
+	}
 	if err = validateMaintenancePeer(*maintenanceUID, *maintenanceGID, *accessGID, *transferGID, policy); err != nil {
 		fatal(err)
 	}

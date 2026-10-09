@@ -23,18 +23,24 @@ var ErrPolicy = errors.New("supervisor policy denied")
 var ErrCapacity = errors.New("workload capacity unavailable")
 
 type Policy struct {
-	Generation       int64  `json:"generation"`
-	MemoryMiB        int    `json:"memoryMiB"`
-	VCPUs            int    `json:"vcpus"`
-	MaxInstances     int    `json:"maxInstances"`
-	DiskReserveBytes int64  `json:"diskReserveBytes"`
-	ControllerUID    uint32 `json:"controllerUid"`
-	TransferUID      uint32 `json:"transferUid"`
+	GuestIdentity    *ReservedGuestPolicy `json:"guestIdentity,omitempty"`
+	Generation       int64                `json:"generation"`
+	MemoryMiB        int                  `json:"memoryMiB"`
+	VCPUs            int                  `json:"vcpus"`
+	MaxInstances     int                  `json:"maxInstances"`
+	DiskReserveBytes int64                `json:"diskReserveBytes"`
+	ControllerUID    uint32               `json:"controllerUid"`
+	TransferUID      uint32               `json:"transferUid"`
 }
 
 func (p Policy) Validate() error {
 	if p.Generation < 1 || p.MemoryMiB < 1024 || p.MemoryMiB > 131072 || p.VCPUs < 1 || p.VCPUs > 64 || p.MaxInstances < 1 || p.MaxInstances > 4 || p.DiskReserveBytes < 4*catalog.GiB || p.ControllerUID == 0 || p.TransferUID == 0 || p.ControllerUID == p.TransferUID {
 		return ErrPolicy
+	}
+	if p.GuestIdentity != nil {
+		if err := p.GuestIdentity.Validate(p.ControllerUID, p.TransferUID); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -89,6 +95,11 @@ type Manager struct {
 func (m *Manager) Initialize(ctx context.Context) error {
 	if err := m.Policy.Validate(); err != nil {
 		return err
+	}
+	if identity := m.Policy.GuestIdentity; identity != nil {
+		if m.GuestUIDPool == nil || m.GuestUIDPool.First != identity.FirstUID || m.GuestUIDPool.Last != identity.LastUID || m.GuestGID != identity.GuestGID {
+			return ErrPolicy
+		}
 	}
 	for _, dir := range []string{m.Images, m.Volumes, m.Channels} {
 		if !filepath.IsAbs(dir) {
