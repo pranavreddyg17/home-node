@@ -572,6 +572,9 @@ func (m *Manager) Audit(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		if i.State != "running" && i.State != "stopping" && i.State != "shutting-down" {
+			continue
+		}
 		image, imageErr := m.Manifest.Image(i.Workload)
 		stop := hostErr != nil || imageErr != nil || i.ImageSHA256 != image.SHA256 || i.MemoryMiB != image.MemoryMiB || i.VCPUs != image.VCPUs || i.DataBytes != image.DataBytes || !m.Manifest.Expires.After(time.Now()) || i.State == "stopping" || i.Workload == "video" && time.Now().Unix()-i.CreatedAt >= 1800
 		if i.State == "shutting-down" && !stop {
@@ -600,13 +603,24 @@ func (m *Manager) Audit(ctx context.Context) error {
 			}
 		}
 		if stop {
-			if _, err = m.Store.DB.ExecContext(ctx, "UPDATE runtime_instances SET state='stopping',desired='stopped' WHERE id=?", id); err != nil {
-				return err
+			claimed, claimErr := m.Store.DB.ExecContext(ctx, "UPDATE runtime_instances SET state='stopping',desired='stopped' WHERE id=? AND revision=? AND state=? AND desired=?", id, i.Revision, i.State, i.Desired)
+			if claimErr != nil {
+				return claimErr
+			}
+			count, claimErr := claimed.RowsAffected()
+			if claimErr != nil {
+				return claimErr
+			}
+			if count == 0 {
+				continue
+			}
+			if count != 1 {
+				return ErrPolicy
 			}
 			if err = m.stopDomain(ctx, id); err != nil {
 				return err
 			}
-			if _, err = m.Store.DB.ExecContext(ctx, "UPDATE runtime_instances SET state='interrupted' WHERE id=?", id); err != nil {
+			if _, err = m.Store.DB.ExecContext(ctx, "UPDATE runtime_instances SET state='interrupted' WHERE id=? AND revision=? AND state='stopping' AND desired='stopped'", id, i.Revision); err != nil {
 				return err
 			}
 		}
