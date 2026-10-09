@@ -23,6 +23,8 @@ func testPinnedChannelSocket(t *testing.T) {
 	ctx := context.Background()
 	d := Domain{ID: state.Random()}
 	d.Image.SHA256 = strings.Repeat("a", 64)
+	m.Manifest.Images[0].SHA256 = d.Image.SHA256
+	m.Manifest.Images[0].DataBytes = 16 << 20
 	if err := m.bindDomainGuestIdentity(ctx, &d, true); err != nil {
 		t.Fatal(err)
 	}
@@ -80,6 +82,18 @@ func testPinnedChannelSocket(t *testing.T) {
 		if err := m.qualifyReservedChannelPath(ctx, d, 1); err != nil {
 			t.Fatal("recorded channel lookup", err)
 		}
+		if got, err := m.Channel(ctx, d.ID); err != nil || got != path {
+			t.Fatal("manager channel lookup", got, err)
+		}
+	}
+	if err := os.Chmod(path, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := m.Channel(ctx, d.ID); !errors.Is(err, ErrPolicy) || got != "" {
+		t.Fatal("manager exposed changed socket", got, err)
+	}
+	if err := os.Chmod(path, 0660); err != nil {
+		t.Fatal(err)
 	}
 	if err := m.qualifyReservedChannelPath(ctx, d, 2); !errors.Is(err, ErrPolicy) {
 		t.Fatal("wrong revision channel lookup", err)
