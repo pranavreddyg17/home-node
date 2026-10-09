@@ -25,6 +25,16 @@ func (m *Manager) recordPinnedChannelSocket(ctx context.Context, d Domain, revis
 	if err != nil {
 		return ChannelSocketIntent{}, err
 	}
+	return m.checkPinnedChannelSocket(ctx, revision, channel, directory, socket, true)
+}
+
+func (m *Manager) checkPinnedChannelSocket(ctx context.Context, revision int64, channel ChannelOwnershipIntent, directory, socket *os.File, create bool) (ChannelSocketIntent, error) {
+	if err := ctx.Err(); err != nil {
+		return ChannelSocketIntent{}, err
+	}
+	if m == nil || directory == nil || socket == nil || os.Geteuid() != 0 {
+		return ChannelSocketIntent{}, ErrPolicy
+	}
 	var originalDirectory, originalSocket unix.Stat_t
 	check := func() error {
 		if err := ctx.Err(); err != nil {
@@ -58,7 +68,7 @@ func (m *Manager) recordPinnedChannelSocket(ctx context.Context, d Domain, revis
 		return ChannelSocketIntent{}, err
 	}
 	intent := ChannelSocketIntent{Channel: channel, Revision: revision, Device: uint64(originalSocket.Dev), Inode: originalSocket.Ino}
-	if err := m.recordChannelSocketIntent(ctx, intent); err != nil {
+	if err := m.checkChannelSocketIntent(ctx, intent, create); err != nil {
 		return ChannelSocketIntent{}, err
 	}
 	if err := check(); err != nil {

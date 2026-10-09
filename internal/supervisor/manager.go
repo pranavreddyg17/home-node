@@ -334,7 +334,7 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 	if err = m.Backend.Start(ctx, domain); err != nil {
 		return fail(err)
 	}
-	if err = m.Backend.Verify(ctx, domain); err != nil {
+	if err = m.verifyPreparedDomain(ctx, domain, r.Revision); err != nil {
 		return fail(err)
 	}
 	current, err = m.Inspect(ctx, r.InstanceID)

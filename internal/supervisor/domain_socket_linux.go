@@ -39,7 +39,17 @@ func (m *Manager) verifyReservedDomainSocket(ctx context.Context, d Domain, revi
 	if err := m.Backend.Verify(ctx, d); err != nil {
 		return err
 	}
-	channel, err := m.loadChannelOwnershipIntent(ctx, d)
+	var existing int
+	err := m.Store.DB.QueryRowContext(ctx, `SELECT 1 FROM runtime_channel_sockets WHERE instance_id=? AND revision=?`, d.ID, revision).Scan(&existing)
+	create := errors.Is(err, sql.ErrNoRows)
+	var channel ChannelOwnershipIntent
+	if create {
+		channel, err = m.loadChannelOwnershipIntent(ctx, d)
+	} else if err == nil {
+		var saved ChannelSocketIntent
+		saved, err = m.loadActiveChannelSocketIntent(ctx, d, revision)
+		channel = saved.Channel
+	}
 	if err != nil {
 		return err
 	}
@@ -80,13 +90,11 @@ func (m *Manager) verifyReservedDomainSocket(ctx context.Context, d Domain, revi
 	if err := checkPath(); err != nil {
 		return err
 	}
-	var existing int
-	err = m.Store.DB.QueryRowContext(ctx, `SELECT 1 FROM runtime_channel_sockets WHERE instance_id=? AND revision=?`, d.ID, revision).Scan(&existing)
-	if err == nil {
+	if !create {
 		if err := m.verifyChannelSocketIntent(ctx, intent); err != nil {
 			return err
 		}
-	} else if errors.Is(err, sql.ErrNoRows) {
+	} else {
 		readPID := func() (int, error) {
 			data, e := os.ReadFile(filepath.Join("/run/libvirt/qemu", d.Name()+".pid"))
 			if e != nil {
@@ -115,8 +123,6 @@ func (m *Manager) verifyReservedDomainSocket(ctx context.Context, d Domain, revi
 		if err != nil || currentPID != pid {
 			return errors.Join(ErrPolicy, err)
 		}
-	} else {
-		return err
 	}
 	if err := checkPath(); err != nil {
 		return err
@@ -125,7 +131,7 @@ func (m *Manager) verifyReservedDomainSocket(ctx context.Context, d Domain, revi
 	if err := m.Backend.Verify(ctx, d); err != nil {
 		return err
 	}
-	actual, err := m.recordPinnedChannelSocket(ctx, d, revision, directory, socket)
+	actual, err := m.checkPinnedChannelSocket(ctx, revision, channel, directory, socket, create)
 	if err != nil {
 		return err
 	}

@@ -23,6 +23,36 @@ func (m *Manager) verifyChannelSocketIntent(ctx context.Context, intent ChannelS
 	return m.checkChannelSocketIntent(ctx, intent, false)
 }
 
+// loadActiveChannelSocketIntent is read-only and accepts the current preparing
+// or running revision. It cannot create preparation or retirement authority.
+func (m *Manager) loadActiveChannelSocketIntent(ctx context.Context, d Domain, revision int64) (ChannelSocketIntent, error) {
+	if err := ctx.Err(); err != nil {
+		return ChannelSocketIntent{}, err
+	}
+	if m == nil || m.Store == nil || revision < 1 {
+		return ChannelSocketIntent{}, ErrPolicy
+	}
+	bound := Domain{ID: d.ID, Image: d.Image}
+	if err := m.bindDomainGuestIdentity(ctx, &bound, false); err != nil {
+		return ChannelSocketIntent{}, err
+	}
+	if bound.GuestUID != d.GuestUID || bound.GuestGID != d.GuestGID {
+		return ChannelSocketIntent{}, ErrPolicy
+	}
+	intent := ChannelSocketIntent{Revision: revision, Channel: ChannelOwnershipIntent{InstanceID: d.ID}}
+	err := m.Store.DB.QueryRowContext(ctx, `SELECT device,inode,image_sha256,uid,guest_gid,access_gid,parent_device,parent_inode FROM runtime_channel_sockets WHERE instance_id=? AND revision=?`, d.ID, revision).Scan(&intent.Device, &intent.Inode, &intent.Channel.ImageSHA256, &intent.Channel.UID, &intent.Channel.GuestGID, &intent.Channel.AccessGID, &intent.Channel.Device, &intent.Channel.Inode)
+	if err != nil {
+		return ChannelSocketIntent{}, errors.Join(ErrPolicy, err)
+	}
+	if intent.Channel.ImageSHA256 != d.Image.SHA256 || intent.Channel.UID != d.GuestUID || intent.Channel.GuestGID != d.GuestGID {
+		return ChannelSocketIntent{}, ErrPolicy
+	}
+	if err := m.verifyChannelSocketIntent(ctx, intent); err != nil {
+		return ChannelSocketIntent{}, err
+	}
+	return intent, nil
+}
+
 // loadChannelSocketRetirementIntent authenticates the active historical socket
 // record against current preparing policy. It permits neither unlink nor
 // retirement publication; callers must retain the exact inode and runtime barrier.

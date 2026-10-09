@@ -68,6 +68,21 @@ func testPinnedChannelSocket(t *testing.T) {
 			t.Fatal("pinned socket record", retry, got, err)
 		}
 	}
+	if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET state='running' WHERE id=?`, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	for retry := 0; retry < 2; retry++ {
+		got, err := m.checkPinnedChannelSocket(ctx, 1, channel, directory, socket, false)
+		if err != nil || got.Inode != native.Ino {
+			t.Fatal("running pinned socket audit", retry, got, err)
+		}
+	}
+	if got, err := m.recordPinnedChannelSocket(ctx, d, 1, directory, socket); !errors.Is(err, ErrPolicy) || got != (ChannelSocketIntent{}) {
+		t.Fatal("running audit granted preparation authority", got, err)
+	}
+	if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET state='preparing' WHERE id=?`, d.ID); err != nil {
+		t.Fatal(err)
+	}
 	unknown := filepath.Join(filepath.Dir(path), "unknown")
 	if err := os.WriteFile(unknown, []byte("preserve"), 0600); err != nil {
 		t.Fatal(err)

@@ -35,6 +35,26 @@ func TestChannelSocketIntentBindsRuntimeRevision(t *testing.T) {
 	if err := m.recordChannelSocketIntent(ctx, intent); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET state='running' WHERE id=?`, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := m.loadActiveChannelSocketIntent(ctx, d, 1); err != nil || got != intent {
+		t.Fatal("running socket receipt", got, err)
+	}
+	if _, err := m.loadActiveChannelSocketIntent(ctx, d, 2); !errors.Is(err, ErrPolicy) {
+		t.Fatal("missing audit receipt admitted", err)
+	}
+	changedDomain := d
+	changedDomain.GuestUID++
+	if _, err := m.loadActiveChannelSocketIntent(ctx, changedDomain, 1); !errors.Is(err, ErrPolicy) {
+		t.Fatal("caller identity drift admitted", err)
+	}
+	if _, err := m.loadChannelOwnershipIntent(ctx, d); !errors.Is(err, ErrPolicy) {
+		t.Fatal("running audit granted preparation authority", err)
+	}
+	if _, err := m.Store.DB.Exec(`UPDATE runtime_instances SET state='preparing' WHERE id=?`, d.ID); err != nil {
+		t.Fatal(err)
+	}
 	// Upgrade the original socket schema without replacing its active proof.
 	if _, err := m.Store.DB.Exec(`ALTER TABLE runtime_channel_sockets DROP COLUMN retirement_started`); err != nil {
 		t.Fatal(err)
