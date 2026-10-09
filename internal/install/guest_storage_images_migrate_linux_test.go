@@ -93,6 +93,38 @@ func TestRootGuestStorageImagesMigrationRecoversInterruptedBatch(t *testing.T) {
 	if err != nil || !bytes.Equal(parentBytes, parentRetry) {
 		t.Fatal("retry changed parent provenance", err)
 	}
+	var imagesIntent guestStorageImagesIntent
+	if err := json.Unmarshal(saved, &imagesIntent); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.withGuestStorageImageParentIntent(ctx, imagesIntent, 993, func(intent guestStorageImageParentIntent, guard func() error) error {
+		if intent.Inode != parentIntent.Inode {
+			t.Fatal("parent inode changed")
+		}
+		return guard()
+	}); err != nil {
+		t.Fatal("bound parent record refused", err)
+	}
+	if err := e.withGuestStorageImageParentIntent(ctx, imagesIntent, 993, func(intent guestStorageImageParentIntent, guard func() error) error {
+		if err := os.Rename(parentPath, parentPath+".original"); err != nil {
+			return err
+		}
+		if err := os.WriteFile(parentPath, parentBytes, 0600); err != nil {
+			return err
+		}
+		if err := guard(); !errors.Is(err, ErrConflict) {
+			t.Fatal("identical parent record replacement admitted", err)
+		}
+		return nil
+	}); !errors.Is(err, ErrConflict) {
+		t.Fatal("final parent record guard admitted replacement", err)
+	}
+	if err := os.Rename(parentPath, parentPath+".foreign"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(parentPath+".original", parentPath); err != nil {
+		t.Fatal(err)
+	}
 	migrated := 0
 	e.checkpoint = func(phase, path string) error {
 		if phase == "guest-storage-image-migrated" {
