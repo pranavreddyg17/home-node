@@ -30,6 +30,38 @@ func (m *Manager) verifyVolumeOwnershipIntent(ctx context.Context, intent Volume
 	return m.checkVolumeOwnershipIntent(ctx, intent, false)
 }
 
+// loadVolumeOwnershipIntent authenticates durable provenance for recovery.
+// Path admission and formatting authority require separate retained scopes.
+func (m *Manager) loadVolumeOwnershipIntent(ctx context.Context, d Domain) (VolumeOwnershipIntent, error) {
+	if err := ctx.Err(); err != nil {
+		return VolumeOwnershipIntent{}, err
+	}
+	if m == nil || m.Store == nil || !guestproto.ValidID(d.ID) {
+		return VolumeOwnershipIntent{}, ErrPolicy
+	}
+	bound := Domain{ID: d.ID, Image: d.Image}
+	if err := m.bindDomainGuestIdentity(ctx, &bound, false); err != nil {
+		return VolumeOwnershipIntent{}, err
+	}
+	if bound.GuestUID != d.GuestUID || bound.GuestGID != d.GuestGID {
+		return VolumeOwnershipIntent{}, ErrPolicy
+	}
+	intent := VolumeOwnershipIntent{InstanceID: d.ID}
+	if err := m.Store.DB.QueryRowContext(ctx, `SELECT image_sha256,uid,gid,device,inode,size FROM runtime_volume_ownership WHERE instance_id=?`, d.ID).Scan(&intent.ImageSHA256, &intent.UID, &intent.GID, &intent.Device, &intent.Inode, &intent.Size); err != nil {
+		return VolumeOwnershipIntent{}, errors.Join(ErrPolicy, err)
+	}
+	if intent.UID != d.GuestUID || intent.GID != d.GuestGID || intent.ImageSHA256 != d.Image.SHA256 || intent.Size != d.Image.DataBytes {
+		return VolumeOwnershipIntent{}, ErrPolicy
+	}
+	if err := m.verifyVolumeOwnershipIntent(ctx, intent); err != nil {
+		return VolumeOwnershipIntent{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return VolumeOwnershipIntent{}, err
+	}
+	return intent, nil
+}
+
 func (m *Manager) checkVolumeOwnershipIntent(ctx context.Context, intent VolumeOwnershipIntent, create bool) error {
 	if err := ctx.Err(); err != nil {
 		return err

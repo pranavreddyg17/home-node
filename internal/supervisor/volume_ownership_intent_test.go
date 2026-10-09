@@ -51,6 +51,11 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 				t.Fatal("maintenance ownership admission", key, err)
 			}
 		}
+		blockedDomain := *identityDomain()
+		blockedDomain.GuestUID, blockedDomain.GuestGID = intent.UID, intent.GID
+		if got, err := m.loadVolumeOwnershipIntent(ctx, blockedDomain); !errors.Is(err, ErrPolicy) || got != (VolumeOwnershipIntent{}) {
+			t.Fatal("maintenance returned recovery authority", key, got, err)
+		}
 		var savedInode uint64
 		if err := m.Store.DB.QueryRow(`SELECT inode FROM runtime_volume_ownership WHERE instance_id=?`, intent.InstanceID).Scan(&savedInode); err != nil || savedInode != intent.Inode {
 			t.Fatal("maintenance refusal changed intent", savedInode, err)
@@ -90,6 +95,23 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 	}
 	if err := replacement.verifyVolumeOwnershipIntent(ctx, intent); err != nil {
 		t.Fatal("saved intent verification refused", err)
+	}
+	for _, manager := range []*Manager{m, replacement} {
+		if got, err := manager.loadVolumeOwnershipIntent(ctx, bound); err != nil || got != intent {
+			t.Fatal("reopened volume recovery intent", got, err)
+		}
+	}
+	for _, change := range []func(*Domain){func(d *Domain) { d.GuestUID++ }, func(d *Domain) { d.GuestGID++ }, func(d *Domain) { d.Image.DataBytes++ }, func(d *Domain) { d.Image.SHA256 = strings.Repeat("b", 64) }} {
+		changed := bound
+		change(&changed)
+		if got, err := m.loadVolumeOwnershipIntent(ctx, changed); !errors.Is(err, ErrPolicy) || got != (VolumeOwnershipIntent{}) {
+			t.Fatal("changed domain obtained recovery intent", got, err)
+		}
+	}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if got, err := m.loadVolumeOwnershipIntent(canceled, bound); !errors.Is(err, context.Canceled) || got != (VolumeOwnershipIntent{}) {
+		t.Fatal("canceled recovery returned authority", got, err)
 	}
 	if _, err := m.Store.DB.Exec(`UPDATE runtime_uid_leases SET uid=? WHERE instance_id=?`, intent.UID+1, intent.InstanceID); err != nil {
 		t.Fatal(err)
