@@ -81,6 +81,15 @@ It requires an existing activation block and vacant controller, supervisor and
 volume destinations; populated runtime storage migration is still unfinished.
 The current composition remains pending native qualification.
 
+Linux CI run [37970946612](https://github.com/pranavreddyg17/home-node/actions/runs/37970946612)
+completed successfully for `a6eee60ecff252be3d8c0081ac81fa44f0fec397`.
+Its root installer suite includes the owned image-batch and parent-publication
+interruption fixtures. The retained log reports package results rather than
+individual fixture outcomes; future runs use uncached verbose execution to
+retain those outcomes. These disposable-root fixtures do not invoke the full
+installed image command against actual account, KVM and manager authority, and
+do not establish runtime policy publication or activation qualification.
+
 The private parent publisher records and reconciles its exact ownership/journal
 intermediate state, while preserving the activation block. Owned guest teardown,
 other storage/configuration transitions, immutable policy publication and
