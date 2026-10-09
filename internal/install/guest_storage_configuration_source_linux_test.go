@@ -114,6 +114,19 @@ func TestRootGuestStorageConfigurationSourcesRetainBothFiles(t *testing.T) {
 	if err := e.withGuestStorageConfigurationSources(ctx, installed, plan, guard, consume); err != nil {
 		t.Fatal(err)
 	}
+	stage, err := e.stageGuestStorageConfiguration(ctx, installed, plan, guard)
+	if err != nil || stage.Version != 1 || len(stage.Files) != 2 {
+		t.Fatal("configuration staging failed", err)
+	}
+	for _, receipt := range stage.Files {
+		data, err := os.ReadFile(filepath.Join(directory, receipt.Name))
+		if err != nil || digest(data) != receipt.SHA256 || int64(len(data)) != receipt.Bytes {
+			t.Fatal("staged replacement lost recorded content", err)
+		}
+	}
+	if retry, err := e.stageGuestStorageConfiguration(ctx, installed, plan, guard); !errors.Is(err, os.ErrExist) || retry.Version != 0 {
+		t.Fatal("existing stage adopted without reconciliation", err)
+	}
 	err = e.withGuestStorageConfigurationSources(ctx, installed, plan, guard, func(_ context.Context, _ guestStorageConfigurationIntent, _ *os.File, _ *os.File, check func() error) error {
 		if err := os.Rename(policyPath, policyPath+".original"); err != nil {
 			return err
