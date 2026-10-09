@@ -129,6 +129,30 @@ func TestRootGuestStorageConfigurationSourcesRetainBothFiles(t *testing.T) {
 			t.Fatal("staged replacement lost recorded content", err)
 		}
 	}
+	if err := e.withGuestStorageConfigurationStaged(ctx, installed, plan, guard, func(_ guestStorageConfigurationStage, files []*os.File, check func() error) error {
+		if len(files) != 2 {
+			t.Fatal("missing retained replacement")
+		}
+		return check()
+	}); err != nil {
+		t.Fatal("recorded replacements refused", err)
+	}
+	stagePath := filepath.Join(directory, stage.Files[1].Name)
+	stageData, err := os.ReadFile(stagePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.withGuestStorageConfigurationStaged(ctx, installed, plan, guard, func(_ guestStorageConfigurationStage, _ []*os.File, check func() error) error {
+		if err := os.Rename(stagePath, stagePath+".original"); err != nil {
+			return err
+		}
+		if err := os.WriteFile(stagePath, stageData, 0600); err != nil {
+			return err
+		}
+		return check()
+	}); !errors.Is(err, ErrConflict) {
+		t.Fatal("identical replacement stage adopted", err)
+	}
 	if retry, err := e.stageGuestStorageConfiguration(ctx, installed, plan, guard); !errors.Is(err, os.ErrExist) || retry.Version != 0 {
 		t.Fatal("existing stage adopted without reconciliation", err)
 	}
