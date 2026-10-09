@@ -147,4 +147,44 @@ func testPinnedChannelSocket(t *testing.T) {
 		t.Fatal("quarantine falsely completed retirement", retired, err)
 	}
 
+	unknown = filepath.Join(filepath.Dir(path), "preserve-extra")
+	if err := os.WriteFile(unknown, []byte("preserve"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := m.removeQuarantinedChannelSocket(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() }); !errors.Is(err, ErrPolicy) || got != (ChannelSocketIntent{}) {
+		t.Fatal("removal admitted unknown directory content", got, err)
+	}
+	if data, err := os.ReadFile(unknown); err != nil || string(data) != "preserve" {
+		t.Fatal("removal changed unknown content", err)
+	}
+	if err := os.Remove(unknown); err != nil {
+		t.Fatal(err)
+	}
+	removeChecks := 0
+	got, err = m.removeQuarantinedChannelSocket(ctx, parent, d, func(ctx context.Context) error {
+		removeChecks++
+		if removeChecks == 5 {
+			return interruption
+		}
+		return ctx.Err()
+	})
+	if !errors.Is(err, interruption) || got != (ChannelSocketIntent{}) {
+		t.Fatal("interrupted removal reported completion", removeChecks, got, err)
+	}
+	if _, err := os.Lstat(stage); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("interrupted removal retained quarantined name", err)
+	}
+	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("interrupted removal published active name", err)
+	}
+	for retry := 0; retry < 2; retry++ {
+		got, err := m.removeQuarantinedChannelSocket(ctx, parent, d, func(ctx context.Context) error { return ctx.Err() })
+		if err != nil || got.Channel != channel || got.Inode != native.Ino {
+			t.Fatal("authenticated absent removal retry", retry, got, err)
+		}
+	}
+	if err := m.Store.DB.QueryRow(`SELECT retired FROM runtime_channel_sockets WHERE instance_id=? AND revision=1`, d.ID).Scan(&retired); err != nil || retired != 0 {
+		t.Fatal("physical removal published unqualified retirement", retired, err)
+	}
+
 }
