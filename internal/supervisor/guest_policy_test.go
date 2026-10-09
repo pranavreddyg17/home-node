@@ -1,9 +1,23 @@
 package supervisor
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
+
+func TestReservedGuestPolicyQualificationRefusesBeforeHostEffects(t *testing.T) {
+	pool, err := QualifyReservedGuestPolicy(context.Background(), ReservedGuestPolicy{}, nil, nil)
+	if !errors.Is(err, ErrPolicy) || pool.First != 0 || pool.Last != 0 || pool.Blocked != nil {
+		t.Fatal("invalid authority returned pool", pool, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	pool, err = QualifyReservedGuestPolicy(ctx, ReservedGuestPolicy{}, nil, nil)
+	if !errors.Is(err, context.Canceled) || pool.First != 0 || pool.Last != 0 || pool.Blocked != nil {
+		t.Fatal("cancelled authority returned pool", pool, err)
+	}
+}
 
 func TestReservedGuestPolicyRequiresEntireIndependentRange(t *testing.T) {
 	valid := ReservedGuestPolicy{Version: 1, FirstUID: 200000, LastUID: 200002, GuestGID: 994}

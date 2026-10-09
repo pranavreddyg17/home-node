@@ -513,10 +513,14 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 		t.Fatal(err)
 	}
 	defer store.Close()
-	pool := GuestUIDPool{First: previous.GuestUID, Last: previous.GuestUID}
+	identity := ReservedGuestPolicy{Version: 1, FirstUID: previous.GuestUID, LastUID: previous.GuestUID, GuestGID: previous.GuestGID}
+	pool, err := QualifyReservedGuestPolicy(ctx, identity, []uint32{1, 2}, []uint32{uint32(backend.TransferGID), uint32(backend.TransferGID)})
+	if err != nil {
+		t.Fatal("native published policy qualification", err)
+	}
 	m := &Manager{Store: store, Backend: backend, Images: images, Volumes: filepath.Dir(previous.DataPath), Channels: channels,
 		GuestUIDPool: &pool, GuestGID: previous.GuestGID,
-		Policy:   Policy{Generation: 1, MemoryMiB: 1024, VCPUs: 1, MaxInstances: 1, DiskReserveBytes: 4 * catalog.GiB, ControllerUID: 1, TransferUID: 2},
+		Policy:   Policy{GuestIdentity: &identity, Generation: 1, MemoryMiB: 1024, VCPUs: 1, MaxInstances: 1, DiskReserveBytes: 4 * catalog.GiB, ControllerUID: 1, TransferUID: 2},
 		Manifest: catalog.Manifest{Schema: 1, Version: 1, Expires: time.Now().Add(time.Hour), Images: []catalog.Image{image}}}
 	if err := m.Initialize(ctx); err != nil {
 		t.Fatal("native manager initialization", err)
