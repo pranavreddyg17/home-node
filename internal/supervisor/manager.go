@@ -381,20 +381,8 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 	return m.Inspect(ctx, r.InstanceID)
 }
 func (m *Manager) stop(ctx context.Context, r Request) (Instance, error) {
-	m.stopMu.Lock()
-	if m.activeStops == nil {
-		m.activeStops = make(map[string]int)
-	}
-	m.activeStops[r.InstanceID]++
-	m.stopMu.Unlock()
-	defer func() {
-		m.stopMu.Lock()
-		m.activeStops[r.InstanceID]--
-		if m.activeStops[r.InstanceID] == 0 {
-			delete(m.activeStops, r.InstanceID)
-		}
-		m.stopMu.Unlock()
-	}()
+	releaseStop := m.retainStopEffect(r.InstanceID)
+	defer releaseStop()
 	var existed bool
 	err := m.Store.Transaction(ctx, func(tx *sql.Tx) error {
 		if _, err := m.operation(tx, r); err != nil {

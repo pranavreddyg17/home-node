@@ -80,6 +80,8 @@ func (m *Manager) shutdown(ctx context.Context, r Request) (Instance, error) {
 	if !ok {
 		return Instance{}, ErrPolicy
 	}
+	releaseStop := m.retainStopEffect(r.InstanceID)
+	defer releaseStop()
 	var completed bool
 	var deadline int64
 	err := m.Store.Transaction(ctx, func(tx *sql.Tx) error {
