@@ -91,9 +91,12 @@ func (e *Engine) publishGuestStorageImageParentLocked(ctx context.Context, inten
 			return err
 		}
 	}
-	current, _, err = verify()
+	current, st, err = verify()
 	if err != nil {
 		return err
+	}
+	if st.Gid != intent.Plan.GuestGID {
+		return ErrConflict
 	}
 	if !reflect.DeepEqual(current, transition.Desired) {
 		if err := e.save(transition.Desired); err != nil {

@@ -83,6 +83,19 @@ func TestRootGuestStorageParentPublicationRecoversOwnershipInterruption(t *testi
 	if err := unix.Fstat(int(parent.Fd()), &st); err != nil || st.Gid != plan.GuestGID {
 		t.Fatal("intermediate ownership not retained", err)
 	}
+	e.checkpoint = func(phase, path string) error {
+		if phase == "guest-storage-parent-ownership-migrated" {
+			return parent.Chown(0, int(intent.SourceGID))
+		}
+		return nil
+	}
+	if err := publish(); !errors.Is(err, ErrConflict) {
+		t.Fatal("journal publication admitted reverted source ownership", err)
+	}
+	current, err = e.load()
+	if err != nil || !reflect.DeepEqual(current, installed) {
+		t.Fatal("journal published with source ownership", err)
+	}
 	e.checkpoint = nil
 	if err := publish(); err != nil {
 		t.Fatal("recorded intermediate retry refused", err)
