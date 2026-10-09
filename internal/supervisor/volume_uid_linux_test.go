@@ -17,6 +17,7 @@ func TestNativeGuestUIDVolumeAdmission(t *testing.T) {
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_VOLUME_INTEGRATION") != "1" {
 		t.Skip("explicit disposable Linux root fixture")
 	}
+	t.Run("ReservedStage", testReservedVolumeStage)
 	path := filepath.Join(volumeFixtureDir(t), "guest.raw")
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
 	if err != nil {

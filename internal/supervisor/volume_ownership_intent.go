@@ -30,6 +30,39 @@ func (m *Manager) verifyVolumeOwnershipIntent(ctx context.Context, intent Volume
 	return m.checkVolumeOwnershipIntent(ctx, intent, false)
 }
 
+func (m *Manager) checkVolumePreparationDomain(ctx context.Context, d Domain) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if m == nil || m.Store == nil || m.GuestUIDPool == nil {
+		return ErrPolicy
+	}
+	bound := Domain{ID: d.ID, Image: d.Image}
+	if err := m.bindDomainGuestIdentity(ctx, &bound, false); err != nil {
+		return err
+	}
+	if bound.GuestUID != d.GuestUID || bound.GuestGID != d.GuestGID || len(d.Image.SHA256) != 64 || strings.Trim(d.Image.SHA256, "0123456789abcdef") != "" {
+		return ErrPolicy
+	}
+	if d.Image.DataBytes < 16<<20 || d.Image.DataBytes > 512<<30 {
+		return ErrPolicy
+	}
+	return m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if err := requireRuntimeAdmission(tx); err != nil {
+			return err
+		}
+		var phase, desired, image string
+		var size int64
+		if err := tx.QueryRowContext(ctx, `SELECT state,desired,image_sha256,data_bytes FROM runtime_instances WHERE id=?`, d.ID).Scan(&phase, &desired, &image, &size); err != nil {
+			return errors.Join(ErrPolicy, err)
+		}
+		if phase != "preparing" || desired != "running" || image != d.Image.SHA256 || size != d.Image.DataBytes {
+			return ErrPolicy
+		}
+		return ctx.Err()
+	})
+}
+
 // loadVolumeOwnershipIntent authenticates durable provenance for recovery.
 // Path admission and formatting authority require separate retained scopes.
 func (m *Manager) loadVolumeOwnershipIntent(ctx context.Context, d Domain) (VolumeOwnershipIntent, error) {

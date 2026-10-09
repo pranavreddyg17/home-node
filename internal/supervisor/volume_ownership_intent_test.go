@@ -53,6 +53,9 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 		}
 		blockedDomain := *identityDomain()
 		blockedDomain.GuestUID, blockedDomain.GuestGID = intent.UID, intent.GID
+		if err := m.checkVolumePreparationDomain(ctx, blockedDomain); !errors.Is(err, ErrPolicy) {
+			t.Fatal("maintenance admitted volume staging", key, err)
+		}
 		if got, err := m.loadVolumeOwnershipIntent(ctx, blockedDomain); !errors.Is(err, ErrPolicy) || got != (VolumeOwnershipIntent{}) {
 			t.Fatal("maintenance returned recovery authority", key, got, err)
 		}
@@ -68,6 +71,14 @@ func TestVolumeOwnershipIntentBindsLeaseAndInode(t *testing.T) {
 	bound.Image.SHA256, bound.Image.DataBytes = intent.ImageSHA256, intent.Size
 	if err := m.bindDomainGuestIdentity(ctx, &bound, false); err != nil {
 		t.Fatal("exact ownership domain binding refused", err)
+	}
+	if err := m.checkVolumePreparationDomain(ctx, bound); err != nil {
+		t.Fatal("bound volume preparation", err)
+	}
+	changedSize := bound
+	changedSize.Image.DataBytes++
+	if err := m.checkVolumePreparationDomain(ctx, changedSize); !errors.Is(err, ErrPolicy) {
+		t.Fatal("preparation accepted runtime size drift", err)
 	}
 	for _, change := range []func(*Domain){func(d *Domain) { d.Image.SHA256 = strings.Repeat("b", 64) }, func(d *Domain) { d.Image.DataBytes++ }} {
 		changed := bound
