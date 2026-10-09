@@ -91,4 +91,16 @@ func TestRootGuestStorageImageIdentity(t *testing.T) {
 	if err := migrateGuestStorageImage(ctx, plan, foreign, file, check); !errors.Is(err, ErrConflict) {
 		t.Fatal("foreign provenance admitted", err)
 	}
+	for _, revokeAt := range []int{3, 4} {
+		probes := 0
+		if err := migrateGuestStorageImage(ctx, plan, receipt, file, func(ctx context.Context) error {
+			probes++
+			if probes == revokeAt {
+				return file.Chown(0, int(receipt.SourceGID))
+			}
+			return ctx.Err()
+		}); !errors.Is(err, ErrConflict) {
+			t.Fatal("post-migration source ownership admitted", revokeAt, probes, err)
+		}
+	}
 }

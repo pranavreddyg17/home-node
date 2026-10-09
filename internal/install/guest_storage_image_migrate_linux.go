@@ -23,12 +23,12 @@ func migrateGuestStorageImage(ctx context.Context, plan GuestStorageProvisioning
 	if _, err := canonicalGuestStorageImagesIntent(ctx, plan, []guestStorageImageIdentity{receipt}); err != nil {
 		return err
 	}
-	qualify := func() error {
+	qualify := func(destinationOnly bool) error {
 		if err := check(ctx); err != nil {
 			return err
 		}
 		var st unix.Stat_t
-		if unix.Fstat(int(file.Fd()), &st) != nil || (st.Gid != receipt.SourceGID && st.Gid != receipt.GuestGID) {
+		if unix.Fstat(int(file.Fd()), &st) != nil || (st.Gid != receipt.SourceGID && st.Gid != receipt.GuestGID) || (destinationOnly && st.Gid != receipt.GuestGID) {
 			return ErrConflict
 		}
 		got, err := qualifyGuestStorageImage(ctx, plan, catalog.Image{SHA256: receipt.SHA256, Bytes: receipt.Bytes}, st.Gid, file)
@@ -40,9 +40,16 @@ func migrateGuestStorageImage(ctx context.Context, plan GuestStorageProvisioning
 		if got != receipt {
 			return ErrConflict
 		}
-		return check(ctx)
+		if err := check(ctx); err != nil {
+			return err
+		}
+		var final unix.Stat_t
+		if unix.Fstat(int(file.Fd()), &final) != nil || final.Dev != st.Dev || final.Ino != st.Ino || final.Mode != st.Mode || final.Uid != st.Uid || final.Gid != st.Gid || final.Nlink != st.Nlink || final.Size != st.Size {
+			return ErrConflict
+		}
+		return ctx.Err()
 	}
-	if err := qualify(); err != nil {
+	if err := qualify(false); err != nil {
 		return err
 	}
 	if err := unix.Fchown(int(file.Fd()), 0, int(receipt.GuestGID)); err != nil {
@@ -51,5 +58,5 @@ func migrateGuestStorageImage(ctx context.Context, plan GuestStorageProvisioning
 	if err := file.Sync(); err != nil {
 		return err
 	}
-	return qualify()
+	return qualify(true)
 }
