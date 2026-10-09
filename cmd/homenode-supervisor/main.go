@@ -95,9 +95,6 @@ func main() {
 	if err = policy.Validate(); err != nil {
 		fatal(err)
 	}
-	if policy.GuestIdentity != nil {
-		fatal(errors.New("reserved guest policy requires qualified storage and host-policy loading"))
-	}
 	if err = validateMaintenancePeer(*maintenanceUID, *maintenanceGID, *accessGID, *transferGID, policy); err != nil {
 		fatal(err)
 	}
@@ -137,37 +134,47 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	for _, directory := range []string{*images, *volumes, *channels} {
-		if !filepath.IsAbs(directory) {
-			fatal(fmt.Errorf("runtime directories must be absolute"))
+	var guestPool *supervisor.GuestUIDPool
+	var guestGID uint32
+	if policy.GuestIdentity != nil {
+		qualified, qualifyErr := loadReservedRuntimePolicy(context.Background(), policy, *images, *volumes, *channels, *accessGID, *transferGID, *maintenanceUID, *maintenanceGID)
+		if qualifyErr != nil {
+			fatal(qualifyErr)
 		}
-		if err = os.MkdirAll(directory, 0710); err != nil {
+		guestPool, guestGID = &qualified, policy.GuestIdentity.GuestGID
+	} else {
+		for _, directory := range []string{*images, *volumes, *channels} {
+			if !filepath.IsAbs(directory) {
+				fatal(fmt.Errorf("runtime directories must be absolute"))
+			}
+			if err = os.MkdirAll(directory, 0710); err != nil {
+				fatal(err)
+			}
+		}
+		qemuGroup, err := user.LookupGroup("libvirt-qemu")
+		if err != nil {
+			fatal(err)
+		}
+		qemuGID, err := strconv.Atoi(qemuGroup.Gid)
+		if err != nil {
+			fatal(err)
+		}
+		for _, directory := range []string{*images, *volumes} {
+			if err = os.Chown(directory, 0, qemuGID); err != nil {
+				fatal(err)
+			}
+			if err = os.Chmod(directory, 0710); err != nil {
+				fatal(err)
+			}
+		}
+		if err = os.Chown(*channels, 0, 0); err != nil {
+			fatal(err)
+		}
+		if err = os.Chmod(*channels, 0755); err != nil {
 			fatal(err)
 		}
 	}
-	qemuGroup, err := user.LookupGroup("libvirt-qemu")
-	if err != nil {
-		fatal(err)
-	}
-	qemuGID, err := strconv.Atoi(qemuGroup.Gid)
-	if err != nil {
-		fatal(err)
-	}
-	for _, directory := range []string{*images, *volumes} {
-		if err = os.Chown(directory, 0, qemuGID); err != nil {
-			fatal(err)
-		}
-		if err = os.Chmod(directory, 0710); err != nil {
-			fatal(err)
-		}
-	}
-	if err = os.Chown(*channels, 0, 0); err != nil {
-		fatal(err)
-	}
-	if err = os.Chmod(*channels, 0755); err != nil {
-		fatal(err)
-	}
-	manager := &supervisor.Manager{Store: store, Policy: policy, Manifest: manifest, Images: *images, Volumes: *volumes, Channels: *channels, Backend: supervisor.LinuxBackend{DataRoot: *volumes, TransferGID: *transferGID}}
+	manager := &supervisor.Manager{GuestUIDPool: guestPool, GuestGID: guestGID, Store: store, Policy: policy, Manifest: manifest, Images: *images, Volumes: *volumes, Channels: *channels, Backend: supervisor.LinuxBackend{DataRoot: *volumes, TransferGID: *transferGID}}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err = manager.Initialize(ctx); err != nil {

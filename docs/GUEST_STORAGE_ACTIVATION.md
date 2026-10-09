@@ -1,7 +1,7 @@
 # Storage migration activation exclusion
 
-The recorded guest storage proposal is not runtime authority. The shipped
-supervisor does not configure a reserved guest pool while the following
+The recorded guest storage proposal is not runtime authority. The installer
+does not publish a reserved guest pool while the following
 transaction is unfinished. This document identifies the implementation boundary, not a passed
 qualification gate.
 
@@ -115,4 +115,8 @@ domain/socket verification and revision-bound publication. Failed launch cleanup
 inside the consumer retains that scope. Direct Linux backend preparation still
 refuses reserved domains: callers must enter through the manager lifecycle.
 This composition is pending native manager-launch qualification, and the shipped
-CLI still requires immutable pool policy and installation activation integration.
+CLI now consumes an explicit reserved policy after live account/KVM qualification
+and read-only parent ownership/mode/ACL observation. Reserved startup does not
+create storage directories or repair ownership. Native installed CLI qualification,
+immutable installer policy publication and installation activation integration
+remain pending.
