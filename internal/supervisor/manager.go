@@ -342,42 +342,7 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 	if err = m.Backend.Prepare(ctx, domain); err != nil {
 		return fail(err)
 	}
-	current, err := m.Inspect(ctx, r.InstanceID)
-	if err != nil {
-		return fail(err)
-	}
-	if current.Desired != "running" || current.Revision != r.Revision || current.State != "preparing" {
-		return fail(errors.New("start cancelled"))
-	}
-	if err = m.Backend.Start(ctx, domain); err != nil {
-		return fail(err)
-	}
-	if err = m.verifyPreparedDomain(ctx, domain, r.Revision); err != nil {
-		return fail(err)
-	}
-	current, err = m.Inspect(ctx, r.InstanceID)
-	if err != nil {
-		return fail(err)
-	}
-	if current.Desired != "running" || current.Revision != r.Revision || current.State != "preparing" {
-		return fail(errors.New("start cancelled"))
-	}
-	err = m.Store.Transaction(ctx, func(tx *sql.Tx) error {
-		result, e := tx.Exec("UPDATE runtime_instances SET state='running' WHERE id=? AND revision=? AND state='preparing' AND desired='running'", r.InstanceID, r.Revision)
-		if e != nil {
-			return e
-		}
-		n, e := result.RowsAffected()
-		if e != nil {
-			return e
-		}
-		if n != 1 {
-			return errors.New("start cancelled")
-		}
-		_, e = tx.Exec("UPDATE runtime_operations SET state='succeeded' WHERE id=?", r.OperationID)
-		return e
-	})
-	if err != nil {
+	if err = m.launchPreparedDomain(ctx, r, domain, func(ctx context.Context) error { return ctx.Err() }); err != nil {
 		return fail(err)
 	}
 	return m.Inspect(ctx, r.InstanceID)
