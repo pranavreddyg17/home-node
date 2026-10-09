@@ -49,6 +49,7 @@ jobs:
         run: |
           sudo "$(command -v go)" test ./internal/accountlock -run '^TestRootLockRefusesParentPermissionDrift$' -count=1 -v
           sudo "$(command -v go)" test ./internal/supervisor -run '^TestRootReservedAccountScopeRefuses(Directory|Lock)Replacement$' -count=1 -v
+          sudo "$(command -v go)" test ./internal/supervisor -run '^TestRootReservedStorageParentObservation$' -count=1 -v
       - name: Test recovery empty and populated kernel guest cgroup
         run: sudo env HOMENODE_RECOVERY_CGROUP_INTEGRATION=1 "$(command -v go)" test ./internal/install -run '^TestNativeRecoveryGuestCgroupObservation$' -count=1 -v
       - name: Test protected local guest UID account observation
