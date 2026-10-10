@@ -114,9 +114,27 @@ prepared ownership before starting and retains account authority through live
 domain/socket verification and revision-bound publication. Failed launch cleanup
 inside the consumer retains that scope. Direct Linux backend preparation still
 refuses reserved domains: callers must enter through the manager lifecycle.
-This composition is pending native manager-launch qualification, and the shipped
+Native manager-launch execution is recorded below. The shipped
 CLI now consumes an explicit reserved policy after live account/KVM qualification
 and read-only parent ownership/mode/ACL observation. Reserved startup does not
 create storage directories or repair ownership. Native installed CLI qualification,
 immutable installer policy publication and installation activation integration
 remain pending.
+
+CI run [38020466571](https://github.com/pranavreddyg17/home-node/actions/runs/38020466571)
+passed at `0dea5fb3baa8c27b8c4d53130abf5975181e10c9`, with an explicit pass for
+`TestNativeReservedDACManagerLaunch`. The synthetic firmware guest completed
+manager launch, audit, stop and identity-retaining restart using native KVM.
+The same run explicitly passed the root configuration batch and interrupted
+journal-publication fixtures. Their runtime guards are synthetic; these results
+do not qualify the installed excluded publisher, signed application images,
+boot-time channel-parent provisioning or activation release. The scope and
+retained log digest are recorded in
+[evidence/reserved-manager-0dea5fb.json](evidence/reserved-manager-0dea5fb.json).
+
+The supervisor's systemd unit owns `/run/homenode` through `RuntimeDirectory`.
+Reserved CLI startup requires an already qualified `/run/homenode/guests`
+parent. Its provisioning and recreation after reboot or service-directory
+cleanup remain an installation/boot integration requirement. Creating a matching
+parent opportunistically in the reserved runtime loader would bypass the
+recorded provisioning authority and is not an accepted completion of that step.

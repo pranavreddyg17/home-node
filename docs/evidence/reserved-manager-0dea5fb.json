@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "sourceRevision": "0dea5fb3baa8c27b8c4d53130abf5975181e10c9",
+  "workflowRun": 38020466571,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38020466571",
+  "workflowConclusion": "success",
+  "logSHA256": "e234224c8e90adc004f1ce3fc1e993511d4dab992f489eaed642fe5d1c2e725c",
+  "environment": "Disposable Linux CI with native KVM and root-owned temporary installer fixtures",
+  "tests": [
+    "TestNativeReservedDACManagerLaunch",
+    "TestRootGuestStorageConfigurationBatchPreflightAndInterruptedRetry",
+    "TestRootGuestStorageConfigurationPublicationRecoversJournalInterruption",
+    "TestRootGuestStorageConfigurationImageRequiresReservedOwnership",
+    "TestRootGuestStorageScopeRetainsIntentDuringRuntimeObservation"
+  ],
+  "qualifiedScope": [
+    "Synthetic firmware guest launched, audited, stopped and restarted through Manager.Apply using a reserved UID and actual Linux backend",
+    "Root-owned configuration fixtures preflight both recorded file pairs and recover interruption before installation journal publication",
+    "Root fixture refuses a matching-digest image whose owner is foreign",
+    "Shared account-lock replacement is refused with installer conflict classification"
+  ],
+  "limitations": [
+    "Synthetic firmware guest has no application adapter or signed bootable application image",
+    "Configuration publication fixture uses synthetic runtime guards, not the installed excluded workflow",
+    "Does not qualify fresh installation, boot-time channel-parent provisioning, activation release or end-user workflows",
+    "Does not qualify later volume-parent commits or their physical migration",
+    "Does not qualify full product deployment or physical hardware endurance"
+  ],
+  "releaseQualified": false
+}
