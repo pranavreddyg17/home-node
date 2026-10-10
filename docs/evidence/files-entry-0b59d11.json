@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "sourceRevision": "0b59d11ca0cdf2f0ed3e1ed2b12aa601d75c2d9c",
+  "workflowRun": 38090739066,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38090739066",
+  "jobID": 114326459140,
+  "jobConclusion": "success",
+  "logSHA256": "fc2171e2dc88dccd2cfd8b2eaa52e134c626e0325517c38f08ff76f38be55028",
+  "imageSHA256": "2f57fc8c86c3ed2698a34369787c783798079f118efde631551000a95e82e5b8",
+  "environment": "Disposable Ubuntu 24.04 native KVM/libvirt CI; temporary qualified NSS/allocator configuration and fixture-owned storage",
+  "tests": [
+    "TestNativeReservedFilesManagerLaunch"
+  ],
+  "qualifiedScope": [
+    "Actual unsigned development Files image starts through reserved Manager with qualified UID/group policy and native backend audit",
+    "Unprivileged client UID 2 with only the channel-access primary group uploads and downloads 1,073,741,824 bytes in bounded 256 KiB chunks with matching aggregate SHA256",
+    "Client closes and reconnects the guest channel during upload, requires unchanged SO_PEERCRED, and replays the last acknowledged chunk without advancing its offset",
+    "A separately finalized object survives cooperative ACPI manager shutdown and identity-retaining restart with matching contents and digest",
+    "Client sends a chunk, closes without consuming its acknowledgment, verifies unchanged peer credentials after reconnect, and replays the identical chunk",
+    "With the first 1 GiB object retained, a second bounded upload exhausts the two GiB ext4 disk and receives CAPACITY_UNAVAILABLE; partial cleanup succeeds and the first object downloads with its original SHA256",
+    "Actual homenode-transfer binary runs as UID 2 with no supplementary groups and serves a controller UID 1 round trip of 1,048,579 bytes through the Manager HTTP handler, runtime client and actual Files guest",
+    "Foreign controller UID 3 receives HTTP 403 from the transfer service; transfer UID 2 receives HTTP 403 when requesting runtime stop from the Manager handler",
+    "The same transfer process completes these checks before and after cooperative VM shutdown/restart, recovering its cached guest connection",
+    "A separate actual supervisor executable accepts the Files manifest signed by an ephemeral fixture Ed25519 key pinned in root-owned configuration and an independent version floor",
+    "Actual executable qualifies the independently provisioned reserved UID/group policy, refuses root caller UID 0 at its runtime socket, and shuts down cleanly without launching a guest",
+    "Idle executable startup preserves provisioned image/storage metadata, leaves its fresh volumes/channels empty, and journals catalog version, policy generation and exact policy digest"
+  ],
+  "limitations": [
+    "Workload VM invocation still uses a constructed development manifest; the separate executable startup uses a fixture-signed manifest, not a trusted release publisher",
+    "Temporary root directories and direct Manager workload invocation; separate real-executable idle startup is qualified, but no VM is launched by that executable in this source revision",
+    "No full quota/trash/export, physical power-loss, cross-VM isolation, reference-hardware performance or release qualification",
+    "Disconnect before consuming acknowledgment does not prove whether the first write committed; separate component coverage injects response-write failure",
+    "Physical disk-full refusal is qualified here; installed logical quota, trash retention and export remain unverified",
+    "Production transfer binary payload is 1,048,579 bytes; the 1 GiB upload uses the direct guest channel fixture",
+    "No signed installed catalog admission or end-to-end release qualification is established by this development fixture",
+    "Original Files image remains an unsigned development artifact; local fixture catalog signatures are not release promotion",
+    "The actual supervisor-to-VM-to-transfer lifecycle added in later commits is not executed by this source revision"
+  ],
+  "releaseQualified": false
+}
