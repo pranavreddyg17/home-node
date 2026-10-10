@@ -30,7 +30,7 @@ func TestOrphanCleanupRetainsReservationUntilGuestDeletion(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err = s.CreateTransfer(ctx, device, "new", 1, sum([]byte("x"))); err != ErrConflict {
+	if _, err = s.CreateTransfer(ctx, device, "new", 1, sum([]byte("x"))); err != ErrCapacity {
 		t.Fatal("orphan quota released early", err)
 	}
 	s.Backend = nil
