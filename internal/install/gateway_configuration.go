@@ -1,6 +1,10 @@
 package install
 
-import "bytes"
+import (
+	"bytes"
+	"context"
+	"os"
+)
 
 // gatewayControlUnit removes controller TCP/TLS authority from the reviewed
 // source unit. Applying it requires a verified, owned gateway identity.
@@ -21,4 +25,46 @@ func gatewayControlUnit(data []byte) ([]byte, error) {
 		data = bytes.Replace(data, before, after, 1)
 	}
 	return data, nil
+}
+
+func (e *Engine) observeGatewayAccount(ctx context.Context, base accountJournal) (*GatewayAccount, error) {
+	return e.observeGatewayAccountWith(ctx, base, nativeGatewayProvisioner{})
+}
+
+func (e *Engine) observeGatewayAccountWith(ctx context.Context, base accountJournal, b gatewayProvisionBackend) (*GatewayAccount, error) {
+	j, err := e.loadGatewayAccountJournal(base)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !j.Ready {
+		return nil, ErrAccounts
+	}
+	snapshot, err := b.Snapshot(ctx)
+	defer clear(snapshot.shadow)
+	if err != nil {
+		return nil, err
+	}
+	for step := 0; step < 4; step++ {
+		matched, err := gatewayAccountStepMatches(snapshot, j.Plan, step)
+		if err != nil || !matched {
+			return nil, ErrAccounts
+		}
+	}
+	for step := 0; step < 5; step++ {
+		matched, err := gatewayBaseStepMatches(snapshot, base, step)
+		if err != nil || !matched {
+			return nil, ErrAccounts
+		}
+	}
+	identity, err := b.VerifyGateway(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if identity != j.Plan.Identity {
+		return nil, ErrAccounts
+	}
+	return &identity, nil
 }

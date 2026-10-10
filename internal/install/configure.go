@@ -16,7 +16,7 @@ func (e *Engine) Configure(ctx context.Context, c Configuration) (ConfigurationP
 	if runtime.GOOS != "linux" || os.Geteuid() != 0 || e.host.Name() != "/" {
 		return ConfigurationPreview{}, ErrConflict
 	}
-	return e.configureWithMaintenance(ctx, c, time.Now(), func(ctx context.Context) (Accounts, Capacity, error) {
+	return e.configureWithIdentities(ctx, c, time.Now(), func(ctx context.Context) (Accounts, Capacity, error) {
 		j, err := e.loadAccountJournal()
 		if err != nil {
 			return Accounts{}, Capacity{}, err
@@ -41,13 +41,17 @@ func (e *Engine) Configure(ctx context.Context, c Configuration) (ConfigurationP
 			return Accounts{}, Capacity{}, ErrConflict
 		}
 		return a, Capacity{MemoryBytes: report.Host.MemoryBytes, FreeDiskBytes: report.Host.AvailableDiskBytes, LogicalCPUs: runtime.NumCPU()}, nil
-	}, e.observeMaintenanceAccount)
+	}, e.observeMaintenanceAccount, e.observeGatewayAccount)
 }
 
 func (e *Engine) configure(ctx context.Context, c Configuration, now time.Time, observe func(context.Context) (Accounts, Capacity, error)) (ConfigurationPreview, error) {
 	return e.configureWithMaintenance(ctx, c, now, observe, nil)
 }
 func (e *Engine) configureWithMaintenance(ctx context.Context, c Configuration, now time.Time, observe func(context.Context) (Accounts, Capacity, error), observeBackup func(context.Context, accountJournal) (*MaintenanceAccount, error)) (ConfigurationPreview, error) {
+	return e.configureWithIdentities(ctx, c, now, observe, observeBackup, nil)
+}
+
+func (e *Engine) configureWithIdentities(ctx context.Context, c Configuration, now time.Time, observe func(context.Context) (Accounts, Capacity, error), observeBackup func(context.Context, accountJournal) (*MaintenanceAccount, error), observeGateway func(context.Context, accountJournal) (*GatewayAccount, error)) (ConfigurationPreview, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -67,7 +71,13 @@ func (e *Engine) configureWithMaintenance(ctx context.Context, c Configuration, 
 	if a != j.Accounts {
 		return ConfigurationPreview{}, ErrAccounts
 	}
-	c.Gateway = nil // Caller identity is untrusted; live gateway observation is wired separately.
+	c.Gateway = nil // Caller-supplied identities never configure service authority.
+	if observeGateway != nil {
+		c.Gateway, err = observeGateway(ctx, j)
+		if err != nil {
+			return ConfigurationPreview{}, err
+		}
+	}
 	c.Maintenance = nil
 	if observeBackup != nil {
 		c.Maintenance, err = observeBackup(ctx, j)

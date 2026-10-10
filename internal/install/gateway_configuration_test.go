@@ -2,7 +2,9 @@ package install
 
 import (
 	"bytes"
+	"context"
 	servicetemplates "github.com/pranavreddyg17/home-node/packaging/systemd"
+	"strings"
 	"testing"
 )
 
@@ -59,5 +61,45 @@ func TestGatewayConfigurationPlanBindsKeyDirectoryAndPeerIdentities(t *testing.T
 		if _, err := ConfigurationPlan(c, now); err == nil {
 			t.Fatal("gateway role alias accepted", identity)
 		}
+	}
+}
+
+func TestGatewayConfigurationObservationRequiresReadyOwnedIdentity(t *testing.T) {
+	host, journal := roots(t)
+	engine := openEngine(t, host, journal)
+	defer engine.Close()
+	base := newAccountFixture()
+	ctx := context.Background()
+	if _, err := engine.provisionAccounts(ctx, base); err != nil {
+		t.Fatal(err)
+	}
+	owned, err := engine.loadAccountJournal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend := fixtureGatewayProvisioner{base}
+	if observed, err := engine.observeGatewayAccountWith(ctx, owned, backend); err != nil || observed != nil {
+		t.Fatal("legacy identity observation", observed, err)
+	}
+	if _, err := engine.prepareGatewayAccount(ctx, base); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.observeGatewayAccountWith(ctx, owned, backend); err == nil {
+		t.Fatal("pending gateway configured")
+	}
+	actual, err := engine.provisionGatewayAccount(ctx, backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observed, err := engine.observeGatewayAccountWith(ctx, owned, backend)
+	if err != nil || observed == nil || *observed != actual {
+		t.Fatal("ready gateway not observed", observed, err)
+	}
+	if _, err := engine.observeGatewayAccountWith(ctx, owned, gatewayVerificationFailure{backend}); err == nil {
+		t.Fatal("failed live verification configured identity")
+	}
+	base.s.passwd = []byte(strings.Replace(string(base.s.passwd), "HomeNode install ", "Foreign install ", 1))
+	if _, err := engine.observeGatewayAccountWith(ctx, owned, backend); err == nil {
+		t.Fatal("lost base ownership configured gateway")
 	}
 }
