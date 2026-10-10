@@ -7,7 +7,6 @@ import (
 	"crypto/ed25519"
 	"encoding/json"
 	"errors"
-	"github.com/pranavreddyg17/home-node/internal/catalog"
 	"os"
 	"reflect"
 	"time"
@@ -94,7 +93,7 @@ func (e *Engine) publishGuestStorageConfigurationExcludedLocked(ctx context.Cont
 								return ErrConflict
 							}
 							for _, image := range manifest.Images {
-								if _, err := catalog.VerifyImage("/var/lib/homenode/images", image); err != nil {
+								if err := e.verifyGuestStorageConfigurationImage(ctx, image, plan.GuestGID, guard); err != nil {
 									return err
 								}
 								if err := guard(ctx); err != nil {
