@@ -112,6 +112,27 @@ func TestRootGuestStorageConfigurationSourcesRetainBothFiles(t *testing.T) {
 	if err := os.MkdirAll(legacyPath, 0755); err != nil {
 		t.Fatal(err)
 	}
+	// An archive-shaped directory has no authority without its captured receipt.
+	archivePath := filepath.Join(host, "run", "homenode", ".homenode-guests.legacy")
+	if err := os.Rename(legacyPath, archivePath); err != nil {
+		t.Fatal(err)
+	}
+	orphan, err := os.Lstat(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.migrateGuestStorageLegacyChannel(ctx, installed, plan, guard); !errors.Is(err, ErrConflict) {
+		t.Fatal("unrecorded legacy archive admitted", err)
+	}
+	if retained, err := os.Lstat(archivePath); err != nil || !os.SameFile(orphan, retained) {
+		t.Fatal("unrecorded archive evidence changed", err)
+	}
+	if _, err := e.journalRoot.Lstat("guest-storage-legacy-channel-intent.json"); !os.IsNotExist(err) {
+		t.Fatal("unrecorded archive produced authority", err)
+	}
+	if err := os.Rename(archivePath, legacyPath); err != nil {
+		t.Fatal(err)
+	}
 	occupied := filepath.Join(legacyPath, "foreign-channel")
 	if err := os.WriteFile(occupied, []byte("preserved evidence"), 0600); err != nil {
 		t.Fatal(err)
@@ -175,6 +196,28 @@ func TestRootGuestStorageConfigurationSourcesRetainBothFiles(t *testing.T) {
 	}
 	legacyBefore, err := os.Lstat(legacyPath)
 	if err != nil {
+		t.Fatal(err)
+	}
+	// Matching metadata is insufficient to adopt a replacement child inode.
+	if err := os.Rename(legacyPath, legacyPath+".original"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(legacyPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.migrateGuestStorageLegacyChannel(ctx, installed, plan, guard); !errors.Is(err, ErrConflict) {
+		t.Fatal("replacement legacy directory admitted", err)
+	}
+	if retained, err := os.Lstat(legacyPath + ".original"); err != nil || !os.SameFile(legacyBefore, retained) {
+		t.Fatal("replacement refusal changed original directory", err)
+	}
+	if _, err := os.Lstat(archivePath); !os.IsNotExist(err) {
+		t.Fatal("replacement refusal published archive", err)
+	}
+	if err := os.Remove(legacyPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(legacyPath+".original", legacyPath); err != nil {
 		t.Fatal(err)
 	}
 	legacyInterrupted := errors.New("legacy archival acknowledgement interrupted")

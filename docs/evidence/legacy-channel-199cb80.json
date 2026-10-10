@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "sourceRevision": "199cb806600b3c572b82503c8e46b37f5eb85b48",
+  "workflowRun": 38023731629,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38023731629",
+  "workflowConclusion": "success",
+  "logSHA256": "d0d7442790ee69d5976010570633e654e93e720145c0bae7726028d28cd5d35f",
+  "environment": "Disposable Linux CI; root-owned temporary installation paths",
+  "tests": [
+    "TestRootGuestStorageConfigurationSourcesRetainBothFiles"
+  ],
+  "qualifiedScope": [
+    "Occupied legacy channel directories refuse capture and preserve contents without publishing a receipt",
+    "Legacy receipt retry preserves its inode; identical-content receipt replacement is refused",
+    "Recorded legacy directory archival retries after interrupted rename acknowledgement and preserves the original inode and mode",
+    "Reserved channel staging and publication preserve the recorded legacy archive; ambiguous simultaneous source/archive paths refuse migration"
+  ],
+  "limitations": [
+    "Uses synthetic runtime exclusion guards and a synthetic installed configuration journal",
+    "Does not qualify the public installed provisioning command, live account exclusion or full signed catalog integration",
+    "Does not qualify physical reboot, boot activation, application workloads or release",
+    "Additional orphan-archive and replacement-directory tests added after this source revision are not covered by this result"
+  ],
+  "releaseQualified": false
+}
