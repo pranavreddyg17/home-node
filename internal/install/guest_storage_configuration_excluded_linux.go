@@ -4,10 +4,13 @@ package install
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
+	"github.com/pranavreddyg17/home-node/internal/catalog"
 	"os"
 	"reflect"
+	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
 )
@@ -15,11 +18,11 @@ import (
 // Caller holds e.mu. Consume already staged configuration under the existing
 // activation block, runtime vacancy observers and shared account writer lock.
 // This does not release activation, stage missing files or expose a CLI command.
-func (e *Engine) publishGuestStorageConfigurationExcludedLocked(ctx context.Context, observe, destinations func(context.Context) error) (result error) {
+func (e *Engine) publishGuestStorageConfigurationExcludedLocked(ctx context.Context, publisher ed25519.PublicKey, minimum int64, observe, destinations func(context.Context) error) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if e == nil || e.host == nil || observe == nil || destinations == nil || os.Geteuid() != 0 || e.host.Name() != "/" {
+	if e == nil || e.host == nil || len(publisher) != ed25519.PublicKeySize || minimum < 1 || observe == nil || destinations == nil || os.Geteuid() != 0 || e.host.Name() != "/" {
 		return ErrPlan
 	}
 	_, result = e.withGuestStorageIntentGuarded(ctx, func(ctx context.Context, plan GuestStorageProvisioningPlan, checkPlan func() error) (result error) {
@@ -75,7 +78,32 @@ func (e *Engine) publishGuestStorageConfigurationExcludedLocked(ctx context.Cont
 							}
 							return checkAccounts(ctx)
 						}
-						return e.publishGuestStorageConfigurationLocked(ctx, directory, plan, guard)
+						manifest, group, err := e.guestStorageCatalogForJournal(ctx, intent.Original, publisher, minimum, time.Now(), guard)
+						if err != nil {
+							return err
+						}
+						if group != plan.GuestGID {
+							return ErrConflict
+						}
+						qualified := func(ctx context.Context) error {
+							current, gid, err := e.guestStorageCatalogForJournal(ctx, intent.Original, publisher, minimum, time.Now(), guard)
+							if err != nil {
+								return err
+							}
+							if gid != group || !reflect.DeepEqual(current, manifest) {
+								return ErrConflict
+							}
+							for _, image := range manifest.Images {
+								if _, err := catalog.VerifyImage("/var/lib/homenode/images", image); err != nil {
+									return err
+								}
+								if err := guard(ctx); err != nil {
+									return err
+								}
+							}
+							return guard(ctx)
+						}
+						return e.publishGuestStorageConfigurationLocked(ctx, directory, plan, qualified)
 					})
 				})
 			})

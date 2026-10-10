@@ -12,12 +12,12 @@ func TestGuestStorageConfigurationExcludedRejectsMissingAuthorityBeforeObservati
 	var e *Engine
 	observed := false
 	observer := func(context.Context) error { observed = true; return nil }
-	if err := e.publishGuestStorageConfigurationExcludedLocked(context.Background(), observer, observer); !errors.Is(err, ErrPlan) || observed {
+	if err := e.publishGuestStorageConfigurationExcludedLocked(context.Background(), nil, 0, observer, observer); !errors.Is(err, ErrPlan) || observed {
 		t.Fatal("missing installation authority observed host", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := e.publishGuestStorageConfigurationExcludedLocked(ctx, observer, observer); !errors.Is(err, context.Canceled) || observed {
+	if err := e.publishGuestStorageConfigurationExcludedLocked(ctx, nil, 0, observer, observer); !errors.Is(err, context.Canceled) || observed {
 		t.Fatal("cancelled publication observed host", err)
 	}
 }
