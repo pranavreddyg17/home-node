@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "sourceRevision": "566148539bfbfd00eec8a7033a05155b04cebea8",
+  "workflowRun": 38053951428,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38053951428",
+  "jobID": 114218499705,
+  "jobConclusion": "success",
+  "logSHA256": "fd358e61f94113ba4bec69432dcf932b695de2743e793192a874a9ee6330fea4",
+  "imageSHA256": "f2695810d9b3692067d3e159dd0146ae5cf7281916b2cd9f9d671e29e1646be7",
+  "environment": "Disposable Ubuntu 24.04 native KVM/libvirt CI; temporary qualified NSS/allocator configuration and fixture-owned storage",
+  "tests": [
+    "TestNativeReservedFilesManagerLaunch"
+  ],
+  "qualifiedScope": [
+    "Actual unsigned development Files image starts through reserved Manager with qualified UID/group policy and native backend audit",
+    "Unprivileged client UID 2 with only the channel-access primary group round-trips 1,048,579 bytes with acknowledged chunk replay",
+    "A separate finalized object of 5248 bytes survives manager stop and identity-retaining restart with matching contents and digest",
+    "Native source-protected process memory observations execute before application manager integration"
+  ],
+  "limitations": [
+    "Constructed development manifest, not signed installed catalog admission",
+    "Temporary directories and direct Manager invocation, not installed supervisor/service activation or authenticated transfer/API/UI",
+    "Stop uses existing forced backend stop; not cooperative shutdown or physical power-loss qualification",
+    "No 1 GiB transfer or channel reconnect evidence; that extension was committed after this source revision",
+    "No complete cross-VM isolation, hardware support, performance or release qualification"
+  ],
+  "releaseQualified": false
+}
