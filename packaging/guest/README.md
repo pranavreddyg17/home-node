@@ -300,6 +300,13 @@ attempt this additional boot when the unprivileged runner can access KVM and
 explicitly report its absence otherwise. These direct development boots do not
 qualify the installed supervisor, signed catalog, reserved UID isolation or release.
 
+Before retaining successful boot evidence, the fixture validates its exact fields,
+build image identity, accelerator flags, chunk replay, profile-specific results,
+cancellation/deletion and guest shutdown/filesystem checks. A software boot
+cannot emit a KVM success flag; incomplete profile evidence and release claims
+are refused. These checks validate development reports, not independently signed
+attestations or production activation authority.
+
 Within a bounded boot deadline the fixture requires adapter health and a small
 upload/finalize/download/content-verification/delete-ack round trip. It retains
 at most 8 MiB of console diagnostics and writes separate boot evidence on success;

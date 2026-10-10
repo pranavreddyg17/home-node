@@ -17,6 +17,7 @@ import time
 import uuid
 sys.dont_write_bytecode = True
 import overlay
+import boot_evidence
 
 
 def development_boot_accelerator():
@@ -383,6 +384,7 @@ def boot_vm(system_fd, data_fd, output, record, accelerator="tcg"):
                   "accelerator": accelerator, "tcgBootAndObjectRoundTrip": accelerator == "tcg",
                   "kvmBootAndObjectRoundTrip": accelerator == "kvm", "objectTransfer": object_evidence,
                   "videoPresets": video_evidence, "videoCancellation": cancellation, "aiInference": ai_evidence, "shutdown": shutdown_evidence, "releaseQualified": False}
+        boot_evidence.validate(result, record, accelerator)
         with (output / "boot-evidence.json").open("x") as file:
             json.dump(result, file, indent=2)
             file.write("\n")
