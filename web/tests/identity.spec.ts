@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 
 async function authenticator(page: Page) {
   const cdp = await page.context().newCDPSession(page)
@@ -231,6 +232,42 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.locator('nav').getByRole('button', { name: 'Files', exact: false }).click()
   await expect(page.getByRole('heading', { name: 'Your files' })).toBeVisible()
+  // Browser transport fixture; native guest and authenticated API have separate evidence.
+  const uploadContent = Buffer.from('Resume the original transfer after a temporary outage.')
+  const uploadHash = createHash('sha256').update(uploadContent).digest('hex')
+  const uploadKey = `homenode-transfer:${uploadHash}:${uploadContent.length}`
+  const uploadId = 'a'.repeat(32)
+  const pending = { id: uploadId, name: 'resume.txt', size: uploadContent.length, sha256: uploadHash, offset: 7, state: 'uploading', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
+  let transferAvailable = false, duplicateTransfers = 0, uploadedOffset = -1
+  await page.evaluate(({ key, id }) => localStorage.setItem(key, id), { key: uploadKey, id: uploadId })
+  await page.route(`**/api/v1/transfers/${uploadId}`, route => transferAvailable ? route.fulfill({ json: pending }) : route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture transfer service unavailable' } } }))
+  await page.route('**/api/v1/transfers', async route => {
+    duplicateTransfers++
+    await route.fulfill({ status: 500, json: { error: { message: 'Duplicate transfer fixture' } } })
+  })
+  await page.route(`**/api/v1/transfers/${uploadId}/chunks`, async route => {
+    const body = JSON.parse(route.request().postData()!)
+    uploadedOffset = body.offset
+    expect(Buffer.from(body.data, 'base64')).toEqual(uploadContent.subarray(7))
+    expect(body.sha256).toBe(createHash('sha256').update(uploadContent.subarray(7)).digest('hex'))
+    await route.fulfill({ json: { ...pending, offset: uploadContent.length } })
+  })
+  await page.route(`**/api/v1/transfers/${uploadId}/finalize`, route => route.fulfill({ json: { id: uploadId } }))
+  const uploadFile = { name: 'resume.txt', mimeType: 'text/plain', buffer: uploadContent }
+  await page.getByLabel('Upload a file').setInputFiles(uploadFile)
+  await expect(page.getByRole('alert')).toContainText('Fixture transfer service unavailable')
+  expect(await page.evaluate(key => localStorage.getItem(key), uploadKey)).toBe(uploadId)
+  expect(duplicateTransfers).toBe(0)
+  transferAvailable = true
+  await page.getByLabel('Upload a file').setInputFiles(uploadFile)
+  await expect(page.getByRole('status')).toContainText('Upload verified')
+  expect(uploadedOffset).toBe(7)
+  expect(duplicateTransfers).toBe(0)
+  expect(await page.evaluate(key => localStorage.getItem(key), uploadKey)).toBeNull()
+  await page.unroute(`**/api/v1/transfers/${uploadId}`)
+  await page.unroute('**/api/v1/transfers')
+  await page.unroute(`**/api/v1/transfers/${uploadId}/chunks`)
+  await page.unroute(`**/api/v1/transfers/${uploadId}/finalize`)
   await page.locator('nav').getByRole('button', { name: 'Jobs', exact: false }).click()
   await expect(page.getByRole('heading', { name: 'Convert a video' })).toBeVisible()
   await page.locator('nav').getByRole('button', { name: 'AI', exact: false }).click()

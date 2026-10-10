@@ -2,7 +2,7 @@ import { approvedAction } from './approvals'
 import { useEffect, useRef, useState } from 'react'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
-import { api, message, type Session } from './api'
+import { APIError, api, message, type Session } from './api'
 
 type App = { workload: string; instanceId: string; state: string; updatedAt: number }
 type Operation = { id: string; state: string; result: { code?: string } }
@@ -62,7 +62,10 @@ export function Files() {
       let transfer: Transfer | null = null
       const saved = localStorage.getItem(storageKey)
       if (saved) {
-        try { transfer = await api<Transfer>(`/transfers/${saved}`) } catch { localStorage.removeItem(storageKey) }
+        try { transfer = await api<Transfer>(`/transfers/${saved}`) } catch (error) {
+          if (error instanceof APIError && error.status === 404) localStorage.removeItem(storageKey)
+          else throw error
+        }
         if (transfer && (transfer.expiresAt * 1000 <= Date.now() || !['uploading', 'verifying', 'ready'].includes(transfer.state))) transfer = null
       }
       if (!transfer) { transfer = await api<Transfer>('/transfers', { name: file.name, size: file.size, sha256: hash }); localStorage.setItem(storageKey, transfer.id) }
