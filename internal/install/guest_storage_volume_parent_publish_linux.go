@@ -4,8 +4,6 @@ package install
 
 import (
 	"context"
-	"errors"
-	"io"
 	"os"
 	"reflect"
 
@@ -43,32 +41,15 @@ func (e *Engine) publishEmptyGuestStorageVolumeParentLocked(ctx context.Context,
 				if err := checkPath(ctx); err != nil {
 					return empty, st, err
 				}
-				emptyCheck, err := root.Open(".")
-				if err != nil {
-					return empty, st, err
-				}
-				entries, readErr := emptyCheck.ReadDir(1)
-				closeErr := emptyCheck.Close()
-				if len(entries) != 0 || !errors.Is(readErr, io.EOF) || closeErr != nil {
-					return empty, st, ErrConflict
-				}
 				current, err := e.load()
 				if err != nil {
 					return empty, st, err
 				}
-				if !reflect.DeepEqual(current, intent.Original) && !reflect.DeepEqual(current, intent.Desired) {
-					return empty, st, ErrConflict
+				if err := e.admitEmptyGuestStorageVolumeParentInstallation(ctx, current, intent, root, parent); err != nil {
+					return empty, st, err
 				}
-				if unix.Fstat(int(parent.Fd()), &st) != nil || uint64(st.Dev) != intent.Device || st.Ino != intent.Inode || st.Mode != unix.S_IFDIR|0710 || st.Uid != 0 || (st.Gid != intent.SourceGID && st.Gid != intent.Plan.GuestGID) || (reflect.DeepEqual(current, intent.Desired) && st.Gid != intent.Plan.GuestGID) {
+				if unix.Fstat(int(parent.Fd()), &st) != nil {
 					return empty, st, ErrConflict
-				}
-				for _, item := range current.Items {
-					if item.Path == "var/lib/homenode/volumes" {
-						continue
-					}
-					if err := e.matches(item); err != nil {
-						return empty, st, ErrConflict
-					}
 				}
 				if err := checkPath(ctx); err != nil {
 					return empty, st, err
