@@ -69,6 +69,9 @@ func (e *Engine) provisionGuestStorageChannelExcludedLocked(ctx context.Context,
 			return checkStorage(ctx)
 		}
 		return e.withGuestStorageDirectoryParentState(ctx, "var/lib/homenode/volumes", plan.GuestGID, plan.GuestGID, 0, 0, false, qualified, func(_ *os.Root, _ *os.File, checkVolumes func(context.Context) error) error {
+			if err := e.prepareGuestStorageChannelRuntime(ctx, checkVolumes); err != nil {
+				return err
+			}
 			transferGID := uint32(accounts.Accounts.TransferGID)
 			if _, err := e.journalRoot.Lstat("guest-storage-channel-stage.json"); err == nil {
 				previous, err := e.loadGuestStorageChannelStage(ctx, plan, transferGID)

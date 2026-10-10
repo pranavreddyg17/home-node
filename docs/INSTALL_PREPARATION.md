@@ -259,13 +259,14 @@ not prove that journey.
 The channel parent can first be provisioned under a blocked installation using
 `homenode guest-storage-provision-channels` with the same independently verified
 `--publisher-key` and positive `--minimum-catalog-version` arguments. The command
-requires an existing systemd-owned `/run/homenode` directory, migrated images and
+creates an absent `/run/homenode` under a retained protected `/run` scope and
+requires migrated images and
 volume ownership, vacant runtime destinations and dormant services/guests. It
 records and publishes only the new empty channel parent, or retries its recorded
 inode. Foreign and uncertain partial directories are preserved and refused.
 Success reports `channelParentPublished`; service activation remains false.
-Creating the outer runtime directory and provisioning after reboot are not yet
-integrated. Native installed-command qualification remains pending.
+A prior-boot receipt can be archived only while both channel paths are absent.
+Automatic boot-time service composition remains unfinished. Native installed-command qualification remains pending.
 
 Once images, volumes and `/run/homenode/guests` have independently qualified
 ownership, an existing blocked installation can publish reserved configuration:
