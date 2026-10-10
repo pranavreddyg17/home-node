@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "sourceRevision": "01ff8e8cb5b3dc429cc0078c4eaf40b59e3a72a5",
+  "workflowRun": 38020955501,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38020955501",
+  "workflowConclusion": "success",
+  "logSHA256": "7d56f5d22c9e78763e4c021b762e4ff9695ec63f1fd9f99c73f8f4393b449b52",
+  "environment": "Disposable Linux CI with root-owned temporary installer fixtures",
+  "tests": [
+    "TestRootGuestStorageVolumeParentIntentRetainsOriginalInode",
+    "TestRootEmptyGuestStorageVolumeParentPublicationRecoversOwnershipInterruption",
+    "TestGuestStorageVolumeParentJournalPreservesImageAndConfigurationAuthority"
+  ],
+  "qualifiedScope": [
+    "Retained empty-volume parent intent refuses inode replacement",
+    "Empty-volume parent publication recovers interruption between ownership migration and installation journal publication",
+    "Volume journal transition preserves image and configuration authority"
+  ],
+  "limitations": [
+    "Runtime exclusion guards in these root fixtures are synthetic",
+    "Does not qualify the public command or installed excluded migration workflow introduced in later commits",
+    "Does not qualify populated-volume migration, channel-parent provisioning, activation release or complete application deployment"
+  ],
+  "releaseQualified": false
+}

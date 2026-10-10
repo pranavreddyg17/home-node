@@ -138,3 +138,11 @@ parent. Its provisioning and recreation after reboot or service-directory
 cleanup remain an installation/boot integration requirement. Creating a matching
 parent opportunistically in the reserved runtime loader would bypass the
 recorded provisioning authority and is not an accepted completion of that step.
+
+Linux CI run [38020955501](https://github.com/pranavreddyg17/home-node/actions/runs/38020955501)
+at `01ff8e8cb5b3dc429cc0078c4eaf40b59e3a72a5` explicitly passed the retained
+empty-volume parent intent and interrupted ownership/journal publication fixtures.
+These use temporary root-owned directories and synthetic runtime guards. They
+do not prove the later public migration command, populated-volume migration or
+activation release. Exact scope and the retained log digest are recorded in
+[evidence/empty-volume-parent-01ff8e8.json](evidence/empty-volume-parent-01ff8e8.json).
