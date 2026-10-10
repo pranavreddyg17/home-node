@@ -4,6 +4,7 @@ package install
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -67,13 +68,22 @@ func TestRootGuestStorageChannelStagePreservesRecordedCandidate(t *testing.T) {
 	if err != nil || string(current) != string(data) {
 		t.Fatal("receipt evidence changed", err)
 	}
-	if err := engine.withRecordedGuestStorageChannel(ctx, plan, 1002, stage, guard, func(_ *os.Root, parent, _ *os.File, check func(context.Context) error) error {
-		if err := unix.Renameat2(int(parent.Fd()), ".homenode-guests.stage", int(parent.Fd()), "guests", unix.RENAME_NOREPLACE); err != nil {
-			return err
+	interrupted := errors.New("channel publication acknowledgement interrupted")
+	engine.checkpoint = func(name, path string) error {
+		if name == "guest-storage-channel-parent-published" {
+			return interrupted
 		}
-		return check(ctx)
-	}); err != nil {
-		t.Fatal("recorded inode could not move to final location", err)
+		return nil
+	}
+	if err := engine.publishGuestStorageChannelParent(ctx, plan, 1002, stage, guard); !errors.Is(err, interrupted) {
+		t.Fatal("publication interruption not observed", err)
+	}
+	engine.checkpoint = nil
+	if err := engine.publishGuestStorageChannelParent(ctx, plan, 1002, stage, guard); err != nil {
+		t.Fatal("recorded publication retry refused", err)
+	}
+	if completed, err := os.Lstat(receipt); err != nil || !os.SameFile(before, completed) {
+		t.Fatal("publication retry rewrote receipt", err)
 	}
 	final := filepath.Join(runtime, "guests")
 	if err := os.Rename(final, final+".original"); err != nil {

@@ -168,3 +168,12 @@ partial candidates and refuses adoption by repeated staging. Publication,
 recorded-stage recovery, installed-command composition and reboot integration
 remain unfinished. The primitive and disposable root fixture compile for Linux;
 native execution of this new fixture remains pending.
+
+The recorded-stage consumer now retains the immutable receipt and both runtime
+and candidate descriptors, admitting exactly one of the fixed staging/final
+paths. The publisher uses `RENAME_NOREPLACE`, synchronizes the candidate and
+runtime directory, and verifies the recorded final inode. Retry after publication
+rechecks and synchronizes the same inode without rewriting the receipt. A fixture
+interrupts acknowledgement after the rename and retries, then refuses a foreign
+final directory with matching ownership. These additions compile for Linux;
+native execution and installed/reboot composition remain pending.
