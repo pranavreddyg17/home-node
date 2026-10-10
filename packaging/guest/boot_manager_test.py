@@ -141,6 +141,45 @@ class ManagerInputs(unittest.TestCase):
                 manager_channel.capacity_roundtrip(object(), b"chunk")
         request.assert_called_once()
 
+    def test_uncertain_upload_retries_identical_bytes_after_timeout(self):
+        first, second = mock.Mock(), mock.Mock()
+        second.getsockopt.return_value = b"originalpeer"
+        fields = {"objectId": "a" * 32, "offset": 524288, "size": 1 << 30,
+                  "sha256": "b" * 64, "data": "fixture"}
+        def reconnect():
+            first.close.assert_called_once()
+            return second
+        with mock.patch.object(manager_channel.socket, "SO_PEERCRED", 17, create=True), mock.patch.object(manager_channel.boot_image, "request", side_effect=[TimeoutError("lost response"), {"offset": 786432}]) as request:
+            channel, response = manager_channel.replay_uncertain_upload(first, reconnect, b"originalpeer", fields)
+        self.assertIs(channel, second)
+        self.assertEqual(response["offset"], 786432)
+        self.assertEqual([call.kwargs for call in request.call_args_list], [fields, fields])
+
+    def test_uncertain_upload_never_retries_guest_refusal(self):
+        reconnect = mock.Mock()
+        with mock.patch.object(manager_channel.boot_image, "request", side_effect=ValueError("guest request failed: CAPACITY_UNAVAILABLE")) as request:
+            with self.assertRaisesRegex(ValueError, "CAPACITY_UNAVAILABLE"):
+                manager_channel.replay_uncertain_upload(mock.Mock(), reconnect, b"originalpeer", {})
+        reconnect.assert_not_called()
+        request.assert_called_once()
+
+    def test_uncertain_upload_refuses_changed_peer_before_replaying(self):
+        reconnect = mock.Mock()
+        reconnect.return_value.getsockopt.return_value = b"foreign-peer"
+        with mock.patch.object(manager_channel.socket, "SO_PEERCRED", 17, create=True), mock.patch.object(manager_channel.boot_image, "request", side_effect=TimeoutError("lost response")) as request:
+            with self.assertRaisesRegex(ValueError, "peer changed"):
+                manager_channel.replay_uncertain_upload(mock.Mock(), reconnect, b"originalpeer", {})
+        request.assert_called_once()
+
+    def test_uncertain_upload_stops_after_three_transport_failures(self):
+        reconnect = mock.Mock()
+        reconnect.return_value.getsockopt.return_value = b"originalpeer"
+        with mock.patch.object(manager_channel.socket, "SO_PEERCRED", 17, create=True), mock.patch.object(manager_channel.boot_image, "request", side_effect=TimeoutError("lost response")) as request:
+            with self.assertRaises(TimeoutError):
+                manager_channel.replay_uncertain_upload(mock.Mock(), reconnect, b"originalpeer", {})
+        self.assertEqual(request.call_count, 3)
+        self.assertEqual(reconnect.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

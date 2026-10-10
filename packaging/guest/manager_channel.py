@@ -14,6 +14,22 @@ import uuid
 import boot_image
 
 
+def replay_uncertain_upload(channel, reconnect, peer, fields):
+    for attempt in range(3):
+        try:
+            response = boot_image.request(channel, "upload", **fields)
+            return channel, response
+        except (OSError, ValueError) as error:
+            if isinstance(error, ValueError) and str(error) != "guest channel closed":
+                raise
+            if attempt == 2:
+                raise
+            channel.close()
+            channel = reconnect()
+            if channel.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12) != peer:
+                raise ValueError("guest peer changed across uncertain upload retry")
+
+
 def capacity_roundtrip(channel, chunk):
     identifier = uuid.uuid4().hex
     total = 1 << 30
@@ -53,8 +69,11 @@ def large_object_roundtrip(channel, reconnect):
             if channel.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12) != peer:
                 raise ValueError("guest peer changed across unacknowledged reconnect")
         try:
-            uploaded = boot_image.request(channel, "upload", **fields)
-        except ValueError as error:
+            if offset == 2 * len(chunk):
+                channel, uploaded = replay_uncertain_upload(channel, reconnect, peer, fields)
+            else:
+                uploaded = boot_image.request(channel, "upload", **fields)
+        except (OSError, ValueError) as error:
             raise ValueError("large object upload refused at offset " + str(offset)) from error
         if uploaded.get("offset") != offset + len(chunk):
             raise ValueError("large object upload offset mismatch")
