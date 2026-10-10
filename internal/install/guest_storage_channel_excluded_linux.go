@@ -92,6 +92,9 @@ func (e *Engine) provisionGuestStorageChannelExcludedLocked(ctx context.Context,
 				return err
 			}
 			if _, err := e.journalRoot.Lstat("guest-storage-channel-stage.json"); os.IsNotExist(err) {
+				if err := e.migrateGuestStorageLegacyChannel(ctx, installed, plan, checkVolumes); err != nil {
+					return fmt.Errorf("migrate recorded legacy channel directory: %w", err)
+				}
 				if _, err := e.stageGuestStorageChannelParent(ctx, plan, transferGID, checkVolumes); err != nil {
 					return fmt.Errorf("stage protected channel directory: %w", err)
 				}

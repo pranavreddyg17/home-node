@@ -184,11 +184,11 @@ func TestRootGuestStorageConfigurationSourcesRetainBothFiles(t *testing.T) {
 		}
 		return nil
 	}
-	if err := e.archiveGuestStorageLegacyChannel(ctx, installed, plan, guard); !errors.Is(err, legacyInterrupted) {
+	if err := e.migrateGuestStorageLegacyChannel(ctx, installed, plan, guard); !errors.Is(err, legacyInterrupted) {
 		t.Fatal("legacy archive interruption not observed", err)
 	}
 	e.checkpoint = nil
-	if err := e.archiveGuestStorageLegacyChannel(ctx, installed, plan, guard); err != nil {
+	if err := e.migrateGuestStorageLegacyChannel(ctx, installed, plan, guard); err != nil {
 		t.Fatal("recorded legacy archive retry refused", err)
 	}
 	legacyArchived, err := os.Lstat(filepath.Join(host, "run", "homenode", ".homenode-guests.legacy"))
@@ -197,6 +197,19 @@ func TestRootGuestStorageConfigurationSourcesRetainBothFiles(t *testing.T) {
 	}
 	if _, err := os.Lstat(legacyPath); !os.IsNotExist(err) {
 		t.Fatal("legacy source path still present", err)
+	}
+	reservedChannel, err := e.stageGuestStorageChannelParent(ctx, plan, 1002, guard)
+	if err != nil {
+		t.Fatal("reserved channel staging after legacy archival refused", err)
+	}
+	if err := e.publishGuestStorageChannelParent(ctx, plan, 1002, reservedChannel, guard); err != nil {
+		t.Fatal("reserved channel publication after legacy archival refused", err)
+	}
+	if err := e.migrateGuestStorageLegacyChannel(ctx, installed, plan, guard); !errors.Is(err, ErrConflict) {
+		t.Fatal("ambiguous legacy and current paths admitted", err)
+	}
+	if archived, err := os.Lstat(filepath.Join(host, "run", "homenode", ".homenode-guests.legacy")); err != nil || !os.SameFile(legacyBefore, archived) {
+		t.Fatal("reserved staging replaced legacy evidence", err)
 	}
 	if err := os.WriteFile(envPath, []byte("foreign environment\n"), 0644); err != nil {
 		t.Fatal(err)
