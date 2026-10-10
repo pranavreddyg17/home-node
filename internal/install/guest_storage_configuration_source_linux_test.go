@@ -142,6 +142,37 @@ func TestRootGuestStorageConfigurationSourcesRetainBothFiles(t *testing.T) {
 	if err != nil || !os.SameFile(legacyReceipt, legacyRetry) {
 		t.Fatal("legacy retry replaced receipt", err)
 	}
+	if err := e.withGuestStorageLegacyChannelIntent(ctx, installed, plan, guard, func(_ guestStorageLegacyChannelIntent, check func(context.Context) error) error { return check(ctx) }); err != nil {
+		t.Fatal("retained legacy authority refused", err)
+	}
+	legacyRecordPath := filepath.Join(journalDir, "guest-storage-legacy-channel-intent.json")
+	legacyBytes, err := os.ReadFile(legacyRecordPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = e.withGuestStorageLegacyChannelIntent(ctx, installed, plan, guard, func(_ guestStorageLegacyChannelIntent, check func(context.Context) error) error {
+		if err := os.Rename(legacyRecordPath, legacyRecordPath+".original"); err != nil {
+			return err
+		}
+		if err := os.WriteFile(legacyRecordPath, legacyBytes, 0600); err != nil {
+			return err
+		}
+		return check(ctx)
+	})
+	if !errors.Is(err, ErrConflict) {
+		t.Fatal("matching legacy receipt replacement admitted", err)
+	}
+	for _, name := range []string{legacyRecordPath, legacyRecordPath + ".original"} {
+		if current, err := os.ReadFile(name); err != nil || string(current) != string(legacyBytes) {
+			t.Fatal("legacy receipt evidence altered", err)
+		}
+	}
+	if err := os.Remove(legacyRecordPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(legacyRecordPath+".original", legacyRecordPath); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(envPath, []byte("foreign environment\n"), 0644); err != nil {
 		t.Fatal(err)
 	}

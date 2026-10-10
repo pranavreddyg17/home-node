@@ -56,7 +56,7 @@ func (e *Engine) withGuestIdentityRecordGuarded(ctx context.Context, name string
 	maximum := int64(8192)
 	if name == "guest-uid-allocation-intent.json" {
 		maximum = 262144
-	} else if name != "guest-identity-nss-intent.json" && name != "guest-identity-nss-stage.json" && name != "guest-uid-allocation-stage.json" && name != "guest-storage-configuration-stage.json" && name != "guest-storage-channel-stage.json" {
+	} else if name != "guest-identity-nss-intent.json" && name != "guest-identity-nss-stage.json" && name != "guest-uid-allocation-stage.json" && name != "guest-storage-configuration-stage.json" && name != "guest-storage-channel-stage.json" && name != "guest-storage-legacy-channel-intent.json" {
 		return ErrPlan
 	}
 	if use == nil || len(expected) == 0 || int64(len(expected)) > maximum {

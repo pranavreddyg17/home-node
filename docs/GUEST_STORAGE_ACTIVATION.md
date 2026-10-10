@@ -228,3 +228,10 @@ their contents and preserves the immutable receipt on retry. It does not archive
 the directory or admit it for reserved execution. Legacy archival and command
 composition remain unfinished; the new source fixture has compiled for Linux
 but native execution remains pending.
+
+Legacy intent consumption now retains the protected policy and receipt together,
+matches the independently qualified plan and current kernel boot, and rechecks
+both named file inodes and bytes around its consumer. The source fixture refuses
+an identical-byte receipt replacement while preserving both files as evidence.
+This still requires a separate recorded-directory scope before legacy archival.
+Linux compilation passed; native qualification remains pending.
