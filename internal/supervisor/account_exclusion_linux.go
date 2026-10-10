@@ -55,6 +55,9 @@ func withReservedAccountDirectory(ctx context.Context, host *os.Root, use func(c
 				return err
 			}
 			if err := checkLock(); err != nil {
+				if errors.Is(err, accountlock.ErrInvalid) || errors.Is(err, accountlock.ErrConflict) {
+					return errors.Join(ErrPolicy, err)
+				}
 				return err
 			}
 			return checkParent(ctx)

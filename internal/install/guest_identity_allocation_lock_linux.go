@@ -12,7 +12,19 @@ import (
 
 // Retain the shared descriptor lock under the installer's qualified directory.
 func withGuestIdentityAllocationLock(ctx context.Context, directory *os.Root, use func(context.Context, func() error) error) error {
-	err := accountlock.With(ctx, directory, use)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if use == nil {
+		return mapGuestIdentityAllocationLockError(accountlock.ErrInvalid)
+	}
+	err := accountlock.With(ctx, directory, func(ctx context.Context, check func() error) error {
+		return use(ctx, func() error { return mapGuestIdentityAllocationLockError(check()) })
+	})
+	return mapGuestIdentityAllocationLockError(err)
+}
+
+func mapGuestIdentityAllocationLockError(err error) error {
 	if errors.Is(err, accountlock.ErrInvalid) {
 		return errors.Join(ErrPlan, err)
 	}
