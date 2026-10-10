@@ -261,7 +261,13 @@ func (a *Agent) upload(r guestproto.Request) (int64, error) {
 		if !bytes.Equal(existing, r.Data) {
 			return info.Size(), errors.New("chunk conflict")
 		}
-		return info.Size(), nil
+		// A previous write can have succeeded while its sync failed. Replayed
+		// bytes prove consistency, not durability; retry both sync boundaries
+		// before acknowledging the chunk or its directory entry.
+		if err := file.Sync(); err != nil {
+			return info.Size(), err
+		}
+		return info.Size(), a.sync()
 	}
 	if r.Offset != info.Size() {
 		return info.Size(), errors.New("offset conflict")
@@ -279,7 +285,7 @@ func (a *Agent) upload(r guestproto.Request) (int64, error) {
 	if err = file.Sync(); err != nil {
 		return info.Size(), err
 	}
-	return r.Offset + int64(len(r.Data)), nil
+	return r.Offset + int64(len(r.Data)), a.sync()
 }
 func (a *Agent) hash(name string) (int64, string, error) {
 	file, err := a.root.Open(name)
@@ -313,7 +319,9 @@ func (a *Agent) finalize(r guestproto.Request) (int64, string, error) {
 		if size != r.Size || hash != r.SHA256 {
 			return 0, "", errors.New("finalize conflict")
 		}
-		return size, hash, nil
+		// A rename may have completed before its directory sync failed.
+		// Finalization retry must make that publication durable as well.
+		return size, hash, a.sync()
 	}
 	if r.Size == 0 && r.SHA256 == checksum(nil) {
 		f, e := a.root.OpenFile(r.ObjectID+".part", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
