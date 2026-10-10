@@ -202,6 +202,11 @@ under its boot UUID before staging a new directory, only if both channel paths
 are absent. Archival retains the exact receipt inode and bytes and uses a
 no-replace rename; existing history or occupied runtime paths are refused.
 A fixture simulates a vacant later-boot namespace and checks archival while
-preserving evidence. It does not qualify a physical reboot. Creation of the outer
-runtime directory, startup activation composition and native installed-command
-qualification remain unfinished.
+preserving evidence. The fixture now interrupts acknowledgement after archival,
+then creates and publishes a current-boot stage while retaining the old archive
+inode and bytes. It does not qualify a physical reboot. Blocked provisioning can
+create an absent outer runtime directory under a retained protected `/run`
+descriptor, mount and ACL guard; existing foreign metadata is refused without
+repair. Startup activation composition and native installed-command qualification
+remain unfinished. These later additions have compiled for Linux; native execution
+remains pending.
