@@ -21,7 +21,11 @@ def large_object_roundtrip(channel, reconnect):
     for offset in range(0, total, len(chunk)):
         fields = {"objectId": identifier, "offset": offset, "size": total,
                   "sha256": chunk_digest, "data": base64.b64encode(chunk).decode()}
-        if boot_image.request(channel, "upload", **fields).get("offset") != offset + len(chunk):
+        try:
+            uploaded = boot_image.request(channel, "upload", **fields)
+        except ValueError as error:
+            raise ValueError("large object upload refused at offset " + str(offset)) from error
+        if uploaded.get("offset") != offset + len(chunk):
             raise ValueError("large object upload offset mismatch")
         digest.update(chunk)
         if offset == len(chunk):

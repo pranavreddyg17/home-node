@@ -67,7 +67,9 @@ def request(channel, operation, allowed_error=None, **fields):
         if name in response and not isinstance(response[name], str):
             raise ValueError("invalid text guest response")
     if response.get("error") and response["error"] != allowed_error:
-        raise ValueError("guest request failed")
+        known = {"INVALID_REQUEST", "WORKLOAD_UNAVAILABLE", "OBJECT_BUSY", "NOT_FOUND", "CAPACITY_UNAVAILABLE", "OPERATION_FAILED"}
+        classification = response["error"] if response["error"] in known else "UNRECOGNIZED_ERROR"
+        raise ValueError("guest request failed: " + classification)
     return response
 
 
