@@ -33,7 +33,24 @@ func (e *Engine) withRecordedGuestStorageImageParent(ctx context.Context, intent
 	return e.withGuestStorageImageParentState(ctx, intent.SourceGID, intent.Plan.GuestGID, intent.Device, intent.Inode, true, checkMigration, use)
 }
 
-func (e *Engine) withGuestStorageImageParentState(ctx context.Context, sourceGID, guestGID uint32, device, inode uint64, recorded bool, checkMigration func(context.Context) error, use func(*os.Root, *os.File, func(context.Context) error) error) (result error) {
+func (e *Engine) withGuestStorageImageParentState(ctx context.Context, sourceGID, guestGID uint32, device, inode uint64, recorded bool, checkMigration func(context.Context) error, use func(*os.Root, *os.File, func(context.Context) error) error) error {
+	return e.withGuestStorageDirectoryParentState(ctx, "var/lib/homenode/images", sourceGID, guestGID, device, inode, recorded, checkMigration, use)
+}
+
+func (e *Engine) withRecordedGuestStorageVolumeParent(ctx context.Context, intent guestStorageVolumeParentIntent, checkMigration func(context.Context) error, use func(*os.Root, *os.File, func(context.Context) error) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if intent.Version != 1 || intent.Device > math.MaxInt64 || intent.Inode == 0 || intent.Inode > math.MaxInt64 {
+		return ErrPlan
+	}
+	if _, err := canonicalGuestStoragePlan(ctx, intent.Plan); err != nil {
+		return err
+	}
+	return e.withGuestStorageDirectoryParentState(ctx, "var/lib/homenode/volumes", intent.SourceGID, intent.Plan.GuestGID, intent.Device, intent.Inode, true, checkMigration, use)
+}
+
+func (e *Engine) withGuestStorageDirectoryParentState(ctx context.Context, path string, sourceGID, guestGID uint32, device, inode uint64, recorded bool, checkMigration func(context.Context) error, use func(*os.Root, *os.File, func(context.Context) error) error) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -43,7 +60,9 @@ func (e *Engine) withGuestStorageImageParentState(ctx context.Context, sourceGID
 	if err := checkMigration(ctx); err != nil {
 		return err
 	}
-	const path = "var/lib/homenode/images"
+	if path != "var/lib/homenode/images" && path != "var/lib/homenode/volumes" {
+		return ErrPlan
+	}
 	root, err := e.host.OpenRoot(path)
 	if err != nil {
 		return err
@@ -78,6 +97,11 @@ func (e *Engine) withGuestStorageImageParentState(ctx context.Context, sourceGID
 		var current, namedStat unix.Stat_t
 		if unix.Fstat(int(parent.Fd()), &current) != nil || unix.Fstat(int(named.Fd()), &namedStat) != nil || current.Dev != original.Dev || current.Ino != original.Ino || current.Mode != original.Mode || current.Uid != original.Uid || (current.Gid != sourceGID && current.Gid != guestGID) || namedStat.Dev != current.Dev || namedStat.Ino != current.Ino || namedStat.Mode != current.Mode || namedStat.Uid != current.Uid || namedStat.Gid != current.Gid {
 			return ErrConflict
+		}
+		for _, attribute := range []string{"system.posix_acl_access", "system.posix_acl_default"} {
+			if _, err := unix.Fgetxattr(int(parent.Fd()), attribute, nil); !errors.Is(err, unix.ENODATA) {
+				return ErrConflict
+			}
 		}
 		var currentMount, namedMount unix.Statx_t
 		if unix.Statx(int(parent.Fd()), "", flags, unix.STATX_MNT_ID, &currentMount) != nil || unix.Statx(int(named.Fd()), "", flags, unix.STATX_MNT_ID, &namedMount) != nil || currentMount.Mask&unix.STATX_MNT_ID == 0 || namedMount.Mask&unix.STATX_MNT_ID == 0 || currentMount.Mnt_id != mount.Mnt_id || namedMount.Mnt_id != mount.Mnt_id {

@@ -77,6 +77,26 @@ func TestRootGuestStorageVolumeParentIntentRetainsOriginalInode(t *testing.T) {
 			t.Fatal("recorded journal state refused", err)
 		}
 	}
+	if err := e.withRecordedGuestStorageVolumeParent(ctx, intent, guard, func(_ *os.Root, _ *os.File, check func(context.Context) error) error { return check(ctx) }); err != nil {
+		t.Fatal("recorded parent refused", err)
+	}
+	if err := e.withRecordedGuestStorageVolumeParent(ctx, intent, guard, func(_ *os.Root, _ *os.File, check func(context.Context) error) error {
+		if err := os.Rename(path, path+".original"); err != nil {
+			return err
+		}
+		if err := os.Mkdir(path, 0710); err != nil {
+			return err
+		}
+		if err := os.Chown(path, 0, 993); err != nil {
+			return err
+		}
+		if err := os.Chmod(path, 0710); err != nil {
+			return err
+		}
+		return check(ctx)
+	}); !errors.Is(err, ErrConflict) {
+		t.Fatal("replacement volume parent admitted", err)
+	}
 	changed := plan
 	changed.GuestGID++
 	if err := e.commitGuestStorageVolumeParentIntent(ctx, installed, changed, 993, parent, guard); !errors.Is(err, ErrConflict) {
