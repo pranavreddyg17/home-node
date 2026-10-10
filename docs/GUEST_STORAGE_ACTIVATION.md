@@ -235,3 +235,10 @@ both named file inodes and bytes around its consumer. The source fixture refuses
 an identical-byte receipt replacement while preserving both files as evidence.
 This still requires a separate recorded-directory scope before legacy archival.
 Linux compilation passed; native qualification remains pending.
+
+Legacy directory archival now has a retained inode/mount/ACL scope admitting
+only the recorded empty `guests` or `.homenode-guests.legacy` directory. It uses
+a no-replace rename, synchronizes the directory and parent, and preserves the
+receipt, ownership and contents. A source fixture interrupts acknowledgement
+after the rename and retries against the same archived inode. Command composition
+still remains unfinished. Linux compilation passed; native execution is pending.

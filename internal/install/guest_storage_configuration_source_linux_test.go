@@ -173,6 +173,31 @@ func TestRootGuestStorageConfigurationSourcesRetainBothFiles(t *testing.T) {
 	if err := os.Rename(legacyRecordPath+".original", legacyRecordPath); err != nil {
 		t.Fatal(err)
 	}
+	legacyBefore, err := os.Lstat(legacyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyInterrupted := errors.New("legacy archival acknowledgement interrupted")
+	e.checkpoint = func(name, path string) error {
+		if name == "guest-storage-legacy-channel-archived" {
+			return legacyInterrupted
+		}
+		return nil
+	}
+	if err := e.archiveGuestStorageLegacyChannel(ctx, installed, plan, guard); !errors.Is(err, legacyInterrupted) {
+		t.Fatal("legacy archive interruption not observed", err)
+	}
+	e.checkpoint = nil
+	if err := e.archiveGuestStorageLegacyChannel(ctx, installed, plan, guard); err != nil {
+		t.Fatal("recorded legacy archive retry refused", err)
+	}
+	legacyArchived, err := os.Lstat(filepath.Join(host, "run", "homenode", ".homenode-guests.legacy"))
+	if err != nil || !os.SameFile(legacyBefore, legacyArchived) || legacyArchived.Mode().Perm() != 0755 {
+		t.Fatal("legacy archival changed directory authority", err)
+	}
+	if _, err := os.Lstat(legacyPath); !os.IsNotExist(err) {
+		t.Fatal("legacy source path still present", err)
+	}
 	if err := os.WriteFile(envPath, []byte("foreign environment\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
