@@ -24,6 +24,7 @@ func ControllerHandler(gatewayUID uint32, next http.Handler) (http.Handler, erro
 		return nil, ErrTransport
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w = &deadlineWriter{ResponseWriter: w}
 		uid, ok := supervisor.RequestPeerUID(r)
 		addresses, versions := r.Header.Values(clientAddressHeader), r.Header.Values(clientTLSHeader)
 		if !ok || uid != gatewayUID || len(addresses) != 1 || len(versions) != 1 || versions[0] != "1.3" {

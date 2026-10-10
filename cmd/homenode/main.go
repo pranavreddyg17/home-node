@@ -331,6 +331,9 @@ func serve(args []string) {
 	go handler.Workloads.Run(ctx)
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13, SessionTicketsDisabled: true}}
 	if privateController {
+		// The authenticated proxy wrapper refreshes a bounded write deadline for
+		// each chunk, allowing active streams to exceed the direct listener limit.
+		server.WriteTimeout = 0
 		server.Handler, err = gatewaytransport.ControllerHandler(uint32(*gatewayUID), handler)
 		if err != nil {
 			fatal(err)
