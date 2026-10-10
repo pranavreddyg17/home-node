@@ -62,13 +62,8 @@ func (e *Engine) publishGuestStorageConfigurationLocked(ctx context.Context, dir
 				if !reflect.DeepEqual(journal, intent.Original) && !reflect.DeepEqual(journal, intent.Desired) {
 					return ErrConflict
 				}
-				for _, item := range journal.Items {
-					if item.Path == "etc/homenode/runtime-policy.json" || item.Path == "etc/homenode/services.env" {
-						continue
-					}
-					if err := e.matches(item); err != nil {
-						return ErrConflict
-					}
+				if err := e.admitGuestStorageConfigurationInstallation(ctx, journal, intent, stage, directory); err != nil {
+					return err
 				}
 				if err := guard(ctx); err != nil {
 					return err

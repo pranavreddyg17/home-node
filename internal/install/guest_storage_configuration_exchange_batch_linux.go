@@ -14,6 +14,10 @@ import (
 // recorded inode pairs, including the interruption between the two exchanges.
 // Saving the destination installation journal and activation are separate.
 func exchangeGuestStorageConfigurationBatch(ctx context.Context, directory *os.File, stage guestStorageConfigurationStage, intent guestStorageConfigurationIntent, guard func(context.Context) error) error {
+	return reconcileGuestStorageConfigurationBatch(ctx, directory, stage, intent, guard, true)
+}
+
+func reconcileGuestStorageConfigurationBatch(ctx context.Context, directory *os.File, stage guestStorageConfigurationStage, intent guestStorageConfigurationIntent, guard func(context.Context) error, publish bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -46,6 +50,9 @@ func exchangeGuestStorageConfigurationBatch(ctx context.Context, directory *os.F
 	}
 	if err := preflight(ctx); err != nil {
 		return err
+	}
+	if !publish {
+		return ctx.Err()
 	}
 	for i, receipt := range stage.Files {
 		if err := exchangeGuestStorageConfigurationFile(ctx, directory, receipt, originals[i], desired[i], preflight); err != nil {
