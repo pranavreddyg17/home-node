@@ -146,3 +146,15 @@ These use temporary root-owned directories and synthetic runtime guards. They
 do not prove the later public migration command, populated-volume migration or
 activation release. Exact scope and the retained log digest are recorded in
 [evidence/empty-volume-parent-01ff8e8.json](evidence/empty-volume-parent-01ff8e8.json).
+
+Configuration preparation now has an installed exclusion composition. It
+requalifies the saved allocation against live accounts, requires all three
+storage parents at their final ownership, verifies the independently trusted
+signed catalog and actual image bytes, and captures both installed configuration
+files against their journal hashes. Both source descriptors remain retained
+while the immutable configuration intent is recorded. Staging runs under the
+same runtime/account exclusion; a retry with an existing stage receipt must
+retain its recorded source and replacement inodes. Unrecorded partial stages
+remain evidence and are refused. This composition has compiled for Linux but
+has not yet completed a native installed workflow; it does not provision a
+missing channel parent, publish configuration or release activation.
