@@ -134,8 +134,10 @@ retained log digest are recorded in
 
 The supervisor's systemd unit owns `/run/homenode` through `RuntimeDirectory`.
 Reserved CLI startup requires an already qualified `/run/homenode/guests`
-parent. Its provisioning and recreation after reboot or service-directory
-cleanup remain an installation/boot integration requirement. Creating a matching
+parent. The unit now sets `RuntimeDirectoryPreserve=yes` to retain the recorded
+runtime/channel inodes across stops; native qualification of that unit change is
+pending. Provisioning and recreation after reboot remain an installation/boot
+integration requirement. Creating a matching
 parent opportunistically in the reserved runtime loader would bypass the
 recorded provisioning authority and is not an accepted completion of that step.
 
@@ -177,3 +179,11 @@ rechecks and synchronizes the same inode without rewriting the receipt. A fixtur
 interrupts acknowledgement after the rename and retries, then refuses a foreign
 final directory with matching ownership. These additions compile for Linux;
 native execution and installed/reboot composition remain pending.
+
+The supervisor protection fixture now checks the source's preservation setting
+with two completed native systemd services sharing a disposable runtime directory.
+It verifies that the outer inode and a `root:transfer`-shaped channel inode and
+permissions survive directory reuse. This checks stop preservation, not reboot
+provisioning or actual installed supervisor restart. Systemd documents that
+`yes` preserves runtime directories on stop, while `/run` directories are still
+removed at reboot: [systemd execution documentation](https://github.com/systemd/systemd/blob/main/man/systemd.exec.xml).

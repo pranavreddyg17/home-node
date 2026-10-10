@@ -17,6 +17,7 @@ EnvironmentFile=/etc/homenode/services.env
 ExecStart=/usr/lib/homenode/homenode-supervisor --access-gid ${RUNTIME_GID} --transfer-gid ${TRANSFER_GID}
 RuntimeDirectory=homenode
 RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
 StateDirectory=homenode/supervisor
 StateDirectoryMode=0700
 UMask=0077

@@ -9,7 +9,7 @@ import uuid
 
 if sys.platform != "linux" or os.geteuid() != 0 or os.getenv("HOMENODE_SUPERVISOR_SYSTEMD_INTEGRATION") != "1":
     sys.exit("Requires explicit disposable Linux root fixture")
-allowed = {"Type", "User", "Group", "UMask", "TimeoutStopSec", "NoNewPrivileges", "CapabilityBoundingSet", "AmbientCapabilities", "ProtectSystem", "ProtectHome", "PrivateTmp", "ProtectKernelTunables", "ProtectKernelModules", "ProtectControlGroups", "RestrictSUIDSGID", "LockPersonality", "RestrictRealtime", "RestrictNamespaces", "RestrictAddressFamilies", "ReadWritePaths", "InaccessiblePaths", "MemoryMax", "TasksMax"}
+allowed = {"Type", "User", "Group", "UMask", "TimeoutStopSec", "NoNewPrivileges", "CapabilityBoundingSet", "AmbientCapabilities", "ProtectSystem", "ProtectHome", "PrivateTmp", "ProtectKernelTunables", "ProtectKernelModules", "ProtectControlGroups", "RestrictSUIDSGID", "LockPersonality", "RestrictRealtime", "RestrictNamespaces", "RestrictAddressFamilies", "ReadWritePaths", "InaccessiblePaths", "MemoryMax", "TasksMax", "RuntimeDirectoryPreserve"}
 adapted = {"EnvironmentFile", "ExecStart", "RuntimeDirectory", "RuntimeDirectoryMode", "StateDirectory", "StateDirectoryMode", "Restart", "RestartSec"}
 properties, seen, section = [], set(), ""
 for line in Path(__file__).with_name("homenode-supervisor.service").read_text().splitlines():
@@ -50,6 +50,41 @@ def create(path, exclusive=False):
     created.append(path)
 
 try:
+    # Qualify the source's stop-preservation policy with a separate disposable
+    # runtime directory. Two completed services must leave both parent and
+    # differently grouped channel inodes intact; no real application is started.
+    preserve = [prop for prop in properties if prop.startswith("--property=RuntimeDirectoryPreserve=")]
+    if preserve != ["--property=RuntimeDirectoryPreserve=yes"]:
+        raise RuntimeError("Supervisor runtime preservation policy refused")
+    runtime_name = "homenode-runtime-preserve-fixture-" + uuid.uuid4().hex
+    runtime_path = Path("/run") / runtime_name
+    if runtime_path.exists() or runtime_path.is_symlink():
+        raise RuntimeError("Existing runtime preservation fixture refused")
+    for attempt in range(2):
+        subprocess.run(["/usr/bin/systemd-run", "--quiet", "--wait", "--pipe", "--collect",
+                        "--unit=" + runtime_name + "-" + str(attempt),
+                        "--property=User=root", "--property=Group=root",
+                        "--property=RuntimeDirectory=" + runtime_name,
+                        "--property=RuntimeDirectoryMode=0755", *preserve,
+                        "/usr/bin/true"], timeout=30, check=True)
+        observed = runtime_path.lstat()
+        if not runtime_path.is_dir() or runtime_path.is_symlink() or observed.st_uid != 0 or observed.st_gid != 0 or observed.st_mode & 0o7777 != 0o755:
+            raise RuntimeError("Preserved runtime metadata refused")
+        if attempt == 0:
+            created.append(runtime_path)
+            runtime_identity = (observed.st_dev, observed.st_ino)
+            channel = runtime_path / "guests"
+            channel.mkdir(mode=0o710)
+            created.append(channel)
+            os.chown(channel, 0, 64055)
+            channel.chmod(0o710)
+            child = channel.lstat()
+            channel_identity = (child.st_dev, child.st_ino)
+        else:
+            child = channel.lstat()
+            if (observed.st_dev, observed.st_ino) != runtime_identity or (child.st_dev, child.st_ino) != channel_identity or child.st_uid != 0 or child.st_gid != 64055 or child.st_mode & 0o7777 != 0o710:
+                raise RuntimeError("Service restart changed recorded channel authority")
+    print("Native supervisor runtime stop preservation passed", flush=True)
     for directory in ("/var/lib/homenode/supervisor", "/var/lib/homenode/images", "/var/lib/homenode/volumes", "/run/homenode", "/var/lib/homenode/control", "/etc/homenode/tls"):
         create(directory, exclusive=True)
     for directory in ("/var/lib/homenode/control", "/etc/homenode/tls"):
