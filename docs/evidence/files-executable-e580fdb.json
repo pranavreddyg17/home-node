@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "sourceRevision": "e580fdbf41840b28d6f419bdc97e9da4094e8411",
+  "workflowRun": 38091150233,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38091150233",
+  "jobID": 114328328037,
+  "jobConclusion": "success",
+  "logSHA256": "f730b18a02c950eba12c27003b94326c2b359ccffd8248a679ab21ea4cb4d25a",
+  "imageSHA256": "602fdd22f4d11528d0f2d39a9aa131be005b3f3d0513d9dee726c94161b810a8",
+  "environment": "Disposable Ubuntu 24.04 native KVM/libvirt CI; temporary qualified NSS/allocator configuration and fixture-owned storage",
+  "tests": [
+    "TestNativeReservedFilesManagerLaunch"
+  ],
+  "qualifiedScope": [
+    "Actual unsigned development Files image starts through reserved Manager with qualified UID/group policy and native backend audit",
+    "Unprivileged client UID 2 with only the channel-access primary group uploads and downloads 1,073,741,824 bytes in bounded 256 KiB chunks with matching aggregate SHA256",
+    "Client closes and reconnects the guest channel during upload, requires unchanged SO_PEERCRED, and replays the last acknowledged chunk without advancing its offset",
+    "A separately finalized object survives cooperative ACPI manager shutdown and identity-retaining restart with matching contents and digest",
+    "Client sends a chunk, closes without consuming its acknowledgment, verifies unchanged peer credentials after reconnect, and replays the identical chunk",
+    "With the first 1 GiB object retained, a second bounded upload exhausts the two GiB ext4 disk and receives CAPACITY_UNAVAILABLE; partial cleanup succeeds and the first object downloads with its original SHA256",
+    "Actual homenode-transfer binary runs as UID 2 with no supplementary groups and serves a controller UID 1 round trip of 1,048,579 bytes through the Manager HTTP handler, runtime client and actual Files guest",
+    "Foreign controller UID 3 receives HTTP 403 from the transfer service; transfer UID 2 receives HTTP 403 when requesting runtime stop from the Manager handler",
+    "The same transfer process completes these checks before and after cooperative VM shutdown/restart, recovering its cached guest connection",
+    "A separate actual supervisor executable accepts the Files manifest signed by an ephemeral fixture Ed25519 key pinned in root-owned configuration and an independent version floor",
+    "Actual executable qualifies the independently provisioned reserved UID/group policy and refuses root caller UID 0 at its runtime socket",
+    "Idle executable startup preserves provisioned image/storage metadata, leaves its fresh volumes/channels empty, and journals catalog version, policy generation and exact policy digest",
+    "Controller UID 1 requests actual Files VM start through the shipped supervisor HTTP socket; response instance, revision, state and reserved guest UID match",
+    "Actual transfer executable UID 2 connects to the shipped supervisor and actual Files guest; controller UID 1 uploads/downloads 1,048,579 bytes with matching contents and hashes",
+    "Against these actual executables, foreign controller UID 3 transfer access and transfer UID 2 runtime-stop requests receive HTTP 403",
+    "Controller UID 1 requests cooperative VM shutdown through the shipped supervisor; clean supervisor process exit and retained stopped runtime record, image digest and guest UID lease are verified"
+  ],
+  "limitations": [
+    "Temporary root fixture configuration/storage and direct root executable launch; not installed systemd protections, activation or restart",
+    "Catalog signature uses an ephemeral locally pinned fixture key, not a trusted release publisher; the original Files image remains an unsigned development artifact",
+    "The actual supervisor/transfer binary payload is 1,048,579 bytes; the 1 GiB interruption/reconnect/disk-full path uses the separate direct Manager fixture",
+    "No actual controller/gateway, private HTTPS/passkey UI, physical tailnet devices or deployed network ACL workflow is qualified",
+    "Actual executable test performs one VM start/shutdown; same-process transfer reuse across VM restart is qualified separately through the direct Manager fixture",
+    "No installed logical quota/trash/export, cross-VM isolation, reference hardware performance, physical power loss or release qualification"
+  ],
+  "releaseQualified": false
+}
