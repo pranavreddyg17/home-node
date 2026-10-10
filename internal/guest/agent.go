@@ -404,8 +404,17 @@ func (a *Agent) save(id string, t *task) error {
 	if err != nil {
 		return err
 	}
-	f, err := a.root.OpenFile(id+".task.tmp", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	f, err := a.root.OpenFile(id+".task.tmp", os.O_CREATE|os.O_WRONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0600)
 	if err != nil {
+		return err
+	}
+	info, err := f.Stat()
+	if err != nil || !privateObjectFile(info) || info.Size() > maxTaskJournalBytes {
+		_ = f.Close()
+		return errTaskJournal
+	}
+	if err = f.Truncate(0); err != nil {
+		_ = f.Close()
 		return err
 	}
 	if _, err = f.Write(data); err == nil {

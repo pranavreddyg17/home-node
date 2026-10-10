@@ -49,6 +49,18 @@ func (a *Agent) recoverTasks() error {
 	}
 	// Validate every record before rewriting any interrupted intent.
 	for id, t := range a.tasks {
+		if t.State != "running" {
+			continue
+		}
+		info, err := a.root.Lstat(id + ".task.tmp")
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil || !privateObjectFile(info) || info.Size() > maxTaskJournalBytes {
+			return errTaskJournal
+		}
+	}
+	for id, t := range a.tasks {
 		if t.State == "running" {
 			t.State = "interrupted"
 			if err = a.save(id, t); err != nil {
@@ -66,7 +78,7 @@ func readTaskJournal(root *os.Root, name, kind string) (task, error) {
 	}
 	defer f.Close()
 	info, err := f.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || info.Size() > maxTaskJournalBytes {
+	if err != nil || !privateObjectFile(info) || info.Size() > maxTaskJournalBytes {
 		return t, errTaskJournal
 	}
 	if stat, ok := info.Sys().(*syscall.Stat_t); !ok || int(stat.Uid) != os.Geteuid() {
