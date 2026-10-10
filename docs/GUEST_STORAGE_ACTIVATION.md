@@ -241,4 +241,19 @@ only the recorded empty `guests` or `.homenode-guests.legacy` directory. It uses
 a no-replace rename, synchronizes the directory and parent, and preserves the
 receipt, ownership and contents. A source fixture interrupts acknowledgement
 after the rename and retries against the same archived inode. Command composition
-still remains unfinished. Linux compilation passed; native execution is pending.
+has since been added as described below. Linux compilation passed; native
+execution is pending.
+
+Installed channel provisioning now composes legacy intent capture and recorded
+archival before reserved staging. It refuses ambiguous source/archive paths and
+unrecorded archives; a historic receipt alone does not trigger migration in an
+empty later-boot namespace. The fixture follows interrupted archival through
+reserved staging/publication while retaining the original legacy inode.
+Native qualification of this newer handoff remains pending.
+
+CI run [38023154264](https://github.com/pranavreddyg17/home-node/actions/runs/38023154264)
+passed at `f562fc4894086a74e35ecee24990adc7f76aee88`, explicitly qualifying the
+version 2 boot-bound channel fixtures, synthetic prior-boot archival/reprovisioning
+and runtime-directory creation/refusal. It does not qualify the later legacy
+handoff or a physical reboot. Exact scope and retained log digest are recorded in
+[evidence/channel-boot-f562fc4.json](evidence/channel-boot-f562fc4.json).

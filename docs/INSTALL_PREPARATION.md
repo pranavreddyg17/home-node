@@ -268,11 +268,12 @@ Success reports `channelParentPublished`; service activation remains false.
 A prior-boot receipt can be archived only while both channel paths are absent.
 Automatic boot-time service composition remains unfinished. Native installed-command qualification remains pending.
 
-An existing unrecorded `guests` directory is refused, including one created by
-the legacy runtime with `root:root` mode `0755`. The command does not infer
-provenance from matching metadata or remove that directory. A recorded legacy
-channel-parent migration is still required before this path can complete an
-upgrade from such an installation.
+An empty legacy `root:root` mode `0755` channel directory can now be captured
+against the authenticated journaled legacy policy, then archived at its recorded
+inode before staging the reserved parent. Occupied, foreign, ambiguous or
+unrecorded archived paths are refused and preserved. Retry retains the legacy
+receipt and archive inode. Native qualification of this newer handoff is pending.
+
 
 Once images, volumes and `/run/homenode/guests` have independently qualified
 ownership, an existing blocked installation can publish reserved configuration:

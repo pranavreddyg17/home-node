@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "sourceRevision": "f562fc4894086a74e35ecee24990adc7f76aee88",
+  "workflowRun": 38023154264,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38023154264",
+  "workflowConclusion": "success",
+  "logSHA256": "a8874e774eb3b5ad391b3b75eee2e827056e176e54e0ddc25d6b6900b3a30288",
+  "tests": [
+    "TestGuestStorageBootIdentityRequiresCanonicalKernelUUID",
+    "TestRootGuestStorageChannelArchiveRequiresDifferentBootAndAbsentChildren",
+    "TestRootGuestStorageChannelStagePreservesRecordedCandidate",
+    "TestRootGuestStorageRuntimePreparationCreatesButNeverRepairs"
+  ],
+  "qualifiedScope": [
+    "Version 2 channel provenance uses actual kernel boot identity and refuses foreign-boot publication",
+    "Synthetic prior-boot receipt archival requires vacant paths and retains receipt inode/bytes through interrupted archival and current-boot reprovisioning",
+    "Channel publication retries after interrupted acknowledgement and refuses matching foreign final inode",
+    "Outer runtime preparation creates an absent directory, retains inode on retry and refuses foreign metadata without repair"
+  ],
+  "limitations": [
+    "Root fixtures use temporary host directories and synthetic runtime guards",
+    "Prior boot is simulated by a fixture receipt; no physical reboot occurs",
+    "Does not qualify newer legacy-channel capture, archival or command composition",
+    "Does not qualify full installed commands, startup activation, application workflows or product release"
+  ],
+  "releaseQualified": false
+}
