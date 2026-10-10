@@ -296,3 +296,30 @@ Success reports `policyPublished`, `environmentPublished` and
 remain false. A missing channel parent is refused; this command does not
 provision it or release activation. Native qualification of the complete installed
 command remains pending.
+
+### Gateway identity phase (service wiring remains pending)
+
+After the owned controller/transfer account phase, the Linux root CLI can prepare
+and provision the separate gateway identity:
+
+```sh
+homenode gateway-accounts-prepare --journal-dir /var/lib/homenode-install
+homenode gateway-accounts-provision --journal-dir /var/lib/homenode-install
+homenode gateway-accounts-check
+```
+
+Preparation records the fixed command plan in `gateway-accounts.json` before any
+account mutation. Provisioning creates `homenode-gateway` and `homenode-proxy`,
+adds only the proxy group to the gateway, and appends proxy membership to the
+owned controller without replacing its runtime group. Existing names and
+numeric collisions are refused. Interrupted command acknowledgements are
+reconciled against exact planned IDs, locked credentials, owner comments and
+memberships. A previously completed membership disappearing is a conflict,
+not an invitation to recreate it. The check reads protected account files and
+requires live NSS IDs and supplementary memberships to agree.
+
+These commands do not start services or change TLS key ownership. The installed
+service configuration still uses the direct controller HTTPS listener; gateway
+service wiring, rollback/removal integration and native distinct-identity
+qualification are incomplete. Do not interpret account readiness as readiness
+to expose the new gateway architecture.

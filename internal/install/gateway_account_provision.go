@@ -18,9 +18,23 @@ type gatewayProvisionBackend interface {
 type nativeGatewayProvisioner struct{ nativeAccountProvisioner }
 
 func (nativeGatewayProvisioner) VerifyGateway(ctx context.Context) (GatewayAccount, error) {
+	return InspectGatewayAccount(ctx)
+}
+
+// InspectGatewayAccount reads protected local snapshots and verifies live NSS.
+func InspectGatewayAccount(ctx context.Context) (GatewayAccount, error) {
+	if runtime.GOOS != "linux" || os.Geteuid() != 0 {
+		return GatewayAccount{}, ErrAccounts
+	}
+	deadline, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	ctx = deadline
 	snapshot, err := (nativeAccountProvisioner{}).Snapshot(ctx)
 	defer clear(snapshot.shadow)
 	if err != nil {
+		return GatewayAccount{}, err
+	}
+	if err := ValidateNameServices(snapshot.nss); err != nil {
 		return GatewayAccount{}, err
 	}
 	accounts, identity, err := validateGatewayAccounts(snapshot.passwd, snapshot.groups, snapshot.shadow)
