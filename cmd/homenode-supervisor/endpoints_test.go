@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestRootEndpointCrashRecovery(t *testing.T) {
@@ -146,4 +150,99 @@ func TestRootEndpointInterruptedPublication(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The child is killed without closing its listener or releasing the directory
+// descriptor in application code. Run only inside the disposable root CI job.
+func TestRootEndpointCrashChild(t *testing.T) {
+	path := os.Getenv("HOMENODE_ENDPOINT_CRASH_CHILD")
+	if os.Geteuid() != 0 || path == "" {
+		t.Skip("isolated crash child only")
+	}
+	parents, err := lockEndpointParents([]string{path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer parents[filepath.Dir(path)].Close()
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Net: "unix", Name: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	if err := os.Chown(path, 0, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0660); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stdout.WriteString("ready\n"); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		time.Sleep(time.Hour)
+	}
+}
+
+func TestRootEndpointKilledProcessLifecycle(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("root-only disposable process fixture")
+	}
+	path := filepath.Join(t.TempDir(), "service.sock")
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	child := exec.CommandContext(ctx, executable, "-test.run=^TestRootEndpointCrashChild$")
+	child.Env = append(os.Environ(), "HOMENODE_ENDPOINT_CRASH_CHILD="+path)
+	output, err := child.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	waited := false
+	defer func() {
+		if !waited {
+			_ = child.Process.Kill()
+			_ = child.Wait()
+		}
+	}()
+	ready := make([]byte, 6)
+	if _, err := io.ReadFull(output, ready); err != nil || string(ready) != "ready\n" {
+		t.Fatal("crash child not ready", err, string(ready))
+	}
+	if parents, err := lockEndpointParents([]string{path}); err == nil {
+		for _, p := range parents {
+			p.Close()
+		}
+		t.Fatal("running child lock bypassed")
+	}
+	if err := child.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	err = child.Wait()
+	waited = true
+	if err == nil {
+		t.Fatal("child exited without crash")
+	}
+	before, err := os.Lstat(path)
+	if err != nil || before.Mode()&os.ModeSocket == 0 {
+		t.Fatal("crash did not retain endpoint", err)
+	}
+	parents, err := lockEndpointParents([]string{path})
+	if err != nil {
+		t.Fatal("kernel did not release crashed process lock", err)
+	}
+	defer parents[filepath.Dir(path)].Close()
+	if err := retireStaleEndpoint(parents[filepath.Dir(path)], path, "unix", 1); err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Net: "unix", Name: path})
+	if err != nil {
+		t.Fatal("restart bind failed", err)
+	}
+	listener.Close()
 }
