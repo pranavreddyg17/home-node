@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pranavreddyg17/home-node/internal/connectionbudget"
 	"github.com/pranavreddyg17/home-node/internal/control"
 	"github.com/pranavreddyg17/home-node/internal/hostcheck"
 	"github.com/pranavreddyg17/home-node/internal/identity"
@@ -275,8 +276,13 @@ func serve(args []string) {
 	if err != nil {
 		fatal(err)
 	}
-	listener, err := net.Listen("tcp", net.JoinHostPort(*address, strconv.Itoa(*port)))
+	rawListener, err := net.Listen("tcp", net.JoinHostPort(*address, strconv.Itoa(*port)))
 	if err != nil {
+		fatal(err)
+	}
+	listener, err := connectionbudget.New(rawListener, connectionbudget.DefaultTotal, connectionbudget.DefaultPerAddress)
+	if err != nil {
+		_ = rawListener.Close()
 		fatal(err)
 	}
 	defer listener.Close()
