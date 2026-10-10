@@ -418,11 +418,12 @@ for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.arg
 			nativeDomainDiagnostics(t, domain)
 			t.Fatal("native pinned process memory observation refused", err)
 		}
-		memoryEvidence, err := command(ctx, "", "/usr/bin/env", "HOMENODE_SUPERVISOR_SYSTEMD_INTEGRATION=1",
+		memoryEvidence, err := nativeFixtureCommand(ctx, "/usr/bin/env", "HOMENODE_SUPERVISOR_SYSTEMD_INTEGRATION=1",
 			"HOMENODE_SUPERVISOR_MEMORY_PID="+strconv.Itoa(pid), "HOMENODE_SUPERVISOR_MEMORY_ID="+id,
 			"HOMENODE_SUPERVISOR_MEMORY_MAX="+strconv.FormatInt(maximum, 10),
 			"/usr/bin/python3", "../../packaging/systemd/supervisor_fixture.py")
 		if err != nil {
+			t.Log("bounded source-protected memory fixture diagnostics", memoryEvidence)
 			t.Fatal("source-protected native process memory fixture", err)
 		}
 		t.Log(memoryEvidence)
@@ -495,6 +496,23 @@ for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.arg
 		filesImage := len(managerLaunch) > 1 && managerLaunch[1]
 		runNativeReservedManagerLifecycle(t, ctx, base, domain, backend, &safeCleanup, filesImage)
 	}
+}
+
+// Native fixture diagnostics contain only fixture authority and process metadata.
+// Keep their bounded output on failure without changing production command errors.
+func nativeFixtureCommand(ctx context.Context, name string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C"}
+	cmd.WaitDelay = 3 * time.Second
+	var output boundedOutput
+	cmd.Stdout, cmd.Stderr = &output, &output
+	err := errors.Join(cmd.Run(), ctx.Err())
+	if output.tooLarge {
+		err = errors.Join(err, errors.New("native fixture diagnostic limit exceeded"))
+	}
+	return output.String(), err
 }
 
 func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base string, previous Domain, backend LinuxBackend, safeCleanup *bool, filesImage bool) {
