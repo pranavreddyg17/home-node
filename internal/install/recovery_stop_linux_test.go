@@ -111,3 +111,16 @@ func TestRecoveryQuiescenceRefusalsPrecedeStop(t *testing.T) {
 		})
 	}
 }
+
+func TestRecoveryStopIncludesGatewayBeforeController(t *testing.T) {
+	command := func(ctx context.Context, path string, args ...string) *exec.Cmd {
+		want := []string{"--system", "--no-pager", "--no-ask-password", "stop", "homenode-backup-credential.socket", "homenode-gateway.service", "homenode-control.service", "homenode-transfer.service", "homenode-backup.service", "homenode-supervisor.service"}
+		if path != "/usr/bin/systemctl" || !reflect.DeepEqual(args, want) {
+			t.Fatal("gateway stop scope", path, args)
+		}
+		return exec.CommandContext(ctx, "/bin/sh", "-c", "exit 0")
+	}
+	if err := stopRecoveryServicesWith(context.Background(), command, true); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -15,18 +15,18 @@ import (
 // ObserveRecoveryServicesDormant checks fixed service observations only. It
 // does not stop services, mask activation, prove empty guest cgroups, or grant
 // publication authority. A retained activation barrier is required separately.
-func ObserveRecoveryServicesDormant(ctx context.Context) error {
+func ObserveRecoveryServicesDormant(ctx context.Context, gateway ...bool) error {
 	if os.Geteuid() != 0 {
 		return ErrConflict
 	}
-	return observeRecoveryServicesWith(ctx, exec.CommandContext)
+	return observeRecoveryServicesWith(ctx, exec.CommandContext, gateway...)
 }
 
-func observeRecoveryServicesWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd) error {
-	return observeRecoveryManagerWith(ctx, command, true)
+func observeRecoveryServicesWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd, gateway ...bool) error {
+	return observeRecoveryManagerWith(ctx, command, true, gateway...)
 }
 
-func observeRecoveryManagerWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd, dormant bool) error {
+func observeRecoveryManagerWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd, dormant bool, gateway ...bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -35,7 +35,7 @@ func observeRecoveryManagerWith(ctx context.Context, command func(context.Contex
 	}
 	bounded, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
-	for _, unit := range []string{"homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket"} {
+	for _, unit := range recoveryUnits(requestedGateway(gateway)) {
 		if err := bounded.Err(); err != nil {
 			return err
 		}

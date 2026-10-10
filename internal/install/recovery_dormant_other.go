@@ -11,7 +11,7 @@ func (e *Engine) QuiesceRecovery(ctx context.Context) error {
 	return ErrConflict
 }
 
-func ObserveRecoveryServicesDormant(ctx context.Context) error {
+func ObserveRecoveryServicesDormant(ctx context.Context, gateway ...bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

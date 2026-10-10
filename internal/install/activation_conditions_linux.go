@@ -15,17 +15,17 @@ import (
 
 // ObserveRecoveryActivationConditions reads the running manager's typed guard
 // conditions for fixed units. It neither stops units nor retains exclusion.
-func ObserveRecoveryActivationConditions(ctx context.Context) error {
+func ObserveRecoveryActivationConditions(ctx context.Context, gateway ...bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if os.Geteuid() != 0 {
 		return ErrConflict
 	}
-	return observeActivationConditionsWith(ctx, exec.CommandContext)
+	return observeActivationConditionsWith(ctx, exec.CommandContext, gateway...)
 }
 
-func observeActivationConditionsWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd) error {
+func observeActivationConditionsWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd, gateway ...bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -34,7 +34,7 @@ func observeActivationConditionsWith(ctx context.Context, command func(context.C
 	}
 	bounded, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
-	for _, unit := range []string{"homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket"} {
+	for _, unit := range recoveryUnits(requestedGateway(gateway)) {
 		if err := bounded.Err(); err != nil {
 			return err
 		}

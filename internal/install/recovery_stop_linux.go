@@ -26,33 +26,37 @@ func (e *Engine) QuiesceRecovery(ctx context.Context) error {
 	}
 	defer e.mu.Unlock()
 	return e.observeRecoveryQuiescence(ctx, func(ctx context.Context) error {
-		return quiesceRecoveryManagerWith(ctx, exec.CommandContext, e.requireRecoveryActivationBlock, ObserveRecoveryGuestsEmpty)
+		config, err := e.load()
+		if err != nil {
+			return err
+		}
+		return quiesceRecoveryManagerWith(ctx, exec.CommandContext, e.requireRecoveryActivationBlock, ObserveRecoveryGuestsEmpty, installedGateway(config))
 	})
 }
 
-func quiesceRecoveryManagerWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd, marker, guests func(context.Context) error) error {
+func quiesceRecoveryManagerWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd, marker, guests func(context.Context) error, gateway ...bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if command == nil || marker == nil || guests == nil {
 		return ErrPlan
 	}
-	if err := observeRecoveryManagerWith(ctx, command, false); err != nil {
+	if err := observeRecoveryManagerWith(ctx, command, false, gateway...); err != nil {
 		return err
 	}
-	if err := observeActivationConditionsWith(ctx, command); err != nil {
+	if err := observeActivationConditionsWith(ctx, command, gateway...); err != nil {
 		return err
 	}
 	if err := marker(ctx); err != nil {
 		return err
 	}
-	if err := stopRecoveryServicesWith(ctx, command); err != nil {
+	if err := stopRecoveryServicesWith(ctx, command, gateway...); err != nil {
 		return err
 	}
-	if err := observeRecoveryServicesWith(ctx, command); err != nil {
+	if err := observeRecoveryServicesWith(ctx, command, gateway...); err != nil {
 		return err
 	}
-	if err := observeActivationConditionsWith(ctx, command); err != nil {
+	if err := observeActivationConditionsWith(ctx, command, gateway...); err != nil {
 		return err
 	}
 	if err := marker(ctx); err != nil {
@@ -65,7 +69,7 @@ func quiesceRecoveryManagerWith(ctx context.Context, command func(context.Contex
 // must retain installer/activation exclusion and qualify loaded unit ownership
 // before invoking it, then independently observe dormancy and guest emptiness.
 // It never removes an activation marker, restarts units or kills guest PIDs.
-func stopRecoveryServicesWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd) error {
+func stopRecoveryServicesWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd, gateway ...bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -74,7 +78,12 @@ func stopRecoveryServicesWith(ctx context.Context, command func(context.Context,
 	}
 	bounded, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	cmd := command(bounded, "/usr/bin/systemctl", "--system", "--no-pager", "--no-ask-password", "stop", "homenode-backup-credential.socket", "homenode-control.service", "homenode-transfer.service", "homenode-backup.service", "homenode-supervisor.service")
+	args := []string{"--system", "--no-pager", "--no-ask-password", "stop", "homenode-backup-credential.socket"}
+	if requestedGateway(gateway) {
+		args = append(args, "homenode-gateway.service")
+	}
+	args = append(args, "homenode-control.service", "homenode-transfer.service", "homenode-backup.service", "homenode-supervisor.service")
+	cmd := command(bounded, "/usr/bin/systemctl", args...)
 	if cmd == nil {
 		return ErrPlan
 	}

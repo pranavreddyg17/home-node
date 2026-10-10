@@ -15,7 +15,7 @@ func validateRecoveryDormant(data []byte) error {
 
 func validateRecoveryDormantUnit(data []byte, unit string) error {
 	switch unit {
-	case "homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket":
+	case "homenode-gateway.service", "homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket":
 	default:
 		return ErrPlan
 	}
@@ -31,7 +31,7 @@ func validateRecoveryDormantUnit(data []byte, unit string) error {
 // the owned unit is active. State and process emptiness are checked afterward.
 func validateRecoveryLoadedUnit(data []byte, unit string) error {
 	switch unit {
-	case "homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket":
+	case "homenode-gateway.service", "homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket":
 	default:
 		return ErrPlan
 	}
@@ -56,3 +56,20 @@ func validateRecoveryProperties(data []byte, expected map[string]string) error {
 	}
 	return nil
 }
+
+func recoveryUnits(gateway bool) []string {
+	units := []string{"homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket"}
+	if gateway {
+		units = append([]string{"homenode-gateway.service"}, units...)
+	}
+	return units
+}
+func installedGateway(config journal) bool {
+	for _, item := range config.Items {
+		if item.Path == "etc/systemd/system/homenode-gateway.service" {
+			return true
+		}
+	}
+	return false
+}
+func requestedGateway(values []bool) bool { return len(values) == 1 && values[0] }

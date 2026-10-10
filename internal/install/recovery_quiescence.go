@@ -24,10 +24,15 @@ func (e *Engine) ObserveRecoveryQuiescence(ctx context.Context) error {
 	}
 	defer e.mu.Unlock()
 	return e.observeRecoveryQuiescence(ctx, func(ctx context.Context) error {
-		if err := ObserveRecoveryActivationConditions(ctx); err != nil {
+		config, err := e.load()
+		if err != nil {
 			return err
 		}
-		if err := ObserveRecoveryServicesDormant(ctx); err != nil {
+		gateway := installedGateway(config)
+		if err := ObserveRecoveryActivationConditions(ctx, gateway); err != nil {
+			return err
+		}
+		if err := ObserveRecoveryServicesDormant(ctx, gateway); err != nil {
 			return err
 		}
 		return ObserveRecoveryGuestsEmpty(ctx)
@@ -111,7 +116,7 @@ func (e *Engine) withRecoveryInstallationExclusionGuardedLocked(ctx context.Cont
 	if err := checkInstalled(ctx); err != nil {
 		return err
 	}
-	for _, unit := range []string{"homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket"} {
+	for _, unit := range recoveryUnits(installedGateway(installed)) {
 		if err = ctx.Err(); err != nil {
 			return err
 		}
