@@ -22,6 +22,10 @@ func TestRootEndpointDefaultACLRefusal(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer parents[dir].Close()
+	before, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Linux POSIX ACL v2: default owner/group/other entries. Unlike an access
 	// ACL, this changes new socket permissions without changing parent mode.
 	acl := make([]byte, 28)
@@ -36,7 +40,7 @@ func TestRootEndpointDefaultACLRefusal(t *testing.T) {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(dir)
-	if err != nil || info.Mode().Perm() != 0700 {
+	if err != nil || info.Mode().Perm() != before.Mode().Perm() {
 		t.Fatal("ACL fixture changed directory permissions", err)
 	}
 	if err := retireStaleEndpoint(parents[dir], path, "unix", 1); err == nil {
