@@ -54,7 +54,7 @@ func accountID(value string) (int, error) {
 // ValidateLocalAccounts evaluates bounded local passwd/group/shadow snapshots.
 // It returns only numeric service identities, never password/hash content.
 // Actual NSS resolution must agree before the production installer uses them.
-func ValidateLocalAccounts(passwd, group, shadow []byte) (Accounts, error) {
+func validateBaseLocalAccounts(passwd, group, shadow []byte) (Accounts, error) {
 	var empty Accounts
 	usersRaw, err := accountLines(passwd, 7)
 	if err != nil {
