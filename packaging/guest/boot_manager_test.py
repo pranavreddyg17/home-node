@@ -81,6 +81,21 @@ class ManagerInputs(unittest.TestCase):
                     manager_channel.persistent_object(object(), "a" * 32, "1")
                 self.assertEqual([call.args[1] for call in request.call_args_list], ["download"])
 
+    def test_large_transfer_closes_old_channel_and_refuses_changed_peer(self):
+        old, new = mock.Mock(), mock.Mock()
+        old.getsockopt.return_value = b"originalpeer"
+        new.getsockopt.return_value = b"foreign-peer"
+        def reconnect():
+            old.close.assert_called_once()
+            return new
+        def response(_channel, operation, **fields):
+            self.assertEqual(operation, "upload")
+            return {"offset": fields["offset"] + 262144}
+        with mock.patch.object(manager_channel.socket, "SO_PEERCRED", 17, create=True), mock.patch.object(manager_channel.boot_image, "request", side_effect=response) as request:
+            with self.assertRaisesRegex(ValueError, "peer changed"):
+                manager_channel.large_object_roundtrip(old, reconnect)
+            self.assertEqual(request.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

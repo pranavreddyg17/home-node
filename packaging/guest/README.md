@@ -432,8 +432,15 @@ contents, offset and digest before deletion is acknowledged. `manager_channel.py
 the fixture transfer UID 2 with only the channel-access primary group, without
 root or supplementary KVM access. Readiness and protocol frames are bounded.
 
+The first boot additionally uploads and downloads 1 GiB using fixed 256 KiB
+chunks and incremental hashing, without retaining the complete object in client
+memory. After two accepted chunks it closes the channel, reconnects, requires
+the same Linux peer credentials, and replays the last chunk before continuing.
+The fixture data disk is 2 GiB to leave room for filesystem metadata. The native
+manager experiment has an eight-minute deadline; this is not a performance target.
+
 This is development manager component evidence. The fixture uses a directly
 constructed manifest and temporary storage, rather than signed catalog admission
 and the installed service. It does not qualify the authenticated transfer/API/UI
-path, a 1 GB reconnect, graceful shutdown, power-loss recovery, cross-VM isolation
+path, physical-network reconnect behavior, graceful shutdown, power-loss recovery, cross-VM isolation
 or release. Missing KVM hardware is explicitly reported as unverified.

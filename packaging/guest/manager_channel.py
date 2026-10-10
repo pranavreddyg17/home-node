@@ -1,13 +1,52 @@
 """Bounded development Files round trip on an admitted manager channel."""
 import base64
+import contextlib
 import hashlib
 import os
 import re
 import socket
 import sys
 import time
+import uuid
 
 import boot_image
+
+
+def large_object_roundtrip(channel, reconnect):
+    identifier = uuid.uuid4().hex
+    chunk = bytes(range(256)) * 1024
+    chunk_digest = hashlib.sha256(chunk).hexdigest()
+    total = 1 << 30
+    digest = hashlib.sha256()
+    for offset in range(0, total, len(chunk)):
+        fields = {"objectId": identifier, "offset": offset, "size": total,
+                  "sha256": chunk_digest, "data": base64.b64encode(chunk).decode()}
+        if boot_image.request(channel, "upload", **fields).get("offset") != offset + len(chunk):
+            raise ValueError("large object upload offset mismatch")
+        digest.update(chunk)
+        if offset == len(chunk):
+            peer = channel.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+            channel.close()
+            channel = reconnect()
+            if channel.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12) != peer:
+                raise ValueError("guest peer changed across transfer reconnect")
+            if boot_image.request(channel, "upload", **fields).get("offset") != offset + len(chunk):
+                raise ValueError("large object acknowledged replay mismatch")
+    checksum = digest.hexdigest()
+    finalized = boot_image.request(channel, "finalize", objectId=identifier, size=total, sha256=checksum)
+    if finalized.get("size") != total or finalized.get("sha256") != checksum:
+        raise ValueError("large object finalization mismatch")
+    downloaded = hashlib.sha256()
+    for offset in range(0, total, len(chunk)):
+        response = boot_image.request(channel, "download", objectId=identifier, offset=offset)
+        actual = base64.b64decode(response.get("data", ""), validate=True)
+        if actual != chunk or response.get("offset") != offset + len(chunk) or response.get("sha256") != chunk_digest:
+            raise ValueError("large object download integrity mismatch")
+        downloaded.update(actual)
+    if downloaded.hexdigest() != checksum:
+        raise ValueError("large object complete digest mismatch")
+    boot_image.request(channel, "delete", objectId=identifier)
+    return channel
 
 
 def persistent_object(channel, identifier, attempt):
@@ -38,11 +77,16 @@ def main():
         raise ValueError("explicit unprivileged disposable Linux client required")
     if len(sys.argv) != 4 or not os.path.isabs(sys.argv[1]) or re.fullmatch(r"[A-Za-z0-9_-]{20,64}", sys.argv[2]) is None or sys.argv[3] not in ("0", "1"):
         raise ValueError("absolute admitted channel and bounded restart identity required")
-    # QEMU socket availability precedes guest adapter readiness. Keep one
-    # connection: reconnecting may create a competing virtio channel consumer.
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
+    # QEMU socket availability precedes guest adapter readiness. Every reconnect
+    # closes its predecessor first; never create competing channel consumers.
+    with contextlib.ExitStack() as cleanup:
+        def connect():
+            connection = cleanup.enter_context(socket.socket(socket.AF_UNIX, socket.SOCK_STREAM))
+            connection.settimeout(30)
+            connection.connect(sys.argv[1])
+            return connection
+        channel = connect()
         channel.settimeout(120)
-        channel.connect(sys.argv[1])
         deadline = time.monotonic() + 120
         while True:
             channel.settimeout(max(1, deadline - time.monotonic()))
@@ -56,6 +100,8 @@ def main():
         result = boot_image.object_roundtrip(channel)
         if result != {"bytes": 1048579, "chunkBytes": 262144, "acknowledgedChunkReplay": True}:
             raise ValueError("unexpected Files round trip evidence")
+        if sys.argv[3] == "0":
+            channel = large_object_roundtrip(channel, connect)
         persistent_object(channel, sys.argv[2], sys.argv[3])
     print("development Files channel round trip passed")
 

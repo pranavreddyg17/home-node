@@ -49,7 +49,7 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool, managerLaunch .
 	}
 	duration := 90 * time.Second
 	if len(managerLaunch) > 1 && managerLaunch[1] {
-		duration = 5 * time.Minute
+		duration = 8 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
@@ -595,7 +595,7 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 		}
 	}
 	if filesImage {
-		t.Log("development Files manager launch, object round trip, audit, stop and identity-retaining restart completed; release remains unqualified")
+		t.Log("development Files manager launch, 1 GiB object round trip, audit, stop and identity-retaining restart completed; release remains unqualified")
 	} else {
 		t.Log("synthetic native manager launch, audit, stop and identity-retaining restart completed")
 	}
