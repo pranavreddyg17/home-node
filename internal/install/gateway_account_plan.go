@@ -96,11 +96,14 @@ func PlanGatewayAccountCreation(owner string, passwd, groups, shadow, nss []byte
 	if identity.UID == 0 || identity.GID == 0 || identity.ProxyGID == 0 {
 		return empty, ErrAccounts
 	}
-	commands := []AccountCommand{
+	return GatewayAccountPlan{OwnerID: owner, Identity: identity, Commands: gatewayCreationCommands(owner, identity)}, nil
+}
+
+func gatewayCreationCommands(owner string, identity GatewayAccount) []AccountCommand {
+	return []AccountCommand{
 		{Program: "/usr/sbin/groupadd", Arguments: []string{"--system", "--gid", strconv.Itoa(identity.GID), "homenode-gateway"}},
 		{Program: "/usr/sbin/groupadd", Arguments: []string{"--system", "--gid", strconv.Itoa(identity.ProxyGID), "homenode-proxy"}},
 		{Program: "/usr/sbin/useradd", Arguments: []string{"--system", "--uid", strconv.FormatUint(uint64(identity.UID), 10), "--gid", "homenode-gateway", "--groups", "homenode-proxy", "--no-create-home", "--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin", "--comment", "HomeNode install " + owner, "homenode-gateway"}},
 		{Program: "/usr/sbin/usermod", Arguments: []string{"--append", "--groups", "homenode-proxy", "homenode"}},
 	}
-	return GatewayAccountPlan{OwnerID: owner, Identity: identity, Commands: commands}, nil
 }
