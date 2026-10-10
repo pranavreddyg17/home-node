@@ -8,11 +8,13 @@ on:
       - 'internal/guestmount/**'
       - 'internal/guestinit/**'
       - 'internal/supervisor/**'
+      - 'internal/catalog/**'
       - 'internal/transfer/**'
       - 'internal/runtimeclient/**'
       - 'packaging/systemd/reserved_manager_fixture.py'
       - 'cmd/homenode-guest*/**'
       - 'cmd/homenode-transfer/**'
+      - 'cmd/homenode-supervisor/**'
       - 'go.mod'
       - 'go.sum'
       - '.github/workflows/guest-images.yml'
@@ -84,6 +86,8 @@ jobs:
           if test -c /dev/kvm; then
             go test -c -o "$RUNNER_TEMP/supervisor-memory.test" ./internal/supervisor
             sudo install -D -m 0755 "$RUNNER_TEMP/supervisor-memory.test" /usr/lib/homenode-fixtures/supervisor.test
+            go build -o "$RUNNER_TEMP/homenode-supervisor" ./cmd/homenode-supervisor
+            sudo install -D -m 0755 "$RUNNER_TEMP/homenode-supervisor" /usr/lib/homenode-fixtures/homenode-supervisor
             go build -o "$RUNNER_TEMP/homenode-transfer" ./cmd/homenode-transfer
             sudo install -D -m 0755 "$RUNNER_TEMP/homenode-transfer" /usr/lib/homenode-fixtures/homenode-transfer
             sudo systemctl start libvirtd

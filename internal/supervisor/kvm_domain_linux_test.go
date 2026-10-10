@@ -560,6 +560,9 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 		GuestUIDPool: &pool, GuestGID: previous.GuestGID,
 		Policy:   Policy{GuestIdentity: &identity, Generation: 1, MemoryMiB: 1024, VCPUs: 1, MaxInstances: 1, DiskReserveBytes: 4 * catalog.GiB, ControllerUID: 1, TransferUID: 2},
 		Manifest: catalog.Manifest{Schema: 1, Version: 1, Expires: time.Now().Add(time.Hour), Images: []catalog.Image{image}}}
+	if filesImage {
+		nativeFilesSupervisorEntry(t, ctx, base, images, image, m.Policy, backend.TransferGID)
+	}
 	if err := m.Initialize(ctx); err != nil {
 		t.Fatal("native manager initialization", err)
 	}
