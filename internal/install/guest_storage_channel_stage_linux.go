@@ -13,6 +13,7 @@ import (
 )
 
 type guestStorageChannelStage struct {
+	BootID        string                       `json:"bootId"`
 	Version       int                          `json:"version"`
 	Plan          GuestStorageProvisioningPlan `json:"plan"`
 	TransferGID   uint32                       `json:"transferGid"`
@@ -36,6 +37,10 @@ func (e *Engine) stageGuestStorageChannelParent(ctx context.Context, plan GuestS
 	if _, err := canonicalGuestStoragePlan(ctx, plan); err != nil {
 		return stage, err
 	}
+	bootID, err := observeGuestStorageBootID(ctx)
+	if err != nil {
+		return stage, err
+	}
 	result = e.withGuestStorageChannelRuntime(ctx, guard, func(root *os.Root, parent *os.File, checkRuntime func(context.Context) error) (result error) {
 		if _, err := root.Lstat("guests"); !os.IsNotExist(err) {
 			return errors.Join(ErrConflict, err)
@@ -57,6 +62,13 @@ func (e *Engine) stageGuestStorageChannelParent(ctx context.Context, plan GuestS
 			return ErrConflict
 		}
 		check := func() error {
+			currentBoot, err := observeGuestStorageBootID(ctx)
+			if err != nil {
+				return err
+			}
+			if currentBoot != bootID {
+				return ErrConflict
+			}
 			if err := checkRuntime(ctx); err != nil {
 				return err
 			}
@@ -112,7 +124,7 @@ func (e *Engine) stageGuestStorageChannelParent(ctx context.Context, plan GuestS
 		if err := check(); err != nil {
 			return err
 		}
-		stage = guestStorageChannelStage{Version: 1, Plan: plan, TransferGID: transferGID, RuntimeDevice: uint64(runtime.Dev), RuntimeInode: runtime.Ino, Device: uint64(original.Dev), Inode: original.Ino}
+		stage = guestStorageChannelStage{Version: 2, BootID: bootID, Plan: plan, TransferGID: transferGID, RuntimeDevice: uint64(runtime.Dev), RuntimeInode: runtime.Ino, Device: uint64(original.Dev), Inode: original.Ino}
 		encoded, err := json.Marshal(stage)
 		if err != nil {
 			return err

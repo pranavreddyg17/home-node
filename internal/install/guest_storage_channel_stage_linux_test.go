@@ -4,6 +4,7 @@ package install
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -70,6 +71,25 @@ func TestRootGuestStorageChannelStagePreservesRecordedCandidate(t *testing.T) {
 	}
 	if malformed, err := engine.loadGuestStorageChannelStage(ctx, plan, 1002); !errors.Is(err, ErrConflict) || !reflect.DeepEqual(malformed, guestStorageChannelStage{}) {
 		t.Fatal("unknown receipt field admitted", malformed, err)
+	}
+	if err := os.WriteFile(receipt, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	foreignBoot := stage
+	foreignBoot.BootID = "12345678-1234-1234-1234-123456789abc"
+	if foreignBoot.BootID == stage.BootID {
+		foreignBoot.BootID = "22345678-1234-1234-1234-123456789abc"
+	}
+	foreignRecord, err := json.Marshal(foreignBoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(receipt, foreignRecord, 0600); err != nil {
+		t.Fatal(err)
+	}
+	foreignCalled := false
+	if err := engine.withRecordedGuestStorageChannel(ctx, plan, 1002, foreignBoot, guard, func(_ *os.Root, _, _ *os.File, _ func(context.Context) error) error { foreignCalled = true; return nil }); !errors.Is(err, ErrConflict) || foreignCalled {
+		t.Fatal("prior boot authority admitted", foreignCalled, err)
 	}
 	if err := os.WriteFile(receipt, data, 0600); err != nil {
 		t.Fatal(err)

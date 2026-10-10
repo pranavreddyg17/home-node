@@ -187,3 +187,12 @@ permissions survive directory reuse. This checks stop preservation, not reboot
 provisioning or actual installed supervisor restart. Systemd documents that
 `yes` preserves runtime directories on stop, while `/run` directories are still
 removed at reboot: [systemd execution documentation](https://github.com/systemd/systemd/blob/main/man/systemd.exec.xml).
+
+New channel receipts use version 2 and include the kernel boot UUID read from
+the fixed procfs `boot_id` interface. Staging rechecks that identity and recorded
+publication requires a matching current boot before admitting the consumer.
+Inode reuse on a later boot therefore cannot qualify a stale receipt. Missing,
+old-version or foreign-boot records are preserved and refused; authorized receipt
+rollover and reboot provisioning remain unfinished. A root fixture checks that
+a canonical receipt with a foreign boot UUID cannot reach publication authority.
+Linux compilation has passed; native qualification of these additions is pending.

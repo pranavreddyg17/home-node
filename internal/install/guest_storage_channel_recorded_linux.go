@@ -33,6 +33,13 @@ func (e *Engine) withRecordedGuestStorageChannel(ctx context.Context, plan Guest
 	}
 	return e.withGuestIdentityRecordGuarded(ctx, "guest-storage-channel-stage.json", encoded, func(ctx context.Context, checkReceipt func() error) error {
 		outer := func(ctx context.Context) error {
+			bootID, err := observeGuestStorageBootID(ctx)
+			if err != nil {
+				return err
+			}
+			if bootID != stage.BootID {
+				return ErrConflict
+			}
 			if err := checkReceipt(); err != nil {
 				return err
 			}
@@ -120,7 +127,7 @@ func (e *Engine) withRecordedGuestStorageChannel(ctx context.Context, plan Guest
 }
 
 func validateGuestStorageChannelStage(ctx context.Context, plan GuestStorageProvisioningPlan, transferGID uint32, stage guestStorageChannelStage) error {
-	if stage.Version != 1 || transferGID == 0 || transferGID > math.MaxInt32 || transferGID == plan.GuestGID || stage.TransferGID != transferGID || !reflect.DeepEqual(stage.Plan, plan) || stage.Device != stage.RuntimeDevice || stage.Device > math.MaxInt64 || stage.Inode == 0 || stage.Inode > math.MaxInt64 || stage.RuntimeInode == 0 || stage.RuntimeInode > math.MaxInt64 || stage.Inode == stage.RuntimeInode {
+	if stage.Version != 2 || !guestStorageBootIDAdmitted(stage.BootID) || transferGID == 0 || transferGID > math.MaxInt32 || transferGID == plan.GuestGID || stage.TransferGID != transferGID || !reflect.DeepEqual(stage.Plan, plan) || stage.Device != stage.RuntimeDevice || stage.Device > math.MaxInt64 || stage.Inode == 0 || stage.Inode > math.MaxInt64 || stage.RuntimeInode == 0 || stage.RuntimeInode > math.MaxInt64 || stage.Inode == stage.RuntimeInode {
 		return ErrPlan
 	}
 	if _, err := canonicalGuestStoragePlan(ctx, plan); err != nil {
