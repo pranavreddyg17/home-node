@@ -528,8 +528,10 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 	if err := os.Rename(previous.SystemPath, filepath.Join(images, image.SHA256+".raw")); err != nil {
 		t.Fatal(err)
 	}
+	clientScript := ""
 	if filesImage {
 		image = stageNativeFilesImage(t, ctx, images, previous.GuestGID)
+		clientScript = stageNativeFilesClient(t, base)
 	}
 	channels := filepath.Join(base, "manager-channels")
 	if err := os.Mkdir(channels, 0700); err != nil {
@@ -583,7 +585,7 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 			if err != nil {
 				t.Fatal("native Files manager channel admission", err)
 			}
-			roundTripNativeFilesChannel(t, ctx, channel, backend.TransferGID, r.InstanceID, attempt)
+			roundTripNativeFilesChannel(t, ctx, clientScript, channel, backend.TransferGID, r.InstanceID, attempt)
 		}
 		stop := r
 		stop.Action, stop.OperationID, stop.Revision = "stop", state.Random(), r.Revision+1

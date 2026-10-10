@@ -74,13 +74,55 @@ func stageNativeFilesImage(t *testing.T, ctx context.Context, directory string, 
 	return catalog.Image{ID: "files", SHA256: digest, Bytes: size, Protocol: 1, MemoryMiB: 512, VCPUs: 1, DataBytes: catalog.GiB, Version: "development", License: "Development fixture; release license inventory unqualified"}
 }
 
-func roundTripNativeFilesChannel(t *testing.T, ctx context.Context, channel string, transferGID int, objectID string, attempt int64) {
+func stageNativeFilesClient(t *testing.T, base string) string {
 	t.Helper()
-	script, err := filepath.Abs("../../packaging/guest/manager_channel.py")
-	if err != nil || transferGID < 1 || transferGID > 1<<31-1 {
-		t.Fatal("invalid native Files client authority", err)
+	directory := filepath.Join(base, "files-client")
+	if err := os.Mkdir(directory, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(directory, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"manager_channel.py", "boot_image.py", "boot_evidence.py", "overlay.py"} {
+		source, err := os.OpenFile(filepath.Join("../../packaging/guest", name), os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		info, err := source.Stat()
+		if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > 128<<10 {
+			source.Close()
+			t.Fatal("invalid development client module", err)
+		}
+		data, err := io.ReadAll(io.LimitReader(source, (128<<10)+1))
+		closeErr := source.Close()
+		if err != nil || closeErr != nil || int64(len(data)) != info.Size() {
+			t.Fatal("development client module changed", err, closeErr)
+		}
+		file, err := os.OpenFile(filepath.Join(directory, name), os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = file.Write(data); err == nil {
+			err = file.Chmod(0644)
+		}
+		if err == nil {
+			err = file.Sync()
+		}
+		closeErr = file.Close()
+		if err != nil || closeErr != nil {
+			t.Fatal("development client staging failed", err, closeErr)
+		}
+	}
+	return filepath.Join(directory, "manager_channel.py")
+}
+
+func roundTripNativeFilesChannel(t *testing.T, ctx context.Context, script, channel string, transferGID int, objectID string, attempt int64) {
+	t.Helper()
+	if !filepath.IsAbs(script) || transferGID < 1 || transferGID > 1<<31-1 {
+		t.Fatal("invalid native Files client authority")
 	}
 	cmd := exec.CommandContext(ctx, "/usr/bin/python3", "-B", script, channel, objectID, strconv.FormatInt(attempt, 10))
+	cmd.Dir = filepath.Dir(script)
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOMENODE_FILES_MANAGER_INTEGRATION=1"}
 	cmd.WaitDelay = time.Second
 	// UID 2 is the fixture's transfer UID; primary group grants channel traversal.
