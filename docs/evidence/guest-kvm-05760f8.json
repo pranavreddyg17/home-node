@@ -1,0 +1,97 @@
+{
+  "schema": 1,
+  "sourceRevision": "05760f872ba1512e0d074158ca91d44ed3ac0d38",
+  "workflowRun": 38024765280,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38024765280",
+  "workflowConclusion": "success",
+  "environment": "Disposable Ubuntu 24.04 CI; non-root runner with process-scoped KVM group",
+  "reports": [
+    {
+      "profile": "files",
+      "reportSHA256": "cde95fd6312fb5c8c8af220999cfa461a912cb33acfeb80507e6b579e84b8e3a",
+      "consoleSHA256": "abcec37585f3403b0cf24df851c6347843d32392317dfda28afbfee952ea7922",
+      "report": {
+        "schema": 1,
+        "profile": "files",
+        "imageSHA256": "219ff6704f94719b2d8f45a96d8525832380114093e2e60619148fc7b356bfb2",
+        "accelerator": "kvm",
+        "tcgBootAndObjectRoundTrip": false,
+        "kvmBootAndObjectRoundTrip": true,
+        "objectTransfer": {
+          "bytes": 1048579,
+          "chunkBytes": 262144,
+          "acknowledgedChunkReplay": true
+        },
+        "videoPresets": [],
+        "videoCancellation": null,
+        "aiInference": null,
+        "shutdown": {
+          "guestInitiated": true,
+          "reason": "guest-shutdown",
+          "qemuExitCode": 0,
+          "readOnlyFilesystemCheck": true
+        },
+        "releaseQualified": false
+      }
+    },
+    {
+      "profile": "video",
+      "reportSHA256": "cdb45c82d1f40ca0748bc1fd27489607dd341e5c73cc42b5d2be16480a1e6bc0",
+      "consoleSHA256": "88f4742291f82c19c381e8332d4a1c8b36410f9c5f76c834648ce1a2b2bfe9b2",
+      "report": {
+        "schema": 1,
+        "profile": "video",
+        "imageSHA256": "8110250f77f0e6d1fefd44c112afe0816d441ffd0b0a07a7e3a6c33aea4d4ad8",
+        "accelerator": "kvm",
+        "tcgBootAndObjectRoundTrip": false,
+        "kvmBootAndObjectRoundTrip": true,
+        "objectTransfer": {
+          "bytes": 1048579,
+          "chunkBytes": 262144,
+          "acknowledgedChunkReplay": true
+        },
+        "videoPresets": [
+          {
+            "preset": "mp4-720p",
+            "width": 1280,
+            "height": 720,
+            "codec": "h264",
+            "bytes": 3248
+          },
+          {
+            "preset": "mp4-1080p",
+            "width": 1920,
+            "height": 1080,
+            "codec": "h264",
+            "bytes": 4364
+          }
+        ],
+        "videoCancellation": {
+          "cancelled": true,
+          "taskDeletionAcknowledged": true
+        },
+        "aiInference": null,
+        "shutdown": {
+          "guestInitiated": true,
+          "reason": "guest-shutdown",
+          "qemuExitCode": 0,
+          "readOnlyFilesystemCheck": true
+        },
+        "releaseQualified": false
+      }
+    }
+  ],
+  "qualifiedScope": [
+    "Files and video unsigned development disks boot through direct QEMU using native KVM",
+    "Both adapters round-trip 1,048,579 bytes with acknowledged chunk replay",
+    "Video produces bounded H.264 720p and 1080p outputs and acknowledges cancellation and deletion",
+    "Both guests acknowledge ACPI poweroff; QEMU exits successfully and read-only ext4 checks pass"
+  ],
+  "limitations": [
+    "Direct QEMU fixture, not the reserved manager or installed service",
+    "Unsigned development images; no release trust or signing qualification",
+    "Does not qualify authenticated transfer/UI, 1 GB reconnect, cross-VM isolation, physical host support or power-loss recovery",
+    "Files manager integration added in a later source revision is not covered by this run"
+  ],
+  "releaseQualified": false
+}
