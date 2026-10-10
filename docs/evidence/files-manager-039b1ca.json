@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "sourceRevision": "039b1caf43a3f61db4666dc8b068b5bc103f76f3",
+  "workflowRun": 38057193718,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38057193718",
+  "jobID": 114227976898,
+  "jobConclusion": "success",
+  "logSHA256": "bffe0fd30e264bf66ba7814f76fc405429fa1e6adb6bbbfd73b00623c924932d",
+  "imageSHA256": "54da99a9384d3267103f74c059e44b34b66b286d5342c76df764bd48a5504858",
+  "environment": "Disposable Ubuntu 24.04 native KVM/libvirt CI; temporary qualified NSS/allocator configuration and fixture-owned storage",
+  "tests": [
+    "TestNativeReservedFilesManagerLaunch"
+  ],
+  "qualifiedScope": [
+    "Actual unsigned development Files image starts through reserved Manager with qualified UID/group policy and native backend audit",
+    "Unprivileged client UID 2 with only the channel-access primary group uploads and downloads 1,073,741,824 bytes in bounded 256 KiB chunks with matching aggregate SHA256",
+    "Client closes and reconnects the guest channel during upload, requires unchanged SO_PEERCRED, and replays the last acknowledged chunk without advancing its offset",
+    "A separately finalized object survives cooperative ACPI manager shutdown and identity-retaining restart with matching contents and digest",
+    "Client sends a chunk, closes without consuming its acknowledgment, verifies unchanged peer credentials after reconnect, and replays the identical chunk",
+    "With the first 1 GiB object retained, a second bounded upload exhausts the two GiB ext4 disk and receives CAPACITY_UNAVAILABLE; partial cleanup succeeds and the first object downloads with its original SHA256"
+  ],
+  "limitations": [
+    "Constructed development manifest, not signed installed catalog admission",
+    "Temporary directories and direct Manager invocation, not installed supervisor/service activation or authenticated transfer/API/UI",
+    "No full quota/trash/export, physical power-loss, cross-VM isolation, reference-hardware performance or release qualification",
+    "Disconnect before consuming acknowledgment does not prove whether the first write committed; separate component coverage injects response-write failure",
+    "Physical disk-full refusal is qualified here; installed logical quota, trash retention and export remain unverified"
+  ],
+  "releaseQualified": false
+}
