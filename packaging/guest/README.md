@@ -296,8 +296,10 @@ as required by the [kernel API documentation](https://docs.kernel.org/virt/kvm/a
 Unknown modes, denied access, foreign device identity and unsupported APIs are
 refused; KVM never falls back to TCG. Evidence records the accelerator and separate
 TCG/KVM round-trip flags, with `releaseQualified` still false. Both image workflows
-attempt this additional boot when the unprivileged runner can access KVM and
-explicitly report its absence otherwise. These direct development boots do not
+attempt this additional boot when the KVM device and group exist, running as
+the same non-root runner user with a process-only `kvm` primary group through
+`runuser`. They do not change device permissions or account memberships, and
+explicitly report missing hardware/group support. These direct development boots do not
 qualify the installed supervisor, signed catalog, reserved UID isolation or release.
 
 Before retaining successful boot evidence, the fixture validates its exact fields,

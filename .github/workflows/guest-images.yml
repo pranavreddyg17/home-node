@@ -68,10 +68,10 @@ jobs:
           HOMENODE_GUEST_BOOT_INTEGRATION: '1'
           HOMENODE_GUEST_BOOT_ACCELERATOR: kvm
         run: |
-          if test -r /dev/kvm && test -w /dev/kvm; then
-            python3 -B packaging/guest/boot_image.py "$RUNNER_TEMP/assembly/$PROFILE/artifacts/homenode-development-$PROFILE.raw" "$RUNNER_TEMP/assembly/$PROFILE/artifacts/development-build.json" "$RUNNER_TEMP/guest-kvm-$PROFILE"
+          if test -c /dev/kvm && getent group kvm > /dev/null; then
+            sudo /usr/sbin/runuser -u "$(id -un)" -g kvm -- env HOMENODE_GUEST_BOOT_INTEGRATION=1 HOMENODE_GUEST_BOOT_ACCELERATOR=kvm python3 -B packaging/guest/boot_image.py "$RUNNER_TEMP/assembly/$PROFILE/artifacts/homenode-development-$PROFILE.raw" "$RUNNER_TEMP/assembly/$PROFILE/artifacts/development-build.json" "$RUNNER_TEMP/guest-kvm-$PROFILE"
           else
-            echo "Native KVM inaccessible; development boot evidence remains TCG-only."
+            echo "Native KVM device or group unavailable; development boot evidence remains TCG-only."
           fi
       - name: Retain bounded boot diagnostics
         if: always()
