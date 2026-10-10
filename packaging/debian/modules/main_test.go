@@ -89,7 +89,7 @@ func TestCompiledModuleReplacementIsRetained(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"usr/bin/homenode", "usr/lib/homenode/homenode-supervisor", "usr/lib/homenode/homenode-transfer", "usr/lib/homenode/homenode-backup", "usr/lib/homenode/homenode-inspect", "usr/lib/homenode/guest/homenode-guest"} {
+	for _, name := range []string{"usr/bin/homenode", "usr/lib/homenode/homenode-supervisor", "usr/lib/homenode/homenode-transfer", "usr/lib/homenode/homenode-backup", "usr/lib/homenode/homenode-inspect", "usr/lib/homenode/homenode-gateway", "usr/lib/homenode/guest/homenode-guest"} {
 		filename := filepath.Join(directory, name)
 		if err := os.MkdirAll(filepath.Dir(filename), 0700); err != nil {
 			t.Fatal(err)
@@ -106,7 +106,7 @@ func TestCompiledModuleReplacementIsRetained(t *testing.T) {
 		SourceSumsVerified bool           `json:"sourceSumsVerified"`
 		Binaries           []binaryRecord `json:"binaries"`
 	}
-	if err := json.Unmarshal(output.Bytes(), &observation); err != nil || observation.SourceSumsVerified || len(observation.Binaries) != 6 {
+	if err := json.Unmarshal(output.Bytes(), &observation); err != nil || observation.SourceSumsVerified || len(observation.Binaries) != 7 {
 		t.Fatal("observational collection claimed qualification", err)
 	}
 	output.Reset()

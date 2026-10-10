@@ -28,7 +28,7 @@ func TestCompleteCollectorReviewedCompiledSourceSums(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"usr/bin/homenode", "usr/lib/homenode/homenode-supervisor", "usr/lib/homenode/homenode-transfer", "usr/lib/homenode/homenode-backup", "usr/lib/homenode/homenode-inspect", "usr/lib/homenode/guest/homenode-guest"} {
+	for _, name := range []string{"usr/bin/homenode", "usr/lib/homenode/homenode-supervisor", "usr/lib/homenode/homenode-transfer", "usr/lib/homenode/homenode-backup", "usr/lib/homenode/homenode-inspect", "usr/lib/homenode/homenode-gateway", "usr/lib/homenode/guest/homenode-guest"} {
 		filename := filepath.Join(directory, name)
 		if err := os.MkdirAll(filepath.Dir(filename), 0700); err != nil {
 			t.Fatal(err)
@@ -58,7 +58,7 @@ func TestCompleteCollectorReviewedCompiledSourceSums(t *testing.T) {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(reviewed)
-	if !record.SourceSumsVerified || record.SourceSumsSHA256 != hex.EncodeToString(digest[:]) || len(record.Binaries) != 6 || len(record.Binaries[0].Dependencies) == 0 {
+	if !record.SourceSumsVerified || record.SourceSumsSHA256 != hex.EncodeToString(digest[:]) || len(record.Binaries) != 7 || len(record.Binaries[0].Dependencies) == 0 {
 		t.Fatal("compiled source sum claim differs from actual inputs")
 	}
 	dependency := record.Binaries[0].Dependencies[0]

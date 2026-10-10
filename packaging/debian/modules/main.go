@@ -70,7 +70,7 @@ func run(args []string, output io.Writer) error {
 	}
 	defer root.Close()
 	records := []binaryRecord{}
-	for _, name := range []string{"usr/bin/homenode", "usr/lib/homenode/homenode-supervisor", "usr/lib/homenode/homenode-transfer", "usr/lib/homenode/homenode-backup", "usr/lib/homenode/homenode-inspect", "usr/lib/homenode/guest/homenode-guest"} {
+	for _, name := range []string{"usr/bin/homenode", "usr/lib/homenode/homenode-supervisor", "usr/lib/homenode/homenode-transfer", "usr/lib/homenode/homenode-backup", "usr/lib/homenode/homenode-inspect", "usr/lib/homenode/homenode-gateway", "usr/lib/homenode/guest/homenode-guest"} {
 		record, err := inspect(root, name)
 		if err != nil {
 			return err
