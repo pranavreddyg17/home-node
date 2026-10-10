@@ -24,7 +24,7 @@ func TestInstalledAccountInspection(t *testing.T) {
 		t.Fatal("integration requires Linux root")
 	}
 	ctx := context.Background()
-	for _, name := range []string{"homenode", "homenode-transfer", "homenode-backup"} {
+	for _, name := range []string{"homenode", "homenode-transfer", "homenode-backup", "homenode-gateway"} {
 		_, exists, err := lookupAccount(ctx, "passwd", name)
 		if err != nil {
 			t.Fatal("fixture cannot establish account vacancy", err)
@@ -33,7 +33,7 @@ func TestInstalledAccountInspection(t *testing.T) {
 			t.Fatal("fixture refuses existing account", name)
 		}
 	}
-	for _, name := range []string{"homenode", "homenode-transfer", "homenode-runtime", "homenode-backup"} {
+	for _, name := range []string{"homenode", "homenode-transfer", "homenode-runtime", "homenode-backup", "homenode-gateway", "homenode-proxy"} {
 		_, exists, err := lookupAccount(ctx, "group", name)
 		if err != nil {
 			t.Fatal("fixture cannot establish group vacancy", err)
@@ -93,8 +93,8 @@ func TestInstalledAccountInspection(t *testing.T) {
 	}()
 	// Initial vacancy was established above. The fixture cleanup runs only for
 	// these known names; production account removal remains a separate phase.
-	createdGroups = []string{"homenode", "homenode-transfer", "homenode-runtime", "homenode-backup"}
-	createdUsers = []string{"homenode", "homenode-transfer", "homenode-backup"}
+	createdGroups = []string{"homenode", "homenode-transfer", "homenode-runtime", "homenode-backup", "homenode-gateway", "homenode-proxy"}
+	createdUsers = []string{"homenode", "homenode-transfer", "homenode-backup", "homenode-gateway"}
 	provisioned, err := engine.ProvisionAccounts(ctx)
 	if err != nil {
 		t.Fatal("journaled native account creation failed", err)
@@ -382,4 +382,5 @@ func TestInstalledAccountInspection(t *testing.T) {
 	if _, err = InspectLocalAccounts(ctx); err != nil {
 		t.Fatal("repaired identity not admitted", err)
 	}
+	t.Run("GatewayProvisioning", func(t *testing.T) { qualifyNativeGatewayAccounts(t, engine, ctx) })
 }
