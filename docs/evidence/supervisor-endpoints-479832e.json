@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "sourceRevision": "479832e22eaec8e3338ab322a1d69eb2f56f7ed7",
+  "workflowRun": 38090180236,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38090180236",
+  "jobID": 114324840279,
+  "jobConclusion": "success",
+  "logSHA256": "8dcc4bcc617e99e4ffbf3a29fc62830981ab1a89f2863663d81bd8c02869f98b",
+  "environment": "Disposable Ubuntu 24.04 Linux root CI; temporary fixture-owned endpoint and configuration paths",
+  "tests": [
+    "TestRootEndpointDefaultACLRefusal",
+    "TestRootEndpointCrashRecovery",
+    "TestRootEndpointForeignEntryPreserved",
+    "TestRootEndpointInterruptedPublication",
+    "TestRootEndpointKilledProcessLifecycle",
+    "TestRootActualSupervisorLiveEndpointRefusal"
+  ],
+  "qualifiedScope": [
+    "Root-owned stream and sequenced-packet stale endpoints can be retired and rebound; live listeners and foreign ownership are preserved",
+    "Concurrent cooperating supervisor startup is excluded by retained parent directory locks",
+    "Actual SIGKILL releases the parent lock while retaining its socket; the next fixture process safely retires and rebinds it",
+    "Live root-private initializing sockets are preserved; stale pre-chown and post-chown initializing sockets are recovered",
+    "Default ACL drift is refused without creating an endpoint; foreign files, symlinks and writable-parent drift are refused",
+    "Actual built supervisor executable refuses a live endpoint before creating its runtime journal or image/volume/channel directories and releases its parent lock on exit"
+  ],
+  "limitations": [
+    "Temporary root fixtures, not installed systemd service crash/restart or physical power loss",
+    "No running application VM, installed controller/transfer, private HTTPS, mobile device or end-to-end owner workflow is qualified by these endpoint tests",
+    "Positive signed-catalog reserved-policy startup fixture is implemented in later commits and not executed by this source revision",
+    "Executable was built from the source revision in the CI job; a separate binary digest was not retained"
+  ],
+  "releaseQualified": false
+}
