@@ -87,3 +87,11 @@ listener with TLS directory access denied; it composes with the existing backup
 maintenance listener transformation. Gateway identity observation, TLS directory
 ownership, configuration staging, recovery/removal integration and native
 systemd qualification must be completed before activating this service split.
+
+HTTPS certificate admission calls Go's Linux interface/address enumeration,
+which uses a `NETLINK_ROUTE` socket. The gateway and transitional direct-HTTPS
+controller therefore allow `AF_NETLINK`. Both keep an empty capability bounding
+set, so this does not grant network administration capability. The transformed
+private controller permits only `AF_UNIX` and performs no interface enumeration
+or TLS key loading. Native startup under these actual service profiles remains
+a required qualification check.
