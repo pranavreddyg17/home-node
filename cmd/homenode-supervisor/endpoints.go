@@ -59,7 +59,8 @@ func qualifyEndpointParent(file *os.File) error {
 	if err != nil || !os.SameFile(info, named) {
 		return errors.New("endpoint parent replaced")
 	}
-	return nil
+	// A default ACL can override the umask while bind creates the socket.
+	return qualifyEndpointParentACL(file)
 }
 
 // Only an exact root-owned socket in a retained, non-writable parent may be
