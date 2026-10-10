@@ -67,4 +67,26 @@ func TestRootGuestStorageChannelStagePreservesRecordedCandidate(t *testing.T) {
 	if err != nil || string(current) != string(data) {
 		t.Fatal("receipt evidence changed", err)
 	}
+	if err := engine.withRecordedGuestStorageChannel(ctx, plan, 1002, stage, guard, func(_ *os.Root, parent, _ *os.File, check func(context.Context) error) error {
+		if err := unix.Renameat2(int(parent.Fd()), ".homenode-guests.stage", int(parent.Fd()), "guests", unix.RENAME_NOREPLACE); err != nil {
+			return err
+		}
+		return check(ctx)
+	}); err != nil {
+		t.Fatal("recorded inode could not move to final location", err)
+	}
+	final := filepath.Join(runtime, "guests")
+	if err := os.Rename(final, final+".original"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(final, 0710); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(final, 0, 1002); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	if err := engine.withRecordedGuestStorageChannel(ctx, plan, 1002, stage, guard, func(_ *os.Root, _, _ *os.File, _ func(context.Context) error) error { called = true; return nil }); err == nil || called {
+		t.Fatal("matching foreign final directory admitted", called, err)
+	}
 }
