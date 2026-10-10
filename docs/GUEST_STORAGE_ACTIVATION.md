@@ -191,8 +191,17 @@ removed at reboot: [systemd execution documentation](https://github.com/systemd/
 New channel receipts use version 2 and include the kernel boot UUID read from
 the fixed procfs `boot_id` interface. Staging rechecks that identity and recorded
 publication requires a matching current boot before admitting the consumer.
-Inode reuse on a later boot therefore cannot qualify a stale receipt. Missing,
-old-version or foreign-boot records are preserved and refused; authorized receipt
-rollover and reboot provisioning remain unfinished. A root fixture checks that
+Inode reuse on a later boot therefore cannot qualify a stale receipt. Publication refuses missing,
+old-version and foreign-boot records. Blocked receipt rollover is described below;
+automatic reboot provisioning remains unfinished. A root fixture checks that
 a canonical receipt with a foreign boot UUID cannot reach publication authority.
 Linux compilation has passed; native qualification of these additions is pending.
+
+Blocked installed channel provisioning now archives a valid prior-boot receipt
+under its boot UUID before staging a new directory, only if both channel paths
+are absent. Archival retains the exact receipt inode and bytes and uses a
+no-replace rename; existing history or occupied runtime paths are refused.
+A fixture simulates a vacant later-boot namespace and checks archival while
+preserving evidence. It does not qualify a physical reboot. Creation of the outer
+runtime directory, startup activation composition and native installed-command
+qualification remain unfinished.

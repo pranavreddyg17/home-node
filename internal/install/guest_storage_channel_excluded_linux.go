@@ -70,6 +70,23 @@ func (e *Engine) provisionGuestStorageChannelExcludedLocked(ctx context.Context,
 		}
 		return e.withGuestStorageDirectoryParentState(ctx, "var/lib/homenode/volumes", plan.GuestGID, plan.GuestGID, 0, 0, false, qualified, func(_ *os.Root, _ *os.File, checkVolumes func(context.Context) error) error {
 			transferGID := uint32(accounts.Accounts.TransferGID)
+			if _, err := e.journalRoot.Lstat("guest-storage-channel-stage.json"); err == nil {
+				previous, err := e.loadGuestStorageChannelStage(ctx, plan, transferGID)
+				if err != nil {
+					return err
+				}
+				bootID, err := observeGuestStorageBootID(ctx)
+				if err != nil {
+					return err
+				}
+				if previous.BootID != bootID {
+					if err := e.archivePreviousBootGuestStorageChannelStage(ctx, plan, transferGID, checkVolumes); err != nil {
+						return err
+					}
+				}
+			} else if !os.IsNotExist(err) {
+				return err
+			}
 			if _, err := e.journalRoot.Lstat("guest-storage-channel-stage.json"); os.IsNotExist(err) {
 				if _, err := e.stageGuestStorageChannelParent(ctx, plan, transferGID, checkVolumes); err != nil {
 					return err
