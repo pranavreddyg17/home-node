@@ -19,6 +19,7 @@ import (
 
 	"github.com/pranavreddyg17/home-node/internal/connectionbudget"
 	"github.com/pranavreddyg17/home-node/internal/control"
+	"github.com/pranavreddyg17/home-node/internal/gatewaytransport"
 	"github.com/pranavreddyg17/home-node/internal/hostcheck"
 	"github.com/pranavreddyg17/home-node/internal/identity"
 	"github.com/pranavreddyg17/home-node/internal/install"
@@ -26,6 +27,7 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/runtimeclient"
 	"github.com/pranavreddyg17/home-node/internal/socketactivation"
 	"github.com/pranavreddyg17/home-node/internal/state"
+	"github.com/pranavreddyg17/home-node/internal/supervisor"
 	"github.com/pranavreddyg17/home-node/internal/workload"
 )
 
@@ -209,7 +211,18 @@ func serve(args []string) {
 	backupRelease := flags.String("backup-release", "", "installed backup worker release (enables backup execution)")
 	backupCatalog := flags.Int64("backup-catalog-version", 0, "installed backup worker catalog version")
 	backupCredentialSocket := flags.String("backup-credential-socket", "/run/homenode-backup/credential.sock", "protected activated backup credential channel")
+	controllerSocket := flags.String("controller-socket", "", "private gateway-authenticated Unix listener")
+	gatewayUID := flags.Uint("gateway-uid", 0, "installed gateway UID")
+	bridgeGID := flags.Uint("access-gid", 0, "installed proxy group")
 	_ = flags.Parse(args)
+	privateController := *controllerSocket != ""
+	if privateController {
+		if *gatewayUID > 1<<31-1 || *bridgeGID > 1<<31-1 || controllerProxyIdentity(*controllerSocket, *dev, uint32(*gatewayUID), uint32(*bridgeGID), *cert, *key) != nil || (*maintenanceUID != -1 && uint64(*maintenanceUID) == uint64(*gatewayUID)) {
+			fatal(errors.New("invalid dedicated controller proxy configuration"))
+		}
+	} else if *gatewayUID != 0 || *bridgeGID != 0 {
+		fatal(errors.New("proxy identity requires a private controller socket"))
+	}
 	var maintenanceListener net.Listener
 	if *maintenanceUID != -1 || *maintenanceGID != -1 {
 		if *dev || runtime.GOOS != "linux" || os.Geteuid() == 0 || *maintenanceUID < 100 || *maintenanceUID > 999 || *maintenanceUID == os.Geteuid() || *maintenanceGID < 100 || *maintenanceGID > 999 {
@@ -238,6 +251,10 @@ func serve(args []string) {
 		*address = "127.0.0.1"
 		if *origin == "" {
 			*origin = "http://localhost:" + strconv.Itoa(*port)
+		}
+	} else if privateController {
+		if _, err := networkcheck.ValidateConfiguration(networkcheck.Config{Bind: *address, Port: *port, Origin: *origin}); err != nil {
+			fatal(err)
 		}
 	} else {
 		var err error
@@ -276,13 +293,20 @@ func serve(args []string) {
 	if err != nil {
 		fatal(err)
 	}
-	rawListener, err := net.Listen("tcp", net.JoinHostPort(*address, strconv.Itoa(*port)))
-	if err != nil {
-		fatal(err)
+	var listener net.Listener
+	if privateController {
+		listener, err = listenControllerProxy(*controllerSocket, uint32(*bridgeGID))
+	} else {
+		var rawListener net.Listener
+		rawListener, err = net.Listen("tcp", net.JoinHostPort(*address, strconv.Itoa(*port)))
+		if err == nil {
+			listener, err = connectionbudget.New(rawListener, connectionbudget.DefaultTotal, connectionbudget.DefaultPerAddress)
+			if err != nil {
+				rawListener.Close()
+			}
+		}
 	}
-	listener, err := connectionbudget.New(rawListener, connectionbudget.DefaultTotal, connectionbudget.DefaultPerAddress)
 	if err != nil {
-		_ = rawListener.Close()
 		fatal(err)
 	}
 	defer listener.Close()
@@ -300,6 +324,13 @@ func serve(args []string) {
 	}
 	go handler.Workloads.Run(ctx)
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13, SessionTicketsDisabled: true}}
+	if privateController {
+		server.Handler, err = gatewaytransport.ControllerHandler(uint32(*gatewayUID), handler)
+		if err != nil {
+			fatal(err)
+		}
+		server.ConnContext = supervisor.PeerContext
+	}
 	if certificateSource != nil {
 		server.TLSConfig.GetCertificate = certificateSource.GetCertificate
 	}
@@ -324,7 +355,7 @@ func serve(args []string) {
 		}
 	}()
 	slog.Info("HomeNode listening", "origin", *origin, "development", *dev)
-	if *dev {
+	if *dev || privateController {
 		err = server.Serve(listener)
 	} else {
 		err = server.ServeTLS(listener, "", "")
