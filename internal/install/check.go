@@ -22,6 +22,7 @@ import (
 )
 
 type InstallationCheck struct {
+	Gateway               *GatewayAccount     `json:"gateway,omitempty"`
 	Maintenance           *MaintenanceAccount `json:"maintenance,omitempty"`
 	ConfigurationID       string              `json:"configurationId"`
 	Network               networkcheck.Config `json:"network"`
@@ -78,11 +79,17 @@ func (e *Engine) CheckInstallation(ctx context.Context) (InstallationCheck, erro
 			return empty, ErrAccounts
 		}
 	}
+	if result.Gateway != nil {
+		observed, err := e.observeGatewayAccount(ctx, j)
+		if err != nil || observed == nil || *observed != *result.Gateway {
+			return empty, ErrAccounts
+		}
+	}
 	result.AccountsVerified = true
 	if err = ctx.Err(); err != nil {
 		return empty, err
 	}
-	if err = e.checkTLSAccess(result.Accounts); err != nil {
+	if err = e.checkTLSAccessWithGateway(result.Accounts, result.Gateway); err != nil {
 		return empty, err
 	}
 	certificate, err := networkcheck.Inspect(result.Network, "/etc/homenode/tls/server.crt", "/etc/homenode/tls/server.key")
@@ -121,6 +128,36 @@ func (e *Engine) checkPrepared(ctx context.Context, now time.Time) (Installation
 	if !a.Ready {
 		return result, ErrAccounts
 	}
+	var gateway *GatewayAccount
+	for _, item := range config.Items {
+		if item.Path == "etc/systemd/system/homenode-gateway.service" {
+			owned, err := e.loadGatewayAccountJournal(a)
+			if err != nil || !owned.Ready {
+				return result, ErrAccounts
+			}
+			identity := owned.Plan.Identity
+			gateway = &identity
+			actual, err := e.readConfiguration(config, item.Path)
+			expected, templateErr := servicetemplates.Unit("homenode-gateway.service")
+			if err != nil || templateErr != nil || !bytes.Equal(actual, expected) {
+				return result, ErrPlan
+			}
+		}
+	}
+	if gateway != nil {
+		foundTLS := false
+		for _, item := range config.Items {
+			if item.Path == "etc/homenode/tls" {
+				if !item.Directory || item.UID != 0 || item.GID != gateway.GID || item.Mode != 0750 {
+					return result, ErrPlan
+				}
+				foundTLS = true
+			}
+		}
+		if !foundTLS {
+			return result, ErrPlan
+		}
+	}
 	var maintenance *MaintenanceAccount
 	unit, err := e.readConfiguration(config, "etc/systemd/system/homenode-supervisor.service")
 	if err != nil {
@@ -152,6 +189,12 @@ func (e *Engine) checkPrepared(ctx context.Context, now time.Time) (Installation
 	expectedControl, err := servicetemplates.Unit("homenode-control.service")
 	if err != nil {
 		return result, err
+	}
+	if gateway != nil {
+		expectedControl, err = gatewayControlUnit(expectedControl)
+		if err != nil {
+			return result, err
+		}
 	}
 	if maintenance != nil {
 		expectedControl, err = maintenanceControlUnit(expectedControl, *maintenance)
@@ -188,7 +231,11 @@ func (e *Engine) checkPrepared(ctx context.Context, now time.Time) (Installation
 		return result, err
 	}
 	lines := strings.Split(string(env), "\n")
-	if len(lines) != 8 || !strings.HasPrefix(lines[0], "TAILNET_IP=") || !strings.HasPrefix(lines[1], "HTTPS_PORT=") || !strings.HasPrefix(lines[2], "HTTPS_ORIGIN=") {
+	expectedLines := 8
+	if gateway != nil {
+		expectedLines = 10
+	}
+	if len(lines) != expectedLines || !strings.HasPrefix(lines[0], "TAILNET_IP=") || !strings.HasPrefix(lines[1], "HTTPS_PORT=") || !strings.HasPrefix(lines[2], "HTTPS_ORIGIN=") {
 		return result, ErrPlan
 	}
 	port, err := strconv.Atoi(strings.TrimPrefix(lines[1], "HTTPS_PORT="))
@@ -200,6 +247,9 @@ func (e *Engine) checkPrepared(ctx context.Context, now time.Time) (Installation
 		return result, err
 	}
 	expected := fmt.Sprintf("TAILNET_IP=%s\nHTTPS_PORT=%d\nHTTPS_ORIGIN=%s\nPOLICY_GENERATION=%d\nCONTROLLER_UID=%d\nRUNTIME_GID=%d\nTRANSFER_GID=%d\n", network.Bind, network.Port, network.Origin, policy.Generation, a.Accounts.ControllerUID, a.Accounts.RuntimeGID, a.Accounts.TransferGID)
+	if gateway != nil {
+		expected += fmt.Sprintf("GATEWAY_UID=%d\nPROXY_GID=%d\n", gateway.UID, gateway.ProxyGID)
+	}
 	if string(env) != expected {
 		return result, ErrPlan
 	}
@@ -244,7 +294,7 @@ func (e *Engine) checkPrepared(ctx context.Context, now time.Time) (Installation
 			return result, err
 		}
 	}
-	result = InstallationCheck{Maintenance: maintenance, ConfigurationID: config.ID, Network: network, Accounts: a.Accounts, RuntimePolicy: policy, PublisherKeyID: catalog.KeyID(pub), CatalogFloor: floor, CatalogVersion: manifest.Version, ArtifactsVerified: true, Pending: []string{"verify supported host enforcement and measured VM overhead", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
+	result = InstallationCheck{Gateway: gateway, Maintenance: maintenance, ConfigurationID: config.ID, Network: network, Accounts: a.Accounts, RuntimePolicy: policy, PublisherKeyID: catalog.KeyID(pub), CatalogFloor: floor, CatalogVersion: manifest.Version, ArtifactsVerified: true, Pending: []string{"verify supported host enforcement and measured VM overhead", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
 	if maintenance != nil {
 		result.Pending = append(result.Pending, "register and qualify an external backup repository", "generate trusted backup launch configuration and qualify worker activation")
 	}
@@ -252,12 +302,19 @@ func (e *Engine) checkPrepared(ctx context.Context, now time.Time) (Installation
 }
 
 func (e *Engine) checkTLSAccess(a Accounts) error {
+	return e.checkTLSAccessWithGateway(a, nil)
+}
+func (e *Engine) checkTLSAccessWithGateway(a Accounts, gateway *GatewayAccount) error {
+	keyGID := a.ControllerGID
+	if gateway != nil {
+		keyGID = gateway.GID
+	}
 	for _, item := range []struct {
 		name string
 		mode os.FileMode
 		gid  int
 	}{
-		{"etc/homenode/tls/server.crt", 0644, -1}, {"etc/homenode/tls/server.key", 0640, a.ControllerGID},
+		{"etc/homenode/tls/server.crt", 0644, -1}, {"etc/homenode/tls/server.key", 0640, keyGID},
 	} {
 		info, err := e.host.Lstat(item.name)
 		if err != nil || !info.Mode().IsRegular() || !owned(info, e.owner) || info.Mode().Perm() != item.mode {
