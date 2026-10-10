@@ -8,8 +8,19 @@ import (
 // Input is the authenticated installed journal. This plans exactly one owned
 // directory group transition; it neither writes the journal nor mutates storage.
 func planGuestStorageImageParentJournal(ctx context.Context, installed journal, sourceGID, guestGID uint32) (journal, error) {
+	return planGuestStorageDirectoryGroupJournal(ctx, installed, "var/lib/homenode/images", sourceGID, guestGID)
+}
+
+func planGuestStorageVolumeParentJournal(ctx context.Context, installed journal, sourceGID, guestGID uint32) (journal, error) {
+	return planGuestStorageDirectoryGroupJournal(ctx, installed, "var/lib/homenode/volumes", sourceGID, guestGID)
+}
+
+func planGuestStorageDirectoryGroupJournal(ctx context.Context, installed journal, path string, sourceGID, guestGID uint32) (journal, error) {
 	if err := ctx.Err(); err != nil {
 		return journal{}, err
+	}
+	if path != "var/lib/homenode/images" && path != "var/lib/homenode/volumes" {
+		return journal{}, ErrPlan
 	}
 	if installed.Version != 1 || installed.Phase != "installed" || sourceGID == 0 || guestGID == 0 || sourceGID > 1<<31-1 || guestGID > 1<<31-1 {
 		return journal{}, ErrPlan
@@ -20,7 +31,7 @@ func planGuestStorageImageParentJournal(ctx context.Context, installed journal, 
 	matches := 0
 	for i, item := range installed.Items {
 		normalized[i].State = "pending"
-		if item.Path != "var/lib/homenode/images" {
+		if item.Path != path {
 			continue
 		}
 		matches++
