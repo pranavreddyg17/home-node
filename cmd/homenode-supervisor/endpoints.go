@@ -80,7 +80,12 @@ func retireStaleEndpoint(parent *os.File, path, network string, gid int) error {
 	if err != nil {
 		return err
 	}
-	if before.Mode&unix.S_IFMT != unix.S_IFSOCK || before.Uid != 0 || before.Gid != uint32(gid) || before.Nlink != 1 || before.Mode&07777 != 0660 {
+	// bind runs under the service's 0077 umask, before chown/chmod publishes
+	// group access. A crash in that interval leaves a root-private 0700 socket.
+	mode := before.Mode & 07777
+	published := mode == 0660 && before.Gid == uint32(gid)
+	initializing := mode == 0700 && (before.Gid == 0 || before.Gid == uint32(gid))
+	if before.Mode&unix.S_IFMT != unix.S_IFSOCK || before.Uid != 0 || before.Nlink != 1 || (!published && !initializing) {
 		return errors.New("foreign endpoint preserved")
 	}
 	conn, err := net.DialTimeout(network, path, time.Second)

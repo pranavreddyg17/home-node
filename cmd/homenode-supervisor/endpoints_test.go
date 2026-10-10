@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -108,5 +109,41 @@ func TestRootEndpointForeignEntryPreserved(t *testing.T) {
 	}
 	if err := retireStaleEndpoint(parents[dir], path, "unix", 0); err == nil {
 		t.Fatal("parent drift admitted")
+	}
+}
+
+func TestRootEndpointInterruptedPublication(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("root-only temporary endpoint fixture")
+	}
+	for _, gid := range []int{0, 1} {
+		t.Run(fmt.Sprint(gid), func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "service.sock")
+			parents, err := lockEndpointParents([]string{path})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer parents[dir].Close()
+			listener, err := net.ListenUnix("unix", &net.UnixAddr{Net: "unix", Name: path})
+			if err != nil {
+				t.Fatal(err)
+			}
+			listener.SetUnlinkOnClose(false)
+			defer listener.Close()
+			if err := os.Chown(path, 0, gid); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(path, 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := retireStaleEndpoint(parents[dir], path, "unix", 1); err == nil {
+				t.Fatal("live initializing socket removed")
+			}
+			listener.Close()
+			if err := retireStaleEndpoint(parents[dir], path, "unix", 1); err != nil {
+				t.Fatal("interrupted publication not recovered", err)
+			}
+		})
 	}
 }
