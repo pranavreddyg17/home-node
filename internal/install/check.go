@@ -60,7 +60,7 @@ func (e *Engine) CheckInstallation(ctx context.Context) (InstallationCheck, erro
 		return empty, err
 	}
 	for index := range creationCommands(j.OwnerID, j.Accounts) {
-		present, err := accountStepMatches(snapshot, j, index)
+		present, err := e.ownedAccountStepMatches(snapshot, j, index)
 		if err != nil || !present {
 			return empty, ErrAccounts
 		}

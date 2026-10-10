@@ -40,7 +40,7 @@ func (e *Engine) prepareMaintenanceAccount(ctx context.Context, b accountProvisi
 		return empty, err
 	}
 	for index := 0; index < 5; index++ {
-		matched, matchErr := accountStepMatches(snapshot, base, index)
+		matched, matchErr := e.ownedAccountStepMatches(snapshot, base, index)
 		if matchErr != nil || !matched {
 			return empty, ErrConflict
 		}

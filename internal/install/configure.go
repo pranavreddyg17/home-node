@@ -27,7 +27,7 @@ func (e *Engine) Configure(ctx context.Context, c Configuration) (ConfigurationP
 			return Accounts{}, Capacity{}, err
 		}
 		for index := range creationCommands(j.OwnerID, j.Accounts) {
-			present, err := accountStepMatches(snapshot, j, index)
+			present, err := e.ownedAccountStepMatches(snapshot, j, index)
 			if err != nil || !present {
 				return Accounts{}, Capacity{}, ErrAccounts
 			}

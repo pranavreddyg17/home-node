@@ -33,7 +33,7 @@ func (e *Engine) inspectGuestIdentityAccountsLocked(ctx context.Context) (string
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
-		matches, err := accountStepMatches(snapshot, base, step)
+		matches, err := e.ownedAccountStepMatches(snapshot, base, step)
 		if err != nil {
 			return "", err
 		}

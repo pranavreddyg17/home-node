@@ -93,7 +93,7 @@ func (e *Engine) provisionMaintenanceAccount(ctx context.Context, b maintenanceP
 			return empty, err
 		}
 		for step := 0; step < 5; step++ {
-			ready, err := accountStepMatches(snapshot, base, step)
+			ready, err := e.ownedAccountStepMatches(snapshot, base, step)
 			if err != nil || !ready {
 				return empty, ErrConflict
 			}

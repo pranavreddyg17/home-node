@@ -56,7 +56,7 @@ func (e *Engine) planInstalledGuestUIDProvisioningLocked(ctx context.Context, po
 		return empty, err
 	}
 	for step := 0; step < 5; step++ {
-		matches, err := accountStepMatches(snapshot, base, step)
+		matches, err := e.ownedAccountStepMatches(snapshot, base, step)
 		if err != nil {
 			return empty, err
 		}

@@ -133,7 +133,7 @@ func (e *Engine) provisionAccounts(ctx context.Context, b accountProvisionBacken
 		if err != nil {
 			return empty, err
 		}
-		present, err := accountStepMatches(snapshot, j, index)
+		present, err := e.ownedAccountStepMatches(snapshot, j, index)
 		if err != nil {
 			return empty, err
 		}
@@ -162,7 +162,7 @@ func (e *Engine) provisionAccounts(ctx context.Context, b accountProvisionBacken
 			if err != nil {
 				return empty, err
 			}
-			present, err = accountStepMatches(snapshot, j, index)
+			present, err = e.ownedAccountStepMatches(snapshot, j, index)
 			if err != nil || !present {
 				return empty, ErrConflict
 			}
