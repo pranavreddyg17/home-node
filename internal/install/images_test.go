@@ -17,9 +17,13 @@ func imagePlacementFixture(t *testing.T) (*Engine, Configuration, string, string
 	return imagePlacementFixtureWithMaintenance(t, nil)
 }
 func imagePlacementFixtureWithMaintenance(t *testing.T, maintenance *MaintenanceAccount) (*Engine, Configuration, string, string, string, time.Time) {
+	return imagePlacementFixtureWithIdentities(t, maintenance, nil)
+}
+func imagePlacementFixtureWithIdentities(t *testing.T, maintenance *MaintenanceAccount, gateway *GatewayAccount) (*Engine, Configuration, string, string, string, time.Time) {
 	t.Helper()
 	c, m, key, now := configurationFixture(t)
 	c.Maintenance = maintenance
+	c.Gateway = gateway
 	source := t.TempDir()
 	for index := range m.Images {
 		data := bytes.Repeat([]byte(m.Images[index].ID), 256)
