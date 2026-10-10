@@ -19,15 +19,6 @@ import (
 // native peer credentials. It does not qualify installed systemd or user TLS.
 func startNativeFilesTransfer(t *testing.T, ctx context.Context, base, script, instanceID string, m *Manager, gid int) (func(), func()) {
 	t.Helper()
-	binary := "/usr/lib/homenode-fixtures/homenode-transfer"
-	info, err := os.Lstat(binary)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0755 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
-		t.Fatal("native transfer fixture binary unavailable", err)
-	}
-	metadata, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || metadata.Uid != 0 || metadata.Nlink != 1 {
-		t.Fatal("unprotected native transfer fixture binary")
-	}
 	runtimeSocket := filepath.Join(base, "transfer-supervisor.sock")
 	listener, err := net.Listen("unix", runtimeSocket)
 	if err != nil {
@@ -53,6 +44,29 @@ func startNativeFilesTransfer(t *testing.T, ctx context.Context, base, script, i
 		}
 	}()
 	go func() { _ = server.Serve(listener) }()
+	exercise, stop := startNativeFilesTransferAt(t, ctx, base, script, instanceID, runtimeSocket, m.Channels, gid)
+	retained = true
+	return exercise, func() {
+		stop()
+		_ = server.Close()
+		_ = listener.Close()
+	}
+}
+
+// Reuse the shipped transfer/client path against either the real executable's
+// socket or the direct Manager fixture. Peer authorization stays server-side.
+func startNativeFilesTransferAt(t *testing.T, ctx context.Context, base, script, instanceID, runtimeSocket, channels string, gid int) (func(), func()) {
+	t.Helper()
+	binary := "/usr/lib/homenode-fixtures/homenode-transfer"
+	info, err := os.Lstat(binary)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0755 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
+		t.Fatal("native transfer fixture binary unavailable", err)
+	}
+	metadata, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || metadata.Uid != 0 || metadata.Nlink != 1 {
+		t.Fatal("unprotected native transfer fixture binary")
+	}
+	retained := false
 	directory := filepath.Join(base, "transfer-runtime")
 	if err := os.Mkdir(directory, 0700); err != nil {
 		t.Fatal(err)
@@ -66,7 +80,7 @@ func startNativeFilesTransfer(t *testing.T, ctx context.Context, base, script, i
 	transferSocket := filepath.Join(directory, "transfer.sock")
 	childCtx, cancel := context.WithCancel(ctx)
 	command := exec.CommandContext(childCtx, binary, "-socket", transferSocket, "-supervisor", runtimeSocket,
-		"-channels", m.Channels, "-controller-uid", "1", "-access-gid", strconv.Itoa(gid), "-policy-generation", "1")
+		"-channels", channels, "-controller-uid", "1", "-access-gid", strconv.Itoa(gid), "-policy-generation", "1")
 	command.Dir = base
 	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin"}
 	var diagnostics boundedOutput
@@ -112,9 +126,5 @@ func startNativeFilesTransfer(t *testing.T, ctx context.Context, base, script, i
 		t.Log("actual unprivileged transfer binary round trip, foreign controller UID refusal and transfer UID runtime-stop refusal passed")
 	}
 	retained = true
-	return exercise, func() {
-		stop()
-		_ = server.Close()
-		_ = listener.Close()
-	}
+	return exercise, stop
 }
