@@ -53,10 +53,12 @@ class ManagerInputs(unittest.TestCase):
 
     def test_client_requires_ready_state_before_object_work(self):
         result = {"bytes": 1048579, "chunkBytes": 262144, "acknowledgedChunkReplay": True}
-        with mock.patch.object(manager_channel.sys, "platform", "linux"), mock.patch.object(os, "geteuid", return_value=2), mock.patch.dict(os.environ, {"HOMENODE_FILES_MANAGER_INTEGRATION": "1"}), mock.patch.object(manager_channel.sys, "argv", ["fixture", "/tmp/admitted.sock", "a" * 32, "0"]), mock.patch.object(manager_channel.socket, "socket"), mock.patch.object(manager_channel.boot_image, "request", return_value={"state": "foreign"}), mock.patch.object(manager_channel.boot_image, "object_roundtrip", return_value=result) as transfer:
+        with mock.patch.object(manager_channel.sys, "platform", "linux"), mock.patch.object(os, "geteuid", return_value=2), mock.patch.dict(os.environ, {"HOMENODE_FILES_MANAGER_INTEGRATION": "1"}), mock.patch.object(manager_channel.sys, "argv", ["fixture", "/tmp/admitted.sock", "Generated_Token_12345678901", "0"]), mock.patch.object(manager_channel.socket, "socket"), mock.patch.object(manager_channel.boot_image, "request", return_value={"state": "foreign"}) as request, mock.patch.object(manager_channel.boot_image, "object_roundtrip", return_value=result) as transfer:
             with self.assertRaises(ValueError):
                 manager_channel.main()
             transfer.assert_not_called()
+            request.assert_called_once()
+            self.assertEqual(request.call_args.args[1], "health")
 
     def test_restart_object_is_retained_then_verified_before_deletion(self):
         content = b"HomeNode development restart persistence\n" * 128

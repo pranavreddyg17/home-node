@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import os
+import re
 import socket
 import sys
 import time
@@ -35,7 +36,7 @@ def persistent_object(channel, identifier, attempt):
 def main():
     if sys.platform != "linux" or os.geteuid() == 0 or os.getenv("HOMENODE_FILES_MANAGER_INTEGRATION") != "1":
         raise ValueError("explicit unprivileged disposable Linux client required")
-    if len(sys.argv) != 4 or not os.path.isabs(sys.argv[1]) or len(sys.argv[2]) != 32 or any(char not in "0123456789abcdef" for char in sys.argv[2]) or sys.argv[3] not in ("0", "1"):
+    if len(sys.argv) != 4 or not os.path.isabs(sys.argv[1]) or re.fullmatch(r"[A-Za-z0-9_-]{20,64}", sys.argv[2]) is None or sys.argv[3] not in ("0", "1"):
         raise ValueError("absolute admitted channel and bounded restart identity required")
     # QEMU socket availability precedes guest adapter readiness. Keep one
     # connection: reconnecting may create a competing virtio channel consumer.
