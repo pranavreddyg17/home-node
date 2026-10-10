@@ -124,6 +124,32 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	endpointPaths := []string{*socket}
+	if *maintenanceUID != -1 {
+		endpointPaths = append(endpointPaths, *maintenanceSocket, *maintenanceDiskSocket)
+	}
+	endpointParents, err := lockEndpointParents(endpointPaths)
+	if err != nil {
+		fatal(err)
+	}
+	defer func() {
+		for _, parent := range endpointParents {
+			_ = parent.Close()
+		}
+	}()
+	// Refuse live or foreign endpoints before reconciliation can change guests.
+	for _, endpoint := range endpointPaths {
+		network, gid := "unix", *accessGID
+		if endpoint != *socket {
+			gid = *maintenanceGID
+		}
+		if *maintenanceUID != -1 && endpoint == *maintenanceDiskSocket {
+			network = "unixpacket"
+		}
+		if err := retireStaleEndpoint(endpointParents[filepath.Dir(endpoint)], endpoint, network, gid); err != nil {
+			fatal(err)
+		}
+	}
 	store, err := state.Open(*root)
 	if err != nil {
 		fatal(err)
@@ -183,6 +209,9 @@ func main() {
 	if err = manager.Reconcile(ctx); err != nil {
 		fatal(err)
 	}
+	if err = retireStaleEndpoint(endpointParents[filepath.Dir(*socket)], *socket, "unix", *accessGID); err != nil {
+		fatal(err)
+	}
 	listener, err := net.Listen("unix", *socket)
 	if err != nil {
 		fatal(err)
@@ -198,6 +227,9 @@ func main() {
 	var maintenanceServer *http.Server
 	maintenanceDone := make(chan error, 1)
 	if *maintenanceUID != -1 {
+		if err = retireStaleEndpoint(endpointParents[filepath.Dir(*maintenanceSocket)], *maintenanceSocket, "unix", *maintenanceGID); err != nil {
+			fatal(err)
+		}
 		maintenanceListener, listenErr := net.Listen("unix", *maintenanceSocket)
 		if listenErr != nil {
 			fatal(listenErr)
@@ -221,6 +253,9 @@ func main() {
 	}
 	diskDone := make(chan error, 1)
 	if *maintenanceUID != -1 {
+		if err = retireStaleEndpoint(endpointParents[filepath.Dir(*maintenanceDiskSocket)], *maintenanceDiskSocket, "unixpacket", *maintenanceGID); err != nil {
+			fatal(err)
+		}
 		diskListener, listenErr := net.ListenUnix("unixpacket", &net.UnixAddr{Net: "unixpacket", Name: *maintenanceDiskSocket})
 		if listenErr != nil {
 			fatal(listenErr)
