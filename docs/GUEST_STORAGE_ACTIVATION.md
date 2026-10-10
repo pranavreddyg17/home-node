@@ -210,3 +210,12 @@ descriptor, mount and ACL guard; existing foreign metadata is refused without
 repair. Startup activation composition and native installed-command qualification
 remain unfinished. These later additions have compiled for Linux; native execution
 remains pending.
+
+CI run [38022669502](https://github.com/pranavreddyg17/home-node/actions/runs/38022669502)
+passed at `42095a91c38529b7c007c12259c58d6d0de817df`. Its log explicitly passes
+the version 1 channel staging/publication retry fixture, protected runtime-parent
+refusal fixtures and unsafe configuration-capture cases, and confirms native
+systemd stop preservation. This qualifies those earlier component scopes only;
+later version 2 boot identity, archival, runtime creation and full installed
+commands remain pending. Exact scope and retained log digest are in
+[evidence/channel-runtime-42095a9.json](evidence/channel-runtime-42095a9.json).

@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "sourceRevision": "42095a91c38529b7c007c12259c58d6d0de817df",
+  "workflowRun": 38022669502,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38022669502",
+  "workflowConclusion": "success",
+  "logSHA256": "70f656899a9f45977ad3692a576d81f42c43c7ebe4c915d2eb78c8450d1a65a6",
+  "environment": "Disposable Linux CI, root-owned temporary installation directories and native systemd services",
+  "tests": [
+    "TestRootGuestStorageChannelRuntimeRefusesDirectoryReplacement",
+    "TestRootGuestStorageChannelRuntimeRefusesWritableParentBeforeConsumer",
+    "TestRootGuestStorageChannelStagePreservesRecordedCandidate",
+    "TestRootGuestStorageConfigurationCandidateRefusesUnsafeSources"
+  ],
+  "nativeSignals": [
+    "Native supervisor runtime stop preservation passed"
+  ],
+  "qualifiedScope": [
+    "Runtime parent scope refuses matching inode replacement and writable metadata before consumer admission",
+    "Version 1 channel staging records and preserves the candidate and receipt",
+    "Version 1 channel publication retries after interrupted rename acknowledgement and refuses a foreign final inode",
+    "Bounded configuration capture refuses oversized, FIFO, symlink, hardlink, writable, foreign-owner and duplicate-record inputs",
+    "Two native systemd service completions preserve a shared runtime directory and differently grouped channel inode using the source preservation setting"
+  ],
+  "limitations": [
+    "Installation fixtures use synthetic runtime exclusion guards",
+    "Channel receipt scope is version 1, before later boot-ID binding and archival commits",
+    "Does not qualify public installed provisioning or configuration migration commands",
+    "Does not qualify actual supervisor restart, physical reboot, runtime bootstrap or boot startup activation",
+    "Does not qualify complete application deployment or release"
+  ],
+  "releaseQualified": false
+}
