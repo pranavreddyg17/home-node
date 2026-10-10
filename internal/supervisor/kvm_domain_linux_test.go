@@ -592,13 +592,16 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 		}
 		stop := r
 		stop.Action, stop.OperationID, stop.Revision = "stop", state.Random(), r.Revision+1
+		if filesImage {
+			stop.Action = "shutdown"
+		}
 		instance, err = m.Apply(ctx, stop)
 		if err != nil || instance.State != "stopped" {
-			t.Fatal("native manager stop", instance, err)
+			t.Fatal("native manager", stop.Action, instance, err)
 		}
 	}
 	if filesImage {
-		t.Log("development Files manager launch, 1 GiB object round trip, audit, stop and identity-retaining restart completed; release remains unqualified")
+		t.Log("development Files manager launch, 1 GiB object round trip, audit, cooperative shutdown and identity-retaining restart completed; release remains unqualified")
 	} else {
 		t.Log("synthetic native manager launch, audit, stop and identity-retaining restart completed")
 	}
