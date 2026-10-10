@@ -531,6 +531,9 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 	clientScript := ""
 	if filesImage {
 		image = stageNativeFilesImage(t, ctx, images, previous.GuestGID)
+		if image.DataBytes < 2*catalog.GiB {
+			t.Fatal("one GiB Files transfer requires a two GiB fixture data disk")
+		}
 		clientScript = stageNativeFilesClient(t, base)
 	}
 	channels := filepath.Join(base, "manager-channels")
