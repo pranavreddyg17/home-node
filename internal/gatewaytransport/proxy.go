@@ -70,18 +70,40 @@ func NewProxy(config Config) (http.Handler, func(), error) {
 			_, _ = w.Write([]byte(`{"error":{"code":"GATEWAY_UNAVAILABLE","message":"The controller is unavailable. Try again shortly."}}`))
 		},
 	}
+	slots := make(chan struct{}, 64)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w = &deadlineWriter{ResponseWriter: w}
 		address, err := netip.ParseAddrPort(r.RemoteAddr)
 		if err != nil || !tailnet.Contains(address.Addr().Unmap()) || r.TLS == nil || r.TLS.Version != tls.VersionTLS13 || r.Host != origin.Host || r.URL.IsAbs() || r.URL.Host != "" || r.Method == "CONNECT" || r.Header.Get("Upgrade") != "" || len(r.Trailer) != 0 {
 			http.Error(w, "gateway request denied", http.StatusForbidden)
 			return
 		}
-		proxy.ServeHTTP(&deadlineWriter{ResponseWriter: w}, r)
+		select {
+		case slots <- struct{}{}:
+			defer func() { <-slots }()
+		default:
+			http.Error(w, "gateway busy", http.StatusServiceUnavailable)
+			return
+		}
+		proxy.ServeHTTP(w, r)
 	})
 	return handler, transport.CloseIdleConnections, nil
 }
 
+// CheckController authenticates the installed peer without sending an HTTP
+// operation. A gateway does not publish its TLS listener before this succeeds.
+func CheckController(ctx context.Context, config Config) error {
+	connection, err := dialController(ctx, config)
+	if err != nil {
+		return err
+	}
+	return connection.Close()
+}
+
 func dialController(ctx context.Context, config Config) (net.Conn, error) {
+	if config.ControllerUID == 0 || config.AccessGID == 0 || !filepath.IsAbs(config.Socket) || filepath.Clean(config.Socket) != config.Socket {
+		return nil, ErrTransport
+	}
 	before, err := os.Lstat(config.Socket)
 	if err != nil || before.Mode()&os.ModeSocket == 0 || before.Mode().Perm() != 0660 || before.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
 		return nil, ErrTransport
