@@ -125,3 +125,99 @@ func TestRootGuestStorageVolumeParentIntentRetainsOriginalInode(t *testing.T) {
 	}
 
 }
+
+func TestRootEmptyGuestStorageVolumeParentPublicationRecoversOwnershipInterruption(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("disposable Linux root fixture")
+	}
+	ctx := context.Background()
+	identity, err := guestUIDProvisioningPlan(ctx, strings.Repeat("a", 32), supervisor.GuestUIDPool{First: 200000, Last: 200002}, []uint32{1001, 1002})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := guestStorageProvisioningPlan(ctx, identity, 994, []int{1001, 1002, 1003})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := []record{{Path: "var/lib/homenode/volumes", Directory: true, GID: 993, Mode: 0710, State: "pending"}}
+	encoded, _ := json.Marshal(items)
+	installed := journal{Version: 1, ID: identity.OwnerID, Phase: "installed", Digest: digest(encoded), Items: items}
+	installed.Items[0].State = "created"
+	host, journalDir := roots(t)
+	path := filepath.Join(host, "var/lib/homenode/volumes")
+	if err := os.MkdirAll(path, 0710); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(path, 0, 993); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0710); err != nil {
+		t.Fatal(err)
+	}
+	parent, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer parent.Close()
+	e := openEngine(t, host, journalDir)
+	defer e.Close()
+	guard := func(ctx context.Context) error { return ctx.Err() }
+	if err := e.commitGuestStorageVolumeParentIntent(ctx, installed, plan, 993, parent, guard); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := e.save(installed); err != nil {
+		t.Fatal(err)
+	}
+	occupied := filepath.Join(path, "foreign-volume")
+	if err := os.WriteFile(occupied, []byte("preserve"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.publishEmptyGuestStorageVolumeParentLocked(ctx, plan, 993, guard); !errors.Is(err, ErrConflict) {
+		t.Fatal("populated directory admitted", err)
+	}
+	data, err := os.ReadFile(occupied)
+	if err != nil || string(data) != "preserve" {
+		t.Fatal("refusal altered foreign volume", err)
+	}
+	if err := os.Remove(occupied); err != nil {
+		t.Fatal(err)
+	}
+	interrupted := errors.New("ownership acknowledgement interrupted")
+	e.checkpoint = func(stage, name string) error {
+		if stage == "guest-storage-volume-parent-ownership-migrated" {
+			return interrupted
+		}
+		return nil
+	}
+	if err := e.publishEmptyGuestStorageVolumeParentLocked(ctx, plan, 993, guard); !errors.Is(err, interrupted) {
+		t.Fatal("ownership interruption not observed", err)
+	}
+	observed, err := e.load()
+	if err != nil || observed.Digest != installed.Digest {
+		t.Fatal("journal committed before ownership acknowledgement", err)
+	}
+	e.checkpoint = nil
+	if err := e.publishEmptyGuestStorageVolumeParentLocked(ctx, plan, 993, guard); err != nil {
+		t.Fatal("recorded ownership retry refused", err)
+	}
+	desired, err := planGuestStorageVolumeParentJournal(ctx, installed, 993, 994)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observed, err = e.load()
+	if err != nil || observed.Digest != desired.Digest {
+		t.Fatal("destination journal not committed", err)
+	}
+	before, err := os.Stat(filepath.Join(journalDir, "install.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.publishEmptyGuestStorageVolumeParentLocked(ctx, plan, 993, guard); err != nil {
+		t.Fatal("completed retry refused", err)
+	}
+	after, err := os.Stat(filepath.Join(journalDir, "install.json"))
+	if err != nil || !os.SameFile(before, after) {
+		t.Fatal("completed retry replaced journal", err)
+	}
+}
