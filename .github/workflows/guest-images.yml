@@ -7,6 +7,8 @@ on:
       - 'internal/guest/**'
       - 'internal/guestmount/**'
       - 'internal/guestinit/**'
+      - 'internal/supervisor/**'
+      - 'packaging/systemd/reserved_manager_fixture.py'
       - 'cmd/homenode-guest*/**'
       - 'go.mod'
       - 'go.sum'
@@ -32,7 +34,7 @@ jobs:
           go-version: '1.26.9'
           cache: true
       - name: Install disposable image build dependencies
-        run: sudo apt-get update && sudo apt-get install -y systemd-container dosfstools mtools grub-pc-bin e2fsprogs python3-pefile squashfs-tools qemu-system-x86 ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y systemd-container dosfstools mtools grub-pc-bin e2fsprogs python3-pefile squashfs-tools qemu-system-x86 ffmpeg libvirt-clients libvirt-daemon-system
       - name: Stage and authenticate local development adapter overlay
         env:
           PROFILE: ${{ matrix.profile }}
@@ -72,6 +74,15 @@ jobs:
             sudo /usr/sbin/runuser -u "$(id -un)" -g kvm -- env HOMENODE_GUEST_BOOT_INTEGRATION=1 HOMENODE_GUEST_BOOT_ACCELERATOR=kvm python3 -B packaging/guest/boot_image.py "$RUNNER_TEMP/assembly/$PROFILE/artifacts/homenode-development-$PROFILE.raw" "$RUNNER_TEMP/assembly/$PROFILE/artifacts/development-build.json" "$RUNNER_TEMP/guest-kvm-$PROFILE"
           else
             echo "Native KVM device or group unavailable; development boot evidence remains TCG-only."
+          fi
+      - name: Exercise Files image through reserved identity manager
+        if: matrix.profile == 'files'
+        run: |
+          if test -c /dev/kvm; then
+            sudo systemctl start libvirtd
+            sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 HOMENODE_FILES_MANAGER_INTEGRATION=1 python3 -B packaging/systemd/reserved_manager_fixture.py "$(command -v go)" "$RUNNER_TEMP/assembly/files/artifacts/homenode-development-files.raw" "$RUNNER_TEMP/assembly/files/artifacts/development-build.json"
+          else
+            echo 'Development Files manager NOT VERIFIED: no native KVM device.'
           fi
       - name: Retain bounded boot diagnostics
         if: always()

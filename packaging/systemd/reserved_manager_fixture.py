@@ -1,5 +1,6 @@
 """Temporarily qualify identity configuration on an explicitly disposable Linux KVM runner."""
 import fcntl
+import json
 import os
 import stat
 import subprocess
@@ -9,8 +10,12 @@ import sys
 def main():
     if sys.platform != "linux" or os.geteuid() != 0 or os.environ.get("HOMENODE_KVM_DOMAIN_INTEGRATION") != "1":
         raise RuntimeError("explicit disposable Linux root fixture required")
-    if len(sys.argv) != 2 or not os.path.isabs(sys.argv[1]):
+    if len(sys.argv) not in (2, 4) or not os.path.isabs(sys.argv[1]):
         raise RuntimeError("absolute Go executable required")
+    test = "TestNativeReservedDACManagerLaunch"
+    if len(sys.argv) == 4:
+        prepare_files_input(sys.argv[2], sys.argv[3])
+        test = "TestNativeReservedFilesManagerLaunch"
     account_fd = os.open("/etc/.pwd.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
     records = []
     try:
@@ -34,7 +39,7 @@ def main():
             replace(fd, installed)
             verify(path, fd, metadata, installed)
         fcntl.lockf(account_fd, fcntl.LOCK_UN)
-        subprocess.run([sys.argv[1], "test", "./internal/supervisor", "-run", "^TestNativeReservedDACManagerLaunch$", "-count=1", "-v"], check=True)
+        subprocess.run([sys.argv[1], "test", "./internal/supervisor", "-run", "^" + test + "$", "-count=1", "-v"], check=True, timeout=600)
     finally:
         try:
             if any(record["changed"] for record in records):
@@ -52,6 +57,34 @@ def main():
             for record in records:
                 os.close(record["fd"])
             os.close(account_fd)
+
+
+def prepare_files_input(image, manifest):
+    if os.environ.get("HOMENODE_FILES_MANAGER_INTEGRATION") != "1" or not os.path.isabs(image) or not os.path.isabs(manifest):
+        raise RuntimeError("explicit absolute development Files inputs required")
+    fd = os.open(manifest, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as file:
+        info = os.fstat(file.fileno())
+        if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= 16384:
+            raise RuntimeError("invalid development manifest")
+        data = file.read(16385)
+        if len(data) != info.st_size:
+            raise RuntimeError("development manifest changed")
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate manifest field")
+            result[key] = value
+        return result
+    record = json.loads(data, object_pairs_hook=unique)
+    expected = {"schema", "profile", "sourceRevision", "overlaySHA256", "mkosiRevision", "bytes", "sha256", "releaseQualified", "bootValidated"}
+    if not isinstance(record, dict) or set(record) != expected or type(record["schema"]) is not int or record["schema"] != 1 or record["profile"] != "files" or record["releaseQualified"] is not False or record["bootValidated"] is not False:
+        raise RuntimeError("expected unqualified development Files manifest")
+    digest, size = record["sha256"], record["bytes"]
+    if not isinstance(digest, str) or len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest) or type(size) is not int or not 0 < size <= 8 << 30:
+        raise RuntimeError("invalid development image identity")
+    os.environ.update(HOMENODE_FILES_IMAGE=image, HOMENODE_FILES_IMAGE_SHA256=digest, HOMENODE_FILES_IMAGE_BYTES=str(size))
 
 
 def qualify_nss(original):

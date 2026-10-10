@@ -36,11 +36,22 @@ func TestNativeReservedDACManagerLaunch(t *testing.T) {
 	runNativeReservedDACLaunch(t, false, true)
 }
 
+func TestNativeReservedFilesManagerLaunch(t *testing.T) {
+	if os.Getenv("HOMENODE_FILES_MANAGER_INTEGRATION") != "1" {
+		t.Skip("explicit development Files image fixture required")
+	}
+	runNativeReservedDACLaunch(t, false, true, true)
+}
+
 func runNativeReservedDACLaunch(t *testing.T, guestConnect bool, managerLaunch ...bool) {
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_KVM_DOMAIN_INTEGRATION") != "1" {
 		t.Skip("explicit disposable Linux libvirt/KVM experiment")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	duration := 90 * time.Second
+	if len(managerLaunch) > 1 && managerLaunch[1] {
+		duration = 5 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
 	device, err := os.Lstat("/dev/kvm")
 	if err != nil {
@@ -481,11 +492,12 @@ for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.arg
 		}
 	}
 	if len(managerLaunch) != 0 && managerLaunch[0] {
-		runNativeReservedManagerLifecycle(t, ctx, base, domain, backend, &safeCleanup)
+		filesImage := len(managerLaunch) > 1 && managerLaunch[1]
+		runNativeReservedManagerLifecycle(t, ctx, base, domain, backend, &safeCleanup, filesImage)
 	}
 }
 
-func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base string, previous Domain, backend LinuxBackend, safeCleanup *bool) {
+func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base string, previous Domain, backend LinuxBackend, safeCleanup *bool, filesImage bool) {
 	t.Helper()
 	contents, err := os.ReadFile(previous.SystemPath)
 	if err != nil {
@@ -497,6 +509,9 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 	images := filepath.Dir(previous.SystemPath)
 	if err := os.Rename(previous.SystemPath, filepath.Join(images, image.SHA256+".raw")); err != nil {
 		t.Fatal(err)
+	}
+	if filesImage {
+		image = stageNativeFilesImage(t, ctx, images, previous.GuestGID)
 	}
 	channels := filepath.Join(base, "manager-channels")
 	if err := os.Mkdir(channels, 0700); err != nil {
@@ -545,6 +560,13 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 		if err := m.Audit(ctx); err != nil {
 			t.Fatal("native manager audit", err)
 		}
+		if filesImage {
+			channel, err := m.Channel(ctx, r.InstanceID)
+			if err != nil {
+				t.Fatal("native Files manager channel admission", err)
+			}
+			roundTripNativeFilesChannel(t, ctx, channel, backend.TransferGID)
+		}
 		stop := r
 		stop.Action, stop.OperationID, stop.Revision = "stop", state.Random(), r.Revision+1
 		instance, err = m.Apply(ctx, stop)
@@ -552,7 +574,11 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 			t.Fatal("native manager stop", instance, err)
 		}
 	}
-	t.Log("synthetic native manager launch, audit, stop and identity-retaining restart completed")
+	if filesImage {
+		t.Log("development Files manager launch, object round trip, audit, stop and identity-retaining restart completed; release remains unqualified")
+	} else {
+		t.Log("synthetic native manager launch, audit, stop and identity-retaining restart completed")
+	}
 }
 
 // Diagnostics are limited to this synthetic domain's process credentials and log.

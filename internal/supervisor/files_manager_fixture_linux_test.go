@@ -1,0 +1,93 @@
+//go:build linux
+
+package supervisor
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"syscall"
+	"testing"
+	"time"
+
+	"github.com/pranavreddyg17/home-node/internal/catalog"
+)
+
+// Development input only: this digest check is not a signed release catalog.
+// Copy through a retained source descriptor into an exclusive fixture-owned file.
+func stageNativeFilesImage(t *testing.T, ctx context.Context, directory string, group uint32) catalog.Image {
+	t.Helper()
+	path := os.Getenv("HOMENODE_FILES_IMAGE")
+	digest := os.Getenv("HOMENODE_FILES_IMAGE_SHA256")
+	size, err := strconv.ParseInt(os.Getenv("HOMENODE_FILES_IMAGE_BYTES"), 10, 64)
+	decoded, decodeErr := hex.DecodeString(digest)
+	if ctx.Err() != nil || !filepath.IsAbs(path) || filepath.Clean(path) != path || err != nil || size <= 0 || size > 8<<30 || decodeErr != nil || len(decoded) != sha256.Size || hex.EncodeToString(decoded) != digest {
+		t.Fatal("unqualified development Files input")
+	}
+	source, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Close()
+	before, err := source.Stat()
+	if err != nil || !before.Mode().IsRegular() || before.Size() != size || before.Mode().Perm()&0022 != 0 {
+		t.Fatal("unqualified development Files source", err)
+	}
+	destination, err := os.OpenFile(filepath.Join(directory, digest+".raw"), os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer destination.Close()
+	hash := sha256.New()
+	if n, err := io.CopyN(io.MultiWriter(destination, hash), source, size); err != nil || n != size || hex.EncodeToString(hash.Sum(nil)) != digest {
+		t.Fatal("development Files image copy or digest mismatch", err)
+	}
+	after, err := source.Stat()
+	if err != nil || !os.SameFile(before, after) || after.Size() != size || after.Mode() != before.Mode() || !after.ModTime().Equal(before.ModTime()) || ctx.Err() != nil {
+		t.Fatal("development Files source changed", err)
+	}
+	if err := destination.Chown(0, int(group)); err != nil {
+		t.Fatal(err)
+	}
+	if err := destination.Chmod(0440); err != nil {
+		t.Fatal(err)
+	}
+	if err := destination.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	parent, err := os.Open(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := parent.Sync(); err != nil {
+		parent.Close()
+		t.Fatal(err)
+	}
+	if err := parent.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return catalog.Image{ID: "files", SHA256: digest, Bytes: size, Protocol: 1, MemoryMiB: 512, VCPUs: 1, DataBytes: catalog.GiB, Version: "development", License: "Development fixture; release license inventory unqualified"}
+}
+
+func roundTripNativeFilesChannel(t *testing.T, ctx context.Context, channel string, transferGID int) {
+	t.Helper()
+	script, err := filepath.Abs("../../packaging/guest/manager_channel.py")
+	if err != nil || transferGID < 1 || transferGID > 1<<31-1 {
+		t.Fatal("invalid native Files client authority", err)
+	}
+	cmd := exec.CommandContext(ctx, "/usr/bin/python3", "-B", script, channel)
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOMENODE_FILES_MANAGER_INTEGRATION=1"}
+	cmd.WaitDelay = time.Second
+	// UID 2 is the fixture's transfer UID; primary group grants channel traversal.
+	// No supplementary KVM group or root privilege is passed to the client.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 2, Gid: uint32(transferGID), Groups: []uint32{}}}
+	output, err := cmd.CombinedOutput()
+	if err != nil || string(output) != "development Files channel round trip passed\n" {
+		t.Fatal("native Files client round trip", err, string(output))
+	}
+}

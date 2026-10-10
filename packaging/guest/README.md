@@ -411,3 +411,27 @@ idle/load/failure conditions. Inhibitor handling and the added package/service
 closure need security review and release inventory qualification. Domain exit
 alone does not authorize copying a data disk. Supervisor maintenance coordination,
 independent disk-copy checks and guaranteed restart remain required.
+
+## Development Files manager integration
+
+The Files image workflow additionally runs `TestNativeReservedFilesManagerLaunch`
+on a disposable Linux KVM/libvirt runner. The existing identity-configuration
+fixture retains and restores its NSS/allocator source descriptors and requires an
+empty libvirt service and unoccupied workload slice. Its optional image arguments
+require `HOMENODE_FILES_MANAGER_INTEGRATION=1` and a bounded, exact development
+manifest; malformed, duplicate or release-qualified inputs are refused before
+identity configuration changes.
+
+The Go fixture copies the image through a retained source descriptor into an
+exclusive fixture-owned file, verifies its digest and size, and assigns the
+protected image group/mode. It then exercises reserved manager start, audit,
+admitted channel lookup, a 1,048,579-byte object round trip with acknowledged
+chunk replay, stop, and identity-retaining restart. `manager_channel.py` runs as
+the fixture transfer UID 2 with only the channel-access primary group, without
+root or supplementary KVM access. Readiness and protocol frames are bounded.
+
+This is development manager component evidence. The fixture uses a directly
+constructed manifest and temporary storage, rather than signed catalog admission
+and the installed service. It does not qualify the authenticated transfer/API/UI
+path, a 1 GB reconnect, graceful shutdown, power-loss recovery, cross-VM isolation
+or release. Missing KVM hardware is explicitly reported as unverified.
