@@ -17,6 +17,12 @@ class UnixHTTP(http.client.HTTPConnection):
         super().__init__("local", timeout=30)
         self.path = path
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exception):
+        self.close()
+
     def connect(self):
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.sock.settimeout(self.timeout)

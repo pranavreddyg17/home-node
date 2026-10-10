@@ -10,6 +10,21 @@ import manager_transfer
 
 
 class TransferFixtureChecks(unittest.TestCase):
+    def test_real_client_context_closes_on_success_and_failure(self):
+        for fail in (False, True):
+            with self.subTest(fail=fail):
+                connection = manager_transfer.UnixHTTP("/tmp/fixture.sock")
+                with mock.patch.object(connection, "close") as close:
+                    try:
+                        with connection as opened:
+                            self.assertIs(opened, connection)
+                            if fail:
+                                raise ValueError("fixture request failure")
+                    except ValueError:
+                        if not fail:
+                            raise
+                    close.assert_called_once()
+
     def test_foreign_uid_grant_fails_before_object_work(self):
         response = mock.Mock(status=200)
         response.read.return_value = b"{}"
