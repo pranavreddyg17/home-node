@@ -94,7 +94,7 @@ function Workspace({ session, logout, verify }: { session: Session; logout: () =
           ) : state.kind === 'loading' ? (
             <section className="status-panel" role="status">Checking this machine…</section>
           ) : state.kind === 'error' ? (
-            <section className="status-panel error-panel" role="alert"><strong>Host service is unavailable</strong><p>{state.message}</p><p>Start the local service with <code>go run ./cmd/homenode serve</code>, then run the checks again.</p></section>
+            <section className="status-panel error-panel" role="alert"><strong>Host service is unavailable</strong><p>{state.message}</p><p>Check that your home server is powered on and this device is connected to your private network, then select Run checks again. If it remains unavailable, check HomeNode on the server.</p></section>
           ) : report && (
             <>
               <section className="hero-panel" aria-label="Host status"><div className="hero-main"><div className="hero-icon" aria-hidden="true">⌂</div><div><span className="hero-kicker">THIS MACHINE</span><h2>{hostName}<span className="os-arch"> · {report.host.architecture}</span></h2><p>{report.prerequisitesMet ? 'Basic prerequisites detected. Hardware qualification remains a separate release gate.' : `${failures} prerequisite${failures === 1 ? '' : 's'} need attention before workload execution.`}</p></div></div><span className={`hero-badge ${report.prerequisitesMet ? 'amber' : 'red'}`}>{report.prerequisitesMet ? 'PREREQUISITES MET' : 'NOT READY'}</span></section>
