@@ -245,8 +245,12 @@ func TestReservationAndChunkIntegrity(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.CreateTransfer(ctx, device, "too-much.bin", 1, sum(nil)); err == nil {
-		t.Fatal("overbooked disk quota")
+	if _, err := s.CreateTransfer(ctx, device, "too-much.bin", 1, sum(nil)); !errors.Is(err, ErrCapacity) {
+		t.Fatal("overbooked disk quota or capacity classification lost", err)
+	}
+	var reservations int
+	if err := s.Store.DB.QueryRow("SELECT count(*) FROM transfers").Scan(&reservations); err != nil || reservations != 12 {
+		t.Fatal("refused transfer changed reservations", reservations, err)
 	}
 	if _, err := s.CreateTransfer(ctx, device, "../escape", 0, sum(nil)); err == nil {
 		t.Fatal("unsafe name accepted")

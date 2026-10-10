@@ -45,6 +45,8 @@ func workloadError(w http.ResponseWriter, err error) {
 		fail(w, 409, "POLICY_DENIED", "Host maintenance is in progress. Existing work may drain; new work is blocked until maintenance safely finishes.")
 	case errors.Is(err, workload.ErrUnavailable):
 		fail(w, 503, "WORKLOAD_UNAVAILABLE", "Start the required app on a qualified Linux host with verified guest images.")
+	case errors.Is(err, workload.ErrCapacity):
+		fail(w, http.StatusInsufficientStorage, "CAPACITY_UNAVAILABLE", "The app's storage is full or its quota is reached. Free space before retrying.")
 	case errors.Is(err, workload.ErrInvalid):
 		fail(w, 400, "INVALID_REQUEST", "Check the name, file size, checksum, or action.")
 	case errors.Is(err, sql.ErrNoRows):

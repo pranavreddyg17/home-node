@@ -25,6 +25,7 @@ const StorageQuota int64 = 12 << 30
 
 var ErrUnavailable = errors.New("start the required workload on a qualified host")
 var ErrConflict = errors.New("operation conflicts with current state")
+var ErrCapacity = errors.New("workload storage capacity unavailable")
 var ErrInvalid = errors.New("invalid workload request")
 var hashPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
@@ -64,6 +65,9 @@ func (s *Service) call(ctx context.Context, instance string, r guestproto.Reques
 		return response, err
 	}
 	if response.Error != "" {
+		if response.Error == "CAPACITY_UNAVAILABLE" {
+			return response, ErrCapacity
+		}
 		return response, ErrConflict
 	}
 	return response, nil
@@ -123,8 +127,11 @@ func (s *Service) CreateTransfer(ctx context.Context, device, name string, size 
 		if err := tx.QueryRow("SELECT coalesce(sum(size),0)+(SELECT count(*) FROM orphan_objects WHERE workload='files')*? FROM files", MaxJobOutputBytes).Scan(&used); err != nil {
 			return err
 		}
-		if count >= 16 || used+reserved+size+int64(activeJobs)*MaxJobOutputBytes > StorageQuota {
+		if count >= 16 {
 			return ErrConflict
+		}
+		if used+reserved+size+int64(activeJobs)*MaxJobOutputBytes > StorageQuota {
+			return ErrCapacity
 		}
 		_, err := tx.Exec("INSERT INTO transfers(id,device_id,name,size,sha256,state,created_at,expires_at) VALUES(?,?,?,?,?,'uploading',?,?)", transfer.ID, device, name, size, hash, time.Now().Unix(), transfer.ExpiresAt)
 		return err
