@@ -1,6 +1,7 @@
 """Transfer fixture must not mistake a foreign peer grant for a passing denial."""
 import contextlib
 import io
+import json
 import os
 import unittest
 from unittest import mock
@@ -29,6 +30,23 @@ class TransferFixtureChecks(unittest.TestCase):
             manager_transfer.main()
             transfer.assert_not_called()
         self.assertEqual(output.getvalue(), "development transfer deny passed\n")
+
+    def test_transfer_uid_stop_refusal_uses_runtime_endpoint(self):
+        response = mock.Mock(status=403)
+        response.read.return_value = b"operation denied"
+        connection = mock.MagicMock()
+        client = connection.__enter__.return_value
+        client.getresponse.return_value = response
+        with mock.patch.object(manager_transfer.sys, "platform", "linux"), mock.patch.object(os, "geteuid", return_value=2), mock.patch.dict(os.environ, {"HOMENODE_FILES_MANAGER_INTEGRATION": "1"}), mock.patch.object(manager_transfer.sys, "argv", ["fixture", "/tmp/supervisor.sock", "a" * 32, "runtime-deny"]), mock.patch.object(manager_transfer, "UnixHTTP", return_value=connection), mock.patch.object(manager_transfer.boot_image, "object_roundtrip") as transfer, contextlib.redirect_stdout(io.StringIO()) as output:
+            manager_transfer.main()
+            transfer.assert_not_called()
+        method, endpoint, body, _ = client.request.call_args.args
+        self.assertEqual((method, endpoint), ("POST", "/v1/runtime"))
+        request = json.loads(body)
+        self.assertEqual(request["action"], "stop")
+        self.assertEqual(request["instanceId"], "a" * 32)
+        self.assertEqual(request["revision"], 2)
+        self.assertEqual(output.getvalue(), "development transfer runtime-deny passed\n")
 
 
 if __name__ == "__main__":

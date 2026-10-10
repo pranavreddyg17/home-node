@@ -26,7 +26,7 @@ class UnixHTTP(http.client.HTTPConnection):
 def main():
     if sys.platform != "linux" or os.geteuid() == 0 or os.getenv("HOMENODE_FILES_MANAGER_INTEGRATION") != "1":
         raise ValueError("explicit unprivileged disposable Linux client required")
-    if len(sys.argv) != 4 or not os.path.isabs(sys.argv[1]) or re.fullmatch(r"[A-Za-z0-9_-]{20,64}", sys.argv[2]) is None or sys.argv[3] not in ("allow", "deny"):
+    if len(sys.argv) != 4 or not os.path.isabs(sys.argv[1]) or re.fullmatch(r"[A-Za-z0-9_-]{20,64}", sys.argv[2]) is None or sys.argv[3] not in ("allow", "deny", "runtime-deny"):
         raise ValueError("bounded native transfer fixture inputs required")
     path, instance, mode = sys.argv[1:]
 
@@ -34,15 +34,20 @@ def main():
         identifier = uuid.uuid4().hex
         body = json.dumps({"instanceId": instance, "request": {
             "version": 1, "requestId": identifier, "operation": operation, **fields}}).encode()
+        endpoint = "/v1/guest"
+        if mode == "runtime-deny":
+            endpoint = "/v1/runtime"
+            body = json.dumps({"version": 1, "operationId": identifier, "action": "stop",
+                               "instanceId": instance, "policyGeneration": 1, "revision": 2}).encode()
         if len(body) > 512 << 10:
             raise ValueError("transfer fixture frame exceeds bound")
         with UnixHTTP(path) as connection:
-            connection.request("POST", "/v1/guest", body, {"Content-Type": "application/json"})
+            connection.request("POST", endpoint, body, {"Content-Type": "application/json"})
             response = connection.getresponse()
             data = response.read((512 << 10) + 1)
             if len(data) > 512 << 10:
                 raise ValueError("transfer fixture response exceeds bound")
-            if mode == "deny":
+            if mode != "allow":
                 if response.status != 403:
                     raise RuntimeError("foreign controller UID was not denied")
                 return {}
@@ -59,7 +64,7 @@ def main():
     while True:
         try:
             result = request(None, "health")
-            if mode == "deny" or result.get("state") == "ready":
+            if mode != "allow" or result.get("state") == "ready":
                 break
             raise ValueError("transfer guest not ready")
         except (OSError, http.client.HTTPException, ValueError):

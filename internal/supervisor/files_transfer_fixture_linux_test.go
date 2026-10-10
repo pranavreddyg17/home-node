@@ -79,8 +79,12 @@ func roundTripNativeFilesTransfer(t *testing.T, ctx context.Context, base, scrip
 	for _, scenario := range []struct {
 		uid  uint32
 		mode string
-	}{{3, "deny"}, {1, "allow"}} {
-		clientCommand := exec.CommandContext(ctx, "/usr/bin/python3", "-B", client, transferSocket, instanceID, scenario.mode)
+	}{{3, "deny"}, {2, "runtime-deny"}, {1, "allow"}} {
+		endpoint := transferSocket
+		if scenario.mode == "runtime-deny" {
+			endpoint = runtimeSocket
+		}
+		clientCommand := exec.CommandContext(ctx, "/usr/bin/python3", "-B", client, endpoint, instanceID, scenario.mode)
 		clientCommand.Dir = filepath.Dir(client)
 		clientCommand.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "HOMENODE_FILES_MANAGER_INTEGRATION=1"}
 		clientCommand.WaitDelay = time.Second
@@ -90,5 +94,5 @@ func roundTripNativeFilesTransfer(t *testing.T, ctx context.Context, base, scrip
 			t.Fatalf("native transfer %s: %v: %s", scenario.mode, err, output)
 		}
 	}
-	t.Log("actual unprivileged transfer binary round trip and foreign controller UID refusal passed")
+	t.Log("actual unprivileged transfer binary round trip, foreign controller UID refusal and transfer UID runtime-stop refusal passed")
 }
