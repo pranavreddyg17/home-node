@@ -203,7 +203,7 @@ func (a *Agent) Handle(r guestproto.Request) guestproto.Response {
 		switch {
 		case errors.Is(err, os.ErrNotExist):
 			response.Error = "NOT_FOUND"
-		case errors.Is(err, errQuota):
+		case errors.Is(err, errQuota), errors.Is(err, syscall.ENOSPC), errors.Is(err, syscall.EDQUOT):
 			response.Error = "CAPACITY_UNAVAILABLE"
 		default:
 			response.Error = "OPERATION_FAILED"
