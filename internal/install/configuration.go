@@ -31,6 +31,7 @@ type Capacity struct {
 	FreeDiskBytes uint64
 }
 type Configuration struct {
+	Gateway               *GatewayAccount
 	BackupRepositoryID    string
 	BackupRelease         string
 	BackupDriveUUID       string
@@ -47,6 +48,7 @@ type Configuration struct {
 	Capacity              Capacity
 }
 type ConfigurationPreview struct {
+	Gateway                *GatewayAccount     `json:"gateway,omitempty"`
 	BackupDriveUUID        string              `json:"backupDriveUuid,omitempty"`
 	BackupRepositoryID     string              `json:"backupRepositoryId,omitempty"`
 	BackupRelease          string              `json:"backupRelease,omitempty"`
@@ -118,6 +120,21 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 			return result, ErrPlan
 		}
 		seen[gid] = true
+	}
+	if c.Gateway != nil {
+		g := *c.Gateway
+		if g.UID < 100 || g.UID > 999 || g.UID == a.ControllerUID || g.UID == a.TransferUID {
+			return result, ErrPlan
+		}
+		for _, gid := range []int{g.GID, g.ProxyGID} {
+			if gid < 100 || gid > 999 || seen[gid] {
+				return result, ErrPlan
+			}
+			seen[gid] = true
+		}
+		if c.Maintenance != nil && g.UID == c.Maintenance.UID {
+			return result, ErrPlan
+		}
 	}
 	if c.Maintenance != nil {
 		b := *c.Maintenance
@@ -198,7 +215,11 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 		plan.Items = append(plan.Items, Item{Path: name, Mode: mode, UID: 0, GID: 0, Data: append([]byte(nil), data...)})
 	}
 	addDir("etc/homenode", 0755, 0, 0)
-	addDir("etc/homenode/tls", 0750, 0, a.ControllerGID)
+	tlsGID := a.ControllerGID
+	if c.Gateway != nil {
+		tlsGID = c.Gateway.GID
+	}
+	addDir("etc/homenode/tls", 0750, 0, tlsGID)
 	addDir("var/lib/homenode", 0755, 0, 0)
 	addDir("var/lib/homenode/control", 0700, int(a.ControllerUID), a.ControllerGID)
 	addDir("var/lib/homenode/supervisor", 0700, 0, 0)
@@ -229,6 +250,9 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 		addDir("var/lib/homenode-backup/recovery", 0700, int(c.Maintenance.UID), c.Maintenance.GID)
 	}
 	env := fmt.Sprintf("TAILNET_IP=%s\nHTTPS_PORT=%d\nHTTPS_ORIGIN=%s\nPOLICY_GENERATION=%d\nCONTROLLER_UID=%d\nRUNTIME_GID=%d\nTRANSFER_GID=%d\n", c.Network.Bind, c.Network.Port, c.Network.Origin, c.Policy.Generation, a.ControllerUID, a.RuntimeGID, a.TransferGID)
+	if c.Gateway != nil {
+		env += fmt.Sprintf("GATEWAY_UID=%d\nPROXY_GID=%d\n", c.Gateway.UID, c.Gateway.ProxyGID)
+	}
 	policy, err := json.MarshalIndent(c.Policy, "", "  ")
 	if err != nil {
 		return result, err
@@ -242,13 +266,23 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 	addFile("etc/homenode/catalog.pub", 0644, []byte(hex.EncodeToString(c.Publisher)+"\n"))
 	addFile("etc/homenode/catalog-floor", 0600, []byte(strconv.FormatInt(c.MinimumCatalogVersion, 10)+"\n"))
 	addFile("var/lib/homenode/catalog/catalog.json", 0600, c.Catalog)
-	for _, name := range []string{"homenode-control.service", "homenode-supervisor.service", "homenode-transfer.service"} {
+	units := []string{"homenode-control.service", "homenode-supervisor.service", "homenode-transfer.service"}
+	if c.Gateway != nil {
+		units = append(units, "homenode-gateway.service")
+	}
+	for _, name := range units {
 		data, err := servicetemplates.Unit(name)
 		if err != nil {
 			return result, err
 		}
 		if name == "homenode-supervisor.service" && c.Maintenance != nil {
 			data, err = maintenanceUnit(data, *c.Maintenance)
+			if err != nil {
+				return result, err
+			}
+		}
+		if name == "homenode-control.service" && c.Gateway != nil {
+			data, err = gatewayControlUnit(data)
 			if err != nil {
 				return result, err
 			}
@@ -296,7 +330,7 @@ func configurationPlan(c Configuration, now time.Time, imageCredit uint64) (Conf
 	if _, _, err = planRecords(plan, 0); err != nil {
 		return result, err
 	}
-	result = ConfigurationPreview{BackupDriveUUID: c.BackupDriveUUID, BackupRelease: c.BackupRelease, BackupRepositoryID: c.BackupRepositoryID, Maintenance: c.Maintenance, Network: c.Network, RuntimePolicy: c.Policy, Accounts: c.Accounts, ProvidedCapacity: c.Capacity, Plan: plan, CatalogVersion: m.Version, PublisherKeyID: catalog.KeyID(c.Publisher), RequiredDiskBytes: required, VerifiedImageBytes: imageCredit, RequiredFreeDiskBytes: required - imageCredit, Pending: []string{"verify actual service account memberships", "verify supported host enforcement and measured VM overhead", "place and verify immutable guest images", "verify live Tailscale and protected HTTPS identity", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
+	result = ConfigurationPreview{Gateway: c.Gateway, BackupDriveUUID: c.BackupDriveUUID, BackupRelease: c.BackupRelease, BackupRepositoryID: c.BackupRepositoryID, Maintenance: c.Maintenance, Network: c.Network, RuntimePolicy: c.Policy, Accounts: c.Accounts, ProvidedCapacity: c.Capacity, Plan: plan, CatalogVersion: m.Version, PublisherKeyID: catalog.KeyID(c.Publisher), RequiredDiskBytes: required, VerifiedImageBytes: imageCredit, RequiredFreeDiskBytes: required - imageCredit, Pending: []string{"verify actual service account memberships", "verify supported host enforcement and measured VM overhead", "place and verify immutable guest images", "verify live Tailscale and protected HTTPS identity", "verify restrictive tailnet policy from allowed and denied devices", "validate and activate services", "complete passkey enrollment and phone sample job"}}
 	if c.Maintenance != nil {
 		result.Pending = append(result.Pending, "register and qualify an external backup repository", "generate trusted backup launch configuration and qualify worker activation")
 	}

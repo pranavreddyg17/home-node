@@ -55,6 +55,7 @@ var directories = map[string]bool{
 	"var/lib/homenode-backup/recovery": true,
 }
 var files = map[string]bool{
+	"etc/systemd/system/homenode-gateway.service": true,
 	"etc/systemd/system/homenode-inspect.service": true,
 	"etc/homenode/update-root.json":               true,
 	"etc/homenode/update-provenance.json":         true,

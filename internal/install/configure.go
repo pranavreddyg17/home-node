@@ -67,6 +67,7 @@ func (e *Engine) configureWithMaintenance(ctx context.Context, c Configuration, 
 	if a != j.Accounts {
 		return ConfigurationPreview{}, ErrAccounts
 	}
+	c.Gateway = nil // Caller identity is untrusted; live gateway observation is wired separately.
 	c.Maintenance = nil
 	if observeBackup != nil {
 		c.Maintenance, err = observeBackup(ctx, j)
