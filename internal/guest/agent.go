@@ -250,36 +250,41 @@ func (a *Agent) upload(r guestproto.Request) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	writeOffset, writeData := r.Offset, r.Data
 	if r.Offset < info.Size() {
-		if r.Offset+int64(len(r.Data)) > info.Size() {
-			return info.Size(), errors.New("partial chunk requires reconciliation")
-		}
-		existing := make([]byte, len(r.Data))
+		prefix := min(int64(len(r.Data)), info.Size()-r.Offset)
+		existing := make([]byte, int(prefix))
 		if _, err = file.ReadAt(existing, r.Offset); err != nil {
 			return info.Size(), err
 		}
-		if !bytes.Equal(existing, r.Data) {
+		if !bytes.Equal(existing, r.Data[:prefix]) {
 			return info.Size(), errors.New("chunk conflict")
 		}
-		// A previous write can have succeeded while its sync failed. Replayed
-		// bytes prove consistency, not durability; retry both sync boundaries
-		// before acknowledging the chunk or its directory entry.
-		if err := file.Sync(); err != nil {
-			return info.Size(), err
+		if prefix < int64(len(r.Data)) {
+			// An interrupted write may leave only this verified prefix. Append
+			// the missing suffix without truncating or rewriting existing bytes.
+			writeOffset, writeData = info.Size(), r.Data[prefix:]
+		} else {
+			// A previous write can have succeeded while its sync failed. Replayed
+			// bytes prove consistency, not durability; retry both sync boundaries
+			// before acknowledging the chunk or its directory entry.
+			if err := file.Sync(); err != nil {
+				return info.Size(), err
+			}
+			return info.Size(), a.sync()
 		}
-		return info.Size(), a.sync()
 	}
-	if r.Offset != info.Size() {
+	if writeOffset != info.Size() {
 		return info.Size(), errors.New("offset conflict")
 	}
 	used, err := a.used()
 	if err != nil {
 		return info.Size(), err
 	}
-	if used+int64(len(r.Data)) > a.quota-(64<<20) {
+	if used+int64(len(writeData)) > a.quota-(64<<20) {
 		return info.Size(), errQuota
 	}
-	if _, err = file.WriteAt(r.Data, r.Offset); err != nil {
+	if _, err = file.WriteAt(writeData, writeOffset); err != nil {
 		return info.Size(), err
 	}
 	if err = file.Sync(); err != nil {

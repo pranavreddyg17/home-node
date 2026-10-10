@@ -1,8 +1,10 @@
 package guest
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -134,6 +136,63 @@ func TestResumableIntegrityWorkflow(t *testing.T) {
 	}
 	if got := send("upload", 0, data, checksum(data)); got.Error == "" {
 		t.Fatal("immutable object overwritten")
+	}
+}
+
+func TestInterruptedChunkReplayAppendsOnlyMatchingSuffix(t *testing.T) {
+	for _, offset := range []int64{0, 8} {
+		t.Run(fmt.Sprint(offset), func(t *testing.T) {
+			dir := privateDataDir(t)
+			id := state.Random()
+			data := []byte("recorded chunk prefix and missing suffix")
+			before := append(bytes.Repeat([]byte("x"), int(offset)), data[:7]...)
+			part := filepath.Join(dir, id+".part")
+			if err := os.WriteFile(part, before, 0600); err != nil {
+				t.Fatal(err)
+			}
+			a, err := New(dir, "files", 1<<30)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer a.Close()
+			r := guestproto.Request{Version: 1, RequestID: state.Random(), Operation: "upload", ObjectID: id, Offset: offset, Size: offset + int64(len(data)), Data: data, SHA256: checksum(data)}
+			// Only the missing suffix consumes new quota; the existing prefix
+			// already occupies the exact remaining capacity in this fixture.
+			a.quota = (64 << 20) + r.Size
+			if response := a.Handle(r); response.Error != "" || response.Offset != r.Size {
+				t.Fatal("partial replay refused", response)
+			}
+			actual, err := os.ReadFile(part)
+			if err != nil || !bytes.Equal(actual, append(bytes.Repeat([]byte("x"), int(offset)), data...)) {
+				t.Fatal("partial replay changed existing bytes", err)
+			}
+			if response := a.Handle(r); response.Error != "" || response.Offset != r.Size {
+				t.Fatal("completed replay refused", response)
+			}
+		})
+	}
+}
+
+func TestInterruptedChunkReplayPreservesConflictingPrefix(t *testing.T) {
+	dir := privateDataDir(t)
+	id := state.Random()
+	part := filepath.Join(dir, id+".part")
+	original := []byte("other-prefix")
+	if err := os.WriteFile(part, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	a, err := New(dir, "files", 1<<30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	data := []byte("matching-request-with-different-prefix")
+	r := guestproto.Request{Version: 1, RequestID: state.Random(), Operation: "upload", ObjectID: id, Size: int64(len(data)), Data: data, SHA256: checksum(data)}
+	if response := a.Handle(r); response.Error == "" {
+		t.Fatal("conflicting prefix accepted", response)
+	}
+	if actual, err := os.ReadFile(part); err != nil || !bytes.Equal(actual, original) {
+		t.Fatal("conflicting evidence changed", err)
 	}
 }
 func TestRejectsTraversalAndWrongWorkload(t *testing.T) {
