@@ -238,17 +238,19 @@ func (a *Agent) upload(r guestproto.Request) (int64, error) {
 	if len(r.Data) == 0 || checksum(r.Data) != r.SHA256 || r.Size < r.Offset+int64(len(r.Data)) || r.Size > a.quota {
 		return 0, guestproto.ErrProtocol
 	}
-	if _, err := a.root.Stat(r.ObjectID + ".blob"); err == nil {
+	if _, err := a.root.Lstat(r.ObjectID + ".blob"); err == nil {
 		return 0, errors.New("object already finalized")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return 0, err
 	}
-	file, err := a.root.OpenFile(r.ObjectID+".part", os.O_CREATE|os.O_RDWR, 0600)
+	file, err := a.root.OpenFile(r.ObjectID+".part", os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0600)
 	if err != nil {
 		return 0, err
 	}
 	defer file.Close()
 	info, err := file.Stat()
-	if err != nil {
-		return 0, err
+	if err != nil || !privateObjectFile(info) {
+		return 0, errors.New("invalid object")
 	}
 	writeOffset, writeData := r.Offset, r.Data
 	if r.Offset < info.Size() {
@@ -292,14 +294,22 @@ func (a *Agent) upload(r guestproto.Request) (int64, error) {
 	}
 	return r.Offset + int64(len(r.Data)), a.sync()
 }
+func privateObjectFile(info os.FileInfo) bool {
+	if info == nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || info.Size() < 0 {
+		return false
+	}
+	metadata, ok := info.Sys().(*syscall.Stat_t)
+	return ok && int(metadata.Uid) == os.Geteuid() && metadata.Nlink == 1
+}
+
 func (a *Agent) hash(name string) (int64, string, error) {
-	file, err := a.root.Open(name)
+	file, err := a.root.OpenFile(name, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return 0, "", err
 	}
 	defer file.Close()
 	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() {
+	if err != nil || !privateObjectFile(info) {
 		return 0, "", errors.New("invalid object")
 	}
 	hash := sha256.New()
@@ -313,8 +323,13 @@ func (a *Agent) hash(name string) (int64, string, error) {
 	return n, hex.EncodeToString(hash.Sum(nil)), nil
 }
 func (a *Agent) stat(id string) (int64, string, error) {
-	if info, err := a.root.Stat(id + ".part"); err == nil {
+	if info, err := a.root.Lstat(id + ".part"); err == nil {
+		if !privateObjectFile(info) {
+			return 0, "", errors.New("invalid object")
+		}
 		return info.Size(), "", nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return 0, "", err
 	}
 	return a.hash(id + ".blob")
 }
@@ -327,6 +342,9 @@ func (a *Agent) finalize(r guestproto.Request) (int64, string, error) {
 		// A rename may have completed before its directory sync failed.
 		// Finalization retry must make that publication durable as well.
 		return size, hash, a.sync()
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return 0, "", err
 	}
 	if r.Size == 0 && r.SHA256 == checksum(nil) {
 		f, e := a.root.OpenFile(r.ObjectID+".part", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
@@ -351,14 +369,14 @@ func (a *Agent) finalize(r guestproto.Request) (int64, string, error) {
 	return size, hash, a.sync()
 }
 func (a *Agent) download(r guestproto.Request) ([]byte, string, error) {
-	f, err := a.root.Open(r.ObjectID + ".blob")
+	f, err := a.root.OpenFile(r.ObjectID+".blob", os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, "", err
 	}
 	defer f.Close()
 	info, err := f.Stat()
-	if err != nil {
-		return nil, "", err
+	if err != nil || !privateObjectFile(info) {
+		return nil, "", errors.New("invalid object")
 	}
 	if r.Offset > info.Size() {
 		return nil, "", guestproto.ErrProtocol
