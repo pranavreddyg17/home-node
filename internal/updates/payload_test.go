@@ -17,7 +17,7 @@ func payloadFixture(t *testing.T, scenario string) []byte {
 	var buffer bytes.Buffer
 	writer := tar.NewWriter(&buffer)
 	var inventory strings.Builder
-	files := []string{"usr/bin/homenode", "usr/lib/homenode/homenode-supervisor", "usr/lib/homenode/homenode-transfer", "usr/lib/homenode/homenode-backup", "usr/lib/homenode/homenode-inspect", "usr/lib/homenode/guest/homenode-guest", "usr/share/homenode/web/index.html"}
+	files := []string{"usr/bin/homenode", "usr/lib/homenode/homenode-supervisor", "usr/lib/homenode/homenode-transfer", "usr/lib/homenode/homenode-backup", "usr/lib/homenode/homenode-inspect", "usr/lib/homenode/homenode-gateway", "usr/lib/homenode/guest/homenode-guest", "usr/share/homenode/web/index.html"}
 	if scenario == "duplicate-entry" {
 		files = append(files, files[0])
 	}

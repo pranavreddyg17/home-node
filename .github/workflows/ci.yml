@@ -189,7 +189,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p "$RUNNER_TEMP/go-binary-vulnerability-scans"
-          for binary in usr/bin/homenode usr/lib/homenode/homenode-supervisor usr/lib/homenode/homenode-transfer usr/lib/homenode/homenode-backup usr/lib/homenode/homenode-inspect usr/lib/homenode/guest/homenode-guest; do
+          for binary in usr/bin/homenode usr/lib/homenode/homenode-supervisor usr/lib/homenode/homenode-transfer usr/lib/homenode/homenode-backup usr/lib/homenode/homenode-inspect usr/lib/homenode/homenode-gateway usr/lib/homenode/guest/homenode-guest; do
             sha256sum "/tmp/homenode-package/$binary" > "$RUNNER_TEMP/go-binary-vulnerability-scans/$(basename "$binary").sha256"
             go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 -mode binary -show verbose "/tmp/homenode-package/$binary" 2>&1 | tee "$RUNNER_TEMP/go-binary-vulnerability-scans/$(basename "$binary").txt"
           done

@@ -15,6 +15,7 @@ import (
 var ErrPackagePayload = errors.New("package payload is outside HomeNode release policy")
 
 var packageExecutables = map[string]bool{
+	"usr/lib/homenode/homenode-gateway":     true,
 	"usr/bin/homenode":                      true,
 	"usr/lib/homenode/homenode-supervisor":  true,
 	"usr/lib/homenode/homenode-transfer":    true,
