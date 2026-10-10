@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "sourceRevision": "17d76e4bdd8a4bebeb5550183364254cb635315d",
+  "workflowRun": 38056530224,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38056530224",
+  "jobID": 114226079072,
+  "jobConclusion": "success",
+  "logSHA256": "d761cce578131d6e9e1875255e732ff68a6ed0b56a27917367bf476f7fecdc89",
+  "imageSHA256": "9e8364f0e9fec5e85adc0d7c6a122cfa3760e2278761e2c370639869e327d537",
+  "environment": "Disposable Ubuntu 24.04 native KVM/libvirt CI; temporary qualified NSS/allocator configuration and fixture-owned storage",
+  "tests": [
+    "TestNativeReservedFilesManagerLaunch"
+  ],
+  "qualifiedScope": [
+    "Actual unsigned development Files image starts through reserved Manager with qualified UID/group policy and native backend audit",
+    "Unprivileged client UID 2 with only the channel-access primary group uploads and downloads 1,073,741,824 bytes in bounded 256 KiB chunks with matching aggregate SHA256",
+    "Client closes and reconnects the guest channel during upload, requires unchanged SO_PEERCRED, and replays the last acknowledged chunk without advancing its offset",
+    "A separately finalized object survives cooperative ACPI manager shutdown and identity-retaining restart with matching contents and digest",
+    "Client sends a chunk, closes without consuming its acknowledgment, verifies unchanged peer credentials after reconnect, and replays the identical chunk"
+  ],
+  "limitations": [
+    "Constructed development manifest, not signed installed catalog admission",
+    "Temporary directories and direct Manager invocation, not installed supervisor/service activation or authenticated transfer/API/UI",
+    "No full quota/trash/export, physical power-loss, cross-VM isolation, reference-hardware performance or release qualification",
+    "Disconnect before consuming acknowledgment does not prove whether the first write committed; separate component coverage injects response-write failure"
+  ],
+  "releaseQualified": false
+}
