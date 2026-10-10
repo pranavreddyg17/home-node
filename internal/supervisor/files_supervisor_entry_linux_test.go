@@ -52,6 +52,14 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images 
 			t.Fatal(err)
 		}
 	}
+	storage := make(map[string]os.FileInfo)
+	for _, path := range []string{images, filepath.Join(images, image.SHA256+".raw"), filepath.Join(directory, "volumes"), filepath.Join(directory, "channels")} {
+		info, err := os.Lstat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		storage[path] = info
+	}
 	pub, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -144,6 +152,22 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images 
 	if diagnostics.tooLarge {
 		t.Fatal("supervisor diagnostics exceeded fixture bound")
 	}
+	for path, before := range storage {
+		after, err := os.Lstat(path)
+		if err != nil || !os.SameFile(before, after) || before.Mode() != after.Mode() || before.Size() != after.Size() {
+			t.Fatal("startup changed provisioned storage metadata", path, err)
+		}
+		first, last := before.Sys().(*syscall.Stat_t), after.Sys().(*syscall.Stat_t)
+		if first.Uid != last.Uid || first.Gid != last.Gid || first.Nlink != last.Nlink {
+			t.Fatal("startup changed provisioned storage ownership", path)
+		}
+	}
+	for _, name := range []string{"volumes", "channels"} {
+		entries, err := os.ReadDir(filepath.Join(directory, name))
+		if err != nil || len(entries) != 0 {
+			t.Fatal("idle startup created guest storage", name, err)
+		}
+	}
 	journal := filepath.Join(directory, "journal")
 	if _, err := os.Lstat(journal); err != nil {
 		t.Fatal("startup journal absent", err)
@@ -159,6 +183,10 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images 
 	}
 	if err := store.DB.QueryRow("SELECT value FROM settings WHERE key='policy-generation'").Scan(&generation); err != nil || generation != "1" {
 		t.Fatal("reserved policy acceptance not retained", generation, err)
+	}
+	var policyHash string
+	if err := store.DB.QueryRow("SELECT value FROM settings WHERE key='policy-hash'").Scan(&policyHash); err != nil || policyHash != state.Hash(string(policyBytes)) {
+		t.Fatal("accepted policy bytes not retained", err)
 	}
 	t.Log("actual supervisor executable accepted fixture-signed Files catalog and qualified reserved policy, refused root caller, and shut down cleanly; no VM or installed-service acceptance claimed")
 }
