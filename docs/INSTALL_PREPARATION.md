@@ -253,3 +253,27 @@ Success JSON reports `emptyParentOwnershipMigrated` and
 prepare runtime channel parents or release activation. Full installed-command
 native qualification remains pending; temporary-root publisher tests alone do
 not prove that journey.
+
+### Configuration migration phase
+
+Once images, volumes and `/run/homenode/guests` have independently qualified
+ownership, an existing blocked installation can publish reserved configuration:
+
+```sh
+sudo homenode guest-storage-migrate-configuration \
+  --publisher-key <independently-verified-ed25519-public-key-hex> \
+  --minimum-catalog-version <independent-positive-floor>
+```
+
+The command retains dormant-runtime and account allocation exclusion. It checks
+the signed catalog and actual image bytes, captures the journaled policy and
+environment, records their transition and stages both replacements. Publication
+preflights both recorded file pairs and can resume an interrupted exchange or
+journal update. Existing stage receipts must match the recorded inodes; foreign
+files and unrecorded partial stages are refused and preserved.
+
+Success reports `policyPublished`, `environmentPublished` and
+`configurationJournalPublished`. `servicesActivated` and `activationQualified`
+remain false. A missing channel parent is refused; this command does not
+provision it or release activation. Native qualification of the complete installed
+command remains pending.
