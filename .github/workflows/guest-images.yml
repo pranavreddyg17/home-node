@@ -79,6 +79,8 @@ jobs:
         if: matrix.profile == 'files'
         run: |
           if test -c /dev/kvm; then
+            go test -c -o "$RUNNER_TEMP/supervisor-memory.test" ./internal/supervisor
+            sudo install -D -m 0755 "$RUNNER_TEMP/supervisor-memory.test" /usr/lib/homenode-fixtures/supervisor.test
             sudo systemctl start libvirtd
             sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 HOMENODE_FILES_MANAGER_INTEGRATION=1 python3 -B packaging/systemd/reserved_manager_fixture.py "$(command -v go)" "$RUNNER_TEMP/assembly/files/artifacts/homenode-development-files.raw" "$RUNNER_TEMP/assembly/files/artifacts/development-build.json"
           else
