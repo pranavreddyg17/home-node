@@ -227,3 +227,29 @@ JSON reports current dormancy/emptiness observations and explicitly reports no
 publication authorization, migration or activation release. Restored-file
 publication and the retained migration transaction remain unfinished; native
 qualification of this command is pending.
+
+### Empty volume-parent migration phase
+
+After the signed image ownership and parent-journal phase, an existing blocked
+installation can run:
+
+```sh
+sudo homenode guest-storage-migrate-empty-volumes \
+  --publisher-key <independently-verified-ed25519-public-key-hex> \
+  --minimum-catalog-version <independent-positive-floor>
+```
+
+The command requires the retained activation block, loaded unit conditions,
+dormant services, an empty guest cgroup and vacant runtime destinations. It
+selects the old volume group from the authenticated account allocation, binds
+an empty volume parent to immutable inode/journal provenance, and publishes its
+reserved guest group under retained runtime/account exclusion. Interrupted
+ownership and journal steps retry only the recorded inode and journal states.
+It refuses populated or foreign directories without deleting their contents.
+
+Success JSON reports `emptyParentOwnershipMigrated` and
+`parentJournalPublished`. `populatedVolumesMigrated`, `policyPublished`,
+`servicesActivated` and `activationQualified` remain false. This phase does not
+prepare runtime channel parents or release activation. Full installed-command
+native qualification remains pending; temporary-root publisher tests alone do
+not prove that journey.

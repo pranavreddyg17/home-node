@@ -38,6 +38,13 @@ func (e *Engine) prepareEmptyGuestStorageVolumeParentExcludedLocked(ctx context.
 			}
 			sourceGID = uint32(item.GID)
 		}
+		accounts, err := e.loadAccountJournal()
+		if err != nil {
+			return err
+		}
+		if !accounts.Ready || accounts.OwnerID != plan.Identity.OwnerID || accounts.Accounts.QEMUGID <= 0 || accounts.Accounts.QEMUGID > 1<<31-1 || sourceGID != uint32(accounts.Accounts.QEMUGID) {
+			return ErrConflict
+		}
 		if sourceGID == 0 {
 			return ErrConflict
 		}
