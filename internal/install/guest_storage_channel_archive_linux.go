@@ -106,6 +106,11 @@ func (e *Engine) archivePreviousBootGuestStorageChannelStage(ctx context.Context
 		if err := parent.Sync(); err != nil {
 			return err
 		}
+		if e.checkpoint != nil {
+			if err := e.checkpoint("guest-storage-channel-prior-boot-archived", archive); err != nil {
+				return err
+			}
+		}
 		return check()
 	})
 }

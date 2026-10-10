@@ -70,9 +70,17 @@ func TestRootGuestStorageChannelArchiveRequiresDifferentBootAndAbsentChildren(t 
 	if err := os.Remove(filepath.Join(runtime, ".homenode-guests.stage")); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.archivePreviousBootGuestStorageChannelStage(ctx, plan, 1002, guard); err != nil {
-		t.Fatal(err)
+	interrupted := errors.New("archival acknowledgement interrupted")
+	engine.checkpoint = func(name, path string) error {
+		if name == "guest-storage-channel-prior-boot-archived" {
+			return interrupted
+		}
+		return nil
 	}
+	if err := engine.archivePreviousBootGuestStorageChannelStage(ctx, plan, 1002, guard); !errors.Is(err, interrupted) {
+		t.Fatal("archival interruption not observed", err)
+	}
+	engine.checkpoint = nil
 	archive := filepath.Join(journalDir, "guest-storage-channel-stage."+stage.BootID+".json")
 	after, err := os.Lstat(archive)
 	if err != nil || !os.SameFile(before, after) {
@@ -84,5 +92,22 @@ func TestRootGuestStorageChannelArchiveRequiresDifferentBootAndAbsentChildren(t 
 	}
 	if _, err := os.Lstat(receipt); !os.IsNotExist(err) {
 		t.Fatal("original receipt name retained", err)
+	}
+	// Resume the next transaction phase using a current-boot receipt. The
+	// archived evidence must remain at its original inode throughout publication.
+	fresh, err := engine.stageGuestStorageChannelParent(ctx, plan, 1002, guard)
+	if err != nil || fresh.BootID != bootID {
+		t.Fatal("current boot staging retry refused", fresh, err)
+	}
+	if err := engine.publishGuestStorageChannelParent(ctx, plan, 1002, fresh, guard); err != nil {
+		t.Fatal("current boot publication retry refused", err)
+	}
+	retained, err := os.Lstat(archive)
+	if err != nil || !os.SameFile(before, retained) {
+		t.Fatal("reprovisioning replaced archived evidence", err)
+	}
+	current, err = os.ReadFile(archive)
+	if err != nil || string(current) != string(data) {
+		t.Fatal("reprovisioning changed archived evidence", err)
 	}
 }
