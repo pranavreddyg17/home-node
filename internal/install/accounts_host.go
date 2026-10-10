@@ -64,7 +64,21 @@ func InspectLocalAccounts(ctx context.Context) (Accounts, error) {
 	if err != nil {
 		return empty, err
 	}
-	if err = resolvedAccounts(ctx, accounts); err != nil {
+	var gateway *GatewayAccount
+	groupRows, err := accountLines(groups, 4)
+	if err != nil {
+		return empty, err
+	}
+	for _, row := range groupRows {
+		if row[0] == "homenode-proxy" {
+			identity, err := ValidateGatewayAccount(passwd, groups, shadow)
+			if err != nil {
+				return empty, err
+			}
+			gateway = &identity
+		}
+	}
+	if err = resolvedAccounts(ctx, accounts, gateway); err != nil {
 		return empty, err
 	}
 	return accounts, nil
@@ -92,15 +106,26 @@ func accountCommand(ctx context.Context, name string, args ...string) ([]byte, e
 	}
 	return output.Bytes(), nil
 }
-func resolvedAccounts(ctx context.Context, a Accounts) error {
+func resolvedAccounts(ctx context.Context, a Accounts, gateway *GatewayAccount) error {
+	return resolvedAccountsWith(ctx, a, gateway, accountCommand)
+}
+
+func resolvedAccountsWith(ctx context.Context, a Accounts, gateway *GatewayAccount, command func(context.Context, string, ...string) ([]byte, error)) error {
 	deadline, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	for _, entry := range []struct {
-		name string
-		uid  uint32
-		gid  int
-	}{{"homenode", a.ControllerUID, a.ControllerGID}, {"homenode-transfer", a.TransferUID, a.TransferGID}} {
-		data, err := accountCommand(deadline, "/usr/bin/getent", "passwd", entry.name)
+	type userEntry struct {
+		name   string
+		uid    uint32
+		gid    int
+		groups []int
+	}
+	users := []userEntry{{"homenode", a.ControllerUID, a.ControllerGID, []int{a.ControllerGID, a.RuntimeGID}}, {"homenode-transfer", a.TransferUID, a.TransferGID, []int{a.TransferGID, a.RuntimeGID}}}
+	if gateway != nil {
+		users[0].groups = append(users[0].groups, gateway.ProxyGID)
+		users = append(users, userEntry{"homenode-gateway", gateway.UID, gateway.GID, []int{gateway.GID, gateway.ProxyGID}})
+	}
+	for _, entry := range users {
+		data, err := command(deadline, "/usr/bin/getent", "passwd", entry.name)
 		if err != nil {
 			return ErrAccounts
 		}
@@ -108,11 +133,14 @@ func resolvedAccounts(ctx context.Context, a Accounts) error {
 		if err != nil || len(rows) != 1 || rows[0][0] != entry.name || rows[0][2] != strconv.FormatUint(uint64(entry.uid), 10) || rows[0][3] != strconv.Itoa(entry.gid) || rows[0][5] != "/nonexistent" || (rows[0][6] != "/usr/sbin/nologin" && rows[0][6] != "/sbin/nologin") {
 			return ErrAccounts
 		}
-		data, err = accountCommand(deadline, "/usr/bin/id", "-G", entry.name)
+		data, err = command(deadline, "/usr/bin/id", "-G", entry.name)
 		if err != nil {
 			return ErrAccounts
 		}
-		expected := map[string]bool{strconv.Itoa(entry.gid): false, strconv.Itoa(a.RuntimeGID): false}
+		expected := map[string]bool{}
+		for _, group := range entry.groups {
+			expected[strconv.Itoa(group)] = false
+		}
 		for _, id := range strings.Fields(string(data)) {
 			if _, ok := expected[id]; !ok {
 				return ErrAccounts
@@ -125,11 +153,16 @@ func resolvedAccounts(ctx context.Context, a Accounts) error {
 			}
 		}
 	}
-	for _, entry := range []struct {
+	type groupEntry struct {
 		name string
 		gid  int
-	}{{"homenode", a.ControllerGID}, {"homenode-transfer", a.TransferGID}, {"homenode-runtime", a.RuntimeGID}, {"libvirt-qemu", a.QEMUGID}} {
-		data, err := accountCommand(deadline, "/usr/bin/getent", "group", entry.name)
+	}
+	groups := []groupEntry{{"homenode", a.ControllerGID}, {"homenode-transfer", a.TransferGID}, {"homenode-runtime", a.RuntimeGID}, {"libvirt-qemu", a.QEMUGID}}
+	if gateway != nil {
+		groups = append(groups, groupEntry{"homenode-gateway", gateway.GID}, groupEntry{"homenode-proxy", gateway.ProxyGID})
+	}
+	for _, entry := range groups {
+		data, err := command(deadline, "/usr/bin/getent", "group", entry.name)
 		if err != nil {
 			return ErrAccounts
 		}
@@ -148,7 +181,7 @@ func lookupAccount(ctx context.Context, database, key string) ([]byte, bool, err
 	if database != "passwd" && database != "group" {
 		return nil, false, ErrAccounts
 	}
-	allowed := key == "homenode" || key == "homenode-transfer" || key == "homenode-runtime" || key == "homenode-backup" || key == "libvirt-qemu"
+	allowed := key == "homenode" || key == "homenode-transfer" || key == "homenode-runtime" || key == "homenode-backup" || key == "homenode-gateway" || key == "homenode-proxy" || key == "libvirt-qemu"
 	if !allowed {
 		if _, err := accountID(key); err != nil {
 			return nil, false, ErrAccounts
