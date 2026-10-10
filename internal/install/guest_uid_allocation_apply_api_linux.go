@@ -38,17 +38,22 @@ func (e *Engine) ApplyGuestUIDAllocationConfiguration(ctx context.Context) (prev
 	}
 	quiesced := false
 	observe := func(ctx context.Context) error {
+		installed, err := e.load()
+		if err != nil {
+			return err
+		}
+		gateway := installedGateway(installed)
 		if !quiesced {
-			if err := quiesceRecoveryManagerWith(ctx, exec.CommandContext, e.requireRecoveryActivationBlock, ObserveRecoveryGuestsEmpty); err != nil {
+			if err := quiesceRecoveryManagerWith(ctx, exec.CommandContext, e.requireRecoveryActivationBlock, ObserveRecoveryGuestsEmpty, gateway); err != nil {
 				return err
 			}
 			quiesced = true
 			return nil
 		}
-		if err := ObserveRecoveryActivationConditions(ctx); err != nil {
+		if err := ObserveRecoveryActivationConditions(ctx, gateway); err != nil {
 			return err
 		}
-		if err := ObserveRecoveryServicesDormant(ctx); err != nil {
+		if err := ObserveRecoveryServicesDormant(ctx, gateway); err != nil {
 			return err
 		}
 		return ObserveRecoveryGuestsEmpty(ctx)

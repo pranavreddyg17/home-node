@@ -33,10 +33,15 @@ func (e *Engine) MigrateEmptyGuestVolumeStorage(ctx context.Context, publisher e
 		return empty, err
 	}
 	observe := func(ctx context.Context) error {
-		if err := ObserveRecoveryActivationConditions(ctx); err != nil {
+		installed, err := e.load()
+		if err != nil {
 			return err
 		}
-		if err := ObserveRecoveryServicesDormant(ctx); err != nil {
+		gateway := installedGateway(installed)
+		if err := ObserveRecoveryActivationConditions(ctx, gateway); err != nil {
+			return err
+		}
+		if err := ObserveRecoveryServicesDormant(ctx, gateway); err != nil {
 			return err
 		}
 		return ObserveRecoveryGuestsEmpty(ctx)

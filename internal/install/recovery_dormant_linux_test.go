@@ -35,10 +35,18 @@ func TestRecoveryDormantQueriesOnlyFixedServices(t *testing.T) {
 	if !reflect.DeepEqual(units, []string{"homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket"}) {
 		t.Fatal("service set", units)
 	}
+	units = nil
+	if err := observeRecoveryServicesWith(context.Background(), command, true); err != nil || !reflect.DeepEqual(units, recoveryUnits(true)) {
+		t.Fatal("gateway recovery observation", units, err)
+	}
 	valid = strings.Replace(valid, "MainPID=0", "MainPID=1", 1)
 	units = nil
 	if err := observeRecoveryServicesWith(context.Background(), command); !errors.Is(err, ErrConflict) || len(units) != 1 {
 		t.Fatal("unsafe observation continued", units, err)
+	}
+	units = nil
+	if err := observeRecoveryServicesWith(context.Background(), command, true); !errors.Is(err, ErrConflict) || len(units) != 1 || units[0] != "homenode-gateway.service" {
+		t.Fatal("active gateway observation accepted", units, err)
 	}
 	var output recoveryManagerOutput
 	if _, err := output.Write(make([]byte, 1025)); !errors.Is(err, ErrConflict) || output.Len() != 0 {
