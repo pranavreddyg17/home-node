@@ -137,3 +137,21 @@ func gatewayAccountStepMatches(s accountSnapshot, p GatewayAccountPlan, step int
 	}
 	return []bool{foundGroup, foundProxy, foundUser, controllerMember}[step], nil
 }
+
+// Proxy membership is validated by gatewayAccountStepMatches. The original
+// ownership matcher still verifies the controller and transfer owner markers.
+func gatewayBaseStepMatches(s accountSnapshot, base accountJournal, step int) (bool, error) {
+	rows, err := accountLines(s.groups, 4)
+	if err != nil {
+		return false, err
+	}
+	var groups strings.Builder
+	for _, row := range rows {
+		if row[0] != "homenode-proxy" {
+			groups.WriteString(strings.Join(row, ":"))
+			groups.WriteByte('\n')
+		}
+	}
+	s.groups = []byte(groups.String())
+	return accountStepMatches(s, base, step)
+}
