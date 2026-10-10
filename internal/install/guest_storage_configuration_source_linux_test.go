@@ -328,6 +328,16 @@ func TestRootGuestStorageConfigurationPublicationRecoversJournalInterruption(t *
 	if err := os.Chmod(imagesPath, 0710); err != nil {
 		t.Fatal(err)
 	}
+	foreign, err := os.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.publishGuestStorageConfigurationLocked(ctx, foreign, plan, guard); !errors.Is(err, ErrConflict) {
+		t.Fatal("foreign configuration directory admitted", err)
+	}
+	if err := foreign.Close(); err != nil {
+		t.Fatal(err)
+	}
 	interrupted := errors.New("journal publication interrupted")
 	fault := func(context.Context) error {
 		data, err := os.ReadFile(envPath)

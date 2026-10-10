@@ -25,6 +25,9 @@ func (e *Engine) publishGuestStorageConfigurationLocked(ctx context.Context, dir
 	if err := guard(ctx); err != nil {
 		return err
 	}
+	if err := e.checkGuestStorageConfigurationDirectory(ctx, directory); err != nil {
+		return err
+	}
 	current, err := e.load()
 	if err != nil {
 		return err
@@ -40,6 +43,9 @@ func (e *Engine) publishGuestStorageConfigurationLocked(ctx context.Context, dir
 		}
 		return e.withGuestIdentityRecordGuarded(ctx, "guest-storage-configuration-stage.json", encoded, func(ctx context.Context, checkStage func() error) error {
 			check := func(ctx context.Context) error {
+				if err := e.checkGuestStorageConfigurationDirectory(ctx, directory); err != nil {
+					return err
+				}
 				if err := guard(ctx); err != nil {
 					return err
 				}
@@ -64,7 +70,10 @@ func (e *Engine) publishGuestStorageConfigurationLocked(ctx context.Context, dir
 						return ErrConflict
 					}
 				}
-				return guard(ctx)
+				if err := guard(ctx); err != nil {
+					return err
+				}
+				return e.checkGuestStorageConfigurationDirectory(ctx, directory)
 			}
 			completed := func() error {
 				if err := check(ctx); err != nil {
