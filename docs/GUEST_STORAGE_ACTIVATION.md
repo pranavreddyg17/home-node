@@ -158,3 +158,13 @@ retain its recorded source and replacement inodes. Unrecorded partial stages
 remain evidence and are refused. This composition has compiled for Linux but
 has not yet completed a native installed workflow; it does not provision a
 missing channel parent, publish configuration or release activation.
+
+Channel provisioning now has a create-only staging primitive under a retained
+`/run/homenode` descriptor, mount and named-path guard. It creates
+`.homenode-guests.stage` privately, verifies an empty directory without ACLs,
+assigns `root:transfer` ownership and mode `0710`, and records both runtime and
+candidate inodes in `guest-storage-channel-stage.json`. It preserves uncertain
+partial candidates and refuses adoption by repeated staging. Publication,
+recorded-stage recovery, installed-command composition and reboot integration
+remain unfinished. The primitive and disposable root fixture compile for Linux;
+native execution of this new fixture remains pending.
