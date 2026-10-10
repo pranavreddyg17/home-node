@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -89,4 +90,52 @@ func TestGatewayAccountIntentRefusesUnownedPhaseAndNSSCollision(t *testing.T) {
 		t.Fatal("lost base ownership accepted", err)
 	}
 
+}
+
+func TestGatewayJournalRefusesSubstitutedCommandsAndRoleAliases(t *testing.T) {
+	host, journal := roots(t)
+	engine := openEngine(t, host, journal)
+	defer engine.Close()
+	backend := newAccountFixture()
+	ctx := context.Background()
+	if _, err := engine.provisionAccounts(ctx, backend); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.prepareGatewayAccount(ctx, backend); err != nil {
+		t.Fatal(err)
+	}
+	base, err := engine.loadAccountJournal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	original, err := engine.loadGatewayAccountJournal(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scenario := range []string{"command", "owner", "UID alias", "proxy alias", "premature ready"} {
+		modified := original
+		switch scenario {
+		case "command":
+			modified.Plan.Commands = append([]AccountCommand(nil), original.Plan.Commands...)
+			modified.Plan.Commands[0].Program = "/bin/sh"
+		case "owner":
+			modified.Plan.OwnerID = strings.Repeat("b", 32)
+		case "UID alias":
+			modified.Plan.Identity.UID = base.Accounts.ControllerUID
+		case "proxy alias":
+			modified.Plan.Identity.ProxyGID = base.Accounts.RuntimeGID
+		case "premature ready":
+			modified.Ready = true
+		}
+		data, err := json.Marshal(modified)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(journal, "gateway-accounts.json"), data, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := engine.loadGatewayAccountJournal(base); !errors.Is(err, ErrConflict) {
+			t.Fatal("substituted intent accepted", scenario, err)
+		}
+	}
 }

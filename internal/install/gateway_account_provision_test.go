@@ -101,3 +101,70 @@ func TestGatewayProvisionResumesEveryLostAcknowledgement(t *testing.T) {
 		})
 	}
 }
+
+func TestGatewayProvisionRequiresIntentVacancyAndUnchangedBaseOwner(t *testing.T) {
+	host, journal := roots(t)
+	engine := openEngine(t, host, journal)
+	defer engine.Close()
+	base := newAccountFixture()
+	ctx := context.Background()
+	if _, err := engine.provisionAccounts(ctx, base); err != nil {
+		t.Fatal(err)
+	}
+	backend := fixtureGatewayProvisioner{base}
+	if _, err := engine.provisionGatewayAccount(ctx, backend); err == nil || base.commands != 5 {
+		t.Fatal("unprepared mutation", err)
+	}
+	if _, err := engine.prepareGatewayAccount(ctx, base); err != nil {
+		t.Fatal(err)
+	}
+	base.collide = true
+	if _, err := engine.provisionGatewayAccount(ctx, backend); !errors.Is(err, ErrConflict) || base.commands != 5 {
+		t.Fatal("NSS collision mutated accounts", err)
+	}
+	base.collide = false
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := engine.provisionGatewayAccount(canceled, backend); !errors.Is(err, context.Canceled) || base.commands != 5 {
+		t.Fatal("canceled mutation", err)
+	}
+	base.s.passwd = []byte(strings.Replace(string(base.s.passwd), "HomeNode install ", "Foreign install ", 1))
+	if _, err := engine.provisionGatewayAccount(ctx, backend); !errors.Is(err, ErrConflict) || base.commands != 5 {
+		t.Fatal("lost base ownership mutated accounts", err)
+	}
+}
+
+type gatewayVerificationFailure struct{ fixtureGatewayProvisioner }
+
+func (gatewayVerificationFailure) VerifyGateway(context.Context) (GatewayAccount, error) {
+	return GatewayAccount{}, ErrAccounts
+}
+
+func TestGatewayVerificationFailureCannotCommitReadiness(t *testing.T) {
+	host, journal := roots(t)
+	engine := openEngine(t, host, journal)
+	defer engine.Close()
+	base := newAccountFixture()
+	ctx := context.Background()
+	if _, err := engine.provisionAccounts(ctx, base); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.prepareGatewayAccount(ctx, base); err != nil {
+		t.Fatal(err)
+	}
+	fixture := fixtureGatewayProvisioner{base}
+	if _, err := engine.provisionGatewayAccount(ctx, gatewayVerificationFailure{fixture}); !errors.Is(err, ErrAccounts) {
+		t.Fatal("failed verification ignored", err)
+	}
+	owned, err := engine.loadAccountJournal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, err := engine.loadGatewayAccountJournal(owned)
+	if err != nil || pending.Ready || pending.Completed != 4 || base.commands != 9 {
+		t.Fatal("unverified identity marked ready", pending, base.commands, err)
+	}
+	if _, err := engine.provisionGatewayAccount(ctx, fixture); err != nil || base.commands != 9 {
+		t.Fatal("verification retry replayed mutations", err)
+	}
+}
