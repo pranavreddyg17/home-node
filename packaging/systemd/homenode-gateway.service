@@ -1,0 +1,40 @@
+[Unit]
+Description=HomeNode private HTTPS gateway
+Requires=homenode-control.service
+After=network-online.target tailscaled.service homenode-control.service
+Wants=network-online.target
+ConditionPathExists=!/var/lib/homenode-install/recovery-blocked
+ConditionPathExists=/etc/homenode/services.env
+
+[Service]
+Type=simple
+User=homenode-gateway
+Group=homenode-gateway
+SupplementaryGroups=homenode-proxy
+EnvironmentFile=/etc/homenode/services.env
+ExecStart=/usr/lib/homenode/homenode-gateway --bind ${TAILNET_IP} --port ${HTTPS_PORT} --origin ${HTTPS_ORIGIN} --controller-socket /run/homenode-control/control.sock --controller-uid ${CONTROLLER_UID} --access-gid ${PROXY_GID} --tls-cert /etc/homenode/tls/server.crt --tls-key /etc/homenode/tls/server.key
+UMask=0077
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+InaccessiblePaths=-/run/homenode -/run/homenode-transfer -/run/homenode-backup -/var/lib/homenode -/var/lib/homenode-backup -/var/lib/homenode-update -/etc/homenode/runtime-policy.json -/etc/homenode/catalog.pub -/etc/homenode/backup.env
+MemoryMax=256M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target
