@@ -21,10 +21,10 @@ func (e *Engine) withRecordedGuestStorageChannel(ctx context.Context, plan Guest
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if guard == nil || use == nil || stage.Version != 1 || transferGID == 0 || transferGID > math.MaxInt32 || transferGID == plan.GuestGID || stage.TransferGID != transferGID || !reflect.DeepEqual(stage.Plan, plan) || stage.Device != stage.RuntimeDevice || stage.Device > math.MaxInt64 || stage.Inode == 0 || stage.Inode > math.MaxInt64 || stage.RuntimeInode == 0 || stage.RuntimeInode > math.MaxInt64 || stage.Inode == stage.RuntimeInode {
+	if e == nil || e.host == nil || e.journalRoot == nil || guard == nil || use == nil {
 		return ErrPlan
 	}
-	if _, err := canonicalGuestStoragePlan(ctx, plan); err != nil {
+	if err := validateGuestStorageChannelStage(ctx, plan, transferGID, stage); err != nil {
 		return err
 	}
 	encoded, err := json.Marshal(stage)
@@ -117,4 +117,14 @@ func (e *Engine) withRecordedGuestStorageChannel(ctx context.Context, plan Guest
 			return check(ctx)
 		})
 	})
+}
+
+func validateGuestStorageChannelStage(ctx context.Context, plan GuestStorageProvisioningPlan, transferGID uint32, stage guestStorageChannelStage) error {
+	if stage.Version != 1 || transferGID == 0 || transferGID > math.MaxInt32 || transferGID == plan.GuestGID || stage.TransferGID != transferGID || !reflect.DeepEqual(stage.Plan, plan) || stage.Device != stage.RuntimeDevice || stage.Device > math.MaxInt64 || stage.Inode == 0 || stage.Inode > math.MaxInt64 || stage.RuntimeInode == 0 || stage.RuntimeInode > math.MaxInt64 || stage.Inode == stage.RuntimeInode {
+		return ErrPlan
+	}
+	if _, err := canonicalGuestStoragePlan(ctx, plan); err != nil {
+		return err
+	}
+	return ctx.Err()
 }

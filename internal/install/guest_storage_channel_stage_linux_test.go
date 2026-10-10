@@ -57,6 +57,23 @@ func TestRootGuestStorageChannelStagePreservesRecordedCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	loaded, err := engine.loadGuestStorageChannelStage(ctx, plan, 1002)
+	if err != nil || !reflect.DeepEqual(loaded, stage) {
+		t.Fatal("recorded stage could not be loaded", loaded, err)
+	}
+	if foreign, err := engine.loadGuestStorageChannelStage(ctx, plan, 1003); !errors.Is(err, ErrConflict) || !reflect.DeepEqual(foreign, guestStorageChannelStage{}) {
+		t.Fatal("foreign transfer authority admitted", foreign, err)
+	}
+	unknown := append(append([]byte(nil), data[:len(data)-1]...), []byte(",\"unexpected\":true}")...)
+	if err := os.WriteFile(receipt, unknown, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if malformed, err := engine.loadGuestStorageChannelStage(ctx, plan, 1002); !errors.Is(err, ErrConflict) || !reflect.DeepEqual(malformed, guestStorageChannelStage{}) {
+		t.Fatal("unknown receipt field admitted", malformed, err)
+	}
+	if err := os.WriteFile(receipt, data, 0600); err != nil {
+		t.Fatal(err)
+	}
 	if retry, err := engine.stageGuestStorageChannelParent(ctx, plan, 1002, guard); err == nil || !reflect.DeepEqual(retry, guestStorageChannelStage{}) {
 		t.Fatal("existing stage adopted", retry, err)
 	}
