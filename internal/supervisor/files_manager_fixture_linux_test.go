@@ -83,7 +83,7 @@ func stageNativeFilesClient(t *testing.T, base string) string {
 	if err := os.Chmod(directory, 0755); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"manager_channel.py", "manager_transfer.py", "boot_image.py", "boot_evidence.py", "overlay.py"} {
+	for _, name := range []string{"manager_channel.py", "manager_transfer.py", "manager_runtime.py", "boot_image.py", "boot_evidence.py", "overlay.py"} {
 		source, err := os.OpenFile(filepath.Join("../../packaging/guest", name), os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 		if err != nil {
 			t.Fatal(err)

@@ -24,8 +24,8 @@ import (
 
 // Qualify the actual executable's signed catalog and reserved-policy startup.
 // The ephemeral fixture signing key is not a release publisher. This does not
-// launch a VM through that process or qualify installed systemd/user access.
-func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images string, image catalog.Image, policy Policy, transferGID int) {
+// qualify installed systemd, the controller/gateway or private HTTPS access.
+func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images, script string, image catalog.Image, policy Policy, transferGID int, safeCleanup *bool) {
 	t.Helper()
 	binary := "/usr/lib/homenode-fixtures/homenode-supervisor"
 	info, err := os.Lstat(binary)
@@ -82,7 +82,7 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images 
 		}
 	}
 	socket := filepath.Join(directory, "supervisor.sock")
-	childCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	childCtx, cancel := context.WithTimeout(ctx, 4*time.Minute)
 	defer cancel()
 	command := exec.CommandContext(childCtx, binary,
 		"--policy", filepath.Join(directory, "policy.json"), "--publisher-key", filepath.Join(directory, "catalog.pub"),
@@ -94,6 +94,27 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images 
 	command.WaitDelay = 3 * time.Second
 	var diagnostics boundedOutput
 	command.Stdout, command.Stderr = &diagnostics, &diagnostics
+	instanceID := state.Random()
+	started := false
+	// This defer runs after the child has been reaped. Never remove fixture
+	// storage if an ambiguous runtime effect could leave QEMU using it.
+	defer func() {
+		if !started {
+			return
+		}
+		cleanup, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		backend := LinuxBackend{DataRoot: filepath.Join(directory, "volumes"), TransferGID: transferGID}
+		if err := backend.Stop(cleanup, instanceID); err != nil {
+			*safeCleanup = false
+			t.Errorf("supervisor entry guest cleanup: %v", err)
+			return
+		}
+		if running, err := backend.Running(cleanup, instanceID); err != nil || running {
+			*safeCleanup = false
+			t.Errorf("supervisor entry guest exit unverified: %v", err)
+		}
+	}()
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -137,21 +158,6 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images 
 	if !ready {
 		t.Fatal("supervisor startup did not reach authenticated listener")
 	}
-	if err := command.Process.Signal(syscall.SIGTERM); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case err := <-done:
-		waited = true
-		if err != nil {
-			t.Fatal("supervisor did not shut down cleanly", err)
-		}
-	case <-childCtx.Done():
-		t.Fatal("supervisor shutdown timed out")
-	}
-	if diagnostics.tooLarge {
-		t.Fatal("supervisor diagnostics exceeded fixture bound")
-	}
 	for path, before := range storage {
 		after, err := os.Lstat(path)
 		if err != nil || !os.SameFile(before, after) || before.Mode() != after.Mode() || before.Size() != after.Size() {
@@ -167,6 +173,34 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images 
 		if err != nil || len(entries) != 0 {
 			t.Fatal("idle startup created guest storage", name, err)
 		}
+	}
+	started = true // A failed request may still have committed native effects.
+	nativeFilesRuntimeRequest(t, childCtx, script, socket, instanceID, "start", policy.GuestIdentity.FirstUID, transferGID)
+	exercise, stopTransfer := startNativeFilesTransferAt(t, childCtx, directory, script, instanceID, socket, filepath.Join(directory, "channels"), transferGID)
+	transferStopped := false
+	defer func() {
+		if !transferStopped {
+			stopTransfer()
+		}
+	}()
+	exercise()
+	stopTransfer()
+	transferStopped = true
+	nativeFilesRuntimeRequest(t, childCtx, script, socket, instanceID, "shutdown", policy.GuestIdentity.FirstUID, transferGID)
+	if err := command.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		waited = true
+		if err != nil {
+			t.Fatal("supervisor did not shut down cleanly", err)
+		}
+	case <-childCtx.Done():
+		t.Fatal("supervisor shutdown timed out")
+	}
+	if diagnostics.tooLarge {
+		t.Fatal("supervisor diagnostics exceeded fixture bound")
 	}
 	journal := filepath.Join(directory, "journal")
 	if _, err := os.Lstat(journal); err != nil {
@@ -188,5 +222,26 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images 
 	if err := store.DB.QueryRow("SELECT value FROM settings WHERE key='policy-hash'").Scan(&policyHash); err != nil || policyHash != state.Hash(string(policyBytes)) {
 		t.Fatal("accepted policy bytes not retained", err)
 	}
-	t.Log("actual supervisor executable accepted fixture-signed Files catalog and qualified reserved policy, refused root caller, and shut down cleanly; no VM or installed-service acceptance claimed")
+	var guestUID uint32
+	var runtimeState, digest string
+	if err := store.DB.QueryRow("SELECT uid FROM runtime_uid_leases WHERE instance_id=?", instanceID).Scan(&guestUID); err != nil || guestUID != policy.GuestIdentity.FirstUID {
+		t.Fatal("actual supervisor guest lease mismatch", guestUID, err)
+	}
+	if err := store.DB.QueryRow("SELECT state,image_sha256 FROM runtime_instances WHERE id=?", instanceID).Scan(&runtimeState, &digest); err != nil || runtimeState != "stopped" || digest != image.SHA256 {
+		t.Fatal("actual supervisor runtime completion mismatch", runtimeState, digest, err)
+	}
+	t.Log("actual supervisor executable accepted fixture-signed Files catalog and reserved policy, launched actual Files guest, completed unprivileged transfer and role refusals, and cooperatively shut down; installed services and release remain unqualified")
+}
+
+func nativeFilesRuntimeRequest(t *testing.T, ctx context.Context, script, socket, instanceID, action string, guestUID uint32, gid int) {
+	t.Helper()
+	command := exec.CommandContext(ctx, "/usr/bin/python3", "-B", filepath.Join(filepath.Dir(script), "manager_runtime.py"), socket, instanceID, action, strconv.FormatUint(uint64(guestUID), 10))
+	command.Dir = filepath.Dir(script)
+	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "HOMENODE_FILES_MANAGER_INTEGRATION=1"}
+	command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 1, Gid: uint32(gid), Groups: []uint32{}}}
+	command.WaitDelay = time.Second
+	output, err := command.CombinedOutput()
+	if err != nil || string(output) != "development runtime "+action+" passed\n" {
+		t.Fatalf("actual supervisor runtime %s: %v: %s", action, err, output)
+	}
 }
