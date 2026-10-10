@@ -140,6 +140,15 @@ func TestProductionTLSAndCookie(t *testing.T) {
 	if w.Code != 403 {
 		t.Fatal("plaintext production accepted")
 	}
+	for _, header := range []string{"Forwarded", "X-Forwarded-Proto", "X-Homenode-Client-TLS"} {
+		r.Header.Set(header, "1.3")
+	}
+	r.Header.Set("X-Homenode-Client-Address", "100.64.0.2")
+	w = httptest.NewRecorder()
+	s.ServeHTTP(w, r)
+	if w.Code != 403 {
+		t.Fatal("public headers bypassed production HTTPS guard")
+	}
 	r.TLS = &tls.ConnectionState{}
 	w = httptest.NewRecorder()
 	s.ServeHTTP(w, r)

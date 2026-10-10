@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pranavreddyg17/home-node/internal/gatewaytransport"
 	"github.com/pranavreddyg17/home-node/internal/hostcheck"
 	"github.com/pranavreddyg17/home-node/internal/identity"
 	"github.com/pranavreddyg17/home-node/internal/state"
@@ -150,7 +151,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 403, "ORIGIN_DENIED", "Use the configured HomeNode address.")
 		return
 	}
-	if !s.config.Development && r.TLS == nil {
+	if !s.config.Development && r.TLS == nil && !gatewaytransport.TrustedHTTPS(r) {
 		fail(w, 403, "TLS_REQUIRED", "A trusted HTTPS connection is required.")
 		return
 	}
