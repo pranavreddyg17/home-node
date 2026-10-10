@@ -64,6 +64,19 @@ func TestRootGuestStorageVolumeParentIntentRetainsOriginalInode(t *testing.T) {
 	if err != nil || !os.SameFile(before, after) {
 		t.Fatal("retry replaced provenance", err)
 	}
+	data, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var intent guestStorageVolumeParentIntent
+	if err := json.Unmarshal(data, &intent); err != nil {
+		t.Fatal(err)
+	}
+	for _, current := range []journal{installed, intent.Desired} {
+		if err := e.withGuestStorageVolumeParentIntent(ctx, current, plan, 993, func(guestStorageVolumeParentIntent, func() error) error { return nil }); err != nil {
+			t.Fatal("recorded journal state refused", err)
+		}
+	}
 	changed := plan
 	changed.GuestGID++
 	if err := e.commitGuestStorageVolumeParentIntent(ctx, installed, changed, 993, parent, guard); !errors.Is(err, ErrConflict) {
@@ -73,4 +86,22 @@ func TestRootGuestStorageVolumeParentIntentRetainsOriginalInode(t *testing.T) {
 	if err != nil || info.Mode().Perm() != 0710 {
 		t.Fatal("intent changed parent", err)
 	}
+	if err := e.withGuestStorageVolumeParentIntent(ctx, installed, plan, 993, func(_ guestStorageVolumeParentIntent, check func() error) error {
+		if err := os.Rename(recordPath, recordPath+".original"); err != nil {
+			return err
+		}
+		if err := os.WriteFile(recordPath, data, 0600); err != nil {
+			return err
+		}
+		return check()
+	}); !errors.Is(err, ErrConflict) {
+		t.Fatal("identical intent replacement admitted", err)
+	}
+	for _, path := range []string{recordPath, recordPath + ".original"} {
+		contents, err := os.ReadFile(path)
+		if err != nil || string(contents) != string(data) {
+			t.Fatal("conflict changed evidence", err)
+		}
+	}
+
 }
