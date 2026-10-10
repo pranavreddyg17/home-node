@@ -5,6 +5,7 @@ package install
 import (
 	"context"
 	"crypto/ed25519"
+	"fmt"
 	"os"
 	"reflect"
 	"time"
@@ -70,7 +71,7 @@ func (e *Engine) provisionGuestStorageChannelExcludedLocked(ctx context.Context,
 		}
 		return e.withGuestStorageDirectoryParentState(ctx, "var/lib/homenode/volumes", plan.GuestGID, plan.GuestGID, 0, 0, false, qualified, func(_ *os.Root, _ *os.File, checkVolumes func(context.Context) error) error {
 			if err := e.prepareGuestStorageChannelRuntime(ctx, checkVolumes); err != nil {
-				return err
+				return fmt.Errorf("prepare protected runtime directory: %w", err)
 			}
 			transferGID := uint32(accounts.Accounts.TransferGID)
 			if _, err := e.journalRoot.Lstat("guest-storage-channel-stage.json"); err == nil {
@@ -84,7 +85,7 @@ func (e *Engine) provisionGuestStorageChannelExcludedLocked(ctx context.Context,
 				}
 				if previous.BootID != bootID {
 					if err := e.archivePreviousBootGuestStorageChannelStage(ctx, plan, transferGID, checkVolumes); err != nil {
-						return err
+						return fmt.Errorf("archive prior boot channel receipt: %w", err)
 					}
 				}
 			} else if !os.IsNotExist(err) {
@@ -92,7 +93,7 @@ func (e *Engine) provisionGuestStorageChannelExcludedLocked(ctx context.Context,
 			}
 			if _, err := e.journalRoot.Lstat("guest-storage-channel-stage.json"); os.IsNotExist(err) {
 				if _, err := e.stageGuestStorageChannelParent(ctx, plan, transferGID, checkVolumes); err != nil {
-					return err
+					return fmt.Errorf("stage protected channel directory: %w", err)
 				}
 			} else if err != nil {
 				return err
@@ -101,7 +102,10 @@ func (e *Engine) provisionGuestStorageChannelExcludedLocked(ctx context.Context,
 			if err != nil {
 				return err
 			}
-			return e.publishGuestStorageChannelParent(ctx, plan, transferGID, stage, checkVolumes)
+			if err := e.publishGuestStorageChannelParent(ctx, plan, transferGID, stage, checkVolumes); err != nil {
+				return fmt.Errorf("publish recorded channel directory: %w", err)
+			}
+			return nil
 		})
 	})
 }
