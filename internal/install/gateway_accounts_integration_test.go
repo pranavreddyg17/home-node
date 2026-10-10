@@ -3,6 +3,7 @@ package install
 import (
 	"context"
 	"encoding/json"
+	"github.com/pranavreddyg17/home-node/internal/supervisor"
 	"os"
 	"runtime"
 	"testing"
@@ -68,6 +69,19 @@ func qualifyNativeGatewayAccounts(t *testing.T, engine *Engine, ctx context.Cont
 	}
 	if actual, err := InspectGatewayAccount(ctx); err != nil || actual != identity {
 		t.Fatal("repaired bridge refused", actual, err)
+	}
+	uidPlan, err := engine.PlanInstalledGuestUIDProvisioning(ctx, supervisor.GuestUIDPool{First: 2000000000, Last: 2000000001})
+	if err != nil || len(uidPlan.ServiceUIDs) != 4 {
+		t.Fatal("gateway omitted from guest UID service exclusions", uidPlan, err)
+	}
+	found := false
+	for _, uid := range uidPlan.ServiceUIDs {
+		if uid == identity.UID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("guest UID plan lacks verified gateway UID")
 	}
 	t.Log("native journaled gateway provisioning, installed check CLI, readiness replay and group isolation passed")
 }

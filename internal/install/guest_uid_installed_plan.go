@@ -72,6 +72,13 @@ func (e *Engine) planInstalledGuestUIDProvisioningLocked(ctx context.Context, po
 		return empty, ErrConflict
 	}
 	identities := []uint32{actual.ControllerUID, actual.TransferUID}
+	gateway, err := e.observeGatewayAccount(ctx, base)
+	if err != nil {
+		return empty, err
+	}
+	if gateway != nil {
+		identities = append(identities, gateway.UID)
+	}
 	maintenance, err := e.loadMaintenanceAccountJournal(base)
 	if err != nil && !os.IsNotExist(err) {
 		return empty, err
