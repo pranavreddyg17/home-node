@@ -60,6 +60,8 @@ func roundTripNativeFilesTransfer(t *testing.T, ctx context.Context, base, scrip
 		"-channels", m.Channels, "-controller-uid", "1", "-access-gid", strconv.Itoa(gid), "-policy-generation", "1")
 	command.Dir = base
 	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin"}
+	var diagnostics boundedOutput
+	command.Stdout, command.Stderr = &diagnostics, &diagnostics
 	command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 2, Gid: uint32(gid), Groups: []uint32{}}}
 	command.WaitDelay = 3 * time.Second
 	if err := command.Start(); err != nil {
@@ -69,6 +71,9 @@ func roundTripNativeFilesTransfer(t *testing.T, ctx context.Context, base, scrip
 	defer func() {
 		cancel()
 		_ = command.Wait() // Cancellation kills/reaps this direct fixture child.
+		if output := diagnostics.String(); output != "" {
+			t.Log("native transfer process diagnostics", output)
+		}
 	}()
 	client := filepath.Join(filepath.Dir(script), "manager_transfer.py")
 	for _, scenario := range []struct {
