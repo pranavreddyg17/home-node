@@ -14,6 +14,22 @@ import uuid
 import boot_image
 
 
+def capacity_roundtrip(channel, chunk):
+    identifier = uuid.uuid4().hex
+    total = 1 << 30
+    checksum = hashlib.sha256(chunk).hexdigest()
+    for offset in range(0, total, len(chunk)):
+        response = boot_image.request(channel, "upload", allowed_error="CAPACITY_UNAVAILABLE",
+                                      objectId=identifier, offset=offset, size=total,
+                                      sha256=checksum, data=base64.b64encode(chunk).decode())
+        if response.get("error") == "CAPACITY_UNAVAILABLE":
+            boot_image.request(channel, "delete", objectId=identifier)
+            return
+        if response.get("error") or response.get("offset") != offset + len(chunk):
+            raise ValueError("capacity probe upload response mismatch")
+    raise ValueError("bounded two GiB fixture did not refuse exhausted capacity")
+
+
 def large_object_roundtrip(channel, reconnect):
     identifier = uuid.uuid4().hex
     chunk = bytes(range(256)) * 1024
@@ -55,6 +71,9 @@ def large_object_roundtrip(channel, reconnect):
     finalized = boot_image.request(channel, "finalize", objectId=identifier, size=total, sha256=checksum)
     if finalized.get("size") != total or finalized.get("sha256") != checksum:
         raise ValueError("large object finalization mismatch")
+    # The native fixture has a two GiB ext4 disk. Preserve this verified object
+    # while exhausting the remaining space, then verify it after partial cleanup.
+    capacity_roundtrip(channel, chunk)
     downloaded = hashlib.sha256()
     for offset in range(0, total, len(chunk)):
         response = boot_image.request(channel, "download", objectId=identifier, offset=offset)

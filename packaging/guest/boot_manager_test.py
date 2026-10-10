@@ -124,6 +124,23 @@ class ManagerInputs(unittest.TestCase):
         foreign.sendall.assert_not_called()
         self.assertEqual(request.call_count, 3)
 
+    def test_capacity_refusal_cleans_only_probe_object(self):
+        chunk = bytes(range(256)) * 1024
+        with mock.patch.object(manager_channel.boot_image, "request", side_effect=[
+                {"offset": 262144}, {"error": "CAPACITY_UNAVAILABLE"}, {}]) as request:
+            manager_channel.capacity_roundtrip(object(), chunk)
+        calls = request.call_args_list
+        self.assertEqual([call.args[1] for call in calls], ["upload", "upload", "delete"])
+        self.assertEqual(calls[1].kwargs["offset"], 262144)
+        self.assertEqual(len({call.kwargs["objectId"] for call in calls}), 1)
+        self.assertEqual(calls[0].kwargs["allowed_error"], "CAPACITY_UNAVAILABLE")
+
+    def test_capacity_probe_refuses_invalid_acknowledgment(self):
+        with mock.patch.object(manager_channel.boot_image, "request", return_value={"offset": 0}) as request:
+            with self.assertRaisesRegex(ValueError, "response mismatch"):
+                manager_channel.capacity_roundtrip(object(), b"chunk")
+        request.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

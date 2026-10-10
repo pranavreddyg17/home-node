@@ -601,7 +601,7 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 		}
 	}
 	if filesImage {
-		t.Log("development Files manager launch, 1 GiB object round trip, audit, cooperative shutdown and identity-retaining restart completed; release remains unqualified")
+		t.Log("development Files manager launch, 1 GiB object round trip, disk-full refusal and cleanup, audit, cooperative shutdown and identity-retaining restart completed; release remains unqualified")
 	} else {
 		t.Log("synthetic native manager launch, audit, stop and identity-retaining restart completed")
 	}
