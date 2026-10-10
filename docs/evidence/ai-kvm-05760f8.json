@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "sourceRevision": "05760f872ba1512e0d074158ca91d44ed3ac0d38",
+  "workflowRun": 38024765264,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38024765264",
+  "workflowConclusion": "success",
+  "environment": "Disposable Ubuntu 24.04 CI; non-root runner with process-scoped KVM group",
+  "reportSHA256": "56972219e55e3daa00fca081054639cd4a22298485c33826b7681bcf0d0997b1",
+  "consoleSHA256": "cba8cbab438c5fdf133ae4950923133df1967fff3e4618f4c71949c1ac6200fd",
+  "report": {
+    "schema": 1,
+    "profile": "ai",
+    "imageSHA256": "337221bf0958d9e609bef39b23f2230977c8235cc45095017ea8455526892079",
+    "accelerator": "kvm",
+    "tcgBootAndObjectRoundTrip": false,
+    "kvmBootAndObjectRoundTrip": true,
+    "objectTransfer": {
+      "bytes": 1048579,
+      "chunkBytes": 262144,
+      "acknowledgedChunkReplay": true
+    },
+    "videoPresets": [],
+    "videoCancellation": null,
+    "aiInference": {
+      "generationSucceeded": true,
+      "textBytes": 146,
+      "taskDeletionAcknowledged": true,
+      "cancellation": {
+        "cancelled": true,
+        "taskDeletionAcknowledged": true
+      }
+    },
+    "shutdown": {
+      "guestInitiated": true,
+      "reason": "guest-shutdown",
+      "qemuExitCode": 0,
+      "readOnlyFilesystemCheck": true
+    },
+    "releaseQualified": false
+  },
+  "qualifiedScope": [
+    "Unsigned development AI image completes generation using direct QEMU native KVM",
+    "Adapter acknowledges task cancellation/deletion and round-trips 1,048,579 bytes with acknowledged chunk replay",
+    "Guest-initiated poweroff completes with QEMU exit zero and read-only data filesystem check"
+  ],
+  "limitations": [
+    "Direct QEMU fixture, not reserved manager or installed service",
+    "No authenticated UI, chat history, concurrent workload or reference hardware qualification",
+    "No release image trust, license approval, model quality or performance qualification",
+    "No physical power-loss or cross-VM isolation qualification"
+  ],
+  "releaseQualified": false
+}
