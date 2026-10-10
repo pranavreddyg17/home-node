@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import os
+import struct
 from pathlib import Path
 import tempfile
 import unittest
@@ -95,6 +96,33 @@ class ManagerInputs(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "peer changed"):
                 manager_channel.large_object_roundtrip(old, reconnect)
             self.assertEqual(request.call_count, 2)
+
+    def test_unacknowledged_disconnect_refuses_foreign_peer_before_replay(self):
+        first, second, foreign = mock.Mock(), mock.Mock(), mock.Mock()
+        first.getsockopt.return_value = second.getsockopt.return_value = b"originalpeer"
+        foreign.getsockopt.return_value = b"foreign-peer"
+        connections = iter((second, foreign))
+        def reconnect():
+            if second.close.call_count:
+                second.close.assert_called_once()
+            else:
+                first.close.assert_called_once()
+            return next(connections)
+        def response(_channel, operation, **fields):
+            self.assertEqual(operation, "upload")
+            return {"offset": fields["offset"] + 262144}
+        with mock.patch.object(manager_channel.socket, "SO_PEERCRED", 17, create=True), mock.patch.object(manager_channel.boot_image, "request", side_effect=response) as request:
+            with self.assertRaisesRegex(ValueError, "unacknowledged reconnect"):
+                manager_channel.large_object_roundtrip(first, reconnect)
+        frame = second.sendall.call_args.args[0]
+        self.assertEqual(struct.unpack(">I", frame[:4])[0], len(frame) - 4)
+        message = json.loads(frame[4:])
+        self.assertEqual(message["operation"], "upload")
+        self.assertEqual(message["offset"], 524288)
+        self.assertEqual(len(base64.b64decode(message["data"], validate=True)), 262144)
+        second.recv.assert_not_called()
+        foreign.sendall.assert_not_called()
+        self.assertEqual(request.call_count, 3)
 
 
 if __name__ == "__main__":

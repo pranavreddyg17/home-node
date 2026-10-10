@@ -2,9 +2,11 @@
 import base64
 import contextlib
 import hashlib
+import json
 import os
 import re
 import socket
+import struct
 import sys
 import time
 import uuid
@@ -21,6 +23,19 @@ def large_object_roundtrip(channel, reconnect):
     for offset in range(0, total, len(chunk)):
         fields = {"objectId": identifier, "offset": offset, "size": total,
                   "sha256": chunk_digest, "data": base64.b64encode(chunk).decode()}
+        if offset == 2 * len(chunk):
+            # Commit may happen before or after disconnect. Do not consume an
+            # acknowledgment; replay the identical request on a new channel.
+            peer = channel.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+            payload = json.dumps({"version": 1, "requestId": uuid.uuid4().hex,
+                                  "operation": "upload", **fields}).encode()
+            if len(payload) > 512 << 10:
+                raise ValueError("fixture request exceeds frame bound")
+            channel.sendall(struct.pack(">I", len(payload)) + payload)
+            channel.close()
+            channel = reconnect()
+            if channel.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12) != peer:
+                raise ValueError("guest peer changed across unacknowledged reconnect")
         try:
             uploaded = boot_image.request(channel, "upload", **fields)
         except ValueError as error:
