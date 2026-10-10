@@ -43,8 +43,12 @@ jobs:
           fi
       - name: Test inspection syscall candidate refusal before native effects
         run: python3 packaging/inspection/resolve_syscall_candidate_test.py
+      - name: Build protected supervisor executable fixture
+        run: |
+          go build -o "$RUNNER_TEMP/homenode-supervisor" ./cmd/homenode-supervisor
+          sudo install -D -m 0755 "$RUNNER_TEMP/homenode-supervisor" /usr/lib/homenode-fixtures/homenode-supervisor
       - name: Test installer ownership with root fixture
-        run: sudo env HOMENODE_UPDATE_INIT_INTEGRATION=1 "$(command -v go)" test ./internal/install ./cmd/homenode-supervisor -count=1 -v
+        run: sudo env HOMENODE_UPDATE_INIT_INTEGRATION=1 HOMENODE_SUPERVISOR_ENTRY_INTEGRATION=1 "$(command -v go)" test ./internal/install ./cmd/homenode-supervisor -count=1 -v
       - name: Test reserved account exclusion with root fixture
         run: |
           sudo "$(command -v go)" test ./internal/accountlock -run '^TestRootLockRefusesParentPermissionDrift$' -count=1 -v
