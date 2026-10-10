@@ -72,7 +72,7 @@ func (e *Engine) commitImmutableGuestIntent(ctx context.Context, name, prefix st
 		maximum = 262144
 	} else if name == "guest-storage-image-parent-journal.json" || name == "guest-storage-volume-parent-intent.json" {
 		maximum = 131072
-	} else if name != "guest-uid-intent.json" && name != "guest-storage-intent.json" && name != "guest-storage-images-intent.json" && name != "guest-storage-image-parent-intent.json" && name != "guest-identity-nss-intent.json" && name != "guest-identity-nss-stage.json" && name != "guest-uid-allocation-stage.json" && name != "guest-storage-configuration-stage.json" && name != "guest-storage-channel-stage.json" {
+	} else if name != "guest-uid-intent.json" && name != "guest-storage-intent.json" && name != "guest-storage-images-intent.json" && name != "guest-storage-image-parent-intent.json" && name != "guest-identity-nss-intent.json" && name != "guest-identity-nss-stage.json" && name != "guest-uid-allocation-stage.json" && name != "guest-storage-configuration-stage.json" && name != "guest-storage-channel-stage.json" && name != "guest-storage-legacy-channel-intent.json" {
 		return ErrPlan
 	}
 	if int64(len(data)) > maximum {

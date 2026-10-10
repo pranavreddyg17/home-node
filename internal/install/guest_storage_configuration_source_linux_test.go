@@ -108,6 +108,40 @@ func TestRootGuestStorageConfigurationSourcesRetainBothFiles(t *testing.T) {
 	e := openEngine(t, host, journalDir)
 	defer e.Close()
 	guard := func(ctx context.Context) error { return ctx.Err() }
+	legacyPath := filepath.Join(host, "run", "homenode", "guests")
+	if err := os.MkdirAll(legacyPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	occupied := filepath.Join(legacyPath, "foreign-channel")
+	if err := os.WriteFile(occupied, []byte("preserved evidence"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.prepareGuestStorageLegacyChannelIntent(ctx, installed, plan, guard); !errors.Is(err, ErrConflict) {
+		t.Fatal("occupied legacy channel captured", err)
+	}
+	if _, err := e.journalRoot.Lstat("guest-storage-legacy-channel-intent.json"); !os.IsNotExist(err) {
+		t.Fatal("rejected legacy source produced authority", err)
+	}
+	if data, err := os.ReadFile(occupied); err != nil || string(data) != "preserved evidence" {
+		t.Fatal("legacy refusal changed evidence", err)
+	}
+	if err := os.Remove(occupied); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.prepareGuestStorageLegacyChannelIntent(ctx, installed, plan, guard); err != nil {
+		t.Fatal(err)
+	}
+	legacyReceipt, err := e.journalRoot.Lstat("guest-storage-legacy-channel-intent.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.prepareGuestStorageLegacyChannelIntent(ctx, installed, plan, guard); err != nil {
+		t.Fatal(err)
+	}
+	legacyRetry, err := e.journalRoot.Lstat("guest-storage-legacy-channel-intent.json")
+	if err != nil || !os.SameFile(legacyReceipt, legacyRetry) {
+		t.Fatal("legacy retry replaced receipt", err)
+	}
 	if err := os.WriteFile(envPath, []byte("foreign environment\n"), 0644); err != nil {
 		t.Fatal(err)
 	}

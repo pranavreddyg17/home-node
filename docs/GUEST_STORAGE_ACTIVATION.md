@@ -219,3 +219,12 @@ systemd stop preservation. This qualifies those earlier component scopes only;
 later version 2 boot identity, archival, runtime creation and full installed
 commands remain pending. Exact scope and retained log digest are in
 [evidence/channel-runtime-42095a9.json](evidence/channel-runtime-42095a9.json).
+
+Legacy channel migration has an intent-capture primitive. It authenticates the
+installed legacy policy against its journal, retains that policy and the runtime
+directory, and records the empty `root:root` mode `0755` channel inode, current
+boot UUID and policy hash. It refuses occupied directories without altering
+their contents and preserves the immutable receipt on retry. It does not archive
+the directory or admit it for reserved execution. Legacy archival and command
+composition remain unfinished; the new source fixture has compiled for Linux
+but native execution remains pending.
