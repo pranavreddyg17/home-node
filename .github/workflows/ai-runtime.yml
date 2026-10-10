@@ -122,6 +122,16 @@ jobs:
         env:
           HOMENODE_GUEST_BOOT_INTEGRATION: '1'
         run: python3 -B -u packaging/guest/boot_image.py "$RUNNER_TEMP/ai-image/build/artifacts/homenode-development-ai.raw" "$RUNNER_TEMP/ai-image/build/artifacts/development-build.json" "$RUNNER_TEMP/guest-boot-ai"
+      - name: Boot AI guest using accessible native KVM
+        env:
+          HOMENODE_GUEST_BOOT_INTEGRATION: '1'
+          HOMENODE_GUEST_BOOT_ACCELERATOR: kvm
+        run: |
+          if test -r /dev/kvm && test -w /dev/kvm; then
+            python3 -B -u packaging/guest/boot_image.py "$RUNNER_TEMP/ai-image/build/artifacts/homenode-development-ai.raw" "$RUNNER_TEMP/ai-image/build/artifacts/development-build.json" "$RUNNER_TEMP/guest-kvm-ai"
+          else
+            echo "Native KVM inaccessible; development AI boot evidence remains TCG-only."
+          fi
       - name: Retain bounded AI guest boot diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -130,6 +140,8 @@ jobs:
           path: |
             ${{ runner.temp }}/guest-boot-ai/boot-console.log
             ${{ runner.temp }}/guest-boot-ai/boot-evidence.json
+            ${{ runner.temp }}/guest-kvm-ai/boot-console.log
+            ${{ runner.temp }}/guest-kvm-ai/boot-evidence.json
           retention-days: 7
           if-no-files-found: warn
       - name: Retain unsigned AI disk and package inventory

@@ -290,6 +290,16 @@ QEMU runs q35 BIOS/TCG with a read-only system descriptor, separate data descrip
 virtio RNG/serial and no NIC or display. A fixture-private Unix socket carries
 bounded typed adapter frames; a separate private QMP socket controls poweroff.
 
+Explicit `HOMENODE_GUEST_BOOT_ACCELERATOR=kvm` selects development KVM boot.
+It first opens the fixed character device and checks `KVM_GET_API_VERSION == 12`,
+as required by the [kernel API documentation](https://docs.kernel.org/virt/kvm/api.html).
+Unknown modes, denied access, foreign device identity and unsupported APIs are
+refused; KVM never falls back to TCG. Evidence records the accelerator and separate
+TCG/KVM round-trip flags, with `releaseQualified` still false. Both image workflows
+attempt this additional boot when the unprivileged runner can access KVM and
+explicitly report its absence otherwise. These direct development boots do not
+qualify the installed supervisor, signed catalog, reserved UID isolation or release.
+
 Within a bounded boot deadline the fixture requires adapter health and a small
 upload/finalize/download/content-verification/delete-ack round trip. It retains
 at most 8 MiB of console diagnostics and writes separate boot evidence on success;

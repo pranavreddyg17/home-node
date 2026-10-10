@@ -62,6 +62,17 @@ jobs:
           PROFILE: ${{ matrix.profile }}
           HOMENODE_GUEST_BOOT_INTEGRATION: '1'
         run: python3 packaging/guest/boot_image.py "$RUNNER_TEMP/assembly/$PROFILE/artifacts/homenode-development-$PROFILE.raw" "$RUNNER_TEMP/assembly/$PROFILE/artifacts/development-build.json" "$RUNNER_TEMP/guest-boot-$PROFILE"
+      - name: Boot development disk using accessible native KVM
+        env:
+          PROFILE: ${{ matrix.profile }}
+          HOMENODE_GUEST_BOOT_INTEGRATION: '1'
+          HOMENODE_GUEST_BOOT_ACCELERATOR: kvm
+        run: |
+          if test -r /dev/kvm && test -w /dev/kvm; then
+            python3 -B packaging/guest/boot_image.py "$RUNNER_TEMP/assembly/$PROFILE/artifacts/homenode-development-$PROFILE.raw" "$RUNNER_TEMP/assembly/$PROFILE/artifacts/development-build.json" "$RUNNER_TEMP/guest-kvm-$PROFILE"
+          else
+            echo "Native KVM inaccessible; development boot evidence remains TCG-only."
+          fi
       - name: Retain bounded boot diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -70,6 +81,8 @@ jobs:
           path: |
             ${{ runner.temp }}/guest-boot-${{ matrix.profile }}/boot-console.log
             ${{ runner.temp }}/guest-boot-${{ matrix.profile }}/boot-evidence.json
+            ${{ runner.temp }}/guest-kvm-${{ matrix.profile }}/boot-console.log
+            ${{ runner.temp }}/guest-kvm-${{ matrix.profile }}/boot-evidence.json
           if-no-files-found: warn
           retention-days: 7
       - name: Retain unsigned development disk and package inventory

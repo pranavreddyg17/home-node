@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Disposable unprivileged TCG boot/adapter fixture; not production qualification."""
+"""Disposable unprivileged TCG/KVM boot/adapter fixture; not production qualification."""
 import base64
+import fcntl
 from collections import deque
 import hashlib
 import json
@@ -16,6 +17,23 @@ import time
 import uuid
 sys.dont_write_bytecode = True
 import overlay
+
+
+def development_boot_accelerator():
+    accelerator = os.getenv("HOMENODE_GUEST_BOOT_ACCELERATOR", "tcg")
+    if accelerator not in {"tcg", "kvm"}:
+        raise ValueError("unsupported development boot accelerator")
+    if accelerator == "kvm":
+        descriptor = os.open("/dev/kvm", os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC)
+        try:
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISCHR(metadata.st_mode) or os.major(metadata.st_rdev) != 10 or os.minor(metadata.st_rdev) != 232:
+                raise ValueError("development KVM device identity refused")
+            if fcntl.ioctl(descriptor, 0xAE00, 0) != 12:  # KVM_GET_API_VERSION
+                raise ValueError("development KVM API refused")
+        finally:
+            os.close(descriptor)
+    return accelerator
 
 
 def read_exact(channel, size):
@@ -215,6 +233,7 @@ def video_roundtrip(channel, output):
 def boot(image, manifest, output):
     if sys.platform != "linux" or os.geteuid() == 0 or os.getenv("HOMENODE_GUEST_BOOT_INTEGRATION") != "1":
         raise ValueError("requires explicit unprivileged disposable Linux fixture")
+    accelerator = development_boot_accelerator()
     metadata_fd = os.open(manifest, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     with os.fdopen(metadata_fd, "rb") as file:
         metadata_info = os.fstat(file.fileno())
@@ -247,7 +266,7 @@ def boot(image, manifest, output):
             subprocess.run(["/usr/sbin/mkfs.ext4", "-q", "-F", "-m", "0", "-E", "nodiscard,lazy_itable_init=0,lazy_journal_init=0", "-L", "homenode-data", "/proc/self/fd/" + str(data_fd)],
                            pass_fds=(data_fd,), check=True, timeout=30)
             os.fsync(data_fd)
-            result = boot_vm(fd, data_fd, output, record)
+            result = boot_vm(fd, data_fd, output, record, accelerator)
         finally:
             os.close(data_fd)
         return result
@@ -300,12 +319,14 @@ def qmp_shutdown(channel):
     return {"guestInitiated": True, "reason": "guest-shutdown"}
 
 
-def boot_vm(system_fd, data_fd, output, record):
+def boot_vm(system_fd, data_fd, output, record, accelerator="tcg"):
+    if accelerator not in {"tcg", "kvm"}:
+        raise ValueError("unsupported development boot accelerator")
     channel_path = output / "adapter.sock"
     qmp_path = output / "qmp.sock"
     if len(os.fsencode(channel_path)) > 100 or "," in str(channel_path) or "\n" in str(channel_path):
         raise ValueError("fixture socket path exceeds bound")
-    command = ["/usr/bin/qemu-system-x86_64", "-machine", "q35", "-accel", "tcg", "-m", "1536" if record["profile"] == "ai" else "512", "-smp", "2" if record["profile"] == "ai" else "1",
+    command = ["/usr/bin/qemu-system-x86_64", "-machine", "q35", "-accel", accelerator, "-m", "1536" if record["profile"] == "ai" else "512", "-smp", "2" if record["profile"] == "ai" else "1",
                "-nodefaults", "-nic", "none", "-display", "none", "-monitor", "none", "-qmp", f"unix:{qmp_path},server=on,wait=off", "-serial", "stdio", "-no-reboot",
                "-drive", f"file=/proc/self/fd/{system_fd},if=none,id=system,format=raw,readonly=on",
                "-device", "virtio-blk-pci,drive=system,serial=homenode-system",
@@ -359,7 +380,8 @@ def boot_vm(system_fd, data_fd, output, record):
         shutdown_evidence["qemuExitCode"] = 0
         shutdown_evidence["readOnlyFilesystemCheck"] = True
         result = {"schema": 1, "profile": record["profile"], "imageSHA256": record["sha256"],
-                  "tcgBootAndObjectRoundTrip": True, "objectTransfer": object_evidence,
+                  "accelerator": accelerator, "tcgBootAndObjectRoundTrip": accelerator == "tcg",
+                  "kvmBootAndObjectRoundTrip": accelerator == "kvm", "objectTransfer": object_evidence,
                   "videoPresets": video_evidence, "videoCancellation": cancellation, "aiInference": ai_evidence, "shutdown": shutdown_evidence, "releaseQualified": False}
         with (output / "boot-evidence.json").open("x") as file:
             json.dump(result, file, indent=2)

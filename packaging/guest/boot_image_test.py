@@ -1,14 +1,53 @@
 import base64
 import hashlib
 import json
+import os
 import socket
+import stat
 import struct
 import sys
 import threading
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 sys.dont_write_bytecode = True
 import boot_image
+
+
+class AcceleratorAdmissionTests(unittest.TestCase):
+    def test_tcg_does_not_access_host_kvm(self):
+        with patch.dict(os.environ, {}, clear=True), patch.object(boot_image.os, "open") as opened:
+            self.assertEqual(boot_image.development_boot_accelerator(), "tcg")
+            opened.assert_not_called()
+
+    def test_unknown_accelerator_refused_before_device_access(self):
+        for value in ("", "auto", "kvm:tcg", "KVM"):
+            with self.subTest(value=value), patch.dict(os.environ, {"HOMENODE_GUEST_BOOT_ACCELERATOR": value}), patch.object(boot_image.os, "open") as opened:
+                with self.assertRaises(ValueError):
+                    boot_image.development_boot_accelerator()
+                opened.assert_not_called()
+
+    def test_kvm_requires_device_identity_and_api_without_fallback(self):
+        for mode, device, api in ((stat.S_IFCHR | 0o660, os.makedev(10, 232), 12),
+                                  (stat.S_IFREG | 0o660, os.makedev(10, 232), 12),
+                                  (stat.S_IFCHR | 0o660, os.makedev(10, 231), 12),
+                                  (stat.S_IFCHR | 0o660, os.makedev(10, 232), 11)):
+            with self.subTest(mode=mode, device=device, api=api), patch.dict(os.environ, {"HOMENODE_GUEST_BOOT_ACCELERATOR": "kvm"}), \
+                 patch.object(boot_image.os, "open", return_value=77), \
+                 patch.object(boot_image.os, "fstat", return_value=SimpleNamespace(st_mode=mode, st_rdev=device)), \
+                 patch.object(boot_image.fcntl, "ioctl", return_value=api), \
+                 patch.object(boot_image.os, "close") as closed:
+                if mode == stat.S_IFCHR | 0o660 and device == os.makedev(10, 232) and api == 12:
+                    self.assertEqual(boot_image.development_boot_accelerator(), "kvm")
+                else:
+                    with self.assertRaises(ValueError):
+                        boot_image.development_boot_accelerator()
+                closed.assert_called_once_with(77)
+
+    def test_denied_kvm_access_is_not_emulation_success(self):
+        with patch.dict(os.environ, {"HOMENODE_GUEST_BOOT_ACCELERATOR": "kvm"}), patch.object(boot_image.os, "open", side_effect=PermissionError):
+            with self.assertRaises(PermissionError):
+                boot_image.development_boot_accelerator()
 
 
 class BootProtocolTests(unittest.TestCase):
