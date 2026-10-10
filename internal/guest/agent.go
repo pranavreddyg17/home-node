@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -213,25 +212,34 @@ func (a *Agent) Handle(r guestproto.Request) guestproto.Response {
 	return response
 }
 func (a *Agent) used() (int64, error) {
-	entries, err := fs.ReadDir(a.root.FS(), ".")
+	directory, err := a.root.Open(".")
 	if err != nil {
 		return 0, err
 	}
+	defer directory.Close()
 	var used int64
-	for _, entry := range entries {
-		info, err := entry.Info()
-		if err != nil {
+	for {
+		entries, err := directory.ReadDir(128)
+		if err != nil && !errors.Is(err, io.EOF) {
 			return 0, err
 		}
-		if !info.Mode().IsRegular() {
-			return 0, errors.New("unexpected data entry")
+		for _, entry := range entries {
+			info, err := entry.Info()
+			if err != nil {
+				return 0, err
+			}
+			if !privateObjectFile(info) {
+				return 0, errors.New("unexpected data entry")
+			}
+			if info.Size() > a.quota-used {
+				return a.quota + 1, errQuota
+			}
+			used += info.Size()
 		}
-		used += info.Size()
-		if used > a.quota {
-			return used, errQuota
+		if errors.Is(err, io.EOF) {
+			return used, nil
 		}
 	}
-	return used, nil
 }
 func checksum(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
 func (a *Agent) upload(r guestproto.Request) (int64, error) {

@@ -1,6 +1,8 @@
 package guest
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +11,28 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/state"
 	"golang.org/x/sys/unix"
 )
+
+func TestQuotaAccountingIncludesEntriesBeyondDirectoryBatch(t *testing.T) {
+	directory := privateDataDir(t)
+	a, err := New(directory, "files", 1<<30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	content := bytes.Repeat([]byte("x"), 1024)
+	for index := 0; index < 150; index++ {
+		if err := os.WriteFile(filepath.Join(directory, state.Random()+".blob"), content, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if used, err := a.used(); err != nil || used != 150*1024 {
+		t.Fatal("quota scan omitted stored entries", used, err)
+	}
+	a.quota = 150*1024 - 1
+	if _, err := a.used(); !errors.Is(err, errQuota) {
+		t.Fatal("quota excess across directory batches admitted", err)
+	}
+}
 
 func TestObjectRequestsRefuseUnsafeEntriesWithoutReplacingEvidence(t *testing.T) {
 	for _, kind := range []string{"symlink", "hardlink", "writable", "directory", "fifo"} {
