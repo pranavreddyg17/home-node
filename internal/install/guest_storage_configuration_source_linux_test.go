@@ -108,7 +108,19 @@ func TestRootGuestStorageConfigurationSourcesRetainBothFiles(t *testing.T) {
 	e := openEngine(t, host, journalDir)
 	defer e.Close()
 	guard := func(ctx context.Context) error { return ctx.Err() }
-	if err := e.commitGuestStorageConfigurationIntent(ctx, installed, source, env, plan, guard); err != nil {
+	if err := os.WriteFile(envPath, []byte("foreign environment\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.prepareGuestStorageConfigurationIntent(ctx, installed, plan, guard); !errors.Is(err, ErrConflict) {
+		t.Fatal("foreign installed bytes admitted", err)
+	}
+	if _, err := e.journalRoot.Lstat("guest-storage-configuration-intent.json"); !os.IsNotExist(err) {
+		t.Fatal("rejected source produced transition authority", err)
+	}
+	if err := os.WriteFile(envPath, env, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.prepareGuestStorageConfigurationIntent(ctx, installed, plan, guard); err != nil {
 		t.Fatal(err)
 	}
 	consume := func(_ context.Context, _ guestStorageConfigurationIntent, _ *os.File, _ *os.File, check func() error) error {
