@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -112,6 +113,67 @@ func TestUploadDownloadTrashRestore(t *testing.T) {
 	items, err := s.Files(ctx)
 	if err != nil || len(items) != 1 || items[0].Name != "renamed.txt" {
 		t.Fatalf("wrong files %+v %v", items, err)
+	}
+}
+
+// Reopened byte-store and real controller journal, not a hypervisor/power-loss
+// qualification. The guest prefix models an interrupted write before the reply.
+func TestUploadRecoversGuestPrefixAheadOfControllerJournal(t *testing.T) {
+	for _, scenario := range []string{"matching", "conflicting"} {
+		t.Run(scenario, func(t *testing.T) {
+			s, backend, device := service(t)
+			ctx := context.Background()
+			startFiles(t, s, device)
+			data := []byte("whole chunk retried after an interrupted guest write")
+			transfer, err := s.CreateTransfer(ctx, device, "resume.txt", int64(len(data)), sum(data))
+			if err != nil {
+				t.Fatal(err)
+			}
+			directory := filepath.Join(t.TempDir(), "data")
+			agent, err := guest.New(directory, "files", 16<<30)
+			if err != nil {
+				t.Fatal(err)
+			}
+			prefix := data[:7]
+			if scenario == "conflicting" {
+				prefix = []byte("foreign")
+			}
+			part := filepath.Join(directory, transfer.ID+".part")
+			if err := os.WriteFile(part, prefix, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := agent.Close(); err != nil {
+				t.Fatal(err)
+			}
+			backend.agent, err = guest.New(directory, "files", 16<<30)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer backend.agent.Close()
+			resumed, err := s.Upload(ctx, device, transfer.ID, 0, data, sum(data))
+			if scenario == "conflicting" {
+				if err == nil {
+					t.Fatal("conflicting guest prefix accepted")
+				}
+				current, readErr := s.Transfer(ctx, device, transfer.ID)
+				actual, fileErr := os.ReadFile(part)
+				if readErr != nil || current.Offset != 0 || fileErr != nil || string(actual) != string(prefix) {
+					t.Fatal("refusal changed controller or guest evidence", current, readErr, fileErr)
+				}
+				return
+			}
+			if err != nil || resumed.Offset != int64(len(data)) {
+				t.Fatal("guest prefix reconciliation failed", resumed, err)
+			}
+			file, err := s.Finalize(ctx, device, transfer.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			actual, err := s.Download(ctx, file.ID, 0)
+			if err != nil || string(actual) != string(data) {
+				t.Fatal("reconciled object differs", err)
+			}
+		})
 	}
 }
 func TestAppIntentDeduplicatesAndConflicts(t *testing.T) {
