@@ -8,8 +8,11 @@ on:
       - 'internal/guestmount/**'
       - 'internal/guestinit/**'
       - 'internal/supervisor/**'
+      - 'internal/transfer/**'
+      - 'internal/runtimeclient/**'
       - 'packaging/systemd/reserved_manager_fixture.py'
       - 'cmd/homenode-guest*/**'
+      - 'cmd/homenode-transfer/**'
       - 'go.mod'
       - 'go.sum'
       - '.github/workflows/guest-images.yml'
@@ -81,6 +84,8 @@ jobs:
           if test -c /dev/kvm; then
             go test -c -o "$RUNNER_TEMP/supervisor-memory.test" ./internal/supervisor
             sudo install -D -m 0755 "$RUNNER_TEMP/supervisor-memory.test" /usr/lib/homenode-fixtures/supervisor.test
+            go build -o "$RUNNER_TEMP/homenode-transfer" ./cmd/homenode-transfer
+            sudo install -D -m 0755 "$RUNNER_TEMP/homenode-transfer" /usr/lib/homenode-fixtures/homenode-transfer
             sudo systemctl start libvirtd
             sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 HOMENODE_FILES_MANAGER_INTEGRATION=1 python3 -B packaging/systemd/reserved_manager_fixture.py "$(command -v go)" "$RUNNER_TEMP/assembly/files/artifacts/homenode-development-files.raw" "$RUNNER_TEMP/assembly/files/artifacts/development-build.json"
           else
