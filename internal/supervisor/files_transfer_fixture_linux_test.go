@@ -17,7 +17,7 @@ import (
 
 // This uses the shipped transfer binary, a real Manager HTTP handler, and
 // native peer credentials. It does not qualify installed systemd or user TLS.
-func roundTripNativeFilesTransfer(t *testing.T, ctx context.Context, base, script, instanceID string, m *Manager, gid int) {
+func startNativeFilesTransfer(t *testing.T, ctx context.Context, base, script, instanceID string, m *Manager, gid int) (func(), func()) {
 	t.Helper()
 	binary := "/usr/lib/homenode-fixtures/homenode-transfer"
 	info, err := os.Lstat(binary)
@@ -33,7 +33,12 @@ func roundTripNativeFilesTransfer(t *testing.T, ctx context.Context, base, scrip
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer listener.Close()
+	retained := false
+	defer func() {
+		if !retained {
+			_ = listener.Close()
+		}
+	}()
 	if err := os.Chown(runtimeSocket, 0, gid); err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +47,11 @@ func roundTripNativeFilesTransfer(t *testing.T, ctx context.Context, base, scrip
 	}
 	server := &http.Server{Handler: m.Handler(), ConnContext: PeerContext,
 		ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 95 * time.Second, MaxHeaderBytes: 8192}
-	defer server.Close()
+	defer func() {
+		if !retained {
+			_ = server.Close()
+		}
+	}()
 	go func() { _ = server.Serve(listener) }()
 	directory := filepath.Join(base, "transfer-runtime")
 	if err := os.Mkdir(directory, 0700); err != nil {
@@ -68,31 +77,44 @@ func roundTripNativeFilesTransfer(t *testing.T, ctx context.Context, base, scrip
 		cancel()
 		t.Fatal("native transfer launch", err)
 	}
-	defer func() {
+	stop := func() {
 		cancel()
 		_ = command.Wait() // Cancellation kills/reaps this direct fixture child.
 		if output := diagnostics.String(); output != "" {
 			t.Log("native transfer process diagnostics", output)
 		}
+	}
+	defer func() {
+		if !retained {
+			stop()
+		}
 	}()
 	client := filepath.Join(filepath.Dir(script), "manager_transfer.py")
-	for _, scenario := range []struct {
-		uid  uint32
-		mode string
-	}{{3, "deny"}, {2, "runtime-deny"}, {1, "allow"}} {
-		endpoint := transferSocket
-		if scenario.mode == "runtime-deny" {
-			endpoint = runtimeSocket
+	exercise := func() {
+		for _, scenario := range []struct {
+			uid  uint32
+			mode string
+		}{{3, "deny"}, {2, "runtime-deny"}, {1, "allow"}} {
+			endpoint := transferSocket
+			if scenario.mode == "runtime-deny" {
+				endpoint = runtimeSocket
+			}
+			clientCommand := exec.CommandContext(ctx, "/usr/bin/python3", "-B", client, endpoint, instanceID, scenario.mode)
+			clientCommand.Dir = filepath.Dir(client)
+			clientCommand.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "HOMENODE_FILES_MANAGER_INTEGRATION=1"}
+			clientCommand.WaitDelay = time.Second
+			clientCommand.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: scenario.uid, Gid: uint32(gid), Groups: []uint32{}}}
+			output, err := clientCommand.CombinedOutput()
+			if err != nil || string(output) != "development transfer "+scenario.mode+" passed\n" {
+				t.Fatalf("native transfer %s: %v: %s", scenario.mode, err, output)
+			}
 		}
-		clientCommand := exec.CommandContext(ctx, "/usr/bin/python3", "-B", client, endpoint, instanceID, scenario.mode)
-		clientCommand.Dir = filepath.Dir(client)
-		clientCommand.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "HOMENODE_FILES_MANAGER_INTEGRATION=1"}
-		clientCommand.WaitDelay = time.Second
-		clientCommand.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: scenario.uid, Gid: uint32(gid), Groups: []uint32{}}}
-		output, err := clientCommand.CombinedOutput()
-		if err != nil || string(output) != "development transfer "+scenario.mode+" passed\n" {
-			t.Fatalf("native transfer %s: %v: %s", scenario.mode, err, output)
-		}
+		t.Log("actual unprivileged transfer binary round trip, foreign controller UID refusal and transfer UID runtime-stop refusal passed")
 	}
-	t.Log("actual unprivileged transfer binary round trip, foreign controller UID refusal and transfer UID runtime-stop refusal passed")
+	retained = true
+	return exercise, func() {
+		stop()
+		_ = server.Close()
+		_ = listener.Close()
+	}
 }

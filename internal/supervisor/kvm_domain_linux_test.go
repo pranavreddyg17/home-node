@@ -572,6 +572,7 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 			t.Errorf("native manager teardown: %v", err)
 		}
 	}()
+	var exerciseTransfer func()
 	for attempt := int64(0); attempt < 2; attempt++ {
 		r.OperationID, r.Revision = state.Random(), attempt*2+1
 		instance, err := m.Apply(ctx, r)
@@ -590,8 +591,11 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 			}
 			roundTripNativeFilesChannel(t, ctx, clientScript, channel, backend.TransferGID, r.InstanceID, attempt)
 			if attempt == 0 {
-				roundTripNativeFilesTransfer(t, ctx, base, clientScript, r.InstanceID, m, backend.TransferGID)
+				var stopTransfer func()
+				exerciseTransfer, stopTransfer = startNativeFilesTransfer(t, ctx, base, clientScript, r.InstanceID, m, backend.TransferGID)
+				defer stopTransfer()
 			}
+			exerciseTransfer()
 		}
 		stop := r
 		stop.Action, stop.OperationID, stop.Revision = "stop", state.Random(), r.Revision+1
