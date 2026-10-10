@@ -74,13 +74,13 @@ func stageNativeFilesImage(t *testing.T, ctx context.Context, directory string, 
 	return catalog.Image{ID: "files", SHA256: digest, Bytes: size, Protocol: 1, MemoryMiB: 512, VCPUs: 1, DataBytes: catalog.GiB, Version: "development", License: "Development fixture; release license inventory unqualified"}
 }
 
-func roundTripNativeFilesChannel(t *testing.T, ctx context.Context, channel string, transferGID int) {
+func roundTripNativeFilesChannel(t *testing.T, ctx context.Context, channel string, transferGID int, objectID string, attempt int64) {
 	t.Helper()
 	script, err := filepath.Abs("../../packaging/guest/manager_channel.py")
 	if err != nil || transferGID < 1 || transferGID > 1<<31-1 {
 		t.Fatal("invalid native Files client authority", err)
 	}
-	cmd := exec.CommandContext(ctx, "/usr/bin/python3", "-B", script, channel)
+	cmd := exec.CommandContext(ctx, "/usr/bin/python3", "-B", script, channel, objectID, strconv.FormatInt(attempt, 10))
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOMENODE_FILES_MANAGER_INTEGRATION=1"}
 	cmd.WaitDelay = time.Second
 	// UID 2 is the fixture's transfer UID; primary group grants channel traversal.

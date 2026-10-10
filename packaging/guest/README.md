@@ -426,7 +426,9 @@ The Go fixture copies the image through a retained source descriptor into an
 exclusive fixture-owned file, verifies its digest and size, and assigns the
 protected image group/mode. It then exercises reserved manager start, audit,
 admitted channel lookup, a 1,048,579-byte object round trip with acknowledged
-chunk replay, stop, and identity-retaining restart. `manager_channel.py` runs as
+chunk replay, stop, and identity-retaining restart. A separate finalized object
+remains on the first boot's data disk; the second boot must return its exact
+contents, offset and digest before deletion is acknowledged. `manager_channel.py` runs as
 the fixture transfer UID 2 with only the channel-access primary group, without
 root or supplementary KVM access. Readiness and protocol frames are bounded.
 
