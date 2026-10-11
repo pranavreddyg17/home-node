@@ -122,3 +122,13 @@ Retained source-scan evidence also identifies the checked Git revision. Go sourc
 reports include exact go.mod/go.sum hashes and the scanner's reported version;
 frontend reports include the revision beside the lock hash and tool versions.
 These context files aid review and do not cryptographically authenticate reports.
+
+Native configuration removal at `6f44d45` passed in
+[CI 38169216485](https://github.com/pranavreddyg17/home-node/actions/runs/38169216485).
+The [bounded evidence record](evidence/configuration-removal-6f44d45.json) identifies
+the source, native job and saved log hash. Public configuration removal and final
+manager retirement retain the activation marker inode and independently pinned
+app/backup data. Systemd's implicit fragmentless slice state is admitted only
+when inactive, job-free and without drop-ins. This fixture uses legacy runtime
+units; it does not qualify the distinct HTTPS gateway runtime, TLS permission
+retirement, package/other identity removal, export, purge or complete uninstall.

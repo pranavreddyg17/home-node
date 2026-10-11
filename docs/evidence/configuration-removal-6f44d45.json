@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "sourceRevision": "6f44d45fc523d28a574bc7ce5220fb0c2f3d09cf",
+  "workflowRun": 38169216485,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38169216485",
+  "jobID": 114558077861,
+  "jobConclusion": "success",
+  "logSHA256": "b88b031edb79cb8ac4a1e09eac9cba133720f33191817471681ad42e8676cc4b",
+  "environment": "Disposable Ubuntu native systemd CI; fixture-owned installed configuration and retained-data sentinels",
+  "tests": [
+    "TestInstalledAccountInspection",
+    "TestRootGatewayTLSRetirementAdmissionPinsContentsAndRejectsHardlinks"
+  ],
+  "qualifiedScope": [
+    "Public PrepareConfigurationRemoval and RemoveConfiguration execute against native systemd and generated installed legacy runtime units",
+    "Repeated public removal preserves durable completed intent and retained-data sentinels",
+    "RetireConfigurationUnits executes native daemon-reload and verifies fragment-free inactive job-free units, including the implicit loaded slice state",
+    "Ready removal and retirement replay preserve the original activation marker inode",
+    "Independently pinned fixture-owned app and backup data retain inode, contents and permissions through removal",
+    "Root temporary TLS admission retains bounded hashed single-link key/certificate descriptors and refuses changed contents or key hardlinks"
+  ],
+  "limitations": [
+    "Configuration removal fixture uses legacy controller units; native distinct gateway/controller HTTPS process execution is not qualified",
+    "TLS admission test is artifact-only; it does not execute permission retirement, installation provenance publication or the production TLS retirement entry point",
+    "No package removal, controller/transfer/backup identity retirement, data export or destructive purge is qualified",
+    "No release publisher trust, physical tailnet devices, physical restart/power-loss or complete end-to-end application lifecycle qualification"
+  ],
+  "releaseQualified": false
+}
