@@ -11,8 +11,10 @@ import (
 )
 
 type gatewayRemovalIntent struct {
-	Version int                       `json:"version"`
-	Plan    GatewayAccountRemovalPlan `json:"plan"`
+	Completed int                       `json:"completed,omitempty"`
+	Ready     bool                      `json:"ready,omitempty"`
+	Version   int                       `json:"version"`
+	Plan      GatewayAccountRemovalPlan `json:"plan"`
 }
 
 // PrepareGatewayAccountRemoval persists intent only. It does not stop services,
@@ -59,4 +61,38 @@ func (e *Engine) prepareGatewayAccountRemoval(ctx context.Context, b gatewayProv
 		return empty, err
 	}
 	return plan, nil
+}
+
+func (e *Engine) loadGatewayRemovalIntent(base accountJournal) (gatewayRemovalIntent, error) {
+	var intent gatewayRemovalIntent
+	if !base.Ready {
+		return intent, ErrConflict
+	}
+	source, err := e.loadGatewayAccountJournal(base)
+	if err != nil || !source.Ready {
+		return intent, ErrConflict
+	}
+	file, err := e.journalRoot.OpenFile("gateway-account-removal.json", os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return intent, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !accountJournalFileAdmitted(info, e.owner, 16384) {
+		return intent, ErrConflict
+	}
+	data, err := io.ReadAll(io.LimitReader(file, 16385))
+	if err != nil || len(data) > 16384 || json.Unmarshal(data, &intent) != nil || !e.accountJournalPathUnchanged("gateway-account-removal.json", info, 16384) {
+		return intent, ErrConflict
+	}
+	if intent.Version != 1 || intent.Completed < 0 || intent.Completed > 4 || (intent.Ready && intent.Completed != 4) || intent.Plan.OwnerID != source.Plan.OwnerID || intent.Plan.Identity != source.Plan.Identity {
+		return intent, ErrConflict
+	}
+	expected := intent
+	expected.Plan = gatewayRemovalPlan(source.Plan.OwnerID, source.Plan.Identity)
+	canonical, err := json.Marshal(expected)
+	if err != nil || !bytes.Equal(data, canonical) {
+		return intent, ErrConflict
+	}
+	return expected, nil
 }

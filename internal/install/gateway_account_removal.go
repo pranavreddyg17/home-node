@@ -49,10 +49,13 @@ func (e *Engine) planGatewayAccountRemovalLocked(ctx context.Context, b gatewayP
 	if err := ctx.Err(); err != nil {
 		return empty, err
 	}
-	return GatewayAccountRemovalPlan{OwnerID: base.OwnerID, Identity: *identity, Commands: []AccountCommand{
+	return gatewayRemovalPlan(base.OwnerID, *identity), nil
+}
+func gatewayRemovalPlan(owner string, identity GatewayAccount) GatewayAccountRemovalPlan {
+	return GatewayAccountRemovalPlan{OwnerID: owner, Identity: identity, Commands: []AccountCommand{
 		{Program: "/usr/bin/gpasswd", Arguments: []string{"--delete", "homenode", "homenode-proxy"}},
 		{Program: "/usr/sbin/userdel", Arguments: []string{"homenode-gateway"}},
 		{Program: "/usr/sbin/groupdel", Arguments: []string{"homenode-proxy"}},
 		{Program: "/usr/sbin/groupdel", Arguments: []string{"homenode-gateway"}},
-	}, Pending: []string{"retain installed activation exclusion and verify gateway/controller dormancy", "journal removal intent and reconcile every command acknowledgement", "remove only owned service configuration while retaining workload and backup data", "qualify native removal and interrupted recovery before executing this plan"}}, nil
+	}, Pending: []string{"retain installed activation exclusion and verify gateway/controller dormancy", "journal removal intent and reconcile every command acknowledgement", "remove only owned service configuration while retaining workload and backup data", "qualify native removal and interrupted recovery before executing this plan"}}
 }
