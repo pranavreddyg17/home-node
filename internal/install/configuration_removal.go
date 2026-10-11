@@ -45,7 +45,6 @@ func (e *Engine) planConfigurationRemovalLocked(ctx context.Context) (Configurat
 	if installed.Phase != "installed" {
 		return empty, ErrConflict
 	}
-	plan := ConfigurationRemovalPlan{InstallationID: installed.ID, InstallationDigest: installed.Digest, Files: []ConfigurationRemovalFile{}, RetainedPaths: []string{}}
 	for _, item := range installed.Items {
 		if err := ctx.Err(); err != nil {
 			return empty, err
@@ -53,6 +52,17 @@ func (e *Engine) planConfigurationRemovalLocked(ctx context.Context) (Configurat
 		if err := e.matches(item); err != nil {
 			return empty, err
 		}
+	}
+	return configurationRemovalPlanFor(installed)
+}
+
+func configurationRemovalPlanFor(installed journal) (ConfigurationRemovalPlan, error) {
+	var empty ConfigurationRemovalPlan
+	if installed.Phase != "installed" {
+		return empty, ErrConflict
+	}
+	plan := ConfigurationRemovalPlan{InstallationID: installed.ID, InstallationDigest: installed.Digest, Files: []ConfigurationRemovalFile{}, RetainedPaths: []string{}}
+	for _, item := range installed.Items {
 		// Existing paths are not adopted by installer removal. Neither directories
 		// nor catalog/data files under var/lib are deleted by ordinary uninstall.
 		if item.State == "existing" || item.Directory || !strings.HasPrefix(item.Path, "etc/") {

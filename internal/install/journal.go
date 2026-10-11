@@ -163,7 +163,7 @@ func (e *Engine) save(j journal) error {
 	return e.saveJournalBytes("install", data)
 }
 func (e *Engine) saveJournalBytes(name string, data []byte) error {
-	if name != "install" && name != "accounts" && name != "images" && name != "maintenance-accounts" && name != "gateway-accounts" && name != "gateway-account-removal" {
+	if name != "install" && name != "accounts" && name != "images" && name != "maintenance-accounts" && name != "gateway-accounts" && name != "gateway-account-removal" && name != "configuration-removal" {
 		return ErrPlan
 	}
 	next, final := name+".next", name+".json"
