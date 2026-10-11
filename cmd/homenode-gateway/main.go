@@ -80,7 +80,7 @@ func main() {
 	if *controllerUID > 1<<31-1 || *bridgeGID > 1<<31-1 || installedIdentity(uint32(*controllerUID), uint32(*bridgeGID)) != nil {
 		fatal(errors.New("gateway requires its dedicated Linux identity and proxy-only group membership"))
 	}
-	source, err := networkcheck.NewCertificateSource(networkcheck.Config{Bind: *bind, Port: *port, Origin: *origin}, *certificate, *privateKey)
+	source, err := networkcheck.NewGatewayCertificateSource(networkcheck.Config{Bind: *bind, Port: *port, Origin: *origin}, *certificate, *privateKey, uint32(os.Getegid()))
 	if err != nil {
 		fatal(err)
 	}

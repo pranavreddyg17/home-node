@@ -19,7 +19,20 @@ type CertificateSource struct {
 }
 
 func NewCertificateSource(c Config, certPath, keyPath string) (*CertificateSource, error) {
-	s := &CertificateSource{load: func() (tls.Certificate, error) { return Inspect(c, certPath, keyPath) }, now: time.Now}
+	return newCertificateSource(c, certPath, keyPath, nil)
+}
+
+// NewGatewayCertificateSource also pins key access to the gateway's private
+// group. A bridge-group key could otherwise expose it to the controller.
+func NewGatewayCertificateSource(c Config, certPath, keyPath string, gatewayGID uint32) (*CertificateSource, error) {
+	if gatewayGID == 0 {
+		return nil, ErrIdentity
+	}
+	return newCertificateSource(c, certPath, keyPath, &gatewayGID)
+}
+
+func newCertificateSource(c Config, certPath, keyPath string, group *uint32) (*CertificateSource, error) {
+	s := &CertificateSource{load: func() (tls.Certificate, error) { return inspectWithKeyGroup(c, certPath, keyPath, group) }, now: time.Now}
 	if _, err := s.GetCertificate(nil); err != nil {
 		return nil, err
 	}

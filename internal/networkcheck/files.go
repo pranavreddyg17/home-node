@@ -12,6 +12,10 @@ import (
 // Read protected files by descriptor and reject final symlinks, unsafe modes,
 // oversized PEMs and path replacement between observation and opening.
 func protectedPEM(path string, private bool) ([]byte, error) {
+	return protectedPEMWithGroup(path, private, nil)
+}
+
+func protectedPEMWithGroup(path string, private bool, group *uint32) ([]byte, error) {
 	before, err := os.Lstat(path)
 	if err != nil || !before.Mode().IsRegular() {
 		return nil, fmt.Errorf("TLS identity file is unavailable or not regular: %w", ErrIdentity)
@@ -28,6 +32,9 @@ func protectedPEM(path string, private bool) ([]byte, error) {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok || stat.Uid != 0 || stat.Nlink != 1 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || info.Mode().Perm()&0111 != 0 || (private && info.Mode().Perm() != 0600 && info.Mode().Perm() != 0640) {
 		return nil, fmt.Errorf("TLS key needs root ownership and no access for other users: %w", ErrIdentity)
+	}
+	if group != nil && (stat.Gid != *group || info.Mode().Perm() != 0640) {
+		return nil, fmt.Errorf("TLS key must belong only to the dedicated gateway group: %w", ErrIdentity)
 	}
 	if err := protectedPEMACL(file); err != nil {
 		return nil, ErrIdentity
@@ -65,6 +72,10 @@ func tlsFileUnchanged(before, after os.FileInfo) bool {
 }
 
 func Inspect(c Config, certPath, keyPath string) (tls.Certificate, error) {
+	return inspectWithKeyGroup(c, certPath, keyPath, nil)
+}
+
+func inspectWithKeyGroup(c Config, certPath, keyPath string, group *uint32) (tls.Certificate, error) {
 	if err := inspectTailnet(c); err != nil {
 		return tls.Certificate{}, err
 	}
@@ -72,7 +83,7 @@ func Inspect(c Config, certPath, keyPath string) (tls.Certificate, error) {
 	if err != nil {
 		return tls.Certificate{}, err
 	}
-	key, err := protectedPEM(keyPath, true)
+	key, err := protectedPEMWithGroup(keyPath, true, group)
 	if err != nil {
 		return tls.Certificate{}, err
 	}

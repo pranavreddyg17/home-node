@@ -148,6 +148,15 @@ func TestRootTLSFileAdmission(t *testing.T) {
 			t.Fatal("protected key refused", mode, err)
 		}
 	}
+
+	group := uint32(os.Getegid())
+	wrongGroup := group ^ 1
+	if _, err := protectedPEMWithGroup(path, true, &group); err != nil {
+		t.Fatal("gateway group refused", err)
+	}
+	if _, err := protectedPEMWithGroup(path, true, &wrongGroup); err == nil {
+		t.Fatal("foreign key group admitted")
+	}
 	for _, mode := range []os.FileMode{0644, 0400, 0610, 0660, 0600 | os.ModeSetuid, 0600 | os.ModeSetgid, 0600 | os.ModeSticky} {
 		if err := os.Chmod(path, mode); err != nil {
 			t.Fatal(err)
