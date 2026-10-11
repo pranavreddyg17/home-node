@@ -178,12 +178,29 @@ func TestRootGatewayTLSRetirementResumesEveryPermissionAcknowledgement(t *testin
 				t.Fatal("published ready replay", err)
 			}
 			reopened.Close()
+
+			retainedTLS, verifyTLS, err := e.retainRetiredGatewayTLSLocked(ctx, installed, identity)
+			if err != nil {
+				t.Fatal("account removal TLS guard", err)
+			}
+			defer retainedTLS.Close()
+			if err := verifyTLS(); err != nil {
+				t.Fatal(err)
+			}
 			// Identical contents at the same name cannot replace the recorded inode.
 			if err := e.host.Rename(key, key+".retained-original"); err != nil {
 				t.Fatal(err)
 			}
 			if err := e.host.WriteFile(key, []byte("retained key fixture"), 0600); err != nil {
 				t.Fatal(err)
+			}
+
+			if err := verifyTLS(); err == nil {
+				t.Fatal("account removal retained replacement TLS inode")
+			}
+			if replacement, _, err := e.retainRetiredGatewayTLSLocked(ctx, installed, identity); err == nil {
+				replacement.Close()
+				t.Fatal("account removal adopted replacement TLS inode")
 			}
 			if replaced, err := e.reopenGatewayTLSRetirementLocked(ctx, source); err == nil {
 				replaced.Close()

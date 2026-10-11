@@ -4,6 +4,7 @@ package install
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"time"
@@ -13,7 +14,7 @@ import (
 // block and removes only its journaled gateway identity. Configuration, workload
 // data, backups and the activation block remain retained. This is one uninstall
 // phase, not a completed installation removal or an activation-ready state.
-func (e *Engine) RemoveGatewayAccount(ctx context.Context) error {
+func (e *Engine) RemoveGatewayAccount(ctx context.Context) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -43,6 +44,12 @@ func (e *Engine) RemoveGatewayAccount(ctx context.Context) error {
 	if len(gatewayRemovalIdentityReferences(installed, intent.Plan.Identity)) != 0 {
 		return ErrConflict
 	}
+
+	tls, verifyTLS, err := e.retainRetiredGatewayTLSLocked(ctx, installed, intent.Plan.Identity)
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, tls.Close()) }()
 	quiesced := false
 	observe := func(ctx context.Context) error {
 		if !quiesced {
@@ -64,6 +71,16 @@ func (e *Engine) RemoveGatewayAccount(ctx context.Context) error {
 	// vacant-destination predicate would incorrectly reject their retained data.
 	retainedData := func(ctx context.Context) error { return ctx.Err() }
 	return e.withRecoveryExclusionGuardedLocked(ctx, observe, retainedData, func(ctx context.Context, guard func(context.Context) error) error {
-		return e.removeGatewayAccountLocked(ctx, nativeGatewayProvisioner{}, guard)
+
+		combined := func(ctx context.Context) error {
+			if err := guard(ctx); err != nil {
+				return err
+			}
+			if err := verifyTLS(); err != nil {
+				return err
+			}
+			return guard(ctx)
+		}
+		return e.removeGatewayAccountLocked(ctx, nativeGatewayProvisioner{}, combined)
 	})
 }

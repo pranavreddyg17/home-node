@@ -363,8 +363,10 @@ homenode gateway-accounts-removal-prepare --journal-dir /var/lib/homenode-instal
 homenode gateway-accounts-removal-apply --journal-dir /var/lib/homenode-install
 ```
 
-Apply requires the existing installed gateway configuration and recovery
-activation block. It stops the owned services, verifies dormancy and empty guest
+Apply requires the existing installed gateway configuration, recovery
+activation block, and completed published TLS ownership retirement. It pins
+the retired TLS inodes and rechecks their contents, ownership and permissions
+around every account command. It stops the owned services, verifies dormancy and empty guest
 cgroups, and retains the block and installation authority around each account
 command. It removes controller proxy membership, the gateway user, and its two
 groups. Exact ownership and NSS vacancy checks govern retries, including Linux
