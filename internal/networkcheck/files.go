@@ -37,7 +37,7 @@ func protectedPEM(path string, private bool) ([]byte, error) {
 		return nil, ErrIdentity
 	}
 	after, err := file.Stat()
-	if err != nil || !os.SameFile(info, after) || info.Size() != after.Size() || info.Mode() != after.Mode() || !info.ModTime().Equal(after.ModTime()) {
+	if err != nil || !tlsFileUnchanged(info, after) {
 		return nil, ErrIdentity
 	}
 	afterStat, ok := after.Sys().(*syscall.Stat_t)
@@ -48,7 +48,20 @@ func protectedPEM(path string, private bool) ([]byte, error) {
 	if err := protectedPEMACL(file); err != nil {
 		return nil, ErrIdentity
 	}
+	final, err := file.Stat()
+	if err != nil || !tlsFileUnchanged(info, final) {
+		return nil, ErrIdentity
+	}
 	return data, nil
+}
+
+func tlsFileUnchanged(before, after os.FileInfo) bool {
+	if !os.SameFile(before, after) || before.Size() != after.Size() || before.Mode() != after.Mode() || !before.ModTime().Equal(after.ModTime()) {
+		return false
+	}
+	a, aOK := before.Sys().(*syscall.Stat_t)
+	b, bOK := after.Sys().(*syscall.Stat_t)
+	return aOK && bOK && a.Uid == b.Uid && a.Gid == b.Gid && a.Nlink == b.Nlink && tlsChangeTimeUnchanged(a, b)
 }
 
 func Inspect(c Config, certPath, keyPath string) (tls.Certificate, error) {

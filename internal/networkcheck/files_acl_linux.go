@@ -3,6 +3,7 @@ package networkcheck
 import (
 	"errors"
 	"os"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 )
@@ -15,4 +16,8 @@ func protectedPEMACL(file *os.File) error {
 		return ErrIdentity
 	}
 	return nil
+}
+
+func tlsChangeTimeUnchanged(before, after *syscall.Stat_t) bool {
+	return before.Ctim == after.Ctim
 }

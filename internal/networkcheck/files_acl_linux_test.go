@@ -5,9 +5,43 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
+
+func TestTLSDetectsRestoredMetadataAfterMutation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "identity")
+	if err := os.WriteFile(path, []byte("original"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate equal-length replacement followed by restoring the visible
+	// modification timestamp. Linux change time must still invalidate it.
+	time.Sleep(time.Millisecond)
+	if err := os.WriteFile(path, []byte("modified"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, before.ModTime(), before.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime()) {
+		t.Fatal("fixture did not restore visible metadata")
+	}
+	if tlsFileUnchanged(before, after) {
+		t.Fatal("mutated file admitted with restored timestamp")
+	}
+	if !tlsFileUnchanged(after, after) {
+		t.Fatal("unchanged observation refused")
+	}
+}
 
 func TestRootTLSRejectsNamedReaderACL(t *testing.T) {
 	if os.Geteuid() != 0 {
