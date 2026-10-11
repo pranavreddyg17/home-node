@@ -57,6 +57,29 @@ func TestGatewayTLSRetirementIntentPinsCanonicalSourceAndProgress(t *testing.T) 
 			t.Fatal("foreign source identity admitted")
 		}
 	}
+
+	// A candidate plan cannot validate itself by merely matching the source
+	// argument: fixed operations and source metadata must still be canonical.
+	for _, mutate := range []func(*GatewayTLSRetirementPlan){
+		func(p *GatewayTLSRetirementPlan) { p.Changes[0].AfterMode = 0644 },
+		func(p *GatewayTLSRetirementPlan) { p.Changes[1].AfterGID = p.Identity.GID },
+		func(p *GatewayTLSRetirementPlan) { p.Key.Path = "etc/shadow" },
+		func(p *GatewayTLSRetirementPlan) { p.Identity.ProxyGID = p.Identity.GID },
+		func(p *GatewayTLSRetirementPlan) { p.InstallationID = "invalid" },
+	} {
+		var bad gatewayTLSRetirementIntent
+		if err := json.Unmarshal(data, &bad); err != nil {
+			t.Fatal(err)
+		}
+		mutate(&bad.Plan)
+		encoded, err := json.Marshal(bad)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := decodeGatewayTLSRetirementIntent(encoded, bad.Plan); err == nil {
+			t.Fatal("self-matching foreign TLS operation admitted")
+		}
+	}
 	if _, err := decodeGatewayTLSRetirementIntent(make([]byte, gatewayTLSRetirementJournalLimit+1), plan); err == nil {
 		t.Fatal("unbounded intent admitted")
 	}
