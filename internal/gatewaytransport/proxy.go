@@ -160,6 +160,25 @@ func (w *deadlineWriter) WriteHeader(status int) {
 	w.ResponseWriter.WriteHeader(status)
 }
 func (w *deadlineWriter) Write(data []byte) (int, error) {
-	_ = http.NewResponseController(w.ResponseWriter).SetWriteDeadline(time.Now().Add(15 * time.Second))
+	if err := w.refreshDeadline(); err != nil {
+		return 0, err
+	}
 	return w.ResponseWriter.Write(data)
+}
+
+func (w *deadlineWriter) refreshDeadline() error {
+	err := http.NewResponseController(w.ResponseWriter).SetWriteDeadline(time.Now().Add(15 * time.Second))
+	// Recorders and development adapters may not expose deadlines. Native HTTP
+	// connections do; an actual deadline failure must stop output.
+	if errors.Is(err, http.ErrNotSupported) {
+		return nil
+	}
+	return err
+}
+
+func (w *deadlineWriter) FlushError() error {
+	if err := w.refreshDeadline(); err != nil {
+		return err
+	}
+	return http.NewResponseController(w.ResponseWriter).Flush()
 }
