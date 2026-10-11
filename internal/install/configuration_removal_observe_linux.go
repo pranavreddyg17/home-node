@@ -5,6 +5,7 @@ package install
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -71,7 +72,7 @@ func (e *Engine) observeConfigurationRemovalManagerStateWith(ctx context.Context
 		}
 		for _, name := range intent.Plan.RetainedPaths {
 			if err := e.matches(records[name]); err != nil {
-				return err
+				return fmt.Errorf("uninstall retained path %s: %w", name, err)
 			}
 		}
 		for index, file := range intent.Plan.Files {
@@ -99,7 +100,7 @@ func (e *Engine) observeConfigurationRemovalManagerStateWith(ctx context.Context
 					return ErrConflict
 				}
 				if err := e.matches(records[file.Path]); err != nil {
-					return err
+					return fmt.Errorf("uninstall source path %s: %w", file.Path, err)
 				}
 			}
 			if strings.HasPrefix(file.Path, "etc/systemd/system/") {
@@ -141,24 +142,52 @@ func (e *Engine) observeConfigurationRemovalManagerStateWith(ctx context.Context
 		}
 		if retired {
 			if err := validateRemovalRetiredUnit(output.Bytes(), unit); err != nil {
-				return err
+				return removalManagerRejection(output.Bytes(), unit, err)
 			}
 		} else if mustBeDormant {
 			if err := validateRemovalDormantUnit(output.Bytes(), unit, missing[unit]); err != nil {
-				return err
+				return removalManagerRejection(output.Bytes(), unit, err)
 			}
 		} else if err := validateRemovalLoadedUnit(output.Bytes(), unit); err != nil {
-			return err
+			return removalManagerRejection(output.Bytes(), unit, err)
 		}
 		// Loaded application units must still carry the retained marker condition.
 		// A genuinely not-found unit was admitted above and has no activation path.
 		loaded := strings.Contains("\n"+string(output.Bytes())+"\n", "\nLoadState=loaded\n")
 		if loaded && unit != "homenode-inspect.service" && unit != "homenode.slice" {
 			if err := observeActivationConditionsForUnitsWith(bounded, command, []string{unit}); err != nil {
-				return err
+				return fmt.Errorf("uninstall activation condition %s: %w", unit, err)
 			}
 		}
 
 	}
 	return verify()
+}
+
+// Only bounded manager enum/PID fields are included; fragment paths, file
+// contents, environments and TLS material are never included in this diagnostic.
+func removalManagerRejection(data []byte, unit string, cause error) error {
+	fields := map[string]string{}
+	for _, line := range strings.Split(string(data), "\n") {
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "LoadState", "ActiveState", "SubState", "NeedDaemonReload", "MainPID", "ControlPID":
+		default:
+			continue
+		}
+		if len(value) > 32 {
+			value = "invalid"
+		}
+		for _, r := range value {
+			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') {
+				value = "invalid"
+				break
+			}
+		}
+		fields[key] = value
+	}
+	return fmt.Errorf("uninstall manager %s rejected (load=%s active=%s sub=%s reload=%s main=%s control=%s): %w", unit, fields["LoadState"], fields["ActiveState"], fields["SubState"], fields["NeedDaemonReload"], fields["MainPID"], fields["ControlPID"], cause)
 }

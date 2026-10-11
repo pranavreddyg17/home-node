@@ -4,6 +4,7 @@ package install
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"time"
@@ -61,7 +62,7 @@ func (e *Engine) RemoveConfiguration(ctx context.Context) error {
 			}
 		}
 		if err := stopConfigurationRemovalUnitsWith(ctx, exec.CommandContext, stopPlan, guard, observeConfigurationRemovalGuestsEmpty); err != nil {
-			return err
+			return fmt.Errorf("configuration removal shutdown: %w", err)
 		}
 		stopped = true
 		if err := guard(ctx); err != nil {
