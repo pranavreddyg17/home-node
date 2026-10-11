@@ -52,6 +52,33 @@ func TestRootGatewayTLSRetirementAdmissionPinsContentsAndRejectsHardlinks(t *tes
 			t.Fatal("artifact-only intent preparation", err)
 		}
 	}
+
+	if phase, err := e.observeGatewayTLSRetirementLocked(context.Background(), a, intent); err != nil || phase != 0 {
+		t.Fatal("initial TLS phase", phase, err)
+	}
+	if err := a.files[0].Chmod(0600); err != nil {
+		t.Fatal(err)
+	}
+	if phase, err := e.observeGatewayTLSRetirementLocked(context.Background(), a, intent); err != nil || phase != 1 {
+		t.Fatal("lost permission acknowledgement", phase, err)
+	}
+	intent.Completed = 1
+	if phase, err := e.observeGatewayTLSRetirementLocked(context.Background(), a, intent); err != nil || phase != 1 {
+		t.Fatal("acknowledged permission phase", phase, err)
+	}
+	if err := a.files[0].Chown(0, 805); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.observeGatewayTLSRetirementLocked(context.Background(), a, intent); err == nil {
+		t.Fatal("foreign TLS group admitted")
+	}
+	if err := a.files[0].Chown(0, identity.GID); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.files[0].Chmod(0640); err != nil {
+		t.Fatal(err)
+	}
+	intent.Completed = 0
 	data, err := e.readGatewayTLSRetirementIntent()
 	if err != nil {
 		t.Fatal(err)
