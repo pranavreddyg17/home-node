@@ -328,6 +328,30 @@ key. Recovery and storage/identity migrations include the installed gateway in
 activation, stop and dormancy checks. Complete uninstall and native distinct-identity
 systemd/HTTPS qualification remain incomplete.
 
+### Retained TLS ownership retirement
+
+Before releasing the installed gateway's numeric identities, retire TLS
+ownership while preserving its key and certificate:
+
+```sh
+homenode gateway-tls-retire --journal-dir /var/lib/homenode-install
+```
+
+This Linux root operation requires the existing activation block and the owned,
+ready gateway identity. It stops the application services and verifies dormancy
+and guest emptiness. A private journal records the exact TLS hashes and inode
+identities. The key becomes root:root 0600, the certificate root:root 0644, and
+the TLS directory root:root 0700. Each permission change is synced and checked
+before acknowledgement. Interrupted execution reopens only the recorded inodes;
+a same-content replacement is refused. The installation record then changes
+only the TLS directory ownership and mode, with source provenance retained for
+retries. The block, TLS contents, app data and backups remain retained.
+
+Output reports `tlsOwnershipRetired: true` and `installationRemoved: false`.
+Gateway account deletion is a separate phase. Native qualification of the TLS
+mutation and production entry point remains pending; this command is not a
+complete uninstall or a usable post-retirement installation.
+
 ### Retained gateway removal phase
 
 The Linux root CLI exposes a read-only plan, a durable intent, and guarded
@@ -379,7 +403,8 @@ successful apply, while `installationRemoved`, `packageRemoved`,
 `serviceIdentitiesRemoved`, and `managerReloaded` remain false. The activation
 block stays in place. Final manager reload, package removal, retained-data export,
 and identity retirement still need a qualified complete uninstall workflow.
-Native installed execution of this new configuration phase remains pending.
+Native public configuration removal and final manager retirement passed in
+CI 38169216485 at 6f44d45; HTTPS gateway runtime was outside that fixture.
 
 After successful configuration deletion, the root CLI can reload systemd and
 verify final retirement of the journaled units:
@@ -390,11 +415,12 @@ homenode configuration-removal-retire --journal-dir /var/lib/homenode-install
 
 Retirement requires a ready removal journal and retains the same activation
 marker. It verifies dormant intermediate manager state, executes a bounded
-`daemon-reload`, then requires every removed unit to be `not-found`, inactive,
+`daemon-reload`, then requires removed services and sockets to be `not-found`, inactive,
 without a job, fragment or drop-ins. Successful output reports `managerReloaded`
 and `unitsRetired` as true. Package and identity retirement are still separate;
 this phase does not report a complete uninstall. Native installed qualification
-of this new retirement phase remains pending.
+passed in CI 38169216485 at 6f44d45. An absent slice can be synthesized as
+`loaded` by systemd; it must have no fragment, drop-ins, job or active state.
 
 Gateway identity removal refuses an installed path whose owner or group still
 references the gateway UID, private GID or bridge GID. In particular, gateway
