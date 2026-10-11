@@ -16,11 +16,13 @@ are not complete. These checks must not be presented as full onboarding success.
    TCP port. Check both an allowed device and a device that must be denied. A
    local interface check cannot establish whether a remote device is authorized.
 4. Provision the TLS directory as root-owned and traversable only by the
-   controller group (`root:homenode`, mode `0750`). Install `server.crt` as
-   root-owned `0644`, and `server.key` as `root:homenode` `0640`. The transfer
-   identity must not belong to the controller group. Avoid symlinked TLS files.
+   dedicated gateway group (`root:homenode-gateway`, mode `0750`). Install `server.crt` as
+   root-owned `0644`, and `server.key` as `root:homenode-gateway` `0640`.
+   The controller and transfer identities must not belong to the gateway group.
+   Use single-link regular files without extended POSIX ACLs; avoid symlinked
+   TLS files.
 5. Use an unprivileged port such as 8787 and include it in the exact HTTPS origin.
-   Run the read-only identity check before starting the controller:
+   Run the read-only identity check before starting the gateway:
 
 ```sh
 sudo homenode network-check \
@@ -37,8 +39,11 @@ reported host DNS name and assigned IPv4 address to match the configuration,
 that address on an active local interface, a matching
 certificate/key, a trusted server-auth certificate chain, current validity,
 matching DNS name and matching listener/origin ports. It never transmits the key
-or emits its contents. Production `serve` runs the same checks before opening
-its listener or management database. Failure does not fall back to HTTP.
+or emits its contents. The installed `homenode-gateway` runs the same checks before opening its
+HTTPS listener and authenticates the private controller socket using kernel
+peer credentials. The controller listens only on that Unix socket and cannot
+read the gateway key. Legacy direct HTTPS `serve` also checks the identity.
+Failure does not fall back to HTTP.
 
 `identityValid` proves only those checks. Output explicitly reports that tailnet
 policy and phone reachability are not verified. From the intended phone, verify
@@ -54,7 +59,7 @@ before it; production startup warns when fewer than 14 days remain.
 
 Stage the renewed certificate/key in the protected directory, validate their
 pair and permissions, and replace each final regular file by atomic rename.
-The controller revalidates protected files at most once a minute when a new TLS
+The gateway revalidates protected files at most once a minute when a new TLS
 handshake arrives. Incomplete, mismatched, untrusted or expired replacements
 reject new handshakes; the old identity is not used as fallback after a failed
 reload. Repair the pair to recover. Existing TLS connections are not terminated

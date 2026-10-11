@@ -77,6 +77,13 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	identity, err := source.GetCertificate(nil)
+	if err != nil {
+		fatal(err)
+	}
+	if time.Until(identity.Leaf.NotAfter) < 14*24*time.Hour {
+		slog.Warn("HTTPS certificate expires within 14 days; renew it from the local console", "expires", identity.Leaf.NotAfter)
+	}
 	config := gatewaytransport.Config{Origin: *origin, Socket: *socket, ControllerUID: uint32(*controllerUID), AccessGID: uint32(*bridgeGID)}
 	proxy, closeProxy, err := gatewaytransport.NewProxy(config)
 	if err != nil {
