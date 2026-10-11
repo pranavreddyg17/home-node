@@ -380,3 +380,18 @@ successful apply, while `installationRemoved`, `packageRemoved`,
 block stays in place. Final manager reload, package removal, retained-data export,
 and identity retirement still need a qualified complete uninstall workflow.
 Native installed execution of this new configuration phase remains pending.
+
+After successful configuration deletion, the root CLI can reload systemd and
+verify final retirement of the journaled units:
+
+```sh
+homenode configuration-removal-retire --journal-dir /var/lib/homenode-install
+```
+
+Retirement requires a ready removal journal and retains the same activation
+marker. It verifies dormant intermediate manager state, executes a bounded
+`daemon-reload`, then requires every removed unit to be `not-found`, inactive,
+without a job, fragment or drop-ins. Successful output reports `managerReloaded`
+and `unitsRetired` as true. Package and identity retirement are still separate;
+this phase does not report a complete uninstall. Native installed qualification
+of this new retirement phase remains pending.

@@ -8,7 +8,7 @@ import (
 )
 
 func TestConfigurationRemovalRejectsInputsBeforeHostEffects(t *testing.T) {
-	for _, mode := range []string{"plan", "prepare", "apply"} {
+	for _, mode := range []string{"plan", "prepare", "apply", "retire"} {
 		for _, args := range [][]string{{"--journal-dir", ""}, {"extra"}, {"--purge"}, {"--journal-dir"}} {
 			var out bytes.Buffer
 			if err := runConfigurationRemoval(context.Background(), args, mode, &out); err == nil || out.Len() != 0 {

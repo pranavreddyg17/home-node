@@ -22,7 +22,7 @@ func configurationRemoval(args []string, mode string) {
 }
 
 func runConfigurationRemoval(ctx context.Context, args []string, mode string, out io.Writer) error {
-	if mode != "plan" && mode != "prepare" && mode != "apply" {
+	if mode != "plan" && mode != "prepare" && mode != "apply" && mode != "retire" {
 		return install.ErrPlan
 	}
 	flags := flag.NewFlagSet("configuration-removal-"+mode, flag.ContinueOnError)
@@ -52,12 +52,14 @@ func runConfigurationRemoval(ctx context.Context, args []string, mode string, ou
 		plan, err = engine.PrepareConfigurationRemoval(ctx)
 	case "apply":
 		err = engine.RemoveConfiguration(ctx)
+	case "retire":
+		err = engine.RetireConfigurationUnits(ctx)
 	}
 	if err = errors.Join(err, engine.Close()); err != nil {
 		return err
 	}
-	result := map[string]any{"phase": mode, "configurationRemoved": mode == "apply", "packageRemoved": false, "serviceIdentitiesRemoved": false, "managerReloaded": false, "removalIntentCommitted": mode != "plan", "installationRemoved": false, "servicesActivated": false, "applicationDataDeleted": false, "backupDataDeleted": false}
-	if mode == "apply" {
+	result := map[string]any{"phase": mode, "configurationRemoved": mode == "apply" || mode == "retire", "packageRemoved": false, "serviceIdentitiesRemoved": false, "managerReloaded": mode == "retire", "unitsRetired": mode == "retire", "removalIntentCommitted": mode != "plan", "installationRemoved": false, "servicesActivated": false, "applicationDataDeleted": false, "backupDataDeleted": false}
+	if mode == "apply" || mode == "retire" {
 		result["activationBlockRetained"] = true
 		result["servicesDormant"] = true
 	} else {

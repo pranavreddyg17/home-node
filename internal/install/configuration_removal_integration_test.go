@@ -57,6 +57,12 @@ func qualifyNativeConfigurationRemoval(t *testing.T, e *Engine, ctx context.Cont
 	if err := e.RemoveConfiguration(ctx); err != nil {
 		t.Fatal("native configuration removal readiness replay", err)
 	}
+	if err := e.RetireConfigurationUnits(ctx); err != nil {
+		t.Fatal("native configuration unit retirement", err)
+	}
+	if err := e.RetireConfigurationUnits(ctx); err != nil {
+		t.Fatal("native configuration unit retirement replay", err)
+	}
 	after, err := e.journalRoot.Lstat("recovery-blocked")
 	if err != nil || !os.SameFile(marker, after) {
 		t.Fatal("native removal released or replaced activation", err)
@@ -89,5 +95,5 @@ func qualifyNativeConfigurationRemoval(t *testing.T, e *Engine, ctx context.Cont
 			t.Fatal(err)
 		}
 	}
-	t.Log("native public configuration removal, dormant unit transitions, retained activation, app/backup data and ready replay passed; HTTPS gateway runtime unqualified")
+	t.Log("native public configuration removal, dormant unit transitions, retained activation, app/backup data, ready replay and final manager retirement passed; HTTPS gateway runtime unqualified")
 }
