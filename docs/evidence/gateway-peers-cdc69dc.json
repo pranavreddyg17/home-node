@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "sourceRevision": "cdc69dc177850b3b570aebe65162973b6674ab6c",
+  "workflowRun": 38172192186,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38172192186",
+  "jobID": 114566935866,
+  "jobConclusion": "success",
+  "logSHA256": "616443dd4024047ed545065230f3583da1e6bcbceb2e4a7d46a652f4ee5e1c90",
+  "environment": "Disposable Ubuntu Linux root fixture; forked test executable with controller UID 991, gateway UID 992, foreign client UID 994 and bridge GID 993",
+  "tests": [
+    "TestRootDistinctControllerGatewayPeers",
+    "TestRootTLSFileAdmission"
+  ],
+  "qualifiedScope": [
+    "Production fixed Unix proxy and controller handler admit a distinct gateway kernel UID and mediate trusted HTTPS context with client forwarding assertions removed",
+    "Foreign client UID is refused with HTTP 403 despite bridge-group socket access",
+    "Proxy refuses HTTP 503 when socket ownership labels name UID 990 but actual serving process remains UID 991",
+    "Root-owned temporary TLS files admit key modes 0600/0640 and refuse unsafe modes, special bits, hard links and empty content"
+  ],
+  "limitations": [
+    "Forked test executable and minimal HTTP controller are used; installed gateway/controller binaries, systemd confinement and NSS identities are not qualified",
+    "TLS connection state is a request fixture; no actual HTTPS handshake, issued certificate, Tailscale device policy or passkey workflow is qualified",
+    "Later ACL, change-time, directory and private-key group checks are absent from this source and need their own native run",
+    "No physical device, load or complete application qualification"
+  ],
+  "releaseQualified": false
+}
