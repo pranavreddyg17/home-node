@@ -103,6 +103,17 @@ func TestRootDistinctControllerGatewayPeers(t *testing.T) {
 			t.Fatalf("%s kernel peer fixture: %v (%s)", entry.role, err, data)
 		}
 	}
+	// Filesystem labels alone cannot authenticate the serving process. Give the
+	// socket an expected foreign owner while the actual listener remains UID 991.
+	if err := os.Chown(directory, 0, 993); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(socket, 990, 993); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := child("foreign-controller", 992, 993).CombinedOutput(); err != nil {
+		t.Fatalf("foreign serving kernel peer accepted: %v (%s)", err, data)
+	}
 }
 
 // Executed only in children selected by the parent fixture. The controller is
@@ -144,16 +155,20 @@ func TestNativeGatewayPeerChild(t *testing.T) {
 	}
 	uid := 992
 	want := 200
+	controllerUID := uint32(991)
 	if role == "foreign" {
 		uid = 994
 		want = 403
+	} else if role == "foreign-controller" {
+		controllerUID = 990
+		want = 503
 	} else if role != "gateway" {
 		t.Fatal("unknown child role")
 	}
 	if os.Geteuid() != uid {
 		t.Fatal("client kernel identity")
 	}
-	proxy, closeProxy, err := NewProxy(Config{Origin: "https://home.example.test:8787", Socket: socket, ControllerUID: 991, AccessGID: 993})
+	proxy, closeProxy, err := NewProxy(Config{Origin: "https://home.example.test:8787", Socket: socket, ControllerUID: controllerUID, AccessGID: 993})
 	if err != nil {
 		t.Fatal(err)
 	}
