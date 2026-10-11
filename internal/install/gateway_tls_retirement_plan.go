@@ -36,6 +36,18 @@ func gatewayTLSRetirementPlan(installed journal, identity GatewayAccount, key, c
 			return empty, ErrConflict
 		}
 	}
+
+	for _, value := range []struct {
+		text   string
+		length int
+	}{{installed.ID, 32}, {installed.Digest, 64}} {
+		if len(value.text) != value.length {
+			return empty, ErrConflict
+		}
+		if _, err := hex.DecodeString(value.text); err != nil {
+			return empty, ErrConflict
+		}
+	}
 	references := gatewayRemovalIdentityReferences(installed, identity)
 	if len(references) != 1 || references[0] != "etc/homenode/tls" {
 		return empty, ErrConflict

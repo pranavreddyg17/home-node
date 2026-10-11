@@ -27,6 +27,21 @@ func TestGatewayTLSRetirementOrdersRootOnlyPermissionsBeforeGroupRelease(t *test
 			t.Fatal("foreign TLS source admitted", bad)
 		}
 	}
+
+	for _, malformed := range []string{"", strings.Repeat("z", 32), strings.Repeat("a", 31)} {
+		bad := installed
+		bad.ID = malformed
+		if _, err := gatewayTLSRetirementPlan(bad, identity, key, cert); err == nil {
+			t.Fatal("malformed installation identity admitted")
+		}
+	}
+	for _, malformed := range []string{"", strings.Repeat("z", 64), strings.Repeat("a", 63)} {
+		bad := installed
+		bad.Digest = malformed
+		if _, err := gatewayTLSRetirementPlan(bad, identity, key, cert); err == nil {
+			t.Fatal("malformed installation digest admitted")
+		}
+	}
 	installed.Items = append(installed.Items, record{Path: "var/lib/homenode/control", UID: 803, GID: 800})
 	if _, err := gatewayTLSRetirementPlan(installed, identity, key, cert); err == nil {
 		t.Fatal("unhandled retained identity reference admitted")

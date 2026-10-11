@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strconv"
 	"testing"
 )
 
@@ -13,8 +14,10 @@ func TestRootGatewayTLSRetirementResumesEveryPermissionAcknowledgement(t *testin
 	if os.Geteuid() != 0 {
 		t.Skip("root-only temporary filesystem fixture")
 	}
-	for stop := 1; stop <= 5; stop++ {
-		t.Run(string(rune('0'+stop)), func(t *testing.T) {
+	for trial := 1; trial <= 10; trial++ {
+		stop := (trial-1)%5 + 1
+		loseGuard := trial > 5
+		t.Run(strconv.Itoa(trial), func(t *testing.T) {
 			host, jr := roots(t)
 			e := openEngine(t, host, jr)
 			defer e.Close()
@@ -51,13 +54,23 @@ func TestRootGatewayTLSRetirementResumesEveryPermissionAcknowledgement(t *testin
 			}
 			// This fixture proves permission/journal behavior only. Production must supply
 			// the separately verified live manager, identity and activation barrier guard.
-			guard := func() error { return nil }
-			interrupted := errors.New("lost TLS permission acknowledgement")
+			interrupted := errors.New("lost TLS permission acknowledgement or authority")
+			authority := true
+			guard := func() error {
+				if !authority {
+					return interrupted
+				}
+				return nil
+			}
 			count := 0
 			e.checkpoint = func(stage, name string) error {
 				if stage == "gateway-tls-retired" {
 					count++
 					if count == stop {
+						if loseGuard {
+							authority = false
+							return nil
+						}
 						return interrupted
 					}
 				}
@@ -75,6 +88,10 @@ func TestRootGatewayTLSRetirementResumesEveryPermissionAcknowledgement(t *testin
 				t.Fatal(partial, err)
 			}
 
+			if phase, err := e.observeGatewayTLSRetirementLocked(ctx, a, partial); err != nil || phase != stop {
+				t.Fatal("unexpected additional permission mutation", phase, err)
+			}
+			authority = true
 			source := a.Plan
 			if err := a.Close(); err != nil {
 				t.Fatal(err)
