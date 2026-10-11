@@ -42,3 +42,36 @@ func TestConfigurationRemovalManagerAdmitsOnlyOwnedDormantTransition(t *testing.
 		t.Fatal("recovery admitted pending reload")
 	}
 }
+
+func TestConfigurationRemovalManagerCoversInspectionSocketsAndSlice(t *testing.T) {
+	for _, unit := range []string{"homenode-app-maintenance.socket", "homenode-backup-credential.socket", "homenode-inspect.service", "homenode.slice"} {
+		observation := "Id=" + unit + "\nFragmentPath=/etc/systemd/system/" + unit + "\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\nJob=\nLoadState=loaded\nActiveState=inactive\nSubState=dead\n"
+		if strings.HasSuffix(unit, ".service") {
+			observation += "MainPID=0\nControlPID=0\n"
+		}
+		if err := validateRemovalDormantUnit([]byte(observation), unit, false); err != nil {
+			t.Fatal(unit, err)
+		}
+		if err := validateRemovalDormantUnit([]byte(strings.Replace(observation, "ActiveState=inactive", "ActiveState=active", 1)), unit, false); err == nil {
+			t.Fatal("active uninstall dependency admitted", unit)
+		}
+	}
+}
+
+func TestConfigurationRemovalUnitsOrderAndExactAllowlist(t *testing.T) {
+	plan := ConfigurationRemovalPlan{Files: []ConfigurationRemovalFile{
+		{Path: "etc/systemd/system/homenode.slice"},
+		{Path: "etc/homenode/services.env"},
+		{Path: "etc/systemd/system/homenode-inspect.service"},
+		{Path: "etc/systemd/system/homenode-app-maintenance.socket"},
+		{Path: "etc/systemd/system/homenode-gateway.service"},
+	}}
+	units, err := configurationRemovalUnits(plan)
+	if err != nil || strings.Join(units, ",") != "homenode-app-maintenance.socket,homenode-gateway.service,homenode-inspect.service,homenode.slice" {
+		t.Fatal(units, err)
+	}
+	plan.Files = append(plan.Files, ConfigurationRemovalFile{Path: "etc/systemd/system/foreign.service"})
+	if _, err := configurationRemovalUnits(plan); err == nil {
+		t.Fatal("foreign manager operation selected")
+	}
+}

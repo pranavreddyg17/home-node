@@ -1,20 +1,19 @@
 package install
 
+import "strings"
+
 // validateRemovalDormantUnit admits only the owned uninstall transition. Missing
 // is supplied from canonical intent and filesystem observation, never from the
 // manager response alone. Ordinary recovery continues requiring loaded units
 // with no pending reload.
 func validateRemovalDormantUnit(data []byte, unit string, missing bool) error {
 	switch unit {
-	case "homenode-gateway.service", "homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket":
+	case "homenode-gateway.service", "homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket", "homenode-app-maintenance.socket", "homenode-inspect.service", "homenode.slice":
 	default:
 		return ErrPlan
 	}
-	if !missing {
-		return validateRecoveryDormantUnit(data, unit)
-	}
 	common := map[string]string{"Job": "", "Id": unit, "DropInPaths": "", "Transient": "no", "ActiveState": "inactive", "SubState": "dead", "MainPID": "0", "ControlPID": "0"}
-	if unit == "homenode-backup-credential.socket" {
+	if !strings.HasSuffix(unit, ".service") {
 		delete(common, "MainPID")
 		delete(common, "ControlPID")
 	}
@@ -22,11 +21,18 @@ func validateRemovalDormantUnit(data []byte, unit string, missing bool) error {
 	// until daemon-reload. Its path must remain exactly the owned unit path.
 	common["LoadState"] = "loaded"
 	common["FragmentPath"] = "/etc/systemd/system/" + unit
-	for _, reload := range []string{"yes", "no"} {
+	reloadStates := []string{"no"}
+	if missing {
+		reloadStates = append(reloadStates, "yes")
+	}
+	for _, reload := range reloadStates {
 		common["NeedDaemonReload"] = reload
 		if validateRecoveryProperties(data, common) == nil {
 			return nil
 		}
+	}
+	if !missing {
+		return ErrConflict
 	}
 	// After reload (or manager collection), only a genuinely absent, inactive
 	// unit is accepted. A masked/failed/generated/aliased unit is not absence.
@@ -34,4 +40,31 @@ func validateRemovalDormantUnit(data []byte, unit string, missing bool) error {
 	common["FragmentPath"] = ""
 	common["NeedDaemonReload"] = "no"
 	return validateRecoveryProperties(data, common)
+}
+
+// configurationRemovalUnits includes every installed unit, not merely runtime
+// services. Sockets precede services and the resource slice is stopped last.
+func configurationRemovalUnits(plan ConfigurationRemovalPlan) ([]string, error) {
+	selected := map[string]bool{}
+	for _, file := range plan.Files {
+		if strings.HasPrefix(file.Path, "etc/systemd/system/") {
+			name := strings.TrimPrefix(file.Path, "etc/systemd/system/")
+			if !files[file.Path] || selected[name] {
+				return nil, ErrPlan
+			}
+			selected[name] = true
+		}
+	}
+	order := []string{"homenode-app-maintenance.socket", "homenode-backup-credential.socket", "homenode-gateway.service", "homenode-control.service", "homenode-transfer.service", "homenode-backup.service", "homenode-supervisor.service", "homenode-inspect.service", "homenode.slice"}
+	units := []string{}
+	for _, name := range order {
+		if selected[name] {
+			units = append(units, name)
+			delete(selected, name)
+		}
+	}
+	if len(selected) != 0 {
+		return nil, ErrPlan
+	}
+	return units, nil
 }
