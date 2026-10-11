@@ -4,9 +4,11 @@ package install
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -14,7 +16,7 @@ import (
 
 // Install real generated units, using the fixture's provisioned account IDs.
 // Catalog payloads are test data; no workload is launched or image qualified.
-func installAccountFixtureConfiguration(t *testing.T, e *Engine, accounts Accounts, maintenance MaintenanceAccount) {
+func installAccountFixtureConfiguration(t *testing.T, e *Engine, accounts Accounts, maintenance MaintenanceAccount, gateway ...*GatewayAccount) {
 	t.Helper()
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_ACCOUNT_INSPECTION_INTEGRATION") != "1" || e.host.Name() != "/" {
 		t.Fatal("native installation fixture requires disposable Linux root")
@@ -26,6 +28,21 @@ func installAccountFixtureConfiguration(t *testing.T, e *Engine, accounts Accoun
 	c, _, _, now := configurationFixture(t)
 	c.Accounts = accounts
 	c.Policy.ControllerUID, c.Policy.TransferUID = accounts.ControllerUID, accounts.TransferUID
+
+	if len(gateway) > 1 {
+		t.Fatal("fixture accepts one owned gateway")
+	}
+	if len(gateway) == 1 {
+		base, err := e.loadAccountJournal()
+		if err != nil || gateway[0] == nil {
+			t.Fatal("fixture requires ready owned gateway", err)
+		}
+		owned, err := e.observeGatewayAccountWith(ctx, base, nativeGatewayProvisioner{})
+		if err != nil || owned == nil || *owned != *gateway[0] {
+			t.Fatal("fixture gateway provenance", err)
+		}
+		c.Gateway = owned
+	}
 	c.Maintenance = &maintenance
 	c.BackupRepositoryID = strings.Repeat("a", 64)
 	c.BackupRelease, c.BackupDriveUUID = "0.1.0", "abcd-1234"
@@ -58,10 +75,30 @@ func installAccountFixtureConfiguration(t *testing.T, e *Engine, accounts Accoun
 		}
 		defer cleanup.Close()
 		current, err := cleanup.load()
-		if err != nil || current.ID != installed.ID || current.Digest != installed.Digest {
+
+		if err != nil || current.ID != installed.ID {
 			t.Error("native installation authority changed; preserving state", err)
 			return
 		}
+		if current.Digest != installed.Digest {
+			data, err := cleanup.readGatewayTLSRetirementIntent()
+			var candidate gatewayTLSRetirementIntent
+			if err != nil || json.Unmarshal(data, &candidate) != nil {
+				t.Error("native TLS transition cleanup provenance", err)
+				return
+			}
+			intent, err := decodeGatewayTLSRetirementIntent(data, candidate.Plan)
+			if err != nil {
+				t.Error("native TLS cleanup intent", err)
+				return
+			}
+			source, err := gatewayTLSSourceInstallation(current, intent)
+			if err != nil || !reflect.DeepEqual(source, installed) {
+				t.Error("unrelated installation transition; preserving state", err)
+				return
+			}
+		}
+
 		if _, err := cleanup.journalRoot.Lstat("guest-identity-nss-stage.json"); !os.IsNotExist(err) {
 			t.Error("NSS restoration incomplete; preserving configuration and marker", err)
 			return
