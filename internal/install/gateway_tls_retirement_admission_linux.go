@@ -14,12 +14,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-type TLSRetirementInode struct {
-	Path   string `json:"path"`
-	Device uint64 `json:"device"`
-	Inode  uint64 `json:"inode"`
-	Size   int64  `json:"size"`
-}
 type gatewayTLSAdmission struct {
 	Plan    GatewayTLSRetirementPlan
 	Sources []TLSRetirementInode
