@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "sourceRevision": "c1eec84e9b209f2e66396038d9088f6646d731b5",
+  "workflowRun": 38170427669,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38170427669",
+  "jobID": 114561701751,
+  "jobConclusion": "success",
+  "logSHA256": "6d8019190261aee41b5bbc221b622b01a92232de9b001be261969671f2c80b5f",
+  "environment": "Disposable Ubuntu Linux root tests using protected temporary installation roots; fixture TLS contents and synthetic service IDs",
+  "tests": [
+    "TestRootGatewayTLSRetirementResumesEveryPermissionAcknowledgement",
+    "TestRootGatewayTLSRetirementAdmissionPinsContentsAndRejectsHardlinks"
+  ],
+  "qualifiedScope": [
+    "Five retained-inode TLS permission changes execute with fsync and private canonical journal acknowledgements",
+    "Every permission step recovers from a lost acknowledgement after closing and reopening the engine and retained descriptors",
+    "Every permission step refuses acknowledgement after the supplied authority guard is revoked; retry does not replay the completed permission mutation",
+    "Root-only TLS directory ownership is published into the installation record and replayed after an interrupted publication acknowledgement",
+    "The original installation provenance is reconstructed from the exact published successor; unrelated metadata changes are refused",
+    "Removal TLS guard checks reject widened key or directory permissions and same-content replacement inodes",
+    "Artifact admission rejects changed retained key contents and hardlinks"
+  ],
+  "limitations": [
+    "Authority guard in these temporary-root fixtures is synthetic; no native systemd dormancy, guest cgroup, NSS or activation barrier authority is qualified by these tests",
+    "No positive production RetireGatewayTLS API or packaged retirement CLI execution is qualified in this revision",
+    "No installed gateway identity removal following TLS retirement or real HTTPS gateway startup is qualified",
+    "Fixture key and certificate are bounded test data, not issued trusted certificates",
+    "No physical power loss, data export, package/other identity removal or complete uninstall qualification"
+  ],
+  "releaseQualified": false
+}
