@@ -27,7 +27,8 @@ export function Apps({ session, verify }: { session: Session; verify: () => Prom
   useEffect(() => {
     if (!operation || !['pending', 'executing'].includes(operation.state)) return
     let active = true
-    const timer = setInterval(() => { void api<Operation>(`/operations/${operation.id}`).then(op => { if (active) { setOperation(op); void refresh().catch(e => setError(message(e))) } }).catch(e => { if (active) setError(message(e)) }) }, 1000)
+    let polling = false
+    const timer = setInterval(() => { if (polling) return; polling = true; void api<Operation>(`/operations/${operation.id}`).then(async op => { if (active) { setOperation(op); await refresh() } }).catch(e => { if (active) setError(message(e)) }).finally(() => { polling = false }) }, 1000)
     return () => { active = false; clearInterval(timer) }
   }, [operation?.id, operation?.state])
   const run = async (name: string, command: string) => { setBusy(true); setError(''); try { setOperation(await approvedAction<Operation>(`/apps/${name}/actions`, { action: command }, { 'Idempotency-Key': crypto.randomUUID() })); await refresh() } catch (e) { setError(message(e)) } finally { setBusy(false) } }
@@ -134,11 +135,12 @@ export function AI({ verify }: { verify: () => Promise<void> }) {
   useEffect(() => {
     if (!pendingDeletion) return
     let current = true
-    const timer = setInterval(() => { void api<Conversation[]>('/ai/conversations').then(items => {
+    let polling = false
+    const timer = setInterval(() => { if (polling) return; polling = true; void api<Conversation[]>('/ai/conversations').then(items => {
       if (!current) return
       setConversations(items)
       setSelected(id => id && !items.some(c => c.id === id) ? '' : id)
-    }).catch(e => { if (current) setError(message(e)) }) }, 2000)
+    }).catch(e => { if (current) setError(message(e)) }).finally(() => { polling = false }) }, 2000)
     return () => { current = false; clearInterval(timer) }
   }, [pendingDeletion])
   useEffect(() => { void refresh().catch(e => setError(message(e))) }, [])
@@ -150,7 +152,8 @@ export function AI({ verify }: { verify: () => Promise<void> }) {
   useEffect(() => {
     if (!active) return
     let current = true
-    const timer = setInterval(() => { void api<Generation>(`/ai/generations/${active}`).then(g => { if (!current) return; setHistory(items => items.map(item => item.id === g.id ? g : item)); if (!['queued', 'running', 'cancelling'].includes(g.state)) setActive(null) }).catch(e => { if (current) setError(message(e)) }) }, 1000)
+    let polling = false
+    const timer = setInterval(() => { if (polling) return; polling = true; void api<Generation>(`/ai/generations/${active}`).then(g => { if (!current) return; setHistory(items => items.map(item => item.id === g.id ? g : item)); if (!['queued', 'running', 'cancelling'].includes(g.state)) setActive(null) }).catch(e => { if (current) setError(message(e)) }).finally(() => { polling = false }) }, 1000)
     return () => { current = false; clearInterval(timer) }
   }, [active])
   const create = async () => { setBusy(true); setError(''); try { const conversation = await api<Conversation>('/ai/conversations', { title: `Conversation ${conversations.length + 1}` }); await refresh(); setSelected(conversation.id) } catch (e) { setError(message(e)) } finally { setBusy(false) } }

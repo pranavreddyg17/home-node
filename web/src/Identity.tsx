@@ -34,8 +34,10 @@ export function IdentityBoundary({ children }: { children: (session: Session, lo
   useEffect(() => { void refresh().catch(e => setError(message(e))) }, [])
   useEffect(() => {
     if (!session) return
-    const timer = window.setInterval(() => { void api<Session>('/session').then(setSession).catch(e => { if (e instanceof APIError && e.status === 401) { setSession(null); setError('Your session ended. Sign in again.') } }) }, 15000)
-    return () => clearInterval(timer)
+    let polling = false
+    let current = true
+    const timer = window.setInterval(() => { if (polling) return; polling = true; void api<Session>('/session').then(value => { if (current) setSession(value) }).catch(e => { if (current && e instanceof APIError && e.status === 401) { setSession(null); setError('Your session ended. Sign in again.') } }).finally(() => { polling = false }) }, 15000)
+    return () => { current = false; clearInterval(timer) }
   }, [session?.device.id])
   const logout = async () => { await api('/logout', {}); setSession(null) }
   const verify = async () => { setSession(await signIn()) }
