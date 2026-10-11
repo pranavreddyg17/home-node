@@ -297,7 +297,7 @@ remain false. A missing channel parent is refused; this command does not
 provision it or release activation. Native qualification of the complete installed
 command remains pending.
 
-### Gateway identity phase (service wiring remains pending)
+### Gateway identity phase (installed runtime qualification remains pending)
 
 After the owned controller/transfer account phase, the Linux root CLI can prepare
 and provision the separate gateway identity:
@@ -325,5 +325,31 @@ Unix-only listener and assigning the TLS directory to the gateway group. The
 certificate provisioning step must supply a root-owned key with mode 0640 and
 the gateway GID; installation verification refuses the controller GID for that
 key. Recovery and storage/identity migrations include the installed gateway in
-activation, stop and dormancy checks. Account removal and native distinct-identity
+activation, stop and dormancy checks. Complete uninstall and native distinct-identity
 systemd/HTTPS qualification remain incomplete.
+
+### Retained gateway removal phase
+
+The Linux root CLI exposes a read-only plan, a durable intent, and guarded
+application of that intent:
+
+```sh
+homenode gateway-accounts-removal-plan --journal-dir /var/lib/homenode-install
+homenode gateway-accounts-removal-prepare --journal-dir /var/lib/homenode-install
+homenode gateway-accounts-removal-apply --journal-dir /var/lib/homenode-install
+```
+
+Apply requires the existing installed gateway configuration and recovery
+activation block. It stops the owned services, verifies dormancy and empty guest
+cgroups, and retains the block and installation authority around each account
+command. It removes controller proxy membership, the gateway user, and its two
+groups. Exact ownership and NSS vacancy checks govern retries, including Linux
+user deletion that automatically removes the private group. Reintroduced IDs or
+memberships conflict with completed steps.
+
+This phase retains service configuration, application data, exports and backups.
+Its JSON explicitly reports `installationRemoved: false`. It does not release
+activation or restore the legacy controller listener. Do not treat it as a
+completed uninstall, a purge, or a usable post-removal installation. Native account
+command qualification is running in disposable CI; full installed service
+exclusion and complete uninstall qualification remain pending.

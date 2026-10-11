@@ -88,6 +88,12 @@ func main() {
 		gatewayAccounts(os.Args[2:], "prepare")
 	case "gateway-accounts-provision":
 		gatewayAccounts(os.Args[2:], "provision")
+	case "gateway-accounts-removal-plan":
+		gatewayRemoval(os.Args[2:], "plan")
+	case "gateway-accounts-removal-prepare":
+		gatewayRemoval(os.Args[2:], "prepare")
+	case "gateway-accounts-removal-apply":
+		gatewayRemoval(os.Args[2:], "apply")
 	case "gateway-accounts-check":
 		gatewayAccounts(os.Args[2:], "check")
 	case "accounts-check":
@@ -101,7 +107,7 @@ func main() {
 	}
 }
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: homenode <guest-allocation-apply|guest-allocation-prepare|guest-identity-apply|guest-identity-prepare|recovery-quiesce|guest-storage-plan|guest-storage-prepare|guest-storage-check|guest-storage-migrate-images|guest-storage-migrate-empty-volumes|guest-storage-migrate-configuration|guest-storage-provision-channels|guest-uid-check|guest-uid-prepare|guest-uid-plan|install-check|install-prepare|update-trust-initialize|doctor|accounts-provision|accounts-check|maintenance-accounts-prepare|maintenance-accounts-provision|maintenance-accounts-check|gateway-accounts-prepare|gateway-accounts-provision|gateway-accounts-check|network-check|serve|setup-code> [options]")
+	fmt.Fprintln(os.Stderr, "usage: homenode <guest-allocation-apply|guest-allocation-prepare|guest-identity-apply|guest-identity-prepare|recovery-quiesce|guest-storage-plan|guest-storage-prepare|guest-storage-check|guest-storage-migrate-images|guest-storage-migrate-empty-volumes|guest-storage-migrate-configuration|guest-storage-provision-channels|guest-uid-check|guest-uid-prepare|guest-uid-plan|install-check|install-prepare|update-trust-initialize|doctor|accounts-provision|accounts-check|maintenance-accounts-prepare|maintenance-accounts-provision|maintenance-accounts-check|gateway-accounts-prepare|gateway-accounts-provision|gateway-accounts-check|gateway-accounts-removal-plan|gateway-accounts-removal-prepare|gateway-accounts-removal-apply|network-check|serve|setup-code> [options]")
 	os.Exit(2)
 }
 func fatal(err error) { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
