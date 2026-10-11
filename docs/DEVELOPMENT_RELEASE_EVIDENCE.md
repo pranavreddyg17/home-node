@@ -7,7 +7,7 @@
 | `.deb` | Script-free development package |
 | `.deb.sha256` | Package transport checksum |
 | `.deb.sbom.json` | CycloneDX 1.6 package binding and staged file inventory |
-| `.deb.gomodules.json` | Build information from the six actual packaged Go binaries |
+| `.deb.gomodules.json` | Build information from the seven actual packaged Go binaries |
 | `.deb.go-notices.json` | Collected Go module root notice sources and hashes, marked incomplete |
 | `.deb.go-notices.txt` | Readable Go notice source collection, marked incomplete |
 | `.deb.frontend.json` | Emitted asset hashes and bundled npm package lock identities |
@@ -100,7 +100,7 @@ package-binding gates alone do not authorize installation.
 CI runs pinned `golang.org/x/vuln/cmd/govulncheck@v1.8.0` against `./...`
 with verbose text output and a five-minute limit, retaining the report for14 days.
 Text mode preserves scanner failure for reachable findings; pipeline failure
-also blocks on tool/database errors. A second gate scans all six independently extracted Linux/amd64 Go package
+also blocks on tool/database errors. A second gate scans all seven independently extracted Linux/amd64 Go package
 executables in binary mode with a ten-minute limit. Each retained binary report
 has an adjacent SHA256 identifying the scanned bytes. Binary scanning reads build
 information/symbols and does not execute these files. These checks cover the CI

@@ -6,6 +6,12 @@ The package owns `/usr/bin/homenode`, `/usr/lib/homenode`,
 are root-owned and writable only by root. The guest executable is a build input
 for immutable guest images; it must not be launched on the host.
 
+The payload also includes the separate `homenode-gateway` executable. Its
+installed service identity reads TLS material and proxies to the private
+controller Unix socket; the package does not create that identity, provision
+TLS material or activate the gateway. Gateway TLS retirement and identity
+removal are explicit guarded installer phases, not package removal hooks.
+
 The payload includes the private `homenode-backup` worker and depends on the
 host `restic` executable used for encrypted local repositories. Packaging the
 worker does not activate it: protected packet socket activation, a separate

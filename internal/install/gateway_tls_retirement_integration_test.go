@@ -6,9 +6,11 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"runtime"
 	"syscall"
 	"testing"
+	"time"
 )
 
 // Runs only in the opt-in disposable native installed account fixture. It
@@ -124,10 +126,22 @@ func qualifyNativeInstalledGatewayRetirement(t *testing.T, engine **Engine, ctx 
 		t.Fatal(err)
 	}
 	*engine = nil
-	output, err := accountCommand(ctx, "/usr/bin/homenode", "gateway-tls-retire", "--journal-dir", "/var/lib/homenode-install")
-	if err != nil {
-		t.Fatal("packaged native TLS retirement CLI", err)
+
+	cliContext, stopCLI := context.WithTimeout(ctx, 10*time.Minute)
+	command := exec.CommandContext(cliContext, "/usr/bin/homenode", "gateway-tls-retire", "--journal-dir", "/var/lib/homenode-install")
+	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C"}
+	command.WaitDelay = time.Second
+	var boundedOutput accountOutput
+	command.Stdout = &boundedOutput
+	command.Stderr = io.Discard
+	err = command.Run()
+	contextErr := cliContext.Err()
+	stopCLI()
+	if err != nil || contextErr != nil {
+		t.Fatal("packaged native TLS retirement CLI", err, contextErr)
 	}
+	output := boundedOutput.Bytes()
+
 	var status struct {
 		Phase     string `json:"phase"`
 		Retired   bool   `json:"tlsOwnershipRetired"`
