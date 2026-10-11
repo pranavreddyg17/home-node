@@ -125,6 +125,32 @@ func TestRootGatewayTLSRetirementResumesEveryPermissionAcknowledgement(t *testin
 				t.Fatal(phase, err)
 			}
 
+			publicationInterrupted := errors.New("lost installation publication acknowledgement")
+			e.checkpoint = func(stage, name string) error {
+				if stage == "gateway-tls-installation-published" {
+					return publicationInterrupted
+				}
+				return nil
+			}
+			if err := e.publishGatewayTLSRetirementLocked(ctx, a, guard); !errors.Is(err, publicationInterrupted) {
+				t.Fatal("publication interruption", err)
+			}
+			e.checkpoint = nil
+			if err := e.publishGatewayTLSRetirementLocked(ctx, a, guard); err != nil {
+				t.Fatal("published replay", err)
+			}
+			installed, err := e.load()
+			if err != nil || len(gatewayRemovalIdentityReferences(installed, identity)) != 0 {
+				t.Fatal("retained numeric identity references", err)
+			}
+			reopened, err := e.reopenGatewayTLSRetirementLocked(ctx, source)
+			if err != nil {
+				t.Fatal("reopen published provenance", err)
+			}
+			if err := e.applyGatewayTLSRetirementLocked(ctx, reopened, guard); err != nil {
+				t.Fatal("published ready replay", err)
+			}
+			reopened.Close()
 			// Identical contents at the same name cannot replace the recorded inode.
 			if err := e.host.Rename(key, key+".retained-original"); err != nil {
 				t.Fatal(err)

@@ -35,8 +35,11 @@ func (e *Engine) applyGatewayTLSRetirementLocked(ctx context.Context, a *gateway
 			return 0, err
 		}
 		installed, err := e.load()
-		if err != nil || installed.Phase != "installed" || installed.ID != intent.Plan.InstallationID || installed.Digest != intent.Plan.InstallationDigest {
+		if err != nil || installed.Phase != "installed" || installed.ID != intent.Plan.InstallationID {
 			return 0, ErrConflict
+		}
+		if _, err := gatewayTLSInstallationSource(installed, intent); err != nil {
+			return 0, err
 		}
 		current, err := e.readGatewayTLSRetirementIntent()
 		if err != nil {

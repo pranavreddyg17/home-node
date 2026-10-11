@@ -86,3 +86,21 @@ func validateTLSInstallationSource(source journal) error {
 	}
 	return nil
 }
+
+// Accept either the original source or its single verified retirement successor.
+func gatewayTLSInstallationSource(current journal, intent gatewayTLSRetirementIntent) (journal, error) {
+	if current.ID != intent.Plan.InstallationID {
+		return journal{}, ErrConflict
+	}
+	if current.Digest == intent.Plan.InstallationDigest {
+		if err := validateTLSInstallationSource(current); err != nil {
+			return journal{}, err
+		}
+		plan, err := gatewayTLSRetirementPlan(current, intent.Plan.Identity, intent.Plan.Key, intent.Plan.Certificate)
+		if err != nil || !reflect.DeepEqual(plan, intent.Plan) {
+			return journal{}, ErrConflict
+		}
+		return current, nil
+	}
+	return gatewayTLSSourceInstallation(current, intent)
+}
