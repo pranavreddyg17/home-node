@@ -3,6 +3,7 @@ package install
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
 	"os"
 	"runtime"
@@ -84,4 +85,40 @@ func qualifyNativeGatewayAccounts(t *testing.T, engine *Engine, ctx context.Cont
 		t.Fatal("guest UID plan lacks verified gateway UID")
 	}
 	t.Log("native journaled gateway provisioning, installed check CLI, readiness replay and group isolation passed")
+	// This fixture has never activated services. It qualifies real account command
+	// semantics only; its guard does not claim installed systemd exclusion.
+	if _, err := engine.PrepareGatewayAccountRemoval(ctx); err != nil {
+		t.Fatal("native removal intent", err)
+	}
+	lost := errors.New("fixture interrupted removal acknowledgement")
+	engine.checkpoint = func(stage, name string) error {
+		if stage == "gateway-account-removed" {
+			return lost
+		}
+		return nil
+	}
+	engine.mu.Lock()
+	err = engine.removeGatewayAccountLocked(ctx, nativeGatewayProvisioner{}, func(ctx context.Context) error { return ctx.Err() })
+	engine.mu.Unlock()
+	engine.checkpoint = nil
+	if !errors.Is(err, lost) {
+		t.Fatal("native removal interruption", err)
+	}
+	engine.mu.Lock()
+	err = engine.removeGatewayAccountLocked(ctx, nativeGatewayProvisioner{}, func(ctx context.Context) error { return ctx.Err() })
+	engine.mu.Unlock()
+	if err != nil {
+		t.Fatal("native removal recovery", err)
+	}
+	engine.mu.Lock()
+	err = engine.removeGatewayAccountLocked(ctx, nativeGatewayProvisioner{}, func(ctx context.Context) error { return ctx.Err() })
+	engine.mu.Unlock()
+	if err != nil {
+		t.Fatal("native removal readiness replay", err)
+	}
+	if _, err := InspectLocalAccounts(ctx); err != nil {
+		t.Fatal("retained base account isolation", err)
+	}
+	t.Log("native journaled gateway account removal and interrupted acknowledgement recovery passed; service exclusion not exercised")
+
 }
