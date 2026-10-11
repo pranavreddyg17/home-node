@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -131,14 +132,14 @@ func qualifyNativeInstalledGatewayRetirement(t *testing.T, engine **Engine, ctx 
 	command := exec.CommandContext(cliContext, "/usr/bin/homenode", "gateway-tls-retire", "--journal-dir", "/var/lib/homenode-install")
 	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C"}
 	command.WaitDelay = time.Second
-	var boundedOutput accountOutput
+	var boundedOutput, boundedError accountOutput
 	command.Stdout = &boundedOutput
-	command.Stderr = io.Discard
+	command.Stderr = &boundedError
 	err = command.Run()
 	contextErr := cliContext.Err()
 	stopCLI()
 	if err != nil || contextErr != nil {
-		t.Fatal("packaged native TLS retirement CLI", err, contextErr)
+		t.Fatal("packaged native TLS retirement CLI", err, contextErr, tlsRetirementDiagnosticPhase(boundedError.Bytes()))
 	}
 	output := boundedOutput.Bytes()
 
@@ -224,4 +225,22 @@ func qualifyNativeInstalledGatewayRetirement(t *testing.T, engine **Engine, ctx 
 	qualifyNativeConfigurationRemoval(t, e, ctx)
 	passed = true
 	t.Log("native packaged TLS retirement CLI, ownership publication, gateway identity removal and ready replay passed; retained bytes and activation marker preserved; HTTPS startup remains unqualified")
+}
+
+// Only fixed phase labels reach test logs; raw stderr may contain retained data.
+func tlsRetirementDiagnosticPhase(data []byte) string {
+	for _, phase := range []string{"installation", "accounts", "identity", "artifacts", "intent", "permissions", "publication", "exclusion"} {
+		if strings.Contains(string(data), "TLS retirement "+phase+":") {
+			return phase
+		}
+	}
+	return "unknown"
+}
+func TestTLSRetirementDiagnosticsOmitUntrustedStderrContents(t *testing.T) {
+	if got := tlsRetirementDiagnosticPhase([]byte("private-key-material TLS retirement permissions: retained-secret-value")); got != "permissions" {
+		t.Fatal(got)
+	}
+	if got := tlsRetirementDiagnosticPhase([]byte("retained-secret-value")); got != "unknown" {
+		t.Fatal(got)
+	}
 }

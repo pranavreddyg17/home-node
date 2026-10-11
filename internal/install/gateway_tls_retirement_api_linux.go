@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"reflect"
@@ -30,15 +31,15 @@ func (e *Engine) RetireGatewayTLS(ctx context.Context) (result error) {
 	defer e.mu.Unlock()
 	installed, err := e.load()
 	if err != nil || !installedGateway(installed) {
-		return ErrConflict
+		return fmt.Errorf("TLS retirement installation: %w", ErrConflict)
 	}
 	base, err := e.loadAccountJournal()
 	if err != nil || !base.Ready {
-		return ErrConflict
+		return fmt.Errorf("TLS retirement accounts: %w", ErrConflict)
 	}
 	identity, err := e.observeGatewayAccountWith(ctx, base, nativeGatewayProvisioner{})
 	if err != nil || identity == nil {
-		return ErrConflict
+		return fmt.Errorf("TLS retirement identity: %w", ErrConflict)
 	}
 	data, err := e.readGatewayTLSRetirementIntent()
 	prepared := err == nil
@@ -64,7 +65,7 @@ func (e *Engine) RetireGatewayTLS(ctx context.Context) (result error) {
 		a, err = e.admitGatewayTLSRetirementLocked(ctx, *identity)
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("TLS retirement artifacts: %w", err)
 	}
 	defer func() { result = errors.Join(result, a.Close()) }()
 	admit := func(ctx context.Context, current journal) error {
@@ -101,18 +102,25 @@ func (e *Engine) RetireGatewayTLS(ctx context.Context) (result error) {
 		}
 		return ObserveRecoveryGuestsEmpty(ctx)
 	}
-	return e.withRecoveryInstallationExclusionGuardedLocked(ctx, observe, func(ctx context.Context) error { return ctx.Err() }, admit, func(ctx context.Context, retained func(context.Context) error) error {
+	result = e.withRecoveryInstallationExclusionGuardedLocked(ctx, observe, func(ctx context.Context) error { return ctx.Err() }, admit, func(ctx context.Context, retained func(context.Context) error) error {
 		guard := func() error { return retained(ctx) }
 		if !prepared {
 			intent := gatewayTLSRetirementIntent{Version: 1, Plan: a.Plan, Sources: a.Sources}
 			if err := e.prepareGatewayTLSRetirementIntentLocked(ctx, intent, guard); err != nil {
-				return err
+				return fmt.Errorf("TLS retirement intent: %w", err)
 			}
 			prepared = true
 		}
 		if err := e.applyGatewayTLSRetirementLocked(ctx, a, guard); err != nil {
-			return err
+			return fmt.Errorf("TLS retirement permissions: %w", err)
 		}
-		return e.publishGatewayTLSRetirementLocked(ctx, a, guard)
+		if err := e.publishGatewayTLSRetirementLocked(ctx, a, guard); err != nil {
+			return fmt.Errorf("TLS retirement publication: %w", err)
+		}
+		return nil
 	})
+	if result != nil {
+		return fmt.Errorf("TLS retirement exclusion: %w", result)
+	}
+	return nil
 }
