@@ -57,3 +57,41 @@ func TestConfigurationRemovalObserverBindsManagerAbsenceToJournal(t *testing.T) 
 		t.Fatal("future missing fragment queried manager", err, queries)
 	}
 }
+
+func TestConfigurationRemovalRetiredObserverRequiresReadyIntentAndAbsentManager(t *testing.T) {
+	host, jr := roots(t)
+	e := openEngine(t, host, jr)
+	defer e.Close()
+	ctx := context.Background()
+	unit := "homenode-control.service"
+	plan := fixturePlan()
+	plan.Items = append(plan.Items, Item{Path: "etc/systemd/system/" + unit, Mode: 0644, UID: os.Geteuid(), GID: os.Getegid(), Data: []byte("owned fixture unit")})
+	if err := e.Apply(ctx, plan); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.prepareConfigurationRemovalLocked(ctx); err != nil {
+		t.Fatal(err)
+	}
+	queries := 0
+	response := "Id=" + unit + "\nFragmentPath=\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\nJob=\nLoadState=not-found\nActiveState=inactive\nSubState=dead\nMainPID=0\nControlPID=0\n"
+	command := func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		queries++
+		if name != "/usr/bin/systemctl" || len(args) != 6 || args[5] != unit {
+			t.Fatal(name, args)
+		}
+		return exec.CommandContext(ctx, "/bin/sh", "-c", `printf '%s' "$1"`, "fixture", response)
+	}
+	if err := e.observeConfigurationRemovalRetiredWith(ctx, command); err == nil || queries != 0 {
+		t.Fatal("unfinished intent queried retirement", err, queries)
+	}
+	if err := e.removeConfigurationLocked(ctx, func(context.Context) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.observeConfigurationRemovalRetiredWith(ctx, command); err != nil || queries != 1 {
+		t.Fatal("absent retirement", err, queries)
+	}
+	response = strings.Replace(strings.Replace(response, "FragmentPath=", "FragmentPath=/etc/systemd/system/"+unit, 1), "LoadState=not-found", "LoadState=loaded", 1)
+	if err := e.observeConfigurationRemovalRetiredWith(ctx, command); err == nil {
+		t.Fatal("cached loaded unit counted as retired")
+	}
+}

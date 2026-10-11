@@ -17,15 +17,21 @@ import (
 // observer. Caller retains the installation lock and activation barrier; this
 // observation neither stops units nor authorizes publication by itself.
 func (e *Engine) observeConfigurationRemovalManagerWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd) error {
-	return e.observeConfigurationRemovalManagerStateWith(ctx, command, true)
+	return e.observeConfigurationRemovalManagerStateWith(ctx, command, true, false)
 }
 
 // Present owned fragments may be active before stop. Missing fragments must
 // already be dormant, so a partial removal cannot adopt a still-running unit.
 func (e *Engine) observeConfigurationRemovalLoadedWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd) error {
-	return e.observeConfigurationRemovalManagerStateWith(ctx, command, false)
+	return e.observeConfigurationRemovalManagerStateWith(ctx, command, false, false)
 }
-func (e *Engine) observeConfigurationRemovalManagerStateWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd, dormant bool) error {
+
+// Final retirement requires completed durable removal and not-found manager
+// state. A successful daemon-reload command alone cannot prove retirement.
+func (e *Engine) observeConfigurationRemovalRetiredWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd) error {
+	return e.observeConfigurationRemovalManagerStateWith(ctx, command, true, true)
+}
+func (e *Engine) observeConfigurationRemovalManagerStateWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd, dormant, retired bool) error {
 
 	if err := ctx.Err(); err != nil {
 		return err
@@ -40,6 +46,9 @@ func (e *Engine) observeConfigurationRemovalManagerStateWith(ctx context.Context
 	intent, err := e.loadConfigurationRemovalIntent(installed)
 	if err != nil {
 		return err
+	}
+	if retired && !intent.Ready {
+		return ErrConflict
 	}
 	units, err := configurationRemovalUnits(intent.Plan)
 	if err != nil {
@@ -130,7 +139,11 @@ func (e *Engine) observeConfigurationRemovalManagerStateWith(ctx context.Context
 		if err != nil || contextErr != nil {
 			return errors.Join(ErrConflict, err, contextErr)
 		}
-		if mustBeDormant {
+		if retired {
+			if err := validateRemovalRetiredUnit(output.Bytes(), unit); err != nil {
+				return err
+			}
+		} else if mustBeDormant {
 			if err := validateRemovalDormantUnit(output.Bytes(), unit, missing[unit]); err != nil {
 				return err
 			}
