@@ -187,6 +187,28 @@ func TestRootGatewayTLSRetirementResumesEveryPermissionAcknowledgement(t *testin
 			if err := verifyTLS(); err != nil {
 				t.Fatal(err)
 			}
+
+			if err := retainedTLS.files[0].Chmod(0640); err != nil {
+				t.Fatal(err)
+			}
+			if err := verifyTLS(); err == nil {
+				t.Fatal("account removal accepted widened retained key permissions")
+			}
+			if err := retainedTLS.files[0].Chmod(0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := retainedTLS.files[2].Chmod(0750); err != nil {
+				t.Fatal(err)
+			}
+			if err := verifyTLS(); err == nil {
+				t.Fatal("account removal accepted widened TLS directory permissions")
+			}
+			if err := retainedTLS.files[2].Chmod(0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := verifyTLS(); err != nil {
+				t.Fatal("restored retained TLS permission guard", err)
+			}
 			// Identical contents at the same name cannot replace the recorded inode.
 			if err := e.host.Rename(key, key+".retained-original"); err != nil {
 				t.Fatal(err)
