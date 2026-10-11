@@ -126,3 +126,53 @@ func TestHTTPSHandshakeUsesValidatedIdentityAndFailsClosed(t *testing.T) {
 		t.Fatal("invalid identity allowed HTTP request")
 	}
 }
+
+// Root ownership is part of production admission. Run this on a disposable
+// Linux runner; ordinary developer runs must not change file ownership.
+func TestRootTLSFileAdmission(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("requires root-owned temporary identity files")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "key")
+	payload := []byte("fixture identity bytes")
+	if err := os.WriteFile(path, payload, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []os.FileMode{0600, 0640} {
+		if err := os.Chmod(path, mode); err != nil {
+			t.Fatal(err)
+		}
+		got, err := protectedPEM(path, true)
+		if err != nil || string(got) != string(payload) {
+			t.Fatal("protected key refused", mode, err)
+		}
+	}
+	for _, mode := range []os.FileMode{0644, 0400, 0610, 0660, 0600 | os.ModeSetuid, 0600 | os.ModeSetgid, 0600 | os.ModeSticky} {
+		if err := os.Chmod(path, mode); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := protectedPEM(path, true); err == nil {
+			t.Fatal("unsafe key admitted", mode)
+		}
+	}
+	if err := os.Chmod(path, 0600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "alias")
+	if err := os.Link(path, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := protectedPEM(path, true); err == nil {
+		t.Fatal("hard-linked key admitted")
+	}
+	if err := os.Remove(link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := protectedPEM(path, true); err == nil {
+		t.Fatal("empty key admitted")
+	}
+}
