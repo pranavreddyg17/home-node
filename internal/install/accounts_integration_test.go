@@ -16,7 +16,9 @@ import (
 
 // Explicitly enabled only in a disposable Linux CI runner after dependency and
 // package installation. Ordinary tests never create real host identities.
-func TestInstalledAccountInspection(t *testing.T) {
+func TestInstalledAccountInspection(t *testing.T)    { runInstalledAccountInspection(t, false) }
+func TestInstalledGatewayTLSRetirement(t *testing.T) { runInstalledAccountInspection(t, true) }
+func runInstalledAccountInspection(t *testing.T, gatewayRetirement bool) {
 	if os.Getenv("HOMENODE_ACCOUNT_INSPECTION_INTEGRATION") != "1" {
 		t.Skip("disposable supported-host account fixture is opt-in")
 	}
@@ -247,6 +249,19 @@ func TestInstalledAccountInspection(t *testing.T) {
 	engine, err = Open("/", journalDirectory)
 	if err != nil {
 		t.Fatal("identity CLI journal reacquisition", err)
+	}
+
+	if gatewayRetirement {
+		if _, err := engine.PrepareGatewayAccount(ctx); err != nil {
+			t.Fatal(err)
+		}
+		identity, err := engine.ProvisionGatewayAccount(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		installAccountFixtureConfiguration(t, engine, accounts, maintenance, &identity)
+		qualifyNativeInstalledGatewayRetirement(t, engine, ctx, identity)
+		return
 	}
 	installAccountFixtureConfiguration(t, engine, accounts, maintenance)
 
