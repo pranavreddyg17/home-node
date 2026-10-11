@@ -59,3 +59,16 @@ func gatewayRemovalPlan(owner string, identity GatewayAccount) GatewayAccountRem
 		{Program: "/usr/sbin/groupdel", Arguments: []string{"homenode-gateway"}},
 	}, Pending: []string{"retain installed activation exclusion and verify gateway/controller dormancy", "journal removal intent and reconcile every command acknowledgement", "remove only owned service configuration while retaining workload and backup data", "qualify native removal and interrupted recovery before executing this plan"}}
 }
+
+// gatewayRemovalIdentityReferences identifies permission records that must be
+// migrated before numeric identities can be freed for reuse. Retaining bytes
+// alone is insufficient when their owner/group can later be reassigned.
+func gatewayRemovalIdentityReferences(installed journal, identity GatewayAccount) []string {
+	references := []string{}
+	for _, item := range installed.Items {
+		if item.UID == int(identity.UID) || item.GID == identity.GID || item.GID == identity.ProxyGID {
+			references = append(references, item.Path)
+		}
+	}
+	return references
+}

@@ -45,3 +45,29 @@ func TestGatewayRemovalPlanRequiresOwnedReadyIdentityWithoutMutation(t *testing.
 		t.Fatal("foreign base ownership accepted", err)
 	}
 }
+
+func TestGatewayRemovalRequiresRetainedPermissionOwnershipTransition(t *testing.T) {
+	c, _, _, now := configurationFixture(t)
+	identity := GatewayAccount{UID: 803, GID: 803, ProxyGID: 804}
+	c.Gateway = &identity
+	preview, err := ConfigurationPlan(c, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	records, _, err := planRecords(preview.Plan, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	references := gatewayRemovalIdentityReferences(journal{Items: records}, identity)
+	if len(references) != 1 || references[0] != "etc/homenode/tls" {
+		t.Fatal("retained TLS permission not protected from identity reuse", references)
+	}
+	legacy := journal{Items: []record{{Path: "var/lib/homenode/control", UID: 800, GID: 800}, {Path: "etc/homenode/tls", UID: 0, GID: 800}}}
+	if references := gatewayRemovalIdentityReferences(legacy, identity); len(references) != 0 {
+		t.Fatal("unrelated identities block retirement", references)
+	}
+	alias := journal{Items: []record{{Path: "var/lib/homenode/control", UID: 803, GID: 800}, {Path: "etc/homenode/services.env", UID: 0, GID: 804}}}
+	if references := gatewayRemovalIdentityReferences(alias, identity); len(references) != 2 {
+		t.Fatal("retained UID or bridge GID omitted", references)
+	}
+}

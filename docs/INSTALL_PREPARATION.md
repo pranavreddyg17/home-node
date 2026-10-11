@@ -395,3 +395,12 @@ without a job, fragment or drop-ins. Successful output reports `managerReloaded`
 and `unitsRetired` as true. Package and identity retirement are still separate;
 this phase does not report a complete uninstall. Native installed qualification
 of this new retirement phase remains pending.
+
+Gateway identity removal refuses an installed path whose owner or group still
+references the gateway UID, private GID or bridge GID. In particular, gateway
+TLS-directory ownership must undergo a separately journaled retained-data
+ownership transition before that group is freed. Otherwise later numeric-ID
+reuse could expose retained TLS material. That transition remains unfinished;
+the gateway identity apply command currently refuses this installed case rather
+than deleting a referenced identity. Account-only disposable qualification does
+not prove this retained-TLS transition.

@@ -30,6 +30,19 @@ func (e *Engine) RemoveGatewayAccount(ctx context.Context) error {
 	if err != nil || !installedGateway(installed) {
 		return ErrConflict
 	}
+	base, err := e.loadAccountJournal()
+	if err != nil {
+		return err
+	}
+	intent, err := e.loadGatewayRemovalIntent(base)
+	if err != nil {
+		return err
+	}
+	// Retained TLS directories or service data must first undergo a separately
+	// journaled ownership transition. Do not free a referenced numeric identity.
+	if len(gatewayRemovalIdentityReferences(installed, intent.Plan.Identity)) != 0 {
+		return ErrConflict
+	}
 	quiesced := false
 	observe := func(ctx context.Context) error {
 		if !quiesced {
