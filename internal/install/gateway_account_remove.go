@@ -54,7 +54,19 @@ func (e *Engine) removeGatewayAccountLocked(ctx context.Context, b gatewayProvis
 		if phase >= 3 {
 			absent = append(absent, struct{ db, key string }{"group", "homenode-proxy"}, struct{ db, key string }{"group", strconv.Itoa(intent.Plan.Identity.ProxyGID)})
 		}
-		if phase == 4 {
+		privatePresent := false
+		groups, err := accountLines(snapshot.groups, 4)
+		if err != nil {
+			return 0, err
+		}
+		for _, row := range groups {
+			if row[0] == "homenode-gateway" {
+				privatePresent = true
+			}
+		}
+		// userdel may remove the private group before the proxy group. Verify
+		// that absence immediately rather than deleting the proxy first.
+		if !privatePresent {
 			absent = append(absent, struct{ db, key string }{"group", "homenode-gateway"}, struct{ db, key string }{"group", strconv.Itoa(intent.Plan.Identity.GID)})
 		}
 		for _, key := range absent {

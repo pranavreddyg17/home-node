@@ -143,3 +143,124 @@ func TestGatewayRemovalGuardFailureNeverMutates(t *testing.T) {
 		t.Fatal(err, base.commands)
 	}
 }
+
+type gatewayRemovalNSSCollision struct{ fixtureGatewayRemover }
+
+func (b gatewayRemovalNSSCollision) Lookup(ctx context.Context, db, key string) (bool, error) {
+	if db == "passwd" && key == "homenode-gateway" {
+		rows, err := accountLines(b.s.passwd, 7)
+		if err != nil {
+			return false, err
+		}
+		present := false
+		for _, row := range rows {
+			if row[0] == key {
+				present = true
+			}
+		}
+		if !present {
+			return true, nil
+		}
+	}
+	return b.fakeAccountProvisioner.Lookup(ctx, db, key)
+}
+
+func gatewayRemovalFixture(t *testing.T) (*Engine, *fakeAccountProvisioner, fixtureGatewayRemover) {
+	t.Helper()
+	host, journal := roots(t)
+	e := openEngine(t, host, journal)
+	t.Cleanup(func() { e.Close() })
+	base := newAccountFixture()
+	ctx := context.Background()
+	if _, err := e.provisionAccounts(ctx, base); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.prepareGatewayAccount(ctx, base); err != nil {
+		t.Fatal(err)
+	}
+	provision := fixtureGatewayProvisioner{base}
+	if _, err := e.provisionGatewayAccount(ctx, provision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.prepareGatewayAccountRemoval(ctx, provision); err != nil {
+		t.Fatal(err)
+	}
+	return e, base, fixtureGatewayRemover{provision, false}
+}
+
+func TestGatewayRemovalLosingGuardAfterCommandRetainsUnacknowledgedIntent(t *testing.T) {
+	e, base, backend := gatewayRemovalFixture(t)
+	ctx := context.Background()
+	lost := errors.New("retained marker replaced")
+	guard := func(context.Context) error {
+		if base.commands > 9 {
+			return lost
+		}
+		return nil
+	}
+	if err := e.removeGatewayAccountLocked(ctx, backend, guard); !errors.Is(err, lost) || base.commands != 10 {
+		t.Fatal(err, base.commands)
+	}
+	owned, err := e.loadAccountJournal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	intent, err := e.loadGatewayRemovalIntent(owned)
+	if err != nil || intent.Ready || intent.Completed != 0 {
+		t.Fatal("lost guard acknowledged removal", intent, err)
+	}
+	if err := e.removeGatewayAccountLocked(ctx, backend, func(context.Context) error { return nil }); err != nil || base.commands != 13 {
+		t.Fatal("guard restoration replayed mutation", err, base.commands)
+	}
+}
+
+func TestGatewayRemovalNSSCollisionBlocksRemainingDeletion(t *testing.T) {
+	e, base, backend := gatewayRemovalFixture(t)
+	ctx := context.Background()
+	guard := func(context.Context) error { return nil }
+	if err := e.removeGatewayAccountLocked(ctx, gatewayRemovalNSSCollision{backend}, guard); !errors.Is(err, ErrConflict) || base.commands != 11 {
+		t.Fatal("NSS collision admitted", err, base.commands)
+	}
+	owned, err := e.loadAccountJournal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	intent, err := e.loadGatewayRemovalIntent(owned)
+	if err != nil || intent.Ready || intent.Completed != 1 {
+		t.Fatal("NSS collision committed readiness", intent, err)
+	}
+	if err := e.removeGatewayAccountLocked(ctx, backend, guard); err != nil || base.commands != 13 {
+		t.Fatal("collision recovery repeated user deletion", err, base.commands)
+	}
+}
+
+func TestGatewayRemovalCompletedIdentityReintroductionIsRefused(t *testing.T) {
+	e, base, backend := gatewayRemovalFixture(t)
+	ctx := context.Background()
+	guard := func(context.Context) error { return nil }
+	if err := e.removeGatewayAccountLocked(ctx, backend, guard); err != nil {
+		t.Fatal(err)
+	}
+	base.s.groups = append(base.s.groups, []byte("homenode-proxy:x:999:\n")...)
+	if err := e.removeGatewayAccountLocked(ctx, backend, guard); err == nil || base.commands != 13 {
+		t.Fatal("reintroduced completed identity deleted", err, base.commands)
+	}
+}
+
+type gatewayRemovalPrivateNSSCollision struct{ fixtureGatewayRemover }
+
+func (b gatewayRemovalPrivateNSSCollision) Lookup(ctx context.Context, db, key string) (bool, error) {
+	if db == "group" && key == "homenode-gateway" {
+		return true, nil
+	}
+	return b.fakeAccountProvisioner.Lookup(ctx, db, key)
+}
+
+func TestGatewayRemovalAutomaticPrivateGroupDeletionChecksNSSBeforeProxyDeletion(t *testing.T) {
+	e, base, backend := gatewayRemovalFixture(t)
+	backend.autoPrivate = true
+	err := e.removeGatewayAccountLocked(context.Background(), gatewayRemovalPrivateNSSCollision{backend}, func(context.Context) error { return nil })
+	if !errors.Is(err, ErrConflict) || base.commands != 11 {
+		t.Fatal("proxy deletion preceded private NSS vacancy", err, base.commands)
+	}
+}
