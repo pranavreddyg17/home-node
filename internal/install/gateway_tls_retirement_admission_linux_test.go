@@ -44,6 +44,21 @@ func TestRootGatewayTLSRetirementAdmissionPinsContentsAndRejectsHardlinks(t *tes
 	if len(a.Sources) != 3 {
 		t.Fatal(a.Sources)
 	}
+
+	intent := gatewayTLSRetirementIntent{Version: 1, Plan: a.Plan, Sources: a.Sources}
+	guard := func() error { return e.verifyGatewayTLSAdmissionLocked(context.Background(), a) }
+	for replay := 0; replay < 2; replay++ {
+		if err := e.prepareGatewayTLSRetirementIntentLocked(context.Background(), intent, guard); err != nil {
+			t.Fatal("artifact-only intent preparation", err)
+		}
+	}
+	data, err := e.readGatewayTLSRetirementIntent()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := decodeGatewayTLSRetirementIntent(data, a.Plan); err != nil {
+		t.Fatal(err)
+	}
 	if err := e.host.WriteFile(keyPath, []byte("changed private key fixture"), 0640); err != nil {
 		t.Fatal(err)
 	}
