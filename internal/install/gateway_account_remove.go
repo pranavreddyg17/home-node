@@ -3,6 +3,7 @@ package install
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strconv"
 )
 
@@ -27,6 +28,15 @@ func (e *Engine) removeGatewayAccountLocked(ctx context.Context, b gatewayProvis
 		}
 		if err := guard(ctx); err != nil {
 			return 0, err
+		}
+
+		currentBase, err := e.loadAccountJournal()
+		if err != nil || !reflect.DeepEqual(currentBase, base) {
+			return 0, ErrConflict
+		}
+		currentIntent, err := e.loadGatewayRemovalIntent(currentBase)
+		if err != nil || !reflect.DeepEqual(currentIntent, intent) {
+			return 0, ErrConflict
 		}
 		snapshot, err := b.Snapshot(ctx)
 		defer clear(snapshot.shadow)

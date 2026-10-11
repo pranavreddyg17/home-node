@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -291,5 +292,47 @@ func TestGatewayRemovalLosingGuardAtCheckpointRefusesAcknowledgement(t *testing.
 	valid = true
 	if err := e.removeGatewayAccountLocked(context.Background(), backend, guard); err != nil || base.commands != 13 {
 		t.Fatal("resume replayed removed membership", err, base.commands)
+	}
+}
+
+func TestGatewayRemovalRefusesIntentReplacementBeforeAcknowledgement(t *testing.T) {
+	e, base, backend := gatewayRemovalFixture(t)
+	owned, err := e.loadAccountJournal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	original, err := e.loadGatewayRemovalIntent(owned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.checkpoint = func(stage, name string) error {
+		changed := original
+		changed.Completed = 4
+		changed.Ready = true
+		data, err := json.Marshal(changed)
+		if err != nil {
+			return err
+		}
+		return e.saveJournalBytes("gateway-account-removal", data)
+	}
+	guard := func(context.Context) error { return nil }
+	if err := e.removeGatewayAccountLocked(context.Background(), backend, guard); !errors.Is(err, ErrConflict) || base.commands != 10 {
+		t.Fatal(err, base.commands)
+	}
+	changed, err := e.loadGatewayRemovalIntent(owned)
+	if err != nil || !changed.Ready || changed.Completed != 4 {
+		t.Fatal("replaced intent overwritten instead of preserved", changed, err)
+	}
+	// Restore only this fixture's independently retained canonical original intent.
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.saveJournalBytes("gateway-account-removal", data); err != nil {
+		t.Fatal(err)
+	}
+	e.checkpoint = nil
+	if err := e.removeGatewayAccountLocked(context.Background(), backend, guard); err != nil || base.commands != 13 {
+		t.Fatal("restored intent replayed completed command", err, base.commands)
 	}
 }
