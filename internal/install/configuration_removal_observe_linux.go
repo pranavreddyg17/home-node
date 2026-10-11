@@ -17,6 +17,16 @@ import (
 // observer. Caller retains the installation lock and activation barrier; this
 // observation neither stops units nor authorizes publication by itself.
 func (e *Engine) observeConfigurationRemovalManagerWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd) error {
+	return e.observeConfigurationRemovalManagerStateWith(ctx, command, true)
+}
+
+// Present owned fragments may be active before stop. Missing fragments must
+// already be dormant, so a partial removal cannot adopt a still-running unit.
+func (e *Engine) observeConfigurationRemovalLoadedWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd) error {
+	return e.observeConfigurationRemovalManagerStateWith(ctx, command, false)
+}
+func (e *Engine) observeConfigurationRemovalManagerStateWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd, dormant bool) error {
+
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -96,8 +106,12 @@ func (e *Engine) observeConfigurationRemovalManagerWith(ctx context.Context, com
 	defer cancel()
 	for _, unit := range units {
 		step, finish := context.WithTimeout(bounded, 5*time.Second)
-		properties := "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,Job,LoadState,ActiveState,SubState"
-		if strings.HasSuffix(unit, ".service") {
+		mustBeDormant := dormant || missing[unit]
+		properties := "--property=Id,FragmentPath,DropInPaths,NeedDaemonReload,Transient,Job,LoadState"
+		if mustBeDormant {
+			properties += ",ActiveState,SubState"
+		}
+		if mustBeDormant && strings.HasSuffix(unit, ".service") {
 			properties += ",MainPID,ControlPID"
 		}
 		cmd := command(step, "/usr/bin/systemctl", "--system", "--no-pager", "--all", "show", properties, unit)
@@ -116,7 +130,11 @@ func (e *Engine) observeConfigurationRemovalManagerWith(ctx context.Context, com
 		if err != nil || contextErr != nil {
 			return errors.Join(ErrConflict, err, contextErr)
 		}
-		if err := validateRemovalDormantUnit(output.Bytes(), unit, missing[unit]); err != nil {
+		if mustBeDormant {
+			if err := validateRemovalDormantUnit(output.Bytes(), unit, missing[unit]); err != nil {
+				return err
+			}
+		} else if err := validateRemovalLoadedUnit(output.Bytes(), unit); err != nil {
 			return err
 		}
 	}

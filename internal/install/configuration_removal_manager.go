@@ -68,3 +68,12 @@ func configurationRemovalUnits(plan ConfigurationRemovalPlan) ([]string, error) 
 	}
 	return units, nil
 }
+
+// This admission establishes loaded fragment ownership before a stop; it makes
+// no claim about dormancy. An absent fragment is never admitted by this parser.
+func validateRemovalLoadedUnit(data []byte, unit string) error {
+	if !files["etc/systemd/system/"+unit] {
+		return ErrPlan
+	}
+	return validateRecoveryProperties(data, map[string]string{"Job": "", "Id": unit, "DropInPaths": "", "Transient": "no", "LoadState": "loaded", "FragmentPath": "/etc/systemd/system/" + unit, "NeedDaemonReload": "no"})
+}

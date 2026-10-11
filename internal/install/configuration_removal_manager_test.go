@@ -75,3 +75,19 @@ func TestConfigurationRemovalUnitsOrderAndExactAllowlist(t *testing.T) {
 		t.Fatal("foreign manager operation selected")
 	}
 }
+
+func TestConfigurationRemovalLoadedOwnershipDoesNotAdmitAbsentOrForeignUnits(t *testing.T) {
+	unit := "homenode-inspect.service"
+	observation := "Id=" + unit + "\nFragmentPath=/etc/systemd/system/" + unit + "\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\nJob=\nLoadState=loaded\n"
+	if err := validateRemovalLoadedUnit([]byte(observation), unit); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{strings.Replace(observation, "LoadState=loaded", "LoadState=not-found", 1), strings.Replace(observation, "Job=", "Job=12", 1), strings.Replace(observation, "NeedDaemonReload=no", "NeedDaemonReload=yes", 1), observation + "ActiveState=active\n"} {
+		if err := validateRemovalLoadedUnit([]byte(bad), unit); err == nil {
+			t.Fatal("unknown or changed loaded unit admitted", bad)
+		}
+	}
+	if err := validateRemovalLoadedUnit([]byte(observation), "foreign.service"); err == nil {
+		t.Fatal("foreign stop target admitted")
+	}
+}
