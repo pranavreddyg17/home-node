@@ -114,6 +114,9 @@ func (e *Engine) removeConfigurationLocked(ctx context.Context, guard func(conte
 				return err
 			}
 		}
+		if err := observe(); err != nil {
+			return err
+		}
 		intent.Completed = index + 1
 		if err := persist(); err != nil {
 			return err

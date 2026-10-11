@@ -76,3 +76,11 @@ func (e *Engine) withConfigurationRemovalExclusionLocked(ctx context.Context, ob
 	}
 	return guard(ctx)
 }
+
+// removeConfigurationWithExclusionLocked composes retained authority and the
+// journaled consumer. Observe remains the caller's native manager/guest gate.
+func (e *Engine) removeConfigurationWithExclusionLocked(ctx context.Context, observe func(context.Context) error) error {
+	return e.withConfigurationRemovalExclusionLocked(ctx, observe, func(ctx context.Context, guard func(context.Context) error) error {
+		return e.removeConfigurationLocked(ctx, guard)
+	})
+}
