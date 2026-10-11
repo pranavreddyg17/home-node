@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"runtime"
@@ -11,7 +12,8 @@ import (
 
 // Runs only in the opt-in disposable native installed account fixture. It
 // qualifies removal authority and retained TLS bytes, not HTTPS startup or trust.
-func qualifyNativeInstalledGatewayRetirement(t *testing.T, e *Engine, ctx context.Context, identity GatewayAccount) {
+func qualifyNativeInstalledGatewayRetirement(t *testing.T, engine **Engine, ctx context.Context, identity GatewayAccount) {
+	e := *engine
 	t.Helper()
 	if runtime.GOOS != "linux" || os.Geteuid() != 0 || os.Getenv("HOMENODE_ACCOUNT_INSPECTION_INTEGRATION") != "1" {
 		t.Fatal("disposable Linux root required")
@@ -79,9 +81,34 @@ func qualifyNativeInstalledGatewayRetirement(t *testing.T, e *Engine, ctx contex
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := e.RetireGatewayTLS(ctx); err != nil {
-		t.Fatal("native TLS retirement", err)
+
+	// Release the installation lock for the actual installed CLI process.
+	if err := e.Close(); err != nil {
+		t.Fatal(err)
 	}
+	*engine = nil
+	output, err := accountCommand(ctx, "/usr/bin/homenode", "gateway-tls-retire", "--journal-dir", "/var/lib/homenode-install")
+	if err != nil {
+		t.Fatal("packaged native TLS retirement CLI", err)
+	}
+	var status struct {
+		Phase     string `json:"phase"`
+		Retired   bool   `json:"tlsOwnershipRetired"`
+		Block     bool   `json:"activationBlockRetained"`
+		Dormant   bool   `json:"servicesDormant"`
+		Deleted   bool   `json:"tlsContentsDeleted"`
+		Removed   bool   `json:"installationRemoved"`
+		Activated bool   `json:"servicesActivated"`
+	}
+	if err := json.Unmarshal(output, &status); err != nil || status.Phase != "gateway-tls-retire" || !status.Retired || !status.Block || !status.Dormant || status.Deleted || status.Removed || status.Activated {
+		t.Fatal("packaged TLS retirement result", err)
+	}
+	e, err = Open("/", "/var/lib/homenode-install")
+	if err != nil {
+		t.Fatal("reopen packaged TLS retirement", err)
+	}
+	*engine = e
+
 	if err := e.RetireGatewayTLS(ctx); err != nil {
 		t.Fatal("native TLS retirement replay", err)
 	}
@@ -118,5 +145,5 @@ func qualifyNativeInstalledGatewayRetirement(t *testing.T, e *Engine, ctx contex
 	}
 	qualifyNativeConfigurationRemoval(t, e, ctx)
 	passed = true
-	t.Log("native installed gateway TLS retirement, ownership publication, gateway identity removal and ready replay passed; retained bytes and activation marker preserved; HTTPS startup remains unqualified")
+	t.Log("native packaged TLS retirement CLI, ownership publication, gateway identity removal and ready replay passed; retained bytes and activation marker preserved; HTTPS startup remains unqualified")
 }

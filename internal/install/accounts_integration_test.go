@@ -260,7 +260,7 @@ func runInstalledAccountInspection(t *testing.T, gatewayRetirement bool) {
 			t.Fatal(err)
 		}
 		installAccountFixtureConfiguration(t, engine, accounts, maintenance, &identity)
-		qualifyNativeInstalledGatewayRetirement(t, engine, ctx, identity)
+		qualifyNativeInstalledGatewayRetirement(t, &engine, ctx, identity)
 		return
 	}
 	installAccountFixtureConfiguration(t, engine, accounts, maintenance)
