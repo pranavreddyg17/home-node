@@ -318,8 +318,12 @@ memberships. A previously completed membership disappearing is a conflict,
 not an invitation to recreate it. The check reads protected account files and
 requires live NSS IDs and supplementary memberships to agree.
 
-These commands do not start services or change TLS key ownership. The installed
-service configuration still uses the direct controller HTTPS listener; gateway
-service wiring, rollback/removal integration and native distinct-identity
-qualification are incomplete. Do not interpret account readiness as readiness
-to expose the new gateway architecture.
+These account commands do not start services or change TLS key ownership.
+Subsequent configuration staging observes the ready gateway journal and live
+identity before installing the gateway unit, transforming the controller to a
+Unix-only listener and assigning the TLS directory to the gateway group. The
+certificate provisioning step must supply a root-owned key with mode 0640 and
+the gateway GID; installation verification refuses the controller GID for that
+key. Recovery and storage/identity migrations include the installed gateway in
+activation, stop and dormancy checks. Account removal and native distinct-identity
+systemd/HTTPS qualification remain incomplete.

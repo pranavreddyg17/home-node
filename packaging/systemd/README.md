@@ -78,15 +78,16 @@ and prepared checks require their exact embedded content. The installer does not
 yet emit backup.env, enable the socket, or coordinate approved owner jobs;
 actual worker startup and confinement remain release gates.
 
-The gateway service source is packaged but not yet installed by configuration
-staging. It uses `homenode-gateway` with only `homenode-proxy` supplementary
-membership, a fixed controller Unix endpoint and gateway-only TLS credentials.
-Its filesystem namespace hides runtime, transfer, backup and workload storage
-paths. `gatewayControlUnit` transforms the controller source to a Unix-only
-listener with TLS directory access denied; it composes with the existing backup
-maintenance listener transformation. Gateway identity observation, TLS directory
-ownership, configuration staging, recovery/removal integration and native
-systemd qualification must be completed before activating this service split.
+When the owned gateway journal is ready and live account inspection agrees,
+configuration staging installs the gateway source and transforms the controller
+into a Unix-only service. The gateway uses `homenode-gateway` with only
+`homenode-proxy` supplementary membership, a fixed controller endpoint and
+TLS directory access through the gateway group. Its namespace hides runtime,
+transfer, backup and workload storage paths; the controller cannot access the
+TLS directory. Installation verification binds both units and peer IDs to the
+journal, and checks gateway key ownership. Recovery and migration paths include
+the gateway's activation block, stop and dormancy observations. Account removal,
+native systemd qualification and actual private HTTPS workflows remain incomplete.
 
 HTTPS certificate admission calls Go's Linux interface/address enumeration,
 which uses a `NETLINK_ROUTE` socket. The gateway and transitional direct-HTTPS
