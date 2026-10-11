@@ -117,7 +117,7 @@ func dialController(ctx context.Context, config Config) (net.Conn, error) {
 		return nil, ErrTransport
 	}
 	parent, err := os.Lstat(filepath.Dir(config.Socket))
-	if err != nil || !parent.IsDir() || parent.Mode().Perm()&0022 != 0 {
+	if err != nil || !parent.IsDir() || parent.Mode().Perm()&0022 != 0 || parent.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
 		return nil, ErrTransport
 	}
 	owner, ok := parent.Sys().(*syscall.Stat_t)
@@ -136,6 +136,16 @@ func dialController(ctx context.Context, config Config) (net.Conn, error) {
 	}
 	updated, ok := after.Sys().(*syscall.Stat_t)
 	if !ok || updated.Uid != metadata.Uid || updated.Gid != metadata.Gid || updated.Nlink != metadata.Nlink {
+		conn.Close()
+		return nil, ErrTransport
+	}
+	currentParent, err := os.Lstat(filepath.Dir(config.Socket))
+	if err != nil || !os.SameFile(parent, currentParent) || parent.Mode() != currentParent.Mode() {
+		conn.Close()
+		return nil, ErrTransport
+	}
+	currentOwner, ok := currentParent.Sys().(*syscall.Stat_t)
+	if !ok || currentOwner.Uid != owner.Uid || currentOwner.Gid != owner.Gid {
 		conn.Close()
 		return nil, ErrTransport
 	}

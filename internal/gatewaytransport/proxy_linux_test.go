@@ -71,6 +71,17 @@ func TestUnixControllerPeerAndHeaderMediation(t *testing.T) {
 	if status := invoke(uint32(os.Geteuid()) + 1); status != 503 || requests.Load() != 0 {
 		t.Fatal("foreign controller owner accepted", status)
 	}
+	for _, mode := range []os.FileMode{0777, 0700 | os.ModeSetgid, 0700 | os.ModeSticky} {
+		if err := os.Chmod(filepath.Dir(socket), mode); err != nil {
+			t.Fatal(err)
+		}
+		if status := invoke(uint32(os.Geteuid())); status != 503 || requests.Load() != 0 {
+			t.Fatal("unsafe socket parent admitted", mode, status)
+		}
+	}
+	if err := os.Chmod(filepath.Dir(socket), 0700); err != nil {
+		t.Fatal(err)
+	}
 	if status := invoke(uint32(os.Geteuid())); status != 200 || requests.Load() != 1 {
 		t.Fatal("qualified peer request failed", status)
 	}
