@@ -28,6 +28,9 @@ func (e *Engine) PlanGatewayAccountRemoval(ctx context.Context) (GatewayAccountR
 func (e *Engine) planGatewayAccountRemoval(ctx context.Context, b gatewayProvisionBackend) (GatewayAccountRemovalPlan, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.planGatewayAccountRemovalLocked(ctx, b)
+}
+func (e *Engine) planGatewayAccountRemovalLocked(ctx context.Context, b gatewayProvisionBackend) (GatewayAccountRemovalPlan, error) {
 	var empty GatewayAccountRemovalPlan
 	if err := ctx.Err(); err != nil {
 		return empty, err
