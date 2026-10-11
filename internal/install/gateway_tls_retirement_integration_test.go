@@ -83,6 +83,23 @@ func qualifyNativeInstalledGatewayRetirement(t *testing.T, engine **Engine, ctx 
 		t.Fatal(err)
 	}
 
+	if _, err := e.PrepareGatewayAccountRemoval(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.RemoveGatewayAccount(ctx); !errors.Is(err, ErrConflict) {
+		t.Fatal("numeric identity release before TLS retirement admitted", err)
+	}
+	if actual, err := InspectGatewayAccount(ctx); err != nil || actual != identity {
+		t.Fatal("refused TLS-dependent removal changed identity", err)
+	}
+	base, err := e.loadAccountJournal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	removal, err := e.loadGatewayRemovalIntent(base)
+	if err != nil || removal.Completed != 0 || removal.Ready {
+		t.Fatal("refused TLS-dependent removal advanced intent", err)
+	}
 	// Release the installation lock for the actual installed CLI process.
 	if err := e.Close(); err != nil {
 		t.Fatal(err)
@@ -148,9 +165,24 @@ func qualifyNativeInstalledGatewayRetirement(t *testing.T, engine **Engine, ctx 
 		if i == 0 {
 			mode = 0600
 		}
-		if err != nil || nameErr != nil || !os.SameFile(info, named) || info.Mode().Perm() != mode {
+
+		if err != nil || nameErr != nil || !os.SameFile(info, named) || info.Mode().Perm() != mode || !info.Mode().IsRegular() {
 			t.Fatal("retained TLS inode or permissions", err, nameErr)
 		}
+		metadata, ok := info.Sys().(*syscall.Stat_t)
+		if !ok || metadata.Uid != 0 || metadata.Gid != 0 || metadata.Nlink != 1 {
+			t.Fatal("retained TLS ownership or links changed")
+		}
+
+	}
+
+	directory, err := e.host.Lstat("etc/homenode/tls")
+	if err != nil || !directory.IsDir() || directory.Mode().Perm() != 0700 {
+		t.Fatal("retained TLS directory permissions", err)
+	}
+	directoryMetadata, ok := directory.Sys().(*syscall.Stat_t)
+	if !ok || directoryMetadata.Uid != 0 || directoryMetadata.Gid != 0 {
+		t.Fatal("retained TLS directory ownership")
 	}
 	after, err := e.journalRoot.Lstat("recovery-blocked")
 	if err != nil || !os.SameFile(marker, after) {
