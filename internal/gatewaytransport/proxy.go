@@ -70,7 +70,7 @@ func NewProxy(config Config) (http.Handler, func(), error) {
 			_, _ = w.Write([]byte(`{"error":{"code":"GATEWAY_UNAVAILABLE","message":"The controller is unavailable. Try again shortly."}}`))
 		},
 	}
-	slots := make(chan struct{}, 64)
+	budget := requestBudget{perAddress: make(map[netip.Addr]int)}
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w = &deadlineWriter{ResponseWriter: w}
 		// Transport refusals bypass application middleware. Keep their access
@@ -83,13 +83,12 @@ func NewProxy(config Config) (http.Handler, func(), error) {
 			http.Error(w, "gateway request denied", http.StatusForbidden)
 			return
 		}
-		select {
-		case slots <- struct{}{}:
-			defer func() { <-slots }()
-		default:
+		client := address.Addr().Unmap()
+		if !budget.acquire(client) {
 			http.Error(w, "gateway busy", http.StatusServiceUnavailable)
 			return
 		}
+		defer budget.release(client)
 		proxy.ServeHTTP(w, r)
 	})
 	return handler, transport.CloseIdleConnections, nil

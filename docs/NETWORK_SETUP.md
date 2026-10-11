@@ -70,3 +70,11 @@ host remain release gates.
 References: [Tailscale HTTPS certificates](https://tailscale.com/docs/how-to/set-up-https-certificates),
 [Tailscale CLI](https://tailscale.com/docs/reference/tailscale-cli),
 [status data definition](https://github.com/tailscale/tailscale/blob/main/ipn/ipnstate/ipnstate.go).
+
+The installed gateway admits at most 64 TCP connections and eight per source
+address before TLS parsing. It separately admits at most 64 active HTTP requests
+and eight per source address, including multiplexed HTTP/2 streams. Excess
+requests receive a non-cacheable 503 response. Active stream slots are released
+when the handler returns; idle address entries are removed. These limits protect
+capacity but do not replace device authorization or workload-specific quotas.
+Native multi-device HTTPS pressure testing remains a release gate.
