@@ -28,10 +28,17 @@ func validateIdentity(platform string, uid, gid int, controllerUID, bridgeGID ui
 	if platform != "linux" || uid <= 0 || gid <= 0 || uid > 1<<31-1 || gid > 1<<31-1 || controllerUID == 0 || controllerUID > 1<<31-1 || bridgeGID == 0 || bridgeGID > 1<<31-1 || uint32(uid) == controllerUID || uint32(gid) == bridgeGID {
 		return gatewaytransport.ErrTransport
 	}
+	hasBridge := false
 	for _, group := range groups {
 		if group < 0 || group > 1<<31-1 || (group != gid && uint32(group) != bridgeGID) {
 			return gatewaytransport.ErrTransport
 		}
+		if uint32(group) == bridgeGID {
+			hasBridge = true
+		}
+	}
+	if !hasBridge {
+		return gatewaytransport.ErrTransport
 	}
 	return nil
 }

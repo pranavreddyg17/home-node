@@ -11,6 +11,9 @@ func TestGatewayIdentitySeparation(t *testing.T) {
 		valid              bool
 	}{
 		{"linux", 200, 201, 202, 203, []int{201, 203}, true},
+		{"linux", 200, 201, 202, 203, []int{203}, true},
+		{"linux", 200, 201, 202, 203, []int{201}, false},
+		{"linux", 200, 201, 202, 203, nil, false},
 		{"darwin", 200, 201, 202, 203, []int{201, 203}, false},
 		{"linux", 0, 201, 202, 203, []int{201, 203}, false},
 		{"linux", 200, 0, 202, 203, []int{203}, false},
