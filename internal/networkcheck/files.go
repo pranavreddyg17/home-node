@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"syscall"
 	"time"
 )
@@ -16,6 +17,16 @@ func protectedPEM(path string, private bool) ([]byte, error) {
 }
 
 func protectedPEMWithGroup(path string, private bool, group *uint32) ([]byte, error) {
+	var directory *os.File
+	var directoryInfo os.FileInfo
+	if group != nil {
+		var err error
+		directory, directoryInfo, err = gatewayKeyDirectory(path, *group)
+		if err != nil {
+			return nil, ErrIdentity
+		}
+		defer directory.Close()
+	}
 	before, err := os.Lstat(path)
 	if err != nil || !before.Mode().IsRegular() {
 		return nil, fmt.Errorf("TLS identity file is unavailable or not regular: %w", ErrIdentity)
@@ -59,7 +70,37 @@ func protectedPEMWithGroup(path string, private bool, group *uint32) ([]byte, er
 	if err != nil || !tlsFileUnchanged(info, final) {
 		return nil, ErrIdentity
 	}
+	if directory != nil {
+		current, err := directory.Stat()
+		named, namedErr := os.Lstat(filepath.Dir(path))
+		if err != nil || namedErr != nil || !tlsFileUnchanged(directoryInfo, current) || !os.SameFile(current, named) || named.Mode() != current.Mode() || protectedPEMACL(directory) != nil {
+			return nil, ErrIdentity
+		}
+	}
 	return data, nil
+}
+
+func gatewayKeyDirectory(path string, group uint32) (*os.File, os.FileInfo, error) {
+	parent := filepath.Dir(path)
+	before, err := os.Lstat(parent)
+	if err != nil || !before.IsDir() || before.Mode().Perm() != 0750 || before.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
+		return nil, nil, ErrIdentity
+	}
+	file, err := os.OpenFile(parent, os.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, nil, ErrIdentity
+	}
+	info, err := file.Stat()
+	if err != nil || !tlsFileUnchanged(before, info) {
+		file.Close()
+		return nil, nil, ErrIdentity
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat.Uid != 0 || stat.Gid != group || protectedPEMACL(file) != nil {
+		file.Close()
+		return nil, nil, ErrIdentity
+	}
+	return file, info, nil
 }
 
 func tlsFileUnchanged(before, after os.FileInfo) bool {

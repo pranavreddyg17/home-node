@@ -149,8 +149,20 @@ func TestRootTLSFileAdmission(t *testing.T) {
 		}
 	}
 
+	if err := os.Chmod(dir, 0750); err != nil {
+		t.Fatal(err)
+	}
 	group := uint32(os.Getegid())
 	wrongGroup := group ^ 1
+	if err := os.Chmod(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := protectedPEMWithGroup(path, true, &group); err == nil {
+		t.Fatal("public TLS directory admitted")
+	}
+	if err := os.Chmod(dir, 0750); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := protectedPEMWithGroup(path, true, &group); err != nil {
 		t.Fatal("gateway group refused", err)
 	}
