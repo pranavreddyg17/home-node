@@ -25,6 +25,11 @@ func ControllerHandler(gatewayUID uint32, next http.Handler) (http.Handler, erro
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w = &deadlineWriter{ResponseWriter: w}
+		// Transport refusals bypass application middleware. Keep their access
+		// decisions out of browser and intermediary caches as well.
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+
 		uid, ok := supervisor.RequestPeerUID(r)
 		addresses, versions := r.Header.Values(clientAddressHeader), r.Header.Values(clientTLSHeader)
 		if !ok || uid != gatewayUID || len(addresses) != 1 || len(versions) != 1 || versions[0] != "1.3" {

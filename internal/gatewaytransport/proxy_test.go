@@ -19,6 +19,10 @@ func TestPublicAssertionsCannotCreateTrustedTransport(t *testing.T) {
 	request.TLS = &tls.ConnectionState{Version: tls.VersionTLS13}
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
+
+	if response.Header().Get("Cache-Control") != "no-store" || response.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatal("peer refusal bypassed transport privacy headers")
+	}
 	if response.Code != 403 || called || TrustedHTTPS(request) {
 		t.Fatal("headers bypassed kernel peer authentication")
 	}
@@ -50,6 +54,10 @@ func TestProxyRefusesUnsafeFrontendRequests(t *testing.T) {
 			change.apply(request)
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
+
+			if response.Header().Get("Cache-Control") != "no-store" || response.Header().Get("X-Content-Type-Options") != "nosniff" {
+				t.Fatal("frontend refusal bypassed transport privacy headers")
+			}
 			if response.Code != 403 {
 				t.Fatal("unsafe frontend accepted", response.Code)
 			}

@@ -73,6 +73,11 @@ func NewProxy(config Config) (http.Handler, func(), error) {
 	slots := make(chan struct{}, 64)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w = &deadlineWriter{ResponseWriter: w}
+		// Transport refusals bypass application middleware. Keep their access
+		// decisions out of browser and intermediary caches as well.
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+
 		address, err := netip.ParseAddrPort(r.RemoteAddr)
 		if err != nil || !tailnet.Contains(address.Addr().Unmap()) || r.TLS == nil || r.TLS.Version != tls.VersionTLS13 || r.Host != origin.Host || r.URL.IsAbs() || r.URL.Host != "" || r.Method == "CONNECT" || r.Header.Get("Upgrade") != "" || len(r.Trailer) != 0 {
 			http.Error(w, "gateway request denied", http.StatusForbidden)
