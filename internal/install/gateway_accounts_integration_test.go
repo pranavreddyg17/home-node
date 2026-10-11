@@ -85,6 +85,15 @@ func qualifyNativeGatewayAccounts(t *testing.T, engine *Engine, ctx context.Cont
 		t.Fatal("guest UID plan lacks verified gateway UID")
 	}
 	t.Log("native journaled gateway provisioning, installed check CLI, readiness replay and group isolation passed")
+}
+
+// Runs after native NSS/allocator restoration while owned accounts still exist.
+func qualifyNativeGatewayRemoval(t *testing.T, engine *Engine, ctx context.Context) {
+	t.Helper()
+	if os.Getenv("HOMENODE_ACCOUNT_INSPECTION_INTEGRATION") != "1" || runtime.GOOS != "linux" || os.Geteuid() != 0 {
+		t.Fatal("disposable Linux root fixture required")
+	}
+	var err error
 	// This fixture has never activated services. It qualifies real account command
 	// semantics only; its guard does not claim installed systemd exclusion.
 	if _, err := engine.PrepareGatewayAccountRemoval(ctx); err != nil {

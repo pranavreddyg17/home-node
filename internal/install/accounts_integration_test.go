@@ -249,6 +249,22 @@ func TestInstalledAccountInspection(t *testing.T) {
 		t.Fatal("identity CLI journal reacquisition", err)
 	}
 	installAccountFixtureConfiguration(t, engine, accounts, maintenance)
+
+	gatewayQualified := false
+	// Cleanup is LIFO: register teardown before NSS/allocator restoration so
+	// those guarded restorations still observe the ready gateway identity.
+	t.Cleanup(func() {
+		if !gatewayQualified || t.Failed() {
+			return
+		}
+		cleanup, err := Open("/", journalDirectory)
+		if err != nil {
+			t.Error("gateway teardown fixture admission", err)
+			return
+		}
+		defer cleanup.Close()
+		qualifyNativeGatewayRemoval(t, cleanup, context.Background())
+	})
 	applyAccountFixtureIdentity(t, &engine, identityPreview)
 	applyAccountFixtureAllocator(t, &engine, allocatorPreview)
 	storagePrepared := false
@@ -382,5 +398,5 @@ func TestInstalledAccountInspection(t *testing.T) {
 	if _, err = InspectLocalAccounts(ctx); err != nil {
 		t.Fatal("repaired identity not admitted", err)
 	}
-	t.Run("GatewayProvisioning", func(t *testing.T) { qualifyNativeGatewayAccounts(t, engine, ctx) })
+	gatewayQualified = t.Run("GatewayProvisioning", func(t *testing.T) { qualifyNativeGatewayAccounts(t, engine, ctx) })
 }
