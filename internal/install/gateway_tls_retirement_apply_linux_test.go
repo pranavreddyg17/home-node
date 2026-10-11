@@ -52,6 +52,21 @@ func TestRootGatewayTLSRetirementResumesEveryPermissionAcknowledgement(t *testin
 			if err := e.prepareGatewayTLSRetirementIntentLocked(ctx, initial, func() error { return e.verifyGatewayTLSAdmissionLocked(ctx, a) }); err != nil {
 				t.Fatal(err)
 			}
+
+			immutable, err := e.load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := e.admitGatewayTLSInstallationLocked(ctx, immutable, immutable, a); err != nil {
+				t.Fatal("initial transition admission", err)
+			}
+
+			foreignSource := immutable
+			foreignSource.Items = append([]record(nil), immutable.Items...)
+			foreignSource.Items[0].GID++
+			if err := e.admitGatewayTLSInstallationLocked(ctx, immutable, foreignSource, a); err == nil {
+				t.Fatal("substituted immutable transition source admitted")
+			}
 			// This fixture proves permission/journal behavior only. Production must supply
 			// the separately verified live manager, identity and activation barrier guard.
 			interrupted := errors.New("lost TLS permission acknowledgement or authority")
@@ -92,6 +107,14 @@ func TestRootGatewayTLSRetirementResumesEveryPermissionAcknowledgement(t *testin
 				t.Fatal("unexpected additional permission mutation", phase, err)
 			}
 			authority = true
+
+			current, err := e.load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := e.admitGatewayTLSInstallationLocked(ctx, current, immutable, a); err != nil {
+				t.Fatal("interrupted transition admission", err)
+			}
 			source := a.Plan
 			if err := a.Close(); err != nil {
 				t.Fatal(err)
@@ -142,6 +165,10 @@ func TestRootGatewayTLSRetirementResumesEveryPermissionAcknowledgement(t *testin
 			installed, err := e.load()
 			if err != nil || len(gatewayRemovalIdentityReferences(installed, identity)) != 0 {
 				t.Fatal("retained numeric identity references", err)
+			}
+
+			if err := e.admitGatewayTLSInstallationLocked(ctx, installed, immutable, a); err != nil {
+				t.Fatal("published transition admission", err)
 			}
 			reopened, err := e.reopenGatewayTLSRetirementLocked(ctx, source)
 			if err != nil {
