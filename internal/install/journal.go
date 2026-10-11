@@ -171,7 +171,7 @@ func (e *Engine) saveJournalBytes(name string, data []byte) error {
 	// This reserved staging name belongs only to this private journal. Recover
 	// a torn previous journal write without touching the last committed journal.
 	if info, err := e.journalRoot.Lstat(next); err == nil {
-		if !info.Mode().IsRegular() || !owned(info, e.owner) || info.Mode().Perm() != 0600 {
+		if !accountJournalFileAdmitted(info, e.owner, 64<<10) {
 			return ErrConflict
 		}
 		if err = e.journalRoot.Remove(next); err != nil {
