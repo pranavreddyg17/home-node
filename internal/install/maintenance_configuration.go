@@ -60,7 +60,7 @@ func maintenanceControlUnit(data []byte, identity MaintenanceAccount) ([]byte, e
 	return bytes.Replace(data, requires, []byte("Requires=homenode-supervisor.service homenode-transfer.service homenode-app-maintenance.socket\n"), 1), nil
 }
 func maintenanceSocketUnit() []byte {
-	return []byte("[Unit]\nDescription=HomeNode backup-only app maintenance listener\n\n[Socket]\nListenStream=/run/homenode-backup/apps.sock\nFileDescriptorName=homenode-app-maintenance\nSocketUser=root\nSocketGroup=homenode-backup\nSocketMode=0660\nDirectoryMode=0755\nService=homenode-control.service\nRemoveOnStop=yes\n\n[Install]\nWantedBy=sockets.target\n")
+	return []byte("[Unit]\nDescription=HomeNode backup-only app maintenance listener\nConditionPathExists=!/var/lib/homenode-install/recovery-blocked\n\n[Socket]\nListenStream=/run/homenode-backup/apps.sock\nFileDescriptorName=homenode-app-maintenance\nSocketUser=root\nSocketGroup=homenode-backup\nSocketMode=0660\nDirectoryMode=0755\nService=homenode-control.service\nRemoveOnStop=yes\n\n[Install]\nWantedBy=sockets.target\n")
 }
 
 func validateMaintenanceStaging(config journal, identity *MaintenanceAccount) error {

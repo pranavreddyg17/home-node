@@ -35,6 +35,9 @@ func TestMaintenanceConfigurationUsesObservedDistinctIdentity(t *testing.T) {
 		t.Fatal("controller activation omitted", control)
 	}
 	socket := string(findConfiguration(t, preview.Plan, "etc/systemd/system/homenode-app-maintenance.socket").Data)
+	if strings.Count(socket, "ConditionPathExists=!/var/lib/homenode-install/recovery-blocked\n") != 1 {
+		t.Fatal("maintenance activation bypasses retained recovery block", socket)
+	}
 	for _, required := range []string{"SocketUser=root\n", "SocketGroup=homenode-backup\n", "SocketMode=0660\n", "FileDescriptorName=homenode-app-maintenance\n", "Service=homenode-control.service\n"} {
 		if !strings.Contains(socket, required) {
 			t.Fatal("unsafe activation socket", socket)
