@@ -102,7 +102,7 @@ func TestConfigurationRemovalRetirementRequiresAbsentDormantJobFreeManagerState(
 			t.Fatal(unit, err)
 		}
 		for _, bad := range []string{
-			strings.Replace(absent, "LoadState=not-found", "LoadState=loaded", 1),
+			strings.Replace(absent, "FragmentPath=", "FragmentPath=/etc/systemd/system/"+unit, 1),
 			strings.Replace(absent, "Job=", "Job=123", 1),
 			strings.Replace(absent, "ActiveState=inactive", "ActiveState=active", 1),
 			strings.Replace(absent, "FragmentPath=", "FragmentPath=/usr/lib/systemd/system/"+unit, 1),
@@ -111,6 +111,45 @@ func TestConfigurationRemovalRetirementRequiresAbsentDormantJobFreeManagerState(
 			if err := validateRemovalRetiredUnit([]byte(bad), unit); err == nil {
 				t.Fatal("unretired manager state admitted", unit, bad)
 			}
+		}
+	}
+}
+
+func TestConfigurationRemovalSynthesizedSliceRequiresAbsentOwnedFile(t *testing.T) {
+	unit := "homenode.slice"
+	observation := "Id=homenode.slice\nFragmentPath=\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\nJob=\nLoadState=loaded\nActiveState=inactive\nSubState=dead\n"
+	if err := validateRemovalDormantUnit([]byte(observation), unit, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateRemovalRetiredUnit([]byte(observation), unit); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateRemovalDormantUnit([]byte(observation), unit, false); err == nil {
+		t.Fatal("present slice fragment admitted as synthesized")
+	}
+	if err := validateRemovalLoadedUnit([]byte(observation), unit); err == nil {
+		t.Fatal("synthesized slice admitted before owned stop")
+	}
+	for _, bad := range []string{
+		strings.Replace(observation, "DropInPaths=", "DropInPaths=/etc/systemd/system/slice.d/foreign.conf", 1),
+		strings.Replace(observation, "ActiveState=inactive", "ActiveState=active", 1),
+		strings.Replace(observation, "SubState=dead", "SubState=running", 1),
+		strings.Replace(observation, "Job=", "Job=12", 1),
+		strings.Replace(observation, "Transient=no", "Transient=yes", 1),
+		strings.Replace(observation, "NeedDaemonReload=no", "NeedDaemonReload=yes", 1),
+		observation + "FragmentPath=\n",
+	} {
+		if validateRemovalDormantUnit([]byte(bad), unit, true) == nil || validateRemovalRetiredUnit([]byte(bad), unit) == nil {
+			t.Fatal("unsafe synthesized slice admitted", bad)
+		}
+	}
+	for _, other := range []string{"homenode-control.service", "homenode-app-maintenance.socket"} {
+		changed := strings.Replace(observation, unit, other, 1)
+		if strings.HasSuffix(other, ".service") {
+			changed += "MainPID=0\nControlPID=0\n"
+		}
+		if validateRemovalDormantUnit([]byte(changed), other, true) == nil || validateRemovalRetiredUnit([]byte(changed), other) == nil {
+			t.Fatal("fragmentless loaded non-slice admitted", other)
 		}
 	}
 }

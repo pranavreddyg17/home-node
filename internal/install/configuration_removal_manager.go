@@ -39,6 +39,16 @@ func validateRemovalDormantUnit(data []byte, unit string, missing bool) error {
 	common["LoadState"] = "not-found"
 	common["FragmentPath"] = ""
 	common["NeedDaemonReload"] = "no"
+	// Slice files are optional in systemd: a collected slice is synthesized as
+	// loaded with no fragment. Filesystem absence is independently established
+	// by the caller; all dormancy and ownership properties remain mandatory.
+	if unit == "homenode.slice" {
+		common["LoadState"] = "loaded"
+		if validateRecoveryProperties(data, common) == nil {
+			return nil
+		}
+		common["LoadState"] = "not-found"
+	}
 	return validateRecoveryProperties(data, common)
 }
 
@@ -80,12 +90,20 @@ func validateRemovalLoadedUnit(data []byte, unit string) error {
 
 // validateRemovalRetiredUnit is the final manager state after daemon-reload.
 // Unlike an intermediate unlink observation, retaining an old loaded fragment
-// is not enough: every retired unit must be absent, inactive and job-free.
+// is not enough: every retired fragment must be absent, inactive and job-free.
+// Systemd synthesizes slices without a fragment as loaded units.
 func validateRemovalRetiredUnit(data []byte, unit string) error {
 	if !files["etc/systemd/system/"+unit] {
 		return ErrPlan
 	}
 	expected := map[string]string{"Job": "", "Id": unit, "DropInPaths": "", "Transient": "no", "LoadState": "not-found", "FragmentPath": "", "NeedDaemonReload": "no", "ActiveState": "inactive", "SubState": "dead"}
+	if unit == "homenode.slice" {
+		expected["LoadState"] = "loaded"
+		if validateRecoveryProperties(data, expected) == nil {
+			return nil
+		}
+		expected["LoadState"] = "not-found"
+	}
 	if strings.HasSuffix(unit, ".service") {
 		expected["MainPID"] = "0"
 		expected["ControlPID"] = "0"

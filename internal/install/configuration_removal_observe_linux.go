@@ -27,8 +27,8 @@ func (e *Engine) observeConfigurationRemovalLoadedWith(ctx context.Context, comm
 	return e.observeConfigurationRemovalManagerStateWith(ctx, command, false, false)
 }
 
-// Final retirement requires completed durable removal and not-found manager
-// state. A successful daemon-reload command alone cannot prove retirement.
+// Final retirement requires completed durable removal and fragment-free dormant
+// manager state (slices may be synthesized as loaded). A successful daemon-reload command alone cannot prove retirement.
 func (e *Engine) observeConfigurationRemovalRetiredWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd) error {
 	return e.observeConfigurationRemovalManagerStateWith(ctx, command, true, true)
 }
