@@ -264,6 +264,7 @@ func TestInstalledAccountInspection(t *testing.T) {
 		}
 		defer cleanup.Close()
 		qualifyNativeGatewayRemoval(t, cleanup, context.Background())
+		qualifyNativeConfigurationRemoval(t, cleanup, context.Background())
 	})
 	applyAccountFixtureIdentity(t, &engine, identityPreview)
 	applyAccountFixtureAllocator(t, &engine, allocatorPreview)

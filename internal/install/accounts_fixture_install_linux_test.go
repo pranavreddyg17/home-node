@@ -70,7 +70,21 @@ func installAccountFixtureConfiguration(t *testing.T, e *Engine, accounts Accoun
 			t.Error("allocator restoration incomplete; preserving configuration and marker", err)
 			return
 		}
-		if sliceStarted {
+		// The qualified public removal phase already stopped the slice. A
+		// second stop may target a collected/not-found unit after file removal.
+		configurationRemoved := false
+		if _, err := cleanup.journalRoot.Lstat("configuration-removal.json"); err == nil {
+			intent, err := cleanup.loadConfigurationRemovalIntent(current)
+			if err != nil {
+				t.Error("configuration removal cleanup provenance", err)
+				return
+			}
+			configurationRemoved = intent.Ready
+		} else if !os.IsNotExist(err) {
+			t.Error("configuration removal cleanup probe", err)
+			return
+		}
+		if sliceStarted && !configurationRemoved {
 			if err := command("stop", "homenode.slice"); err != nil {
 				t.Error("fixture slice cleanup", err)
 				return
