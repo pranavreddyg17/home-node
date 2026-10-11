@@ -50,7 +50,7 @@ jobs:
       - name: Test installer ownership with root fixture
         run: sudo env HOMENODE_UPDATE_INIT_INTEGRATION=1 HOMENODE_SUPERVISOR_ENTRY_INTEGRATION=1 "$(command -v go)" test ./internal/install ./cmd/homenode-supervisor -count=1 -v
       - name: Test root-owned TLS identity admission
-        run: sudo "$(command -v go)" test ./internal/networkcheck -run '^TestRootTLSFileAdmission$' -count=1 -v
+        run: sudo "$(command -v go)" test ./internal/networkcheck -run '^TestRootTLS(FileAdmission|RejectsNamedReaderACL)$' -count=1 -v
       - name: Test distinct private gateway kernel peers
         run: sudo env HOMENODE_GATEWAY_PEER_INTEGRATION=1 "$(command -v go)" test ./internal/gatewaytransport -run '^TestRootDistinctControllerGatewayPeers$' -count=1 -v
       - name: Test reserved account exclusion with root fixture

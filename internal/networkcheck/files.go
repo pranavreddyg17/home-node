@@ -29,6 +29,9 @@ func protectedPEM(path string, private bool) ([]byte, error) {
 	if !ok || stat.Uid != 0 || stat.Nlink != 1 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || info.Mode().Perm()&0111 != 0 || (private && info.Mode().Perm() != 0600 && info.Mode().Perm() != 0640) {
 		return nil, fmt.Errorf("TLS key needs root ownership and no access for other users: %w", ErrIdentity)
 	}
+	if err := protectedPEMACL(file); err != nil {
+		return nil, ErrIdentity
+	}
 	data, err := io.ReadAll(io.LimitReader(file, (64<<10)+1))
 	if err != nil || len(data) == 0 || len(data) > 64<<10 || int64(len(data)) != info.Size() {
 		return nil, ErrIdentity
@@ -40,6 +43,9 @@ func protectedPEM(path string, private bool) ([]byte, error) {
 	afterStat, ok := after.Sys().(*syscall.Stat_t)
 	named, err := os.Lstat(path)
 	if !ok || afterStat.Uid != stat.Uid || afterStat.Gid != stat.Gid || afterStat.Nlink != 1 || err != nil || !os.SameFile(after, named) || named.Mode() != after.Mode() || named.Size() != after.Size() {
+		return nil, ErrIdentity
+	}
+	if err := protectedPEMACL(file); err != nil {
 		return nil, ErrIdentity
 	}
 	return data, nil
