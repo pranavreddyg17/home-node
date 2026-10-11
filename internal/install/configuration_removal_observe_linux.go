@@ -137,6 +137,15 @@ func (e *Engine) observeConfigurationRemovalManagerStateWith(ctx context.Context
 		} else if err := validateRemovalLoadedUnit(output.Bytes(), unit); err != nil {
 			return err
 		}
+		// Loaded application units must still carry the retained marker condition.
+		// A genuinely not-found unit was admitted above and has no activation path.
+		loaded := strings.Contains("\n"+string(output.Bytes())+"\n", "\nLoadState=loaded\n")
+		if loaded && unit != "homenode-inspect.service" && unit != "homenode.slice" {
+			if err := observeActivationConditionsForUnitsWith(bounded, command, []string{unit}); err != nil {
+				return err
+			}
+		}
+
 	}
 	return verify()
 }

@@ -27,6 +27,11 @@ func TestConfigurationRemovalObserverBindsManagerAbsenceToJournal(t *testing.T) 
 	queries := 0
 	absent := false
 	command := func(ctx context.Context, name string, args ...string) *exec.Cmd {
+
+		if name == "/usr/bin/busctl" {
+			response := `{"type":"a(sbbsi)","data":[["ConditionPathExists",false,true,"/var/lib/homenode-install/recovery-blocked",0]]}`
+			return exec.CommandContext(ctx, "/bin/sh", "-c", "printf '%s' \"$1\"", "fixture", response)
+		}
 		queries++
 		if name != "/usr/bin/systemctl" || len(args) != 6 || args[5] != unit {
 			t.Fatal(name, args)

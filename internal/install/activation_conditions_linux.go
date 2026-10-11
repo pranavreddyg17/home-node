@@ -26,6 +26,28 @@ func ObserveRecoveryActivationConditions(ctx context.Context, gateway ...bool) e
 }
 
 func observeActivationConditionsWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd, gateway ...bool) error {
+	return observeActivationConditionsForUnitsWith(ctx, command, recoveryUnits(requestedGateway(gateway)))
+}
+
+// The supplied unit subset is selected from canonical removal provenance.
+// Reject arbitrary or repeated names before issuing any bus operation.
+func observeActivationConditionsForUnitsWith(ctx context.Context, command func(context.Context, string, ...string) *exec.Cmd, units []string) error {
+	if len(units) > 7 {
+		return ErrPlan
+	}
+	seen := map[string]bool{}
+	for _, unit := range units {
+		switch unit {
+		case "homenode-gateway.service", "homenode-control.service", "homenode-transfer.service", "homenode-supervisor.service", "homenode-backup.service", "homenode-backup-credential.socket", "homenode-app-maintenance.socket":
+		default:
+			return ErrPlan
+		}
+		if seen[unit] {
+			return ErrPlan
+		}
+		seen[unit] = true
+	}
+
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -34,7 +56,7 @@ func observeActivationConditionsWith(ctx context.Context, command func(context.C
 	}
 	bounded, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
-	for _, unit := range recoveryUnits(requestedGateway(gateway)) {
+	for _, unit := range units {
 		if err := bounded.Err(); err != nil {
 			return err
 		}
