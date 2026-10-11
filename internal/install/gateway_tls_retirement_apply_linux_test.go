@@ -74,6 +74,21 @@ func TestRootGatewayTLSRetirementResumesEveryPermissionAcknowledgement(t *testin
 			if err != nil || partial.Completed != stop-1 || partial.Ready {
 				t.Fatal(partial, err)
 			}
+
+			source := a.Plan
+			if err := a.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err := e.Close(); err != nil {
+				t.Fatal(err)
+			}
+			e = openEngine(t, host, jr)
+			defer e.Close()
+			a, err = e.reopenGatewayTLSRetirementLocked(ctx, source)
+			if err != nil {
+				t.Fatal("reopen interrupted permission state", err)
+			}
+			defer a.Close()
 			e.checkpoint = nil
 			if err := e.applyGatewayTLSRetirementLocked(ctx, a, guard); err != nil {
 				t.Fatal("resume", err)
@@ -91,6 +106,18 @@ func TestRootGatewayTLSRetirementResumesEveryPermissionAcknowledgement(t *testin
 			}
 			if phase, err := e.observeGatewayTLSRetirementLocked(ctx, a, final); err != nil || phase != 5 {
 				t.Fatal(phase, err)
+			}
+
+			// Identical contents at the same name cannot replace the recorded inode.
+			if err := e.host.Rename(key, key+".retained-original"); err != nil {
+				t.Fatal(err)
+			}
+			if err := e.host.WriteFile(key, []byte("retained key fixture"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if replaced, err := e.reopenGatewayTLSRetirementLocked(ctx, source); err == nil {
+				replaced.Close()
+				t.Fatal("same-content replacement TLS inode admitted")
 			}
 		})
 	}
