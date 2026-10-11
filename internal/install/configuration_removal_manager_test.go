@@ -91,3 +91,26 @@ func TestConfigurationRemovalLoadedOwnershipDoesNotAdmitAbsentOrForeignUnits(t *
 		t.Fatal("foreign stop target admitted")
 	}
 }
+
+func TestConfigurationRemovalRetirementRequiresAbsentDormantJobFreeManagerState(t *testing.T) {
+	for _, unit := range []string{"homenode-control.service", "homenode-app-maintenance.socket", "homenode-inspect.service", "homenode.slice"} {
+		absent := "Id=" + unit + "\nFragmentPath=\nDropInPaths=\nNeedDaemonReload=no\nTransient=no\nJob=\nLoadState=not-found\nActiveState=inactive\nSubState=dead\n"
+		if strings.HasSuffix(unit, ".service") {
+			absent += "MainPID=0\nControlPID=0\n"
+		}
+		if err := validateRemovalRetiredUnit([]byte(absent), unit); err != nil {
+			t.Fatal(unit, err)
+		}
+		for _, bad := range []string{
+			strings.Replace(absent, "LoadState=not-found", "LoadState=loaded", 1),
+			strings.Replace(absent, "Job=", "Job=123", 1),
+			strings.Replace(absent, "ActiveState=inactive", "ActiveState=active", 1),
+			strings.Replace(absent, "FragmentPath=", "FragmentPath=/usr/lib/systemd/system/"+unit, 1),
+			strings.Replace(absent, "LoadState=not-found", "LoadState=masked", 1),
+		} {
+			if err := validateRemovalRetiredUnit([]byte(bad), unit); err == nil {
+				t.Fatal("unretired manager state admitted", unit, bad)
+			}
+		}
+	}
+}

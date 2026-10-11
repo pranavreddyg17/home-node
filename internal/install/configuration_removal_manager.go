@@ -77,3 +77,18 @@ func validateRemovalLoadedUnit(data []byte, unit string) error {
 	}
 	return validateRecoveryProperties(data, map[string]string{"Job": "", "Id": unit, "DropInPaths": "", "Transient": "no", "LoadState": "loaded", "FragmentPath": "/etc/systemd/system/" + unit, "NeedDaemonReload": "no"})
 }
+
+// validateRemovalRetiredUnit is the final manager state after daemon-reload.
+// Unlike an intermediate unlink observation, retaining an old loaded fragment
+// is not enough: every retired unit must be absent, inactive and job-free.
+func validateRemovalRetiredUnit(data []byte, unit string) error {
+	if !files["etc/systemd/system/"+unit] {
+		return ErrPlan
+	}
+	expected := map[string]string{"Job": "", "Id": unit, "DropInPaths": "", "Transient": "no", "LoadState": "not-found", "FragmentPath": "", "NeedDaemonReload": "no", "ActiveState": "inactive", "SubState": "dead"}
+	if strings.HasSuffix(unit, ".service") {
+		expected["MainPID"] = "0"
+		expected["ControlPID"] = "0"
+	}
+	return validateRecoveryProperties(data, expected)
+}
