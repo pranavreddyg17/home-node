@@ -143,3 +143,14 @@ original-source reconstruction, widened-permission refusal and same-content
 replacement refusal pass. These are protected temporary-root tests with a
 synthetic authority guard. They do not prove native systemd/NSS/activation
 exclusion, the production API/CLI, real HTTPS or complete uninstall.
+
+Native installed gateway retirement passed in
+[CI 38171024806](https://github.com/pranavreddyg17/home-node/actions/runs/38171024806)
+at `0699855`. The [installed gateway evidence record](evidence/installed-gateway-retirement-0699855.json)
+identifies the packaged CLI, native systemd/NSS job and saved log hash. It covers
+TLS-reference refusal, root-only TLS ownership publication, public API replay,
+interrupted public gateway removal and ready replay, retained TLS inode/content
+and metadata, and final configuration retirement with retained app/backup data
+and activation marker. Fixture certificates are test bytes: HTTPS startup,
+certificate trust, live gateway/controller confinement, encrypted export, other
+identity retirement, package removal and complete lifecycle remain unqualified.

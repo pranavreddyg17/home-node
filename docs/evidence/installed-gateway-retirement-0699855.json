@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "sourceRevision": "06998550c9e9b1f0455ee88abe1022001da97e3a",
+  "workflowRun": 38171024806,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38171024806",
+  "jobID": 114563485421,
+  "jobConclusion": "success",
+  "logSHA256": "bf2819901b81cf92e5abe04e74938d14379a5624e0b789467c590c9eeed17700",
+  "environment": "Opt-in disposable Ubuntu Linux root fixture with native NSS accounts, installed generated gateway units, systemd and packaged CLI",
+  "tests": [
+    "TestInstalledGatewayTLSRetirement"
+  ],
+  "qualifiedScope": [
+    "Gateway account and bridge are provisioned through owned ready journals before generated installed gateway configuration is admitted",
+    "Public gateway removal refuses retained TLS identity references before retirement without advancing removal intent",
+    "Actual packaged gateway-tls-retire CLI quiesces native installed services behind the existing activation marker and publishes root-only TLS ownership provenance",
+    "Public RetireGatewayTLS API replays the completed packaged transition against retained installation authority",
+    "Public RemoveGatewayAccount recovers after a native command succeeds without an acknowledgement, completes owned gateway identity removal and supports ready replay",
+    "Retained key and certificate preserve named inode identity and contents with root UID/GID, single links and exact 0600/0644 modes; directory remains root:root 0700",
+    "Public configuration removal and final native manager retirement preserve app/backup sentinel data and the activation marker inode"
+  ],
+  "limitations": [
+    "Fixture TLS material is bounded test data; no issued certificate, HTTPS request, distinct running gateway/controller process confinement or physical tailnet device is qualified",
+    "No active workload, encrypted app-data export, controller/transfer/backup identity removal, package uninstall or purge is qualified",
+    "No physical power loss, supported hardware soak, external review or complete end-to-end application lifecycle qualification"
+  ],
+  "releaseQualified": false
+}

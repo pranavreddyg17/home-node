@@ -348,8 +348,8 @@ only the TLS directory ownership and mode, with source provenance retained for
 retries. The block, TLS contents, app data and backups remain retained.
 
 Output reports `tlsOwnershipRetired: true` and `installationRemoved: false`.
-Gateway account deletion is a separate phase. Native qualification of the TLS
-mutation and production entry point remains pending; this command is not a
+Gateway account deletion is a separate phase. Native installed TLS retirement CLI/API and gateway identity removal passed
+in CI 38171024806 at 0699855; HTTPS startup remains unqualified. This command is not a
 complete uninstall or a usable post-retirement installation.
 
 ### Retained gateway removal phase
@@ -377,8 +377,10 @@ This phase retains service configuration, application data, exports and backups.
 Its JSON explicitly reports `installationRemoved: false`. It does not release
 activation or restore the legacy controller listener. Do not treat it as a
 completed uninstall, a purge, or a usable post-removal installation. Native account
-command qualification passed in CI 38108077678 at e5b07da; full installed service
-exclusion and complete uninstall qualification remain pending.
+command qualification passed in CI 38108077678 at e5b07da. Installed gateway
+TLS retirement, service exclusion, native public removal interruption/replay,
+and retained data passed in CI 38171024806 at 0699855. HTTPS startup and
+complete uninstall qualification remain pending.
 
 ### Retained configuration removal phase
 
