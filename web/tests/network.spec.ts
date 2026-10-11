@@ -22,3 +22,32 @@ test('a stalled setup read times out and the owner can reconnect', async ({ page
   await expect(page.getByRole('heading', { name: 'Welcome home', exact: true })).toBeVisible()
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
+
+test('slow AI status reads do not overlap and polling recovers after refusal', async ({ page }) => {
+  const generation = { id: 'fixture-generation', conversationId: 'fixture-chat', prompt: 'Fixture question', output: '', state: 'running', createdAt: 1 }
+  let active = 0, maximum = 0, completed = 0
+  await page.route('**/api/v1/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    if (path === '/api/v1/setup') return route.fulfill({ json: { claimed: true, development: true } })
+    if (path === '/api/v1/session') return route.fulfill({ json: { device: { id: 'fixture-owner', name: 'Fixture owner', capabilities: ['admin', 'ai'], createdAt: 1, revokedAt: null }, verifiedAt: 1, expiresAt: 9999999999 } })
+    if (path === '/api/v1/host/report') return route.fulfill({ json: { generatedAt: new Date().toISOString(), host: { os: 'linux', architecture: 'amd64' }, checks: [], prerequisitesMet: false, executionEnabled: false } })
+    if (path === '/api/v1/apps') return route.fulfill({ json: { apps: [], runtimeConfigured: false } })
+    if (path === '/api/v1/ai/conversations') return route.fulfill({ json: [{ id: 'fixture-chat', title: 'Fixture chat', createdAt: 1, deletionPending: false, deletionRequiresAction: false }] })
+    if (path.endsWith('/history')) return route.fulfill({ json: [generation] })
+    if (path === '/api/v1/ai/generations/fixture-generation') {
+      active++; maximum = Math.max(maximum, active)
+      await new Promise(resolve => setTimeout(resolve, 2800))
+      completed++; active--
+      if (completed === 1) return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture status temporarily unavailable' } } })
+      return route.fulfill({ json: { ...generation, output: 'Status recovered' } })
+    }
+    return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Unused fixture endpoint' } } })
+  })
+  await page.goto('/')
+  await page.locator('nav').getByRole('button', { name: 'AI', exact: false }).click()
+  await page.locator('.conversation-picker select').selectOption('fixture-chat')
+  await expect(page.getByText('Status recovered', { exact: true })).toBeVisible({ timeout: 12000 })
+  expect(completed).toBeGreaterThanOrEqual(2)
+  expect(maximum).toBe(1)
+  await page.locator('nav').getByRole('button', { name: 'Overview', exact: false }).click()
+})
