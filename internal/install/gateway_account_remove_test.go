@@ -264,3 +264,32 @@ func TestGatewayRemovalAutomaticPrivateGroupDeletionChecksNSSBeforeProxyDeletion
 		t.Fatal("proxy deletion preceded private NSS vacancy", err, base.commands)
 	}
 }
+
+func TestGatewayRemovalLosingGuardAtCheckpointRefusesAcknowledgement(t *testing.T) {
+	e, base, backend := gatewayRemovalFixture(t)
+	lost := errors.New("authority lost before acknowledgement")
+	valid := true
+	e.checkpoint = func(stage, name string) error { valid = false; return nil }
+	guard := func(context.Context) error {
+		if !valid {
+			return lost
+		}
+		return nil
+	}
+	if err := e.removeGatewayAccountLocked(context.Background(), backend, guard); !errors.Is(err, lost) || base.commands != 10 {
+		t.Fatal(err, base.commands)
+	}
+	owned, err := e.loadAccountJournal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	intent, err := e.loadGatewayRemovalIntent(owned)
+	if err != nil || intent.Completed != 0 || intent.Ready {
+		t.Fatal("revoked authority acknowledged", intent, err)
+	}
+	e.checkpoint = nil
+	valid = true
+	if err := e.removeGatewayAccountLocked(context.Background(), backend, guard); err != nil || base.commands != 13 {
+		t.Fatal("resume replayed removed membership", err, base.commands)
+	}
+}

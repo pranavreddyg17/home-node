@@ -115,6 +115,16 @@ func (e *Engine) removeGatewayAccountLocked(ctx context.Context, b gatewayProvis
 				}
 			}
 		}
+
+		// The interruption hook can outlive or revoke authority. Revalidate the
+		// retained guard and observed command effect immediately before ack.
+		phase, err = observe()
+		if err != nil {
+			return err
+		}
+		if phase <= index {
+			return ErrConflict
+		}
 		if index >= intent.Completed {
 			intent.Completed = index + 1
 			if err := persist(); err != nil {

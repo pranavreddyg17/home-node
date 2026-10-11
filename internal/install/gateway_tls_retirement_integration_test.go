@@ -3,6 +3,7 @@ package install
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"runtime"
@@ -115,6 +116,18 @@ func qualifyNativeInstalledGatewayRetirement(t *testing.T, engine **Engine, ctx 
 	if _, err := e.PrepareGatewayAccountRemoval(ctx); err != nil {
 		t.Fatal(err)
 	}
+
+	interrupted := errors.New("native installed removal lost acknowledgement")
+	e.checkpoint = func(stage, name string) error {
+		if stage == "gateway-account-removed" {
+			return interrupted
+		}
+		return nil
+	}
+	if err := e.RemoveGatewayAccount(ctx); !errors.Is(err, interrupted) {
+		t.Fatal("native installed removal interruption", err)
+	}
+	e.checkpoint = nil
 	if err := e.RemoveGatewayAccount(ctx); err != nil {
 		t.Fatal("native installed gateway removal", err)
 	}
