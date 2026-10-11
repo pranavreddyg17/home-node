@@ -351,5 +351,32 @@ This phase retains service configuration, application data, exports and backups.
 Its JSON explicitly reports `installationRemoved: false`. It does not release
 activation or restore the legacy controller listener. Do not treat it as a
 completed uninstall, a purge, or a usable post-removal installation. Native account
-command qualification is running in disposable CI; full installed service
+command qualification passed in CI 38108077678 at e5b07da; full installed service
 exclusion and complete uninstall qualification remain pending.
+
+### Retained configuration removal phase
+
+After any gateway identity removal phase, an owner can review and commit the
+configuration removal plan, then apply it on the Linux host:
+
+```sh
+homenode configuration-removal-plan --journal-dir /var/lib/homenode-install
+homenode configuration-removal-prepare --journal-dir /var/lib/homenode-install
+homenode configuration-removal-apply --journal-dir /var/lib/homenode-install
+```
+
+The apply phase requires the existing activation block. It verifies installation
+provenance and live manager conditions, stops sockets and services before the
+resource slice, then removes only the canonical intent's installer-created
+configuration files. Retries reconcile the first unacknowledged unlink and
+refuse missing future files, changed files, or reintroduced completed files.
+Every deletion is followed by parent-directory synchronization and revalidation
+before its acknowledgement becomes durable.
+
+Application databases, catalog data, directories, backups, identities and
+installer journals remain retained. Output reports `configurationRemoved` for
+successful apply, while `installationRemoved`, `packageRemoved`,
+`serviceIdentitiesRemoved`, and `managerReloaded` remain false. The activation
+block stays in place. Final manager reload, package removal, retained-data export,
+and identity retirement still need a qualified complete uninstall workflow.
+Native installed execution of this new configuration phase remains pending.
