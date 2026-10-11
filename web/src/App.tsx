@@ -47,9 +47,7 @@ function Workspace({ session, logout, verify }: { session: Session; logout: () =
   const refresh = useCallback(async () => {
     setState({ kind: 'loading' })
     try {
-      const response = await fetch('/api/v1/host/report', { cache: 'no-store' })
-      if (!response.ok) throw new Error(`Host service returned ${response.status}`)
-      const report = (await response.json()) as Report
+      const report = await api<Report>('/host/report')
       if (!Array.isArray(report.checks)) throw new Error('Invalid report from host service')
       const apps = await api<{ apps: { state: string }[]; runtimeConfigured: boolean }>('/apps')
       setRuntime({ configured: apps.runtimeConfigured, running: apps.apps.filter(a => a.state === 'running').length })
