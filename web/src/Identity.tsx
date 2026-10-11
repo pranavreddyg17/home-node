@@ -24,6 +24,7 @@ export function IdentityBoundary({ children }: { children: (session: Session, lo
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const refresh = async () => {
+    setError('')
     const status = await api<{ claimed: boolean; development: boolean }>('/setup')
     setClaimed(status.claimed); setDevelopment(status.development)
     if (!status.claimed) setMode('register')
