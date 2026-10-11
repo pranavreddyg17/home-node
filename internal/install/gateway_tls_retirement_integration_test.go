@@ -47,6 +47,25 @@ func qualifyNativeInstalledGatewayRetirement(t *testing.T, engine **Engine, ctx 
 				t.Error("TLS fixture replacement; preserving data")
 				return
 			}
+
+			metadata, ok := info.Sys().(*syscall.Stat_t)
+			expectedMode := os.FileMode(0644)
+			if i == 0 {
+				expectedMode = 0600
+			}
+			if !ok || metadata.Uid != 0 || metadata.Gid != 0 || metadata.Nlink != 1 || !info.Mode().IsRegular() || info.Mode().Perm() != expectedMode {
+				t.Error("TLS cleanup metadata changed; preserving data")
+				return
+			}
+			if _, err := file.Seek(0, io.SeekStart); err != nil {
+				t.Error(err)
+				return
+			}
+			data, err := io.ReadAll(io.LimitReader(file, 1024))
+			if err != nil || string(data) != payloads[i] {
+				t.Error("TLS cleanup contents changed; preserving data", err)
+				return
+			}
 			if err := root.Remove(names[i]); err != nil {
 				t.Error(err)
 				return
