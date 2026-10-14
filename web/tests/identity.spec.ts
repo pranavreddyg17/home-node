@@ -263,6 +263,25 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   expect(await page.evaluate(key => localStorage.getItem(key), uploadKey)).toBe(uploadId)
   expect(duplicateTransfers).toBe(0)
   transferAvailable = true
+  // Pause while local chunk bytes are still being read, before any POST.
+  await page.evaluate(() => {
+    const original = Blob.prototype.arrayBuffer
+    let reads = 0
+    Blob.prototype.arrayBuffer = function () {
+      const result = original.call(this)
+      if (++reads !== 2) return result
+      Blob.prototype.arrayBuffer = original
+      return new Promise<ArrayBuffer>(resolve => {
+        Object.assign(window, { releaseUploadRead: () => { void result.then(resolve) } })
+      })
+    }
+  })
+  await page.getByLabel('Upload a file').setInputFiles(uploadFile)
+  await expect.poll(() => page.evaluate(() => 'releaseUploadRead' in window)).toBe(true)
+  await page.getByRole('button', { name: 'Pause upload', exact: true }).click()
+  await page.evaluate(() => (window as unknown as { releaseUploadRead: () => void }).releaseUploadRead())
+  await expect(page.getByRole('status')).toContainText('Paused. Select the same file to resume.')
+  expect(chunkRequests).toBe(0)
   await page.getByLabel('Upload a file').setInputFiles(uploadFile)
   await expect.poll(() => uploadedOffset).toBe(7)
   await page.getByRole('button', { name: 'Pause upload', exact: true }).click()
