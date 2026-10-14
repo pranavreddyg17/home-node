@@ -3,8 +3,9 @@ export type Session = { device: Device; verifiedAt: number; expiresAt: number }
 export class APIError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message) }
 }
-export async function api<T>(path: string, body?: unknown): Promise<T> {
-  const signal = body === undefined ? AbortSignal.timeout(15000) : undefined
+export async function api<T>(path: string, body?: unknown, cancellation?: AbortSignal): Promise<T> {
+  const deadline = body === undefined ? AbortSignal.timeout(15000) : undefined
+  const signal = deadline && cancellation ? AbortSignal.any([deadline, cancellation]) : deadline ?? cancellation
   try {
     const response = await fetch(`/api/v1${path}`, {
       method: body === undefined ? 'GET' : 'POST',

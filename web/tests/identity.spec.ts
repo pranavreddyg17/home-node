@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page, type Route } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 
@@ -238,7 +238,8 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   const uploadKey = `homenode-transfer:${uploadHash}:${uploadContent.length}`
   const uploadId = 'a'.repeat(32)
   const pending = { id: uploadId, name: 'resume.txt', size: uploadContent.length, sha256: uploadHash, offset: 7, state: 'uploading', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
-  let transferAvailable = false, duplicateTransfers = 0, uploadedOffset = -1
+  let transferAvailable = false, duplicateTransfers = 0, uploadedOffset = -1, chunkRequests = 0
+  let heldChunk: Route | undefined
   await page.evaluate(({ key, id }) => localStorage.setItem(key, id), { key: uploadKey, id: uploadId })
   await page.route(`**/api/v1/transfers/${uploadId}`, route => transferAvailable ? route.fulfill({ json: pending }) : route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture transfer service unavailable' } } }))
   await page.route('**/api/v1/transfers', async route => {
@@ -248,9 +249,12 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.route(`**/api/v1/transfers/${uploadId}/chunks`, async route => {
     const body = JSON.parse(route.request().postData()!)
     uploadedOffset = body.offset
+    chunkRequests++
     expect(Buffer.from(body.data, 'base64')).toEqual(uploadContent.subarray(7))
     expect(body.sha256).toBe(createHash('sha256').update(uploadContent.subarray(7)).digest('hex'))
-    await route.fulfill({ json: { ...pending, offset: uploadContent.length } })
+    // The guest accepted the bytes but the acknowledgement is lost.
+    pending.offset = uploadContent.length
+    heldChunk = route
   })
   await page.route(`**/api/v1/transfers/${uploadId}/finalize`, route => route.fulfill({ json: { id: uploadId } }))
   const uploadFile = { name: 'resume.txt', mimeType: 'text/plain', buffer: uploadContent }
@@ -260,8 +264,15 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   expect(duplicateTransfers).toBe(0)
   transferAvailable = true
   await page.getByLabel('Upload a file').setInputFiles(uploadFile)
+  await expect.poll(() => uploadedOffset).toBe(7)
+  await page.getByRole('button', { name: 'Pause upload', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('Paused. Select the same file to resume.')
+  expect(await page.evaluate(key => localStorage.getItem(key), uploadKey)).toBe(uploadId)
+  await heldChunk?.abort().catch(() => {})
+  await page.getByLabel('Upload a file').setInputFiles(uploadFile)
   await expect(page.getByRole('status')).toContainText('Upload verified')
   expect(uploadedOffset).toBe(7)
+  expect(chunkRequests).toBe(1)
   expect(duplicateTransfers).toBe(0)
   expect(await page.evaluate(key => localStorage.getItem(key), uploadKey)).toBeNull()
   await page.unroute(`**/api/v1/transfers/${uploadId}`)
