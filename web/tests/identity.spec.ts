@@ -239,9 +239,10 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   const uploadId = 'a'.repeat(32)
   const pending = { id: uploadId, name: 'resume.txt', size: uploadContent.length, sha256: uploadHash, offset: 7, state: 'uploading', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
   let transferAvailable = false, duplicateTransfers = 0, uploadedOffset = -1, chunkRequests = 0
+  let transferMismatch = true
   let heldChunk: Route | undefined
   await page.evaluate(({ key, id }) => localStorage.setItem(key, id), { key: uploadKey, id: uploadId })
-  await page.route(`**/api/v1/transfers/${uploadId}`, route => transferAvailable ? route.fulfill({ json: pending }) : route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture transfer service unavailable' } } }))
+  await page.route(`**/api/v1/transfers/${uploadId}`, route => transferAvailable ? route.fulfill({ json: { ...pending, sha256: transferMismatch ? '0'.repeat(64) : uploadHash } }) : route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture transfer service unavailable' } } }))
   await page.route('**/api/v1/transfers', async route => {
     duplicateTransfers++
     await route.fulfill({ status: 500, json: { error: { message: 'Duplicate transfer fixture' } } })
@@ -263,6 +264,12 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   expect(await page.evaluate(key => localStorage.getItem(key), uploadKey)).toBe(uploadId)
   expect(duplicateTransfers).toBe(0)
   transferAvailable = true
+  await page.getByLabel('Upload a file').setInputFiles(uploadFile)
+  await expect(page.getByRole('alert')).toContainText('The saved upload does not match this file.')
+  expect(chunkRequests).toBe(0)
+  expect(duplicateTransfers).toBe(0)
+  expect(await page.evaluate(key => localStorage.getItem(key), uploadKey)).toBe(uploadId)
+  transferMismatch = false
   // Pause while local chunk bytes are still being read, before any POST.
   await page.evaluate(() => {
     const original = Blob.prototype.arrayBuffer

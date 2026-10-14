@@ -69,6 +69,9 @@ export function Files() {
           if (error instanceof APIError && error.status === 404) localStorage.removeItem(storageKey)
           else throw error
         }
+        if (transfer && (transfer.id !== saved || transfer.size !== file.size || transfer.sha256 !== hash || !Number.isSafeInteger(transfer.offset) || transfer.offset < 0 || transfer.offset > file.size)) {
+          throw new Error('The saved upload does not match this file. Refresh Files and check the upload before continuing.')
+        }
         if (transfer && (transfer.expiresAt * 1000 <= Date.now() || !['uploading', 'verifying', 'ready'].includes(transfer.state))) transfer = null
       }
       if (pause.current) { setPhase('Paused. Select the same file to resume.'); return }
