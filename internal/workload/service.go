@@ -161,7 +161,7 @@ func (s *Service) Upload(ctx context.Context, device, id string, offset int64, d
 	if err != nil {
 		return t, err
 	}
-	if response.Offset < offset+int64(len(data)) || response.Offset > t.Size || response.Offset > max(t.Offset, offset+int64(len(data))) {
+	if response.Offset != max(t.Offset, offset+int64(len(data))) || response.Offset > t.Size {
 		return t, ErrConflict
 	}
 	_, err = s.Store.DB.ExecContext(ctx, "UPDATE transfers SET offset=? WHERE id=?", response.Offset, id)
