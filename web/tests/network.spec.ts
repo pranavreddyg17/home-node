@@ -54,6 +54,8 @@ test('slow AI status reads do not overlap and polling recovers after refusal', a
 
 test('Jobs refreshes stay serialized when one response fails before the other completes', async ({ page }) => {
   let activeJobs = 0, activeFiles = 0, maxJobs = 0, maxFiles = 0, completedJobs = 0
+  let fileAvailable = true
+  const inputFile = { id: 'a'.repeat(32), name: 'available.mp4', size: 1, sha256: 'b'.repeat(64), createdAt: 1, trashUntil: null }
   await page.route('**/api/v1/**', async route => {
     const path = new URL(route.request().url()).pathname
     if (path === '/api/v1/setup') return route.fulfill({ json: { claimed: true, development: true } })
@@ -71,7 +73,7 @@ test('Jobs refreshes stay serialized when one response fails before the other co
       activeFiles++; maxFiles = Math.max(maxFiles, activeFiles)
       await new Promise(resolve => setTimeout(resolve, 3500))
       activeFiles--
-      return route.fulfill({ json: [] })
+      return route.fulfill({ json: fileAvailable ? [inputFile] : [{ ...inputFile, trashUntil: 0 }] })
     }
     return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Unused fixture endpoint' } } })
   })
@@ -88,7 +90,44 @@ test('Jobs refreshes stay serialized when one response fails before the other co
   await expect(page.getByText('Last observed', { exact: false })).toBeVisible({ timeout: 12000 })
   await expect(page.getByRole('alert')).toHaveCount(0)
   expect(completedJobs).toBeGreaterThanOrEqual(2)
+  await page.getByRole('combobox', { name: 'Input file', exact: true }).selectOption(inputFile.id)
+  await expect(page.getByRole('button', { name: 'Queue conversion', exact: true })).toBeEnabled()
+  fileAvailable = false
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: 'Input file', exact: true })).toHaveValue('', { timeout: 6000 })
+  await expect(page.getByRole('button', { name: 'Queue conversion', exact: true })).toBeDisabled()
   expect(maxJobs).toBe(1)
   expect(maxFiles).toBe(1)
   await page.unrouteAll({ behavior: 'wait' })
+})
+
+test('leaving Jobs aborts pending reads and reopening starts a fresh refresh', async ({ page }) => {
+  let hold = true
+  const held: Route[] = []
+  const requests = { jobs: 0, files: 0 }
+  await page.route('**/api/v1/**', route => {
+    const path = new URL(route.request().url()).pathname
+    if (path === '/api/v1/setup') return route.fulfill({ json: { claimed: true, development: true } })
+    if (path === '/api/v1/session') return route.fulfill({ json: { device: { id: 'fixture-owner', name: 'Fixture owner', capabilities: ['admin', 'jobs', 'files'], createdAt: 1, revokedAt: null }, verifiedAt: 1, expiresAt: 9999999999 } })
+    if (path === '/api/v1/host/report') return route.fulfill({ json: { generatedAt: new Date().toISOString(), host: { os: 'linux', architecture: 'amd64' }, checks: [], prerequisitesMet: false, executionEnabled: false } })
+    if (path === '/api/v1/apps') return route.fulfill({ json: { apps: [], runtimeConfigured: false } })
+    if (path === '/api/v1/jobs' || path === '/api/v1/files') {
+      requests[path === '/api/v1/jobs' ? 'jobs' : 'files']++
+      if (hold) { held.push(route); return }
+      return route.fulfill({ json: [] })
+    }
+    return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Unused fixture endpoint' } } })
+  })
+  await page.goto('/')
+  await page.locator('nav').getByRole('button', { name: 'Jobs', exact: false }).click()
+  await expect.poll(() => held.length).toBe(2)
+  const aborted = held.map(route => page.waitForEvent('requestfailed', { timeout: 3000, predicate: request => request === route.request() }))
+  await page.locator('nav').getByRole('button', { name: 'Overview', exact: false }).click()
+  for (const request of await Promise.all(aborted)) expect(request.failure()).not.toBeNull()
+  for (const route of held) await route.abort().catch(() => {})
+  hold = false
+  await page.locator('nav').getByRole('button', { name: 'Jobs', exact: false }).click()
+  await expect(page.getByText('Last observed', { exact: false })).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  expect(requests).toEqual({ jobs: 2, files: 2 })
 })

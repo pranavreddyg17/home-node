@@ -158,7 +158,7 @@ export function Files() {
     } catch (e) { setError(message(e)) } finally { setBusy(false) }
   }
   const change = async (file: FileInfo, action: string, name = '') => { setError(''); try { await api(`/files/${file.id}/actions`, { action, name }); await refresh() } catch (e) { setError(message(e)) } }
-  const visible = files.filter(f => Boolean(f.trashUntil) === trash)
+  const visible = files.filter(f => (f.trashUntil !== null) === trash)
   return <div className="stack">{error && <p className="form-error" role="alert">{error}</p>}
     <section className="panel" aria-label="Files storage"><h2>Files storage</h2>{storage ? <>
       <p>{bytes(storage.chargedBytes)} of {bytes(storage.quotaBytes)} charged · {bytes(storage.availableBytes)} available in quota</p>
@@ -208,7 +208,10 @@ export function Jobs({ session }: { session: Session }) {
       if (jobList.status === 'rejected') throw jobList.reason
       if (fileList.status === 'rejected') throw fileList.reason
       if (!mounted.current || generation.current !== epoch) return
-      setJobs(jobList.value); setFiles(fileList.value.filter(f => !f.trashUntil)); setCheckedAt(new Date()); setRefreshError('')
+      const availableFiles = fileList.value.filter(f => f.trashUntil === null)
+      setJobs(jobList.value); setFiles(availableFiles)
+      setInput(previous => availableFiles.some(file => file.id === previous) ? previous : '')
+      setCheckedAt(new Date()); setRefreshError('')
     }).catch(e => {
       if (mounted.current && generation.current === epoch) setRefreshError(message(e))
       throw e
