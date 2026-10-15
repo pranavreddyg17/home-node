@@ -225,6 +225,7 @@ func (s *Server) download(w http.ResponseWriter, r *http.Request) {
 		workloadError(w, workload.ErrConflict)
 		return
 	}
+
 	// Fetch one checked chunk before committing successful download headers.
 	data, err := s.Workloads.Download(r.Context(), id, 0)
 	if err != nil {
@@ -238,37 +239,92 @@ func (s *Server) download(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	etag := `"` + file.SHA256 + `"`
+	rangeValue := r.Header.Get("Range")
+	if r.Method != http.MethodGet || (r.Header.Get("If-Range") != "" && r.Header.Get("If-Range") != etag) {
+		rangeValue = ""
+	}
+	if len(r.Header.Values("Range")) > 1 {
+		rangeValue = ""
+	}
+	start, end, partial, rangeErr := downloadRange(rangeValue, file.Size)
+	if rangeErr != nil {
+		w.Header().Set("Content-Range", "bytes */"+strconv.FormatInt(file.Size, 10))
+		fail(w, http.StatusRequestedRangeNotSatisfiable, "INVALID_RANGE", "Choose one satisfiable byte range for this file.")
+		return
+	}
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": file.Name}))
-	w.Header().Set("Content-Length", strconv.FormatInt(file.Size, 10))
+	w.Header().Set("Content-Length", strconv.FormatInt(end-start, 10))
 	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
 	w.Header().Set("X-Content-SHA256", file.SHA256)
+
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Accept-Ranges", "bytes")
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	status := http.StatusOK
+	if partial {
+		status = http.StatusPartialContent
+		w.Header().Set("Content-Range", "bytes "+strconv.FormatInt(start, 10)+"-"+strconv.FormatInt(end-1, 10)+"/"+strconv.FormatInt(file.Size, 10))
+	}
+	w.WriteHeader(status)
 	controller := http.NewResponseController(w)
+	if partial {
+		_ = controller.SetWriteDeadline(time.Now().Add(15 * time.Second))
+		if err := controller.Flush(); err != nil {
+			return
+		}
+	}
+	authorized := func() bool {
+		session, err := s.Identity.Authenticate(r.Context(), s.readCookie(r, ""))
+		return err == nil && session.Allows("files")
+	}
+	write := func(piece []byte) bool {
+		_ = controller.SetWriteDeadline(time.Now().Add(15 * time.Second))
+		_, err := w.Write(piece)
+		return err == nil
+	}
+	// Hash every byte in a single pass, including bytes outside the requested
+	// range. Keep its final piece until the published whole-object hash matches;
+	// failure yields an incomplete HTTP body rather than a completed bad range.
+	var pending []byte
 	offset := int64(0)
 	digest := sha256.New()
 	for {
-		if _, err = s.Identity.Authenticate(r.Context(), s.readCookie(r, "")); err != nil {
+		if !authorized() {
 			return
 		}
 		_ = controller.SetWriteDeadline(time.Now().Add(15 * time.Second))
-		if len(data) > 0 {
-			_, _ = digest.Write(data)
-			if offset+int64(len(data)) == file.Size && hex.EncodeToString(digest.Sum(nil)) != file.SHA256 {
+		_, _ = digest.Write(data)
+		next := offset + int64(len(data))
+		low, high := max(offset, start), min(next, end)
+		if high > low {
+			piece := data[low-offset : high-offset]
+			if high == end {
+				pending = piece
+			} else if !write(piece) {
 				return
 			}
-			if _, err = w.Write(data); err != nil {
-				return
-			}
-			offset += int64(len(data))
 		}
+		offset = next
 		if offset == file.Size {
-			return
+			break
 		}
 		data, err = s.Workloads.Download(r.Context(), id, offset)
 		if err != nil {
 			return
 		}
 	}
+	if hex.EncodeToString(digest.Sum(nil)) != file.SHA256 {
+		return
+	}
+	if len(pending) > 0 && authorized() {
+		_ = write(pending)
+	}
+
 }
 
 func (s *Server) jobs(w http.ResponseWriter, r *http.Request) {
