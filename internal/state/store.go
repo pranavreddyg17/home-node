@@ -62,7 +62,15 @@ func Open(directory string) (*Store, error) {
 
 func (s *Store) Close() error { return s.DB.Close() }
 
-func (s *Store) Transaction(ctx context.Context, fn func(*sql.Tx) error) error {
+func (s *Store) Transaction(ctx context.Context, fn func(*sql.Tx) error) (resultErr error) {
+	// database/sql may finish its cancellation rollback before Commit or a
+	// callback observes it. Preserve the caller's cancellation cause alongside
+	// ErrTxDone so resumable operations can distinguish this from other failures.
+	defer func() {
+		if errors.Is(resultErr, sql.ErrTxDone) && ctx.Err() != nil {
+			resultErr = errors.Join(resultErr, ctx.Err())
+		}
+	}()
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err

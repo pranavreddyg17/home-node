@@ -9,6 +9,35 @@ import (
 	"testing"
 )
 
+func TestCancelledTransactionPreservesCauseAfterRollback(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err = s.Transaction(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.Exec("INSERT INTO settings VALUES('cancelled','private')"); err != nil {
+			return err
+		}
+		// Establish the same completed-rollback state database/sql reaches when
+		// cancellation wins the race with Commit, without relying on scheduling.
+		if err := tx.Rollback(); err != nil {
+			return err
+		}
+		cancel()
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) || !errors.Is(err, sql.ErrTxDone) {
+		t.Fatal("cancellation or original database failure lost", err)
+	}
+	var count int
+	if err := s.DB.QueryRow("SELECT count(*) FROM settings WHERE key='cancelled'").Scan(&count); err != nil || count != 0 {
+		t.Fatal("cancelled write survived rollback", count, err)
+	}
+}
+
 func TestRollbackAndReopen(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "state")
 	s, err := Open(dir)
