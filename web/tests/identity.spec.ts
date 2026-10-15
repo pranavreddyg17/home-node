@@ -284,11 +284,12 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   const pending = { id: uploadId, name: 'resume.txt', size: uploadContent.length, sha256: uploadHash, offset: 7, state: 'uploading', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
   let transferAvailable = false, duplicateTransfers = 0, uploadedOffset = -1, chunkRequests = 0
   let transferMismatch = true
+  let transferMissing = false
   let heldChunk: Route | undefined
   await page.evaluate(({ key, id }) => localStorage.setItem(key, id), { key: uploadKey, id: uploadId })
-  await page.route(`**/api/v1/transfers/${uploadId}`, route => transferAvailable ? route.fulfill({ json: { ...pending, sha256: transferMismatch ? '0'.repeat(64) : uploadHash } }) : route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture transfer service unavailable' } } }))
+  await page.route(`**/api/v1/transfers/${uploadId}`, route => transferMissing ? route.fulfill({ status: 404, json: { error: { code: 'NOT_FOUND' } } }) : transferAvailable ? route.fulfill({ json: { ...pending, sha256: transferMismatch ? '0'.repeat(64) : uploadHash } }) : route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture transfer service unavailable' } } }))
   await page.route('**/api/v1/transfers', async route => {
-    if (route.request().method() === 'GET') return route.continue()
+    if (route.request().method() === 'GET') return route.fulfill({ json: [pending] })
     duplicateTransfers++
     await route.fulfill({ status: 500, json: { error: { message: 'Duplicate transfer fixture' } } })
   })
@@ -315,6 +316,21 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   expect(duplicateTransfers).toBe(0)
   expect(await page.evaluate(key => localStorage.getItem(key), uploadKey)).toBe(uploadId)
   transferMismatch = false
+  await page.evaluate(key => localStorage.removeItem(key), uploadKey)
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await unfinishedPanel.getByRole('button', { name: 'Resume resume.txt', exact: true }).click()
+  await expect(unfinishedPanel).toContainText('Selected upload: resume.txt')
+  await page.getByLabel('Upload a file').setInputFiles({ ...uploadFile, buffer: Buffer.from('wrong file') })
+  await expect(page.getByRole('alert')).toContainText('This file does not match the selected upload.')
+  expect(chunkRequests).toBe(0)
+  expect(duplicateTransfers).toBe(0)
+  expect(await page.evaluate(key => localStorage.getItem(key), uploadKey)).toBeNull()
+  transferMissing = true
+  await page.getByLabel('Upload a file').setInputFiles(uploadFile)
+  await expect(page.getByRole('alert')).toContainText('The selected upload is no longer available.')
+  expect(chunkRequests).toBe(0)
+  expect(duplicateTransfers).toBe(0)
+  transferMissing = false
   // Pause while local chunk bytes are still being read, before any POST.
   await page.evaluate(() => {
     const original = Blob.prototype.arrayBuffer
@@ -332,16 +348,17 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await expect.poll(() => page.evaluate(() => 'releaseUploadRead' in window)).toBe(true)
   await page.getByRole('button', { name: 'Pause upload', exact: true }).click()
   await page.evaluate(() => (window as unknown as { releaseUploadRead: () => void }).releaseUploadRead())
-  await expect(page.getByRole('status')).toContainText('Paused. Select the same file to resume.')
+  await expect(page.locator('.transfer-progress')).toContainText('Paused. Select the same file to resume.')
   expect(chunkRequests).toBe(0)
   await page.getByLabel('Upload a file').setInputFiles(uploadFile)
   await expect.poll(() => uploadedOffset).toBe(7)
   await page.getByRole('button', { name: 'Pause upload', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText('Paused. Select the same file to resume.')
+  await expect(page.locator('.transfer-progress')).toContainText('Paused. Select the same file to resume.')
   expect(await page.evaluate(key => localStorage.getItem(key), uploadKey)).toBe(uploadId)
   await heldChunk?.abort().catch(() => {})
   await page.getByLabel('Upload a file').setInputFiles(uploadFile)
-  await expect(page.getByRole('status')).toContainText('Upload verified')
+  await expect(page.locator('.transfer-progress')).toContainText('Upload verified')
+  await expect(unfinishedPanel.getByRole('button', { name: 'Clear resume selection', exact: true })).toHaveCount(0)
   expect(uploadedOffset).toBe(7)
   expect(chunkRequests).toBe(1)
   expect(duplicateTransfers).toBe(0)
