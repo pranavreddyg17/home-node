@@ -251,6 +251,31 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.unroute('**/api/v1/files/storage')
   await page.getByRole('button', { name: 'Refresh', exact: true }).click()
   await expect(storagePanel.getByRole('meter', { name: 'Files quota usage' })).toBeVisible()
+  // Recover a server-recorded unfinished upload after reopening the page.
+  const recoveredUpload = { id: 'b'.repeat(32), name: 'unfinished.txt', size: 12, offset: 4, sha256: '1'.repeat(64), state: 'uploading', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
+  const recoveredKey = `homenode-transfer:${recoveredUpload.sha256}:${recoveredUpload.size}`
+  const newerUploadId = 'c'.repeat(32)
+  let discardRequests = 0
+  await page.evaluate(({ key, id }) => localStorage.setItem(key, id), { key: recoveredKey, id: newerUploadId })
+  await page.route('**/api/v1/transfers', route => route.request().method() === 'GET' ? route.fulfill({ json: [recoveredUpload] }) : route.continue())
+  await page.route(`**/api/v1/transfers/${recoveredUpload.id}/cancel`, route => {
+    discardRequests++; recoveredUpload.state = 'cancelling'
+    return route.fulfill({ status: 202, json: recoveredUpload })
+  })
+  await page.reload()
+  await page.locator('nav').getByRole('button', { name: 'Files', exact: false }).click()
+  const unfinishedPanel = page.getByRole('region', { name: 'Unfinished uploads', exact: true })
+  await expect(unfinishedPanel).toContainText('4 bytes of 12 bytes acknowledged')
+  await unfinishedPanel.getByRole('button', { name: 'Discard unfinished.txt', exact: true }).click()
+  await expect(unfinishedPanel).toContainText('Cleanup pending')
+  await expect(unfinishedPanel.getByRole('button', { name: 'Discard unfinished.txt', exact: true })).toBeDisabled()
+  expect(discardRequests).toBe(1)
+  expect(await page.evaluate(key => localStorage.getItem(key), recoveredKey)).toBe(newerUploadId)
+  await page.evaluate(key => localStorage.removeItem(key), recoveredKey)
+  await page.unroute('**/api/v1/transfers')
+  await page.unroute(`**/api/v1/transfers/${recoveredUpload.id}/cancel`)
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await expect(unfinishedPanel).toContainText('No unfinished uploads were reported')
   // Browser transport fixture; native guest and authenticated API have separate evidence.
   const uploadContent = Buffer.from('Resume the original transfer after a temporary outage.')
   const uploadHash = createHash('sha256').update(uploadContent).digest('hex')
@@ -263,6 +288,7 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.evaluate(({ key, id }) => localStorage.setItem(key, id), { key: uploadKey, id: uploadId })
   await page.route(`**/api/v1/transfers/${uploadId}`, route => transferAvailable ? route.fulfill({ json: { ...pending, sha256: transferMismatch ? '0'.repeat(64) : uploadHash } }) : route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture transfer service unavailable' } } }))
   await page.route('**/api/v1/transfers', async route => {
+    if (route.request().method() === 'GET') return route.continue()
     duplicateTransfers++
     await route.fulfill({ status: 500, json: { error: { message: 'Duplicate transfer fixture' } } })
   })

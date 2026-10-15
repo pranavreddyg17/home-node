@@ -50,6 +50,11 @@ func TestAuthenticatedTransferAPI(t *testing.T) {
 	if err = json.Unmarshal(w.Body.Bytes(), &transfer); err != nil {
 		t.Fatal(err)
 	}
+	w = request(s, "GET", "http://localhost:8787/api/v1/transfers", "", token, "")
+	var pending []workload.Transfer
+	if err := json.Unmarshal(w.Body.Bytes(), &pending); err != nil || w.Code != 200 || len(pending) != 1 || pending[0].ID != transfer.ID {
+		t.Fatal("pending transfer API", w.Code, pending, err)
+	}
 	body, _ = json.Marshal(map[string]any{"offset": 0, "data": data, "sha256": digest})
 	w = request(s, "POST", "http://localhost:8787/api/v1/transfers/"+transfer.ID+"/chunks", string(body), token, s.config.Origin)
 	if w.Code != 200 {
@@ -58,6 +63,10 @@ func TestAuthenticatedTransferAPI(t *testing.T) {
 	w = request(s, "POST", "http://localhost:8787/api/v1/transfers/"+transfer.ID+"/finalize", "{}", token, s.config.Origin)
 	if w.Code != 200 {
 		t.Fatalf("finalize: %d %s", w.Code, w.Body.String())
+	}
+	w = request(s, "GET", "http://localhost:8787/api/v1/transfers", "", token, "")
+	if err := json.Unmarshal(w.Body.Bytes(), &pending); err != nil || w.Code != 200 || len(pending) != 0 {
+		t.Fatal("finalized transfer remained pending", w.Code, pending, err)
 	}
 	w = request(s, "GET", "http://localhost:8787/api/v1/files/"+transfer.ID+"/download", "", token, "")
 	if w.Code != 200 || w.Body.String() != string(data) {

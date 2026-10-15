@@ -134,6 +134,27 @@ func (s *Service) Transfer(ctx context.Context, device, id string) (Transfer, er
 	err := s.Store.DB.QueryRowContext(ctx, "SELECT id,name,size,sha256,offset,state,expires_at FROM transfers WHERE id=? AND device_id=?", id, device).Scan(&t.ID, &t.Name, &t.Size, &t.SHA256, &t.Offset, &t.State, &t.ExpiresAt)
 	return t, err
 }
+
+// PendingTransfers is scoped to the same device as individual transfer access.
+// Terminal records remain in the journal but do not need owner intervention.
+func (s *Service) PendingTransfers(ctx context.Context, device string) ([]Transfer, error) {
+	rows, err := s.Store.DB.QueryContext(ctx, `SELECT id,name,size,sha256,offset,state,expires_at
+FROM transfers WHERE device_id=? AND state IN('uploading','verifying','cancelling')
+ORDER BY created_at,id LIMIT 16`, device)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Transfer{}
+	for rows.Next() {
+		var item Transfer
+		if err := rows.Scan(&item.ID, &item.Name, &item.Size, &item.SHA256, &item.Offset, &item.State, &item.ExpiresAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
 func (s *Service) Upload(ctx context.Context, device, id string, offset int64, data []byte, hash string) (Transfer, error) {
 	unlock := s.lock(id)
 	defer unlock()

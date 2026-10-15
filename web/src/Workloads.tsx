@@ -47,6 +47,8 @@ export function Files() {
   const [trash, setTrash] = useState(false)
   const [storage, setStorage] = useState<StorageUsage | null>(null)
   const [storageError, setStorageError] = useState('')
+  const [uploads, setUploads] = useState<Transfer[] | null>(null)
+  const [uploadsError, setUploadsError] = useState('')
   const pause = useRef(false)
   const activeChunk = useRef<AbortController | null>(null)
   const [pendingUpload, setPendingUpload] = useState<{ id: string; storageKey: string } | null>(null)
@@ -54,6 +56,7 @@ export function Files() {
     const [items] = await Promise.all([
       api<FileInfo[]>('/files'),
       api<StorageUsage>('/files/storage').then(value => { setStorage(value); setStorageError('') }).catch(e => { setStorage(null); setStorageError(message(e)) }),
+      api<Transfer[]>('/transfers').then(value => { setUploads(value); setUploadsError('') }).catch(e => { setUploads(null); setUploadsError(message(e)) }),
     ])
     setFiles(items)
   }
@@ -109,13 +112,14 @@ export function Files() {
       else { setError(message(e)); setPhase('Upload stopped. Select the same file to retry or resume.') }
     } finally { setBusy(false) }
   }
-  const cancelUpload = async () => {
-    if (!pendingUpload || busy) return
+  const cancelUpload = async (target = pendingUpload) => {
+    if (!target || busy) return
     setBusy(true); setError('')
     try {
-      await api(`/transfers/${pendingUpload.id}/cancel`, {})
-      localStorage.removeItem(pendingUpload.storageKey)
+      await api(`/transfers/${target.id}/cancel`, {})
+      if (localStorage.getItem(target.storageKey) === target.id) localStorage.removeItem(target.storageKey)
       setPendingUpload(null); setPhase('Upload cancelled. Storage cleanup will finish when Private Files is available.'); setProgress(0)
+      await refresh()
     } catch (e) { setError(message(e)) } finally { setBusy(false) }
   }
   const change = async (file: FileInfo, action: string, name = '') => { setError(''); try { await api(`/files/${file.id}/actions`, { action, name }); await refresh() } catch (e) { setError(message(e)) } }
@@ -128,6 +132,13 @@ export function Files() {
       <p>Reserved for uploads: {bytes(storage.uploadReservedBytes)} · Job outputs: {bytes(storage.jobReservedBytes)} · Pending cleanup: {bytes(storage.cleanupReservedBytes)}</p>
       <p>Trash and cancelled uploads keep using quota until cleanup is acknowledged. Physical disk space may run out before this quota is reached.</p>
     </> : <p role="status">{storageError ? `Storage usage is unavailable. ${storageError}` : 'Reading storage usage…'}</p>}</section>
+    <section className="panel" aria-label="Unfinished uploads"><h2>Unfinished uploads on this device</h2>
+      <p>Select the same file again to resume. Discarding an upload retains its quota reservation until Private Files acknowledges cleanup.</p>
+      {uploadsError ? <p role="status">Upload status is unavailable. {uploadsError}</p> : uploads === null ? <p role="status">Reading unfinished uploads…</p> : !uploads.length ? <p>No unfinished uploads were reported at the last refresh.</p> : uploads.map(item => <article className="file-row" key={item.id}>
+        <div><strong>{item.name}</strong><p>{bytes(item.offset)} of {bytes(item.size)} acknowledged</p><small>{item.state === 'cancelling' ? 'Cleanup pending' : item.expiresAt * 1000 <= Date.now() ? 'Expired; cleanup pending' : item.state === 'verifying' ? 'Verification pending' : 'Waiting for file or upload to continue'}</small></div>
+        <button disabled={busy || item.state === 'cancelling'} onClick={() => void cancelUpload({ id: item.id, storageKey: `homenode-transfer:${item.sha256}:${item.size}` })}>Discard {item.name}</button>
+      </article>)}
+    </section>
     <section className="panel"><div className="section-heading"><h2>Your files</h2><button onClick={() => void refresh().catch(e => setError(message(e)))}>Refresh</button></div><p>Uploads are checked before they become downloadable. If a connection breaks, select the same file again to resume. Trash retains files for seven days, then permanently removes them; trash still counts toward storage until removal finishes.</p><label className="upload-picker">Upload a file<input type="file" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void upload(file); e.target.value = '' }} /></label>{phase && <div className="transfer-progress" role="status"><span>{phase}</span><progress max={1} value={progress} aria-label="Transfer progress" />{busy && phase !== 'Verifying complete file' && <button onClick={pauseUpload}>Pause upload</button>}{!busy && pendingUpload && <button onClick={() => void cancelUpload()}>Cancel upload and discard partial file</button>}</div>}</section>
     <section className="panel"><div className="button-row"><button aria-pressed={!trash} onClick={() => setTrash(false)}>Files</button><button aria-pressed={trash} onClick={() => setTrash(true)}>Trash</button></div>{!visible.length && <p>{trash ? 'Trash is empty.' : 'No files yet. Start Private Files in Apps, then upload your first file.'}</p>}{visible.map(file => <article className="file-row" key={file.id}><div><strong>{file.name}</strong><p>{bytes(file.size)} · {new Date(file.createdAt * 1000).toLocaleDateString()}</p>{file.trashUntil !== null && <p>{file.trashUntil * 1000 <= Date.now() ? 'Retention expired; removal awaits Private Files.' : `Trash expires ${new Date(file.trashUntil * 1000).toLocaleDateString()}.`}</p>}<details><summary>Integrity</summary><code className="checksum">SHA-256: {file.sha256}</code></details></div><div className="button-row">{trash ? <button disabled={file.trashUntil !== null && file.trashUntil * 1000 <= Date.now()} onClick={() => void change(file, 'restore')}>Restore</button> : <><a className="download-link" href={`/api/v1/files/${file.id}/download`} download>Download</a><button onClick={() => { const name = window.prompt('New filename', file.name); if (name) void change(file, 'rename', name) }}>Rename</button><button onClick={() => void change(file, 'trash')}>Move to trash</button></>}</div></article>)}</section>
   </div>

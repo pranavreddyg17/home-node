@@ -37,3 +37,25 @@ func TestFilesStorageRequiresFilesCapability(t *testing.T) {
 		}
 	}
 }
+
+func TestPendingTransfersRequireFilesCapability(t *testing.T) {
+	for _, test := range []struct {
+		capabilities string
+		status       int
+	}{
+		{"", 401}, {`["ai"]`, 403}, {`["files"]`, 200},
+	} {
+		s := testServer(t)
+		token := ""
+		if test.capabilities != "" {
+			token = seedSession(t, s, test.capabilities)
+		}
+		response := request(s, "GET", "http://localhost:8787/api/v1/transfers", "", token, "")
+		if response.Code != test.status {
+			t.Fatal("pending upload authority", response.Code, response.Body.String())
+		}
+		if test.status == 200 && (response.Body.String() != "[]\n" || response.Header().Get("Cache-Control") != "no-store") {
+			t.Fatal("empty pending uploads must be a private JSON list", response.Body.String())
+		}
+	}
+}

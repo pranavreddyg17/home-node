@@ -31,6 +31,7 @@ func (s *Server) workloadRoutes() {
 	s.mux.Handle("POST /api/v1/apps/{workload}/actions", s.require("admin", false, http.HandlerFunc(s.appAction)))
 	s.mux.Handle("GET /api/v1/operations/{id}", s.require("", false, http.HandlerFunc(s.operation)))
 	s.mux.Handle("POST /api/v1/transfers", s.require("files", false, http.HandlerFunc(s.createTransfer)))
+	s.mux.Handle("GET /api/v1/transfers", s.require("files", false, http.HandlerFunc(s.pendingTransfers)))
 	s.mux.Handle("GET /api/v1/transfers/{id}", s.require("files", false, http.HandlerFunc(s.transfer)))
 	s.mux.Handle("POST /api/v1/transfers/{id}/chunks", s.require("files", false, http.HandlerFunc(s.upload)))
 	s.mux.Handle("POST /api/v1/transfers/{id}/finalize", s.require("files", false, http.HandlerFunc(s.finalize)))
@@ -132,6 +133,14 @@ func (s *Server) transfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, item)
+}
+func (s *Server) pendingTransfers(w http.ResponseWriter, r *http.Request) {
+	items, err := s.Workloads.PendingTransfers(r.Context(), actor(r).Device.ID)
+	if err != nil {
+		workloadError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
 }
 func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	var body struct {

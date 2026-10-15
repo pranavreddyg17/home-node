@@ -20,6 +20,13 @@ func TestCancelUploadIsScopedDurableAndPreservesQuota(t *testing.T) {
 	if _, err = s.Upload(ctx, device, upload.ID, 0, data, sum(data)); err != nil {
 		t.Fatal(err)
 	}
+	items, err := s.PendingTransfers(ctx, device)
+	if err != nil || len(items) != 1 || items[0].ID != upload.ID || items[0].Offset != int64(len(data)) {
+		t.Fatal("pending upload missing", items, err)
+	}
+	if foreign, err := s.PendingTransfers(ctx, state.Random()); err != nil || len(foreign) != 0 {
+		t.Fatal("another device observed upload", foreign, err)
+	}
 	if _, err = s.CancelTransfer(ctx, state.Random(), upload.ID); err == nil {
 		t.Fatal("another device cancelled upload")
 	}
@@ -27,6 +34,10 @@ func TestCancelUploadIsScopedDurableAndPreservesQuota(t *testing.T) {
 	cancelled, err := s.CancelTransfer(ctx, device, upload.ID)
 	if err != nil || cancelled.State != "cancelling" {
 		t.Fatal(cancelled, err)
+	}
+	items, err = s.PendingTransfers(ctx, device)
+	if err != nil || len(items) != 1 || items[0].State != "cancelling" {
+		t.Fatal("pending cleanup disappeared", items, err)
 	}
 	var reserved int64
 	if err = s.Store.DB.QueryRow("SELECT coalesce(sum(size),0) FROM transfers WHERE state IN('uploading','verifying','cancelling')").Scan(&reserved); err != nil || reserved != int64(len(data)) {
@@ -48,6 +59,9 @@ func TestCancelUploadIsScopedDurableAndPreservesQuota(t *testing.T) {
 	cancelled, err = s.Transfer(ctx, device, upload.ID)
 	if err != nil || cancelled.State != "cancelled" {
 		t.Fatal(cancelled, err)
+	}
+	if items, err := s.PendingTransfers(ctx, device); err != nil || len(items) != 0 {
+		t.Fatal("terminal upload remained pending", items, err)
 	}
 }
 
