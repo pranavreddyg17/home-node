@@ -51,12 +51,12 @@ func TestDownloadRangeBounds(t *testing.T) {
 
 type downloadHookBackend struct {
 	workload.Backend
-	hook func() error
+	hook func(context.Context) error
 }
 
 func (b downloadHookBackend) Call(ctx context.Context, instance string, request guestproto.Request) (guestproto.Response, error) {
 	if request.Operation == "download" {
-		if err := b.hook(); err != nil {
+		if err := b.hook(ctx); err != nil {
 			return guestproto.Response{}, err
 		}
 	}
@@ -174,7 +174,7 @@ func TestAuthenticatedDownloadRangesPreserveIntegrityAndRevocation(t *testing.T)
 	}
 	token = originalToken
 	reads := 0
-	s.Workloads.Backend = downloadHookBackend{Backend: backend, hook: func() error {
+	s.Workloads.Backend = downloadHookBackend{Backend: backend, hook: func(_ context.Context) error {
 		reads++
 		if reads == 2 {
 			_, err := s.Store.DB.Exec(`UPDATE devices SET capabilities='["ai"]' WHERE id='device'`)

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"sync"
@@ -63,20 +64,30 @@ func TestBusyDownloadsPreserveOtherDevicesAndManagementCapacity(t *testing.T) {
 	var releaseOnce sync.Once
 	var workers sync.WaitGroup
 	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }); workers.Wait() })
-	s.Workloads.Backend = downloadHookBackend{Backend: backend, hook: func() error {
+	s.Workloads.Backend = downloadHookBackend{Backend: backend, hook: func(ctx context.Context) error {
 		started <- struct{}{}
 		select {
 		case <-release:
 			return nil
+		case <-ctx.Done():
+			return ctx.Err()
 		case <-time.After(5 * time.Second):
 			return context.DeadlineExceeded
 		}
 	}}
 	url := "http://localhost:8787/api/v1/files/" + transfer.ID + "/download"
 	finished := make(chan *httptest.ResponseRecorder, 4)
-	start := func(token string) {
+	start := func(token string, ctx context.Context) {
 		workers.Add(1)
-		go func() { defer workers.Done(); finished <- request(s, "GET", url, "", token, "") }()
+		go func() {
+			defer workers.Done()
+			r := httptest.NewRequest("GET", url, nil).WithContext(ctx)
+			r.URL.Scheme, r.URL.Host = "", ""
+			r.AddCookie(&http.Cookie{Name: s.cookie, Value: token})
+			response := httptest.NewRecorder()
+			s.ServeHTTP(response, r)
+			finished <- response
+		}()
 		select {
 		case <-started:
 		case <-time.After(5 * time.Second):
@@ -90,11 +101,24 @@ func TestBusyDownloadsPreserveOtherDevicesAndManagementCapacity(t *testing.T) {
 			t.Fatal("download did not refuse excess work", response.Code, response.Body.String())
 		}
 	}
-	start(first)
-	start(first)
+	cancellation, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	start(first, cancellation)
+	start(first, context.Background())
 	busy(first)
-	start(second)
-	start(second)
+	cancel()
+	select {
+	case response := <-finished:
+		if response.Code == 200 {
+			t.Fatal("cancelled guest read completed a download")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("cancelled download retained capacity")
+	}
+	start(first, context.Background())
+	busy(first)
+	start(second, context.Background())
+	start(second, context.Background())
 	busy(third)
 	if response := request(s, "GET", "http://localhost:8787/api/v1/healthz", "", "", ""); response.Code != 200 {
 		t.Fatal("downloads blocked health checks", response.Code)

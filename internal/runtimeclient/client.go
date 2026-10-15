@@ -29,7 +29,14 @@ func socketClient(socket string) *http.Client {
 func New(runtimeSocket, transferSocket string) *Client {
 	return &Client{runtime: socketClient(runtimeSocket), transfer: socketClient(transferSocket)}
 }
-func call(ctx context.Context, client *http.Client, path string, request, response any) error {
+func call(ctx context.Context, client *http.Client, path string, request, response any) (resultErr error) {
+	// Keep local socket/address errors private while retaining cancellation as
+	// a typed cause for callers reconciling interrupted operations.
+	defer func() {
+		if resultErr != nil && ctx.Err() != nil {
+			resultErr = errors.Join(resultErr, ctx.Err())
+		}
+	}()
 	data, err := json.Marshal(request)
 	if err != nil {
 		return err
