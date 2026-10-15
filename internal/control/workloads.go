@@ -226,6 +226,13 @@ func (s *Server) download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	device := actor(r).Device.ID
+	if !s.downloads.acquire(device) {
+		w.Header().Set("Retry-After", "1")
+		fail(w, http.StatusTooManyRequests, "DOWNLOAD_BUSY", "Download capacity is busy. Wait for an active download to finish, then retry.")
+		return
+	}
+	defer s.downloads.release(device)
 	// Fetch one checked chunk before committing successful download headers.
 	data, err := s.Workloads.Download(r.Context(), id, 0)
 	if err != nil {

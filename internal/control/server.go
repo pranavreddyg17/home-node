@@ -37,6 +37,7 @@ type Config struct {
 	Report             func() hostcheck.Report
 }
 type Server struct {
+	downloads        downloadBudget
 	snapshotRequests snapshotRequests
 	backupTasks      *backupTasks
 	Workloads        *workload.Service

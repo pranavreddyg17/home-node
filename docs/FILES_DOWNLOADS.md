@@ -12,6 +12,9 @@ These behaviors follow the relevant [HTTP range and If-Range rules](https://www.
 Files remain attachments with sandbox/no-sniff/no-store protections. An approved
 Files session is required for metadata and content. Session and Files capability
 are checked throughout a download and before releasing its final requested bytes.
+At most four downloads run at once, with at most two for one paired device.
+Additional requests receive a non-cacheable 429 response with Retry-After before
+guest reads begin. Generic controller capacity remains available for management.
 
 The current protocol has one trusted whole-file hash. A partial download therefore
 reads and hashes the complete guest object in one pass, retaining only its final
