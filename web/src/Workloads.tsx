@@ -10,11 +10,17 @@ type FileInfo = { id: string; name: string; size: number; sha256: string; create
 type Transfer = { id: string; name: string; size: number; sha256: string; offset: number; state: string; expiresAt: number }
 type StorageUsage = { quotaBytes: number; storedBytes: number; trashBytes: number; uploadReservedBytes: number; jobReservedBytes: number; cleanupReservedBytes: number; chargedBytes: number; availableBytes: number }
 const bytes = (n: number) => n >= 2 ** 30 ? `${(n / 2 ** 30).toFixed(2)} GiB` : n >= 2 ** 20 ? `${(n / 2 ** 20).toFixed(1)} MiB` : n >= 1024 ? `${(n / 1024).toFixed(1)} KiB` : `${n} bytes`
-async function action<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`/api/v1${path}`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify(body) })
-  const data = await response.json()
-  if (!response.ok) throw new Error(data.error?.message ?? 'The action failed.')
-  return data as T
+async function action<T>(device: string, path: string, body: unknown): Promise<T> {
+  const digest = bytesToHex(sha256(new TextEncoder().encode(JSON.stringify(body))))
+  const marker = `homenode-action:${device}:${path}:${digest}`
+  const key = localStorage.getItem(marker) ?? crypto.randomUUID()
+  if (!/^[a-f0-9-]{36}$/.test(key)) throw new Error('The saved request is unavailable. Refresh its status before retrying.')
+  // Store no prompt or request body. Unknown outcomes reuse this device-bound
+  // key; acknowledged results permit a later intentional identical request.
+  localStorage.setItem(marker, key)
+  const result = await api<T>(path, body, AbortSignal.timeout(30000), { 'Idempotency-Key': key })
+  if (localStorage.getItem(marker) === key) localStorage.removeItem(marker)
+  return result
 }
 
 export function Apps({ session, verify }: { session: Session; verify: () => Promise<void> }) {
@@ -175,7 +181,7 @@ export function Files() {
 }
 
 type Job = { cleanupPending: boolean; id: string; attemptId: string; inputId: string; preset: string; state: string; outputId: string | null; errorCode: string | null; createdAt: number; updatedAt: number }
-export function Jobs() {
+export function Jobs({ session }: { session: Session }) {
   const [jobs, setJobs] = useState<Job[]>([])
   const [files, setFiles] = useState<FileInfo[]>([])
   const [input, setInput] = useState('')
@@ -186,14 +192,14 @@ export function Jobs() {
   const refresh = async () => { const [jobList, fileList] = await Promise.all([api<Job[]>('/jobs'), api<FileInfo[]>('/files')]); setJobs(jobList); setFiles(fileList.filter(f => !f.trashUntil)); setCheckedAt(new Date()) }
   useEffect(() => { void refresh().catch(e => setError(message(e))); const timer = setInterval(() => { void refresh().catch(e => setError(message(e))) }, 2000); return () => clearInterval(timer) }, [])
   const run = async (work: () => Promise<unknown>) => { setBusy(true); setError(''); try { await work(); await refresh() } catch (e) { setError(message(e)) } finally { setBusy(false) } }
-  return <div className="stack">{error && <p className="form-error" role="alert">{error}</p>}<section className="panel"><h2>Convert a video</h2><p>Choose an uploaded file and a maintained MP4 preset. Each attempt runs in a separate VM. Closing this page does not stop it.</p><form onSubmit={e => { e.preventDefault(); void run(() => action('/jobs', { inputId: input, preset, retryGroup: '' })) }}><label>Input file<select value={input} required onChange={e => setInput(e.target.value)}><option value="">Select a file</option>{files.map(file => <option key={file.id} value={file.id}>{file.name} · {bytes(file.size)}</option>)}</select></label><label>Conversion preset<select value={preset} onChange={e => setPreset(e.target.value)}><option value="mp4-720p">MP4 · Up to 720p</option><option value="mp4-1080p">MP4 · Up to 1080p</option></select></label><button className="primary" disabled={busy || !input}>Queue conversion</button></form></section>
-    <section className="panel"><div className="section-heading"><h2>Job attempts</h2><button onClick={() => void refresh().catch(e => setError(message(e)))}>Refresh</button></div>{!jobs.length && <p>No jobs yet. Upload a video in Files to get started.</p>}{jobs.map(job => <article className="file-row" key={job.attemptId}><div><strong>{files.find(f => f.id === job.inputId)?.name ?? 'Video conversion'}</strong><p>{job.preset} · {new Date(job.createdAt * 1000).toLocaleString()}</p><span className="state-pill">{job.state}</span>{job.cleanupPending && <p>Temporary workload cleanup is pending; HomeNode will retry.</p>}{job.errorCode && job.errorCode !== 'CLEANUP_PENDING' && <p>{job.errorCode.replaceAll('_', ' ').toLowerCase()}</p>}<small className="attempt-label">Attempt {job.attemptId.slice(0, 10)}</small></div><div className="button-row">{['queued', 'preparing', 'running', 'finalizing'].includes(job.state) && <button disabled={busy} onClick={() => void run(() => api(`/jobs/${job.id}/cancel`, { attemptId: job.attemptId }))}>Cancel</button>}{['failed', 'cancelled', 'interrupted'].includes(job.state) && <button disabled={busy} onClick={() => void run(() => action('/jobs', { inputId: job.inputId, preset: job.preset, retryGroup: job.id }))}>Retry as new attempt</button>}{job.state === 'succeeded' && job.outputId && <a className="download-link" href={`/api/v1/files/${job.outputId}/download`} download>Download result</a>}</div></article>)}{checkedAt && <p className="timestamp">Last observed {checkedAt.toLocaleTimeString()}</p>}</section>
+  return <div className="stack">{error && <p className="form-error" role="alert">{error}</p>}<section className="panel"><h2>Convert a video</h2><p>Choose an uploaded file and a maintained MP4 preset. Each attempt runs in a separate VM. Closing this page does not stop it.</p><form onSubmit={e => { e.preventDefault(); void run(() => action(session.device.id, '/jobs', { inputId: input, preset, retryGroup: '' })) }}><label>Input file<select value={input} required onChange={e => setInput(e.target.value)}><option value="">Select a file</option>{files.map(file => <option key={file.id} value={file.id}>{file.name} · {bytes(file.size)}</option>)}</select></label><label>Conversion preset<select value={preset} onChange={e => setPreset(e.target.value)}><option value="mp4-720p">MP4 · Up to 720p</option><option value="mp4-1080p">MP4 · Up to 1080p</option></select></label><button className="primary" disabled={busy || !input}>Queue conversion</button></form></section>
+    <section className="panel"><div className="section-heading"><h2>Job attempts</h2><button onClick={() => void refresh().catch(e => setError(message(e)))}>Refresh</button></div>{!jobs.length && <p>No jobs yet. Upload a video in Files to get started.</p>}{jobs.map(job => <article className="file-row" key={job.attemptId}><div><strong>{files.find(f => f.id === job.inputId)?.name ?? 'Video conversion'}</strong><p>{job.preset} · {new Date(job.createdAt * 1000).toLocaleString()}</p><span className="state-pill">{job.state}</span>{job.cleanupPending && <p>Temporary workload cleanup is pending; HomeNode will retry.</p>}{job.errorCode && job.errorCode !== 'CLEANUP_PENDING' && <p>{job.errorCode.replaceAll('_', ' ').toLowerCase()}</p>}<small className="attempt-label">Attempt {job.attemptId.slice(0, 10)}</small></div><div className="button-row">{['queued', 'preparing', 'running', 'finalizing'].includes(job.state) && <button disabled={busy} onClick={() => void run(() => api(`/jobs/${job.id}/cancel`, { attemptId: job.attemptId }))}>Cancel</button>}{['failed', 'cancelled', 'interrupted'].includes(job.state) && <button disabled={busy} onClick={() => void run(() => action(session.device.id, '/jobs', { inputId: job.inputId, preset: job.preset, retryGroup: job.id }))}>Retry as new attempt</button>}{job.state === 'succeeded' && job.outputId && <a className="download-link" href={`/api/v1/files/${job.outputId}/download`} download>Download result</a>}</div></article>)}{checkedAt && <p className="timestamp">Last observed {checkedAt.toLocaleTimeString()}</p>}</section>
   </div>
 }
 
 type Conversation = { id: string; title: string; createdAt: number; deletionPending: boolean; deletionRequiresAction: boolean }
 type Generation = { id: string; conversationId: string; prompt: string; output: string; state: string; createdAt: number }
-export function AI({ verify }: { verify: () => Promise<void> }) {
+export function AI({ session, verify }: { session: Session; verify: () => Promise<void> }) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selected, setSelected] = useState('')
   const [history, setHistory] = useState<Generation[]>([])
@@ -230,7 +236,7 @@ export function AI({ verify }: { verify: () => Promise<void> }) {
     return () => { current = false; clearInterval(timer) }
   }, [active])
   const create = async () => { setBusy(true); setError(''); try { const conversation = await api<Conversation>('/ai/conversations', { title: `Conversation ${conversations.length + 1}` }); await refresh(); setSelected(conversation.id) } catch (e) { setError(message(e)) } finally { setBusy(false) } }
-  const send = async () => { setBusy(true); setError(''); try { const g = await action<Generation>('/ai/generations', { conversationId: selected, prompt }); setHistory(items => [...items, g]); setPrompt(''); setActive(g.id) } catch (e) { setError(message(e)) } finally { setBusy(false) } }
+  const send = async () => { setBusy(true); setError(''); try { const g = await action<Generation>(session.device.id, '/ai/generations', { conversationId: selected, prompt }); setHistory(items => items.some(item => item.id === g.id) ? items.map(item => item.id === g.id ? g : item) : [...items, g]); setPrompt(''); setActive(['queued', 'running', 'cancelling'].includes(g.state) ? g.id : null) } catch (e) { setError(message(e)) } finally { setBusy(false) } }
   const remove = async () => { if (!window.confirm('Delete this conversation and its stored messages? This cannot be undone.')) return; setBusy(true); setError(''); try { const op = await approvedAction<Operation>(`/ai/conversations/${selected}/delete`, {}, { 'Idempotency-Key': crypto.randomUUID() });
       let completed = false;
       for (let i = 0; i < 120; i++) {

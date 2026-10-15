@@ -398,10 +398,72 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.unroute(`**/api/v1/transfers/${uploadId}/finalize`)
   await page.locator('nav').getByRole('button', { name: 'Jobs', exact: false }).click()
   await expect(page.getByRole('heading', { name: 'Convert a video' })).toBeVisible()
+  const jobInput = { id: 'e'.repeat(32), name: 'fixture-video.mp4', size: 1, sha256: '2'.repeat(64), createdAt: 1, trashUntil: null }
+  const queuedJob = { id: '7'.repeat(32), attemptId: 'f'.repeat(32), inputId: jobInput.id, preset: 'mp4-720p', state: 'queued', cleanupPending: false, outputId: null, errorCode: null, createdAt: 1, updatedAt: 1 }
+  let jobRequests = 0, jobKey = ''
+  await page.route('**/api/v1/files', route => route.fulfill({ json: [jobInput] }))
+  await page.route('**/api/v1/jobs', route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: jobRequests ? [queuedJob] : [] })
+    jobRequests++
+    expect(route.request().postDataJSON()).toEqual({ inputId: jobInput.id, preset: 'mp4-720p', retryGroup: '' })
+    const key = route.request().headers()['idempotency-key']
+    if (jobRequests === 1) { jobKey = key; return route.abort('connectionreset') }
+    expect(key).toBe(jobKey)
+    return route.fulfill({ status: 202, json: queuedJob })
+  })
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await page.getByRole('combobox', { name: 'Input file', exact: true }).selectOption(jobInput.id)
+  await page.getByRole('button', { name: 'Queue conversion', exact: true }).click()
+  await expect(page.getByRole('alert')).toBeVisible()
+  expect(await page.evaluate(key => Object.values(localStorage).includes(key), jobKey)).toBe(true)
+  await page.reload()
+  await page.locator('nav').getByRole('button', { name: 'Jobs', exact: false }).click()
+  await page.getByRole('combobox', { name: 'Input file', exact: true }).selectOption(jobInput.id)
+  await page.getByRole('button', { name: 'Queue conversion', exact: true }).click()
+  await expect.poll(() => jobRequests).toBe(2)
+  await expect(page.locator('.attempt-label')).toHaveCount(1)
+  await expect.poll(() => page.evaluate(key => Object.values(localStorage).includes(key), jobKey)).toBe(false)
+  await page.unroute('**/api/v1/files')
+  await page.unroute('**/api/v1/jobs')
   await page.locator('nav').getByRole('button', { name: 'AI', exact: false }).click()
   await page.getByRole('button', { name: 'New conversation' }).click()
   await expect(page.getByLabel('Message', { exact: true })).toBeVisible()
   const conversationId = await page.locator('.conversation-picker select').inputValue()
+  const retryPrompt = 'Private prompt retained only by the server and current form'
+  const completedGeneration = { id: '9'.repeat(32), conversationId, prompt: retryPrompt, output: 'Recovered answer', state: 'succeeded', createdAt: 1 }
+  let generationRequests = 0, generationKey = ''
+  await page.route('**/api/v1/ai/generations', route => {
+    generationRequests++
+    expect(route.request().postDataJSON()).toEqual({ conversationId, prompt: retryPrompt })
+    const key = route.request().headers()['idempotency-key']
+    if (generationRequests === 1) { generationKey = key; return route.abort('connectionreset') }
+    if (generationRequests === 2) expect(key).toBe(generationKey)
+    else expect(key).not.toBe(generationKey)
+    return route.fulfill({ status: 202, json: generationRequests === 2 ? completedGeneration : { ...completedGeneration, id: '8'.repeat(32), output: 'Fresh answer' } })
+  })
+  await page.route(`**/api/v1/ai/conversations/${conversationId}/history`, route => route.fulfill({ json: generationRequests ? [completedGeneration] : [] }))
+  await page.getByLabel('Message', { exact: true }).fill(retryPrompt)
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  await expect(page.getByRole('alert')).toBeVisible()
+  expect(await page.evaluate(key => Object.values(localStorage).includes(key), generationKey)).toBe(true)
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(retryPrompt)
+  await page.reload()
+  await page.locator('nav').getByRole('button', { name: 'AI', exact: false }).click()
+  await page.locator('.conversation-picker select').selectOption(conversationId)
+  await expect(page.getByText('Recovered answer', { exact: true })).toBeVisible()
+  await page.getByLabel('Message', { exact: true }).fill(retryPrompt)
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  await expect.poll(() => generationRequests).toBe(2)
+  await expect(page.locator('.chat-message.user-message')).toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Cancel generation', exact: true })).toHaveCount(0)
+  await expect.poll(() => page.evaluate(key => Object.values(localStorage).includes(key), generationKey)).toBe(false)
+  await page.getByLabel('Message', { exact: true }).fill(retryPrompt)
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  await expect(page.getByText('Fresh answer', { exact: true })).toBeVisible()
+  await expect(page.locator('.chat-message.user-message')).toHaveCount(2)
+  expect(generationRequests).toBe(3)
+  await page.unroute('**/api/v1/ai/generations')
+  await page.unroute(`**/api/v1/ai/conversations/${conversationId}/history`)
   // UI reload fixture only; backend pending-intent reporting has Go coverage.
   await page.route('**/api/v1/ai/conversations', async route => {
     if (route.request().method() !== 'GET') return route.continue()
