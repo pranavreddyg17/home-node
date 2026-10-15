@@ -114,26 +114,17 @@ func (s *Service) CreateTransfer(ctx context.Context, device, name string, size 
 		if err := state.RequireAdmission(tx); err != nil {
 			return errors.Join(ErrConflict, err)
 		}
-		var reserved int64
-		var count int
-		if err := tx.QueryRow("SELECT coalesce(sum(size),0),count(*) FROM transfers WHERE state IN('uploading','verifying','cancelling')").Scan(&reserved, &count); err != nil {
+		usage, err := filesStorage(ctx, tx)
+		if err != nil {
 			return err
 		}
-		var activeJobs int
-		if err := tx.QueryRow("SELECT count(*) FROM jobs WHERE state IN('queued','preparing','running','finalizing','cancelling')").Scan(&activeJobs); err != nil {
-			return err
-		}
-		var used int64
-		if err := tx.QueryRow("SELECT coalesce(sum(size),0)+(SELECT count(*) FROM orphan_objects WHERE workload='files')*? FROM files", MaxJobOutputBytes).Scan(&used); err != nil {
-			return err
-		}
-		if count >= 16 {
+		if usage.activeTransfers >= 16 {
 			return ErrConflict
 		}
-		if used+reserved+size+int64(activeJobs)*MaxJobOutputBytes > StorageQuota {
+		if usage.ChargedBytes+size > StorageQuota {
 			return ErrCapacity
 		}
-		_, err := tx.Exec("INSERT INTO transfers(id,device_id,name,size,sha256,state,created_at,expires_at) VALUES(?,?,?,?,?,'uploading',?,?)", transfer.ID, device, name, size, hash, time.Now().Unix(), transfer.ExpiresAt)
+		_, err = tx.Exec("INSERT INTO transfers(id,device_id,name,size,sha256,state,created_at,expires_at) VALUES(?,?,?,?,?,'uploading',?,?)", transfer.ID, device, name, size, hash, time.Now().Unix(), transfer.ExpiresAt)
 		return err
 	})
 	return transfer, err

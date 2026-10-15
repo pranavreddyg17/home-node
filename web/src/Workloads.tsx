@@ -8,6 +8,7 @@ type App = { workload: string; instanceId: string; state: string; updatedAt: num
 type Operation = { id: string; state: string; result: { code?: string } }
 type FileInfo = { id: string; name: string; size: number; sha256: string; createdAt: number; trashUntil: number | null }
 type Transfer = { id: string; name: string; size: number; sha256: string; offset: number; state: string; expiresAt: number }
+type StorageUsage = { quotaBytes: number; storedBytes: number; trashBytes: number; uploadReservedBytes: number; jobReservedBytes: number; cleanupReservedBytes: number; chargedBytes: number; availableBytes: number }
 const bytes = (n: number) => n >= 2 ** 30 ? `${(n / 2 ** 30).toFixed(2)} GiB` : n >= 2 ** 20 ? `${(n / 2 ** 20).toFixed(1)} MiB` : n >= 1024 ? `${(n / 1024).toFixed(1)} KiB` : `${n} bytes`
 async function action<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`/api/v1${path}`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify(body) })
@@ -44,10 +45,18 @@ export function Files() {
   const [progress, setProgress] = useState(0)
   const [busy, setBusy] = useState(false)
   const [trash, setTrash] = useState(false)
+  const [storage, setStorage] = useState<StorageUsage | null>(null)
+  const [storageError, setStorageError] = useState('')
   const pause = useRef(false)
   const activeChunk = useRef<AbortController | null>(null)
   const [pendingUpload, setPendingUpload] = useState<{ id: string; storageKey: string } | null>(null)
-  const refresh = () => api<FileInfo[]>('/files').then(setFiles)
+  const refresh = async () => {
+    const [items] = await Promise.all([
+      api<FileInfo[]>('/files'),
+      api<StorageUsage>('/files/storage').then(value => { setStorage(value); setStorageError('') }).catch(e => { setStorage(null); setStorageError(message(e)) }),
+    ])
+    setFiles(items)
+  }
   const pauseUpload = () => { pause.current = true; activeChunk.current?.abort() }
   useEffect(() => { void refresh().catch(e => setError(message(e))); return pauseUpload }, [])
   const upload = async (file: File) => {
@@ -111,7 +120,15 @@ export function Files() {
   }
   const change = async (file: FileInfo, action: string, name = '') => { setError(''); try { await api(`/files/${file.id}/actions`, { action, name }); await refresh() } catch (e) { setError(message(e)) } }
   const visible = files.filter(f => Boolean(f.trashUntil) === trash)
-  return <div className="stack">{error && <p className="form-error" role="alert">{error}</p>}<section className="panel"><div className="section-heading"><h2>Your files</h2><button onClick={() => void refresh().catch(e => setError(message(e)))}>Refresh</button></div><p>Uploads are checked before they become downloadable. If a connection breaks, select the same file again to resume. Trash retains files for seven days, then permanently removes them; trash still counts toward storage until removal finishes.</p><label className="upload-picker">Upload a file<input type="file" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void upload(file); e.target.value = '' }} /></label>{phase && <div className="transfer-progress" role="status"><span>{phase}</span><progress max={1} value={progress} aria-label="Transfer progress" />{busy && phase !== 'Verifying complete file' && <button onClick={pauseUpload}>Pause upload</button>}{!busy && pendingUpload && <button onClick={() => void cancelUpload()}>Cancel upload and discard partial file</button>}</div>}</section>
+  return <div className="stack">{error && <p className="form-error" role="alert">{error}</p>}
+    <section className="panel" aria-label="Files storage"><h2>Files storage</h2>{storage ? <>
+      <p>{bytes(storage.chargedBytes)} of {bytes(storage.quotaBytes)} charged · {bytes(storage.availableBytes)} available in quota</p>
+      <meter min={0} max={storage.quotaBytes} value={Math.min(storage.chargedBytes, storage.quotaBytes)} aria-label="Files quota usage" />
+      <p>Stored files: {bytes(storage.storedBytes)} including {bytes(storage.trashBytes)} in trash.</p>
+      <p>Reserved for uploads: {bytes(storage.uploadReservedBytes)} · Job outputs: {bytes(storage.jobReservedBytes)} · Pending cleanup: {bytes(storage.cleanupReservedBytes)}</p>
+      <p>Trash and cancelled uploads keep using quota until cleanup is acknowledged. Physical disk space may run out before this quota is reached.</p>
+    </> : <p role="status">{storageError ? `Storage usage is unavailable. ${storageError}` : 'Reading storage usage…'}</p>}</section>
+    <section className="panel"><div className="section-heading"><h2>Your files</h2><button onClick={() => void refresh().catch(e => setError(message(e)))}>Refresh</button></div><p>Uploads are checked before they become downloadable. If a connection breaks, select the same file again to resume. Trash retains files for seven days, then permanently removes them; trash still counts toward storage until removal finishes.</p><label className="upload-picker">Upload a file<input type="file" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void upload(file); e.target.value = '' }} /></label>{phase && <div className="transfer-progress" role="status"><span>{phase}</span><progress max={1} value={progress} aria-label="Transfer progress" />{busy && phase !== 'Verifying complete file' && <button onClick={pauseUpload}>Pause upload</button>}{!busy && pendingUpload && <button onClick={() => void cancelUpload()}>Cancel upload and discard partial file</button>}</div>}</section>
     <section className="panel"><div className="button-row"><button aria-pressed={!trash} onClick={() => setTrash(false)}>Files</button><button aria-pressed={trash} onClick={() => setTrash(true)}>Trash</button></div>{!visible.length && <p>{trash ? 'Trash is empty.' : 'No files yet. Start Private Files in Apps, then upload your first file.'}</p>}{visible.map(file => <article className="file-row" key={file.id}><div><strong>{file.name}</strong><p>{bytes(file.size)} · {new Date(file.createdAt * 1000).toLocaleDateString()}</p>{file.trashUntil !== null && <p>{file.trashUntil * 1000 <= Date.now() ? 'Retention expired; removal awaits Private Files.' : `Trash expires ${new Date(file.trashUntil * 1000).toLocaleDateString()}.`}</p>}<details><summary>Integrity</summary><code className="checksum">SHA-256: {file.sha256}</code></details></div><div className="button-row">{trash ? <button disabled={file.trashUntil !== null && file.trashUntil * 1000 <= Date.now()} onClick={() => void change(file, 'restore')}>Restore</button> : <><a className="download-link" href={`/api/v1/files/${file.id}/download`} download>Download</a><button onClick={() => { const name = window.prompt('New filename', file.name); if (name) void change(file, 'rename', name) }}>Rename</button><button onClick={() => void change(file, 'trash')}>Move to trash</button></>}</div></article>)}</section>
   </div>
 }

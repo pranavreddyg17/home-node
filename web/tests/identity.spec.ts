@@ -232,6 +232,25 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.locator('nav').getByRole('button', { name: 'Files', exact: false }).click()
   await expect(page.getByRole('heading', { name: 'Your files' })).toBeVisible()
+  const storagePanel = page.getByRole('region', { name: 'Files storage', exact: true })
+  await expect(storagePanel.getByRole('meter', { name: 'Files quota usage' })).toHaveAttribute('max', String(12 * 2 ** 30))
+  let storageAvailable = true
+  await page.route('**/api/v1/files/storage', route => storageAvailable ? route.fulfill({ json: {
+    quotaBytes: 12 * 2 ** 30, storedBytes: 2 ** 30, trashBytes: 128 * 2 ** 20,
+    uploadReservedBytes: 256 * 2 ** 20, jobReservedBytes: 512 * 2 ** 20, cleanupReservedBytes: 256 * 2 ** 20,
+    chargedBytes: 2 * 2 ** 30, availableBytes: 10 * 2 ** 30,
+  } }) : route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture storage accounting unavailable' } } }))
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await expect(storagePanel).toContainText('2.00 GiB of 12.00 GiB charged')
+  await expect(storagePanel).toContainText('128.0 MiB in trash')
+  await expect(storagePanel).toContainText('Pending cleanup: 256.0 MiB')
+  storageAvailable = false
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await expect(storagePanel).toContainText('Storage usage is unavailable.')
+  await expect(page.getByRole('heading', { name: 'Your files' })).toBeVisible()
+  await page.unroute('**/api/v1/files/storage')
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await expect(storagePanel.getByRole('meter', { name: 'Files quota usage' })).toBeVisible()
   // Browser transport fixture; native guest and authenticated API have separate evidence.
   const uploadContent = Buffer.from('Resume the original transfer after a temporary outage.')
   const uploadHash = createHash('sha256').update(uploadContent).digest('hex')

@@ -36,6 +36,7 @@ func (s *Server) workloadRoutes() {
 	s.mux.Handle("POST /api/v1/transfers/{id}/finalize", s.require("files", false, http.HandlerFunc(s.finalize)))
 	s.mux.Handle("POST /api/v1/transfers/{id}/cancel", s.require("files", false, http.HandlerFunc(s.cancelTransfer)))
 	s.mux.Handle("GET /api/v1/files", s.require("files", false, http.HandlerFunc(s.files)))
+	s.mux.Handle("GET /api/v1/files/storage", s.require("files", false, http.HandlerFunc(s.filesStorage)))
 	s.mux.Handle("POST /api/v1/files/{id}/actions", s.require("files", false, http.HandlerFunc(s.changeFile)))
 	s.mux.Handle("GET /api/v1/files/{id}/download", s.require("files", false, http.HandlerFunc(s.download)))
 }
@@ -175,6 +176,14 @@ func (s *Server) files(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, items)
+}
+func (s *Server) filesStorage(w http.ResponseWriter, r *http.Request) {
+	usage, err := s.Workloads.FilesStorage(r.Context())
+	if err != nil {
+		workloadError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, usage)
 }
 func (s *Server) changeFile(w http.ResponseWriter, r *http.Request) {
 	var body struct {

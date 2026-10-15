@@ -84,22 +84,15 @@ func (s *Service) CreateJob(ctx context.Context, device, key, input, preset, ret
 		if size > MaxFileBytes {
 			return ErrInvalid
 		}
-		var active int
-		if err = tx.QueryRow("SELECT count(*) FROM jobs WHERE state IN('queued','preparing','running','finalizing','cancelling')").Scan(&active); err != nil {
+		usage, err := filesStorage(ctx, tx)
+		if err != nil {
 			return err
 		}
-		if active >= 8 {
+		if usage.activeJobs >= 8 {
 			return ErrConflict
 		}
-		var used, reserved int64
-		if err = tx.QueryRow("SELECT coalesce(sum(size),0)+(SELECT count(*) FROM orphan_objects WHERE workload='files')*? FROM files", MaxJobOutputBytes).Scan(&used); err != nil {
-			return err
-		}
-		if err = tx.QueryRow("SELECT coalesce(sum(size),0) FROM transfers WHERE state IN('uploading','verifying','cancelling')").Scan(&reserved); err != nil {
-			return err
-		}
-		if used+reserved+int64(active+1)*MaxJobOutputBytes > StorageQuota {
-			return ErrConflict
+		if usage.ChargedBytes+MaxJobOutputBytes > StorageQuota {
+			return ErrCapacity
 		}
 		group := retryGroup
 		if group == "" {
