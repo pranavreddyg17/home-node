@@ -293,29 +293,53 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   const emptyHash = createHash('sha256').update(Buffer.alloc(0)).digest('hex')
   const creationMarker = `homenode-transfer:${emptyHash}:0`
   let creationKey = '', creationRequests = 0
+  let heldCreation: Route | undefined, heldFinalization: Route | undefined
+  let finalizationRequests = 0
   await page.route('**/api/v1/transfers', async route => {
     if (route.request().method() === 'GET') return route.continue()
     creationRequests++
     const key = route.request().headers()['idempotency-key']
     const body = route.request().postDataJSON()
     expect(body).toEqual({ name: 'empty-retry.txt', size: 0, sha256: emptyHash })
-    if (creationRequests === 1) { creationKey = key; expect(key).toHaveLength(36); return route.abort('connectionreset') }
+    if (creationRequests === 1) { creationKey = key; expect(key).toHaveLength(36); heldCreation = route; return }
     expect(key).toBe(creationKey)
     return route.fulfill({ status: 201, json: { id: creationId, name: body.name, size: 0, sha256: emptyHash, offset: 0, state: 'uploading', expiresAt: Math.floor(Date.now() / 1000) + 3600 } })
   })
-  await page.route(`**/api/v1/transfers/${creationId}/finalize`, route => route.fulfill({ json: { id: creationId } }))
+  await page.route(`**/api/v1/transfers/${creationId}/finalize`, route => {
+    if (++finalizationRequests === 1) { heldFinalization = route; return }
+    return route.fulfill({ json: { id: creationId } })
+  })
+  await page.route(`**/api/v1/transfers/${creationId}`, route => route.fulfill({ json: { id: creationId, name: 'empty-retry.txt', size: 0, sha256: emptyHash, offset: 0, state: 'ready', expiresAt: Math.floor(Date.now() / 1000) + 3600 } }))
   await page.getByLabel('Upload a file').setInputFiles({ name: 'empty-retry.txt', mimeType: 'text/plain', buffer: Buffer.alloc(0) })
-  await expect(page.locator('.transfer-progress')).toContainText('Upload stopped.')
+  await expect.poll(() => Boolean(heldCreation)).toBe(true)
+  const creationAborted = page.waitForEvent('requestfailed', { timeout: 3000, predicate: request => request === heldCreation!.request() })
+  await page.getByRole('button', { name: 'Pause upload', exact: true }).click()
+  await creationAborted
+  await expect(page.locator('.transfer-progress')).toContainText('Paused.')
+  await heldCreation?.abort().catch(() => {})
   expect(await page.evaluate(key => localStorage.getItem(key), creationMarker)).toBeNull()
   expect(JSON.parse((await page.evaluate(key => localStorage.getItem(key), `${creationMarker}:creation`))!).key).toBe(creationKey)
   await page.reload()
   await page.locator('nav').getByRole('button', { name: 'Files', exact: false }).click()
   await page.getByLabel('Upload a file').setInputFiles({ name: 'renamed-empty.txt', mimeType: 'text/plain', buffer: Buffer.alloc(0) })
+  await expect.poll(() => Boolean(heldFinalization)).toBe(true)
+  await expect(page.locator('.transfer-progress')).toContainText('Verifying complete file')
+  await expect(page.getByRole('button', { name: 'Pause upload', exact: true })).toHaveCount(0)
+  const finalizationAborted = page.waitForEvent('requestfailed', { timeout: 3000, predicate: request => request === heldFinalization!.request() })
+  await page.locator('nav').getByRole('button', { name: 'Overview', exact: false }).click()
+  await finalizationAborted
+  await heldFinalization?.abort().catch(() => {})
+  expect(await page.evaluate(key => localStorage.getItem(key), creationMarker)).toBe(creationId)
+  await page.locator('nav').getByRole('button', { name: 'Files', exact: false }).click()
+  await page.getByLabel('Upload a file').setInputFiles({ name: 'renamed-empty.txt', mimeType: 'text/plain', buffer: Buffer.alloc(0) })
   await expect(page.locator('.transfer-progress')).toContainText('Upload verified')
   expect(creationRequests).toBe(2)
+  expect(finalizationRequests).toBe(2)
+  expect(await page.evaluate(key => localStorage.getItem(key), creationMarker)).toBeNull()
   expect(await page.evaluate(key => localStorage.getItem(key), `${creationMarker}:creation`)).toBeNull()
   await page.unroute('**/api/v1/transfers')
   await page.unroute(`**/api/v1/transfers/${creationId}/finalize`)
+  await page.unroute(`**/api/v1/transfers/${creationId}`)
   // Browser transport fixture; native guest and authenticated API have separate evidence.
   const uploadContent = Buffer.from('Resume the original transfer after a temporary outage.')
   const uploadHash = createHash('sha256').update(uploadContent).digest('hex')
@@ -326,9 +350,14 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   let transferMismatch = true
   let transferMissing = false
   let fileListUnavailable = false
+  let holdStatus = false
+  let heldStatus: Route | undefined
   let heldChunk: Route | undefined
   await page.evaluate(({ key, id }) => localStorage.setItem(key, id), { key: uploadKey, id: uploadId })
-  await page.route(`**/api/v1/transfers/${uploadId}`, route => transferMissing ? route.fulfill({ status: 404, json: { error: { code: 'NOT_FOUND' } } }) : transferAvailable ? route.fulfill({ json: { ...pending, sha256: transferMismatch ? '0'.repeat(64) : uploadHash } }) : route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture transfer service unavailable' } } }))
+  await page.route(`**/api/v1/transfers/${uploadId}`, route => {
+    if (holdStatus) { heldStatus = route; return }
+    return transferMissing ? route.fulfill({ status: 404, json: { error: { code: 'NOT_FOUND' } } }) : transferAvailable ? route.fulfill({ json: { ...pending, sha256: transferMismatch ? '0'.repeat(64) : uploadHash } }) : route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture transfer service unavailable' } } })
+  })
   await page.route('**/api/v1/transfers', async route => {
     if (route.request().method() === 'GET') return route.fulfill({ json: pending.state === 'ready' ? [] : [pending] })
     duplicateTransfers++
@@ -354,6 +383,17 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await expect(page.getByRole('alert')).toContainText('Fixture transfer service unavailable')
   expect(await page.evaluate(key => localStorage.getItem(key), uploadKey)).toBe(uploadId)
   expect(duplicateTransfers).toBe(0)
+  holdStatus = true
+  await page.getByLabel('Upload a file').setInputFiles(uploadFile)
+  await expect.poll(() => Boolean(heldStatus)).toBe(true)
+  const statusAborted = page.waitForEvent('requestfailed', { timeout: 3000, predicate: request => request === heldStatus!.request() })
+  await page.getByRole('button', { name: 'Pause upload', exact: true }).click()
+  await statusAborted
+  await expect(page.locator('.transfer-progress')).toContainText('Paused.')
+  expect(await page.evaluate(key => localStorage.getItem(key), uploadKey)).toBe(uploadId)
+  expect(chunkRequests).toBe(0)
+  await heldStatus?.abort().catch(() => {})
+  holdStatus = false
   transferAvailable = true
   await page.getByLabel('Upload a file').setInputFiles(uploadFile)
   await expect(page.getByRole('alert')).toContainText('The saved upload does not match this file.')

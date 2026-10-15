@@ -59,7 +59,7 @@ export function Files() {
   const [uploadsError, setUploadsError] = useState('')
   const [resumeTarget, setResumeTarget] = useState<Transfer | null>(null)
   const pause = useRef(false)
-  const activeChunk = useRef<AbortController | null>(null)
+  const activeUploadRequest = useRef<AbortController | null>(null)
   const [pendingUpload, setPendingUpload] = useState<{ id: string; storageKey: string } | null>(null)
   const mounted = useRef(false)
   const generation = useRef(0)
@@ -90,7 +90,14 @@ export function Files() {
     refreshing.current = request
     return request
   }
-  const pauseUpload = () => { pause.current = true; activeChunk.current?.abort() }
+  const uploadRequest = async <T,>(path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> => {
+    if (pause.current) throw new DOMException('Upload paused', 'AbortError')
+    const controller = new AbortController()
+    activeUploadRequest.current = controller
+    try { return await api<T>(path, body, controller.signal, headers) }
+    finally { if (activeUploadRequest.current === controller) activeUploadRequest.current = null }
+  }
+  const pauseUpload = () => { pause.current = true; activeUploadRequest.current?.abort() }
   useEffect(() => {
     mounted.current = true; generation.current++
     void refresh().catch(e => setError(message(e)))
@@ -107,6 +114,7 @@ export function Files() {
         setProgress(Math.min(file.size, offset + 2 ** 20) / file.size)
       }
       const hash = bytesToHex(digest.digest())
+      if (pause.current) { setPhase('Paused. Select the same file to resume.'); return }
       if (target && (target.size !== file.size || target.sha256 !== hash)) {
         throw new Error('This file does not match the selected upload. Choose the original file, or clear the resume selection to start another upload.')
       }
@@ -114,7 +122,7 @@ export function Files() {
       let transfer: Transfer | null = null
       const saved = target?.id ?? localStorage.getItem(storageKey)
       if (saved) {
-        try { transfer = await api<Transfer>(`/transfers/${saved}`) } catch (error) {
+        try { transfer = await uploadRequest<Transfer>(`/transfers/${saved}`) } catch (error) {
           if (error instanceof APIError && error.status === 404) {
             if (target) throw new Error('The selected upload is no longer available. Refresh Files before choosing an upload to resume.')
             localStorage.removeItem(storageKey)
@@ -138,7 +146,7 @@ export function Files() {
           throw new Error('The saved upload request is unavailable. Refresh Files and choose an unfinished upload before retrying.')
         }
         localStorage.setItem(intentKey, JSON.stringify(intent))
-        transfer = await api<Transfer>('/transfers', { name: intent.name, size: file.size, sha256: hash }, undefined, { 'Idempotency-Key': intent.key })
+        transfer = await uploadRequest<Transfer>('/transfers', { name: intent.name, size: file.size, sha256: hash }, { 'Idempotency-Key': intent.key })
         if (!transfer || !/^[a-f0-9]{32}$/.test(transfer.id) || transfer.size !== file.size || transfer.sha256 !== hash || !Number.isSafeInteger(transfer.offset) || transfer.offset < 0 || transfer.offset > file.size) {
           throw new Error('The upload response does not match this file. Refresh Files before retrying.')
         }
@@ -157,16 +165,12 @@ export function Files() {
         if (pause.current) { setPhase('Paused. Select the same file to resume.'); return }
         let binary = ''
         for (let i = 0; i < chunk.length; i += 8192) binary += String.fromCharCode(...chunk.subarray(i, i + 8192))
-        const controller = new AbortController()
-        activeChunk.current = controller
-        try {
-          transfer = await api<Transfer>(`/transfers/${transfer.id}/chunks`, { offset: transfer.offset, data: btoa(binary), sha256: bytesToHex(sha256(chunk)) }, controller.signal)
-        } finally { activeChunk.current = null }
+        transfer = await uploadRequest<Transfer>(`/transfers/${transfer.id}/chunks`, { offset: transfer.offset, data: btoa(binary), sha256: bytesToHex(sha256(chunk)) })
         setProgress(transfer.offset / file.size)
       }
       if (pause.current) { setPhase('Paused. Select the same file to resume.'); return }
       setPhase('Verifying complete file')
-      await api(`/transfers/${transfer.id}/finalize`, {})
+      await uploadRequest(`/transfers/${transfer.id}/finalize`, {})
       localStorage.removeItem(storageKey); setPendingUpload(null); setResumeTarget(null); setPhase('Upload verified'); setProgress(1); await refresh(true)
     } catch (e) {
       if (pause.current) setPhase('Paused. Select the same file to resume.')
