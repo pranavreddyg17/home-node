@@ -45,7 +45,9 @@ export function Apps({ session, verify }: { session: Session; verify: () => Prom
 }
 
 export function Files() {
-  const [files, setFiles] = useState<FileInfo[]>([])
+  const [files, setFiles] = useState<FileInfo[] | null>(null)
+  const [filesError, setFilesError] = useState('')
+  const [checkedAt, setCheckedAt] = useState<Date | null>(null)
   const [error, setError] = useState('')
   const [phase, setPhase] = useState('')
   const [progress, setProgress] = useState(0)
@@ -59,16 +61,41 @@ export function Files() {
   const pause = useRef(false)
   const activeChunk = useRef<AbortController | null>(null)
   const [pendingUpload, setPendingUpload] = useState<{ id: string; storageKey: string } | null>(null)
-  const refresh = async () => {
-    const [items] = await Promise.all([
-      api<FileInfo[]>('/files'),
-      api<StorageUsage>('/files/storage').then(value => { setStorage(value); setStorageError('') }).catch(e => { setStorage(null); setStorageError(message(e)) }),
-      api<Transfer[]>('/transfers').then(value => { setUploads(value); setUploadsError('') }).catch(e => { setUploads(null); setUploadsError(message(e)) }),
-    ])
-    setFiles(items)
+  const mounted = useRef(false)
+  const generation = useRef(0)
+  const refreshing = useRef<Promise<void> | null>(null)
+  const refreshAbort = useRef<AbortController | null>(null)
+  const refresh = (fresh = false): Promise<void> => {
+    if (!mounted.current) return Promise.resolve()
+    if (refreshing.current) return fresh ? refreshing.current.then(() => refresh()) : refreshing.current
+    const epoch = generation.current
+    const controller = new AbortController()
+    refreshAbort.current = controller
+    const request: Promise<void> = Promise.allSettled([
+      api<FileInfo[]>('/files', undefined, controller.signal),
+      api<StorageUsage>('/files/storage', undefined, controller.signal),
+      api<Transfer[]>('/transfers', undefined, controller.signal),
+    ]).then(([items, usage, pending]) => {
+      if (!mounted.current || generation.current !== epoch) return
+      if (items.status === 'fulfilled') { setFiles(items.value); setFilesError(''); setCheckedAt(new Date()) }
+      else setFilesError(message(items.reason))
+      if (usage.status === 'fulfilled') { setStorage(usage.value); setStorageError('') }
+      else { setStorage(null); setStorageError(message(usage.reason)) }
+      if (pending.status === 'fulfilled') { setUploads(pending.value); setUploadsError('') }
+      else { setUploads(null); setUploadsError(message(pending.reason)) }
+    }).finally(() => {
+      if (refreshing.current === request) refreshing.current = null
+      if (refreshAbort.current === controller) refreshAbort.current = null
+    })
+    refreshing.current = request
+    return request
   }
   const pauseUpload = () => { pause.current = true; activeChunk.current?.abort() }
-  useEffect(() => { void refresh().catch(e => setError(message(e))); return pauseUpload }, [])
+  useEffect(() => {
+    mounted.current = true; generation.current++
+    void refresh().catch(e => setError(message(e)))
+    return () => { mounted.current = false; generation.current++; refreshAbort.current?.abort(); refreshAbort.current = null; refreshing.current = null; pauseUpload() }
+  }, [])
   const upload = async (file: File, target: Transfer | null = null) => {
     if (file.size > 2 ** 30) { setError('This build accepts files up to 1 GiB.'); return }
     setBusy(true); setError(''); pause.current = false; setPendingUpload(null); setProgress(0); setPhase('Calculating file checksum')
@@ -140,7 +167,7 @@ export function Files() {
       if (pause.current) { setPhase('Paused. Select the same file to resume.'); return }
       setPhase('Verifying complete file')
       await api(`/transfers/${transfer.id}/finalize`, {})
-      localStorage.removeItem(storageKey); setPendingUpload(null); setResumeTarget(null); setPhase('Upload verified'); setProgress(1); await refresh()
+      localStorage.removeItem(storageKey); setPendingUpload(null); setResumeTarget(null); setPhase('Upload verified'); setProgress(1); await refresh(true)
     } catch (e) {
       if (pause.current) setPhase('Paused. Select the same file to resume.')
       else { setError(message(e)); setPhase('Upload stopped. Select the same file to retry or resume.') }
@@ -154,12 +181,12 @@ export function Files() {
       if (localStorage.getItem(target.storageKey) === target.id) localStorage.removeItem(target.storageKey)
       if (resumeTarget?.id === target.id) setResumeTarget(null)
       setPendingUpload(null); setPhase('Upload cancelled. Storage cleanup will finish when Private Files is available.'); setProgress(0)
-      await refresh()
+      await refresh(true)
     } catch (e) { setError(message(e)) } finally { setBusy(false) }
   }
-  const change = async (file: FileInfo, action: string, name = '') => { setError(''); try { await api(`/files/${file.id}/actions`, { action, name }); await refresh() } catch (e) { setError(message(e)) } }
-  const visible = files.filter(f => (f.trashUntil !== null) === trash)
-  return <div className="stack">{error && <p className="form-error" role="alert">{error}</p>}
+  const change = async (file: FileInfo, action: string, name = '') => { setError(''); try { await api(`/files/${file.id}/actions`, { action, name }); await refresh(true) } catch (e) { setError(message(e)) } }
+  const visible = (files ?? []).filter(f => (f.trashUntil !== null) === trash)
+  return <div className="stack">{error && <p className="form-error" role="alert">{error}</p>}{filesError && <p className="form-error" role="alert">File list is unavailable. {filesError}</p>}
     <section className="panel" aria-label="Files storage"><h2>Files storage</h2>{storage ? <>
       <p>{bytes(storage.chargedBytes)} of {bytes(storage.quotaBytes)} charged · {bytes(storage.availableBytes)} available in quota</p>
       <meter min={0} max={storage.quotaBytes} value={Math.min(storage.chargedBytes, storage.quotaBytes)} aria-label="Files quota usage" />
@@ -175,8 +202,9 @@ export function Files() {
         <div className="button-row"><button disabled={busy || item.state === 'cancelling' || item.expiresAt * 1000 <= Date.now()} onClick={() => { setResumeTarget(item); setError('') }}>Resume {item.name}</button><button disabled={busy || item.state === 'cancelling'} onClick={() => void cancelUpload({ id: item.id, storageKey: `homenode-transfer:${item.sha256}:${item.size}` })}>Discard {item.name}</button></div>
       </article>)}
     </section>
-    <section className="panel"><div className="section-heading"><h2>Your files</h2><button onClick={() => void refresh().catch(e => setError(message(e)))}>Refresh</button></div><p>Uploads are checked before they become downloadable. If a connection breaks, select the same file again to resume. Trash retains files for seven days, then permanently removes them; trash still counts toward storage until removal finishes.</p><label className="upload-picker">Upload a file<input type="file" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void upload(file, resumeTarget); e.target.value = '' }} /></label>{phase && <div className="transfer-progress" role="status"><span>{phase}</span><progress max={1} value={progress} aria-label="Transfer progress" />{busy && phase !== 'Verifying complete file' && <button onClick={pauseUpload}>Pause upload</button>}{!busy && pendingUpload && <button onClick={() => void cancelUpload()}>Cancel upload and discard partial file</button>}</div>}</section>
-    <section className="panel"><div className="button-row"><button aria-pressed={!trash} onClick={() => setTrash(false)}>Files</button><button aria-pressed={trash} onClick={() => setTrash(true)}>Trash</button></div>{!visible.length && <p>{trash ? 'Trash is empty.' : 'No files yet. Start Private Files in Apps, then upload your first file.'}</p>}{visible.map(file => <article className="file-row" key={file.id}><div><strong>{file.name}</strong><p>{bytes(file.size)} · {new Date(file.createdAt * 1000).toLocaleDateString()}</p>{file.trashUntil !== null && <p>{file.trashUntil * 1000 <= Date.now() ? 'Retention expired; removal awaits Private Files.' : `Trash expires ${new Date(file.trashUntil * 1000).toLocaleDateString()}.`}</p>}<details><summary>Integrity</summary><code className="checksum">SHA-256: {file.sha256}</code></details></div><div className="button-row">{trash ? <button disabled={file.trashUntil !== null && file.trashUntil * 1000 <= Date.now()} onClick={() => void change(file, 'restore')}>Restore</button> : <><a className="download-link" href={`/api/v1/files/${file.id}/download`} download>Download</a><button onClick={() => { const name = window.prompt('New filename', file.name); if (name) void change(file, 'rename', name) }}>Rename</button><button onClick={() => void change(file, 'trash')}>Move to trash</button></>}</div></article>)}</section>
+    <section className="panel"><div className="section-heading"><h2>Your files</h2><button onClick={() => void refresh(true).catch(e => setError(message(e)))}>Refresh</button></div><p>Uploads are checked before they become downloadable. If a connection breaks, select the same file again to resume. Trash retains files for seven days, then permanently removes them; trash still counts toward storage until removal finishes.</p><label className="upload-picker">Upload a file<input type="file" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void upload(file, resumeTarget); e.target.value = '' }} /></label>{phase && <div className="transfer-progress" role="status"><span>{phase}</span><progress max={1} value={progress} aria-label="Transfer progress" />{busy && phase !== 'Verifying complete file' && <button onClick={pauseUpload}>Pause upload</button>}{!busy && pendingUpload && <button onClick={() => void cancelUpload()}>Cancel upload and discard partial file</button>}</div>}</section>
+    <section className="panel"><div className="button-row"><button aria-pressed={!trash} onClick={() => setTrash(false)}>Files</button><button aria-pressed={trash} onClick={() => setTrash(true)}>Trash</button></div>{files === null ? <p role="status">{filesError ? 'The file list has not been loaded.' : 'Reading your files…'}</p> : !visible.length && <p>{trash ? 'Trash is empty.' : 'No files yet. Start Private Files in Apps, then upload your first file.'}</p>}{visible.map(file => <article className="file-row" key={file.id}><div><strong>{file.name}</strong><p>{bytes(file.size)} · {new Date(file.createdAt * 1000).toLocaleDateString()}</p>{file.trashUntil !== null && <p>{file.trashUntil * 1000 <= Date.now() ? 'Retention expired; removal awaits Private Files.' : `Trash expires ${new Date(file.trashUntil * 1000).toLocaleDateString()}.`}</p>}<details><summary>Integrity</summary><code className="checksum">SHA-256: {file.sha256}</code></details></div><div className="button-row">{trash ? <button disabled={file.trashUntil !== null && file.trashUntil * 1000 <= Date.now()} onClick={() => void change(file, 'restore')}>Restore</button> : <><a className="download-link" href={`/api/v1/files/${file.id}/download`} download>Download</a><button onClick={() => { const name = window.prompt('New filename', file.name); if (name) void change(file, 'rename', name) }}>Rename</button><button onClick={() => void change(file, 'trash')}>Move to trash</button></>}</div></article>)}</section>
+    {checkedAt && <p className="timestamp">File list last observed {checkedAt.toLocaleTimeString()}</p>}
   </div>
 }
 

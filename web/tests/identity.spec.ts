@@ -325,11 +325,12 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   let transferAvailable = false, duplicateTransfers = 0, uploadedOffset = -1, chunkRequests = 0
   let transferMismatch = true
   let transferMissing = false
+  let fileListUnavailable = false
   let heldChunk: Route | undefined
   await page.evaluate(({ key, id }) => localStorage.setItem(key, id), { key: uploadKey, id: uploadId })
   await page.route(`**/api/v1/transfers/${uploadId}`, route => transferMissing ? route.fulfill({ status: 404, json: { error: { code: 'NOT_FOUND' } } }) : transferAvailable ? route.fulfill({ json: { ...pending, sha256: transferMismatch ? '0'.repeat(64) : uploadHash } }) : route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture transfer service unavailable' } } }))
   await page.route('**/api/v1/transfers', async route => {
-    if (route.request().method() === 'GET') return route.fulfill({ json: [pending] })
+    if (route.request().method() === 'GET') return route.fulfill({ json: pending.state === 'ready' ? [] : [pending] })
     duplicateTransfers++
     await route.fulfill({ status: 500, json: { error: { message: 'Duplicate transfer fixture' } } })
   })
@@ -343,7 +344,11 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
     pending.offset = uploadContent.length
     heldChunk = route
   })
-  await page.route(`**/api/v1/transfers/${uploadId}/finalize`, route => route.fulfill({ json: { id: uploadId } }))
+  await page.route('**/api/v1/files', route => fileListUnavailable ? route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture file list temporarily unavailable' } } }) : route.continue())
+  await page.route(`**/api/v1/transfers/${uploadId}/finalize`, route => {
+    pending.state = 'ready'; fileListUnavailable = true
+    return route.fulfill({ json: { id: uploadId } })
+  })
   const uploadFile = { name: 'resume.txt', mimeType: 'text/plain', buffer: uploadContent }
   await page.getByLabel('Upload a file').setInputFiles(uploadFile)
   await expect(page.getByRole('alert')).toContainText('Fixture transfer service unavailable')
@@ -398,11 +403,17 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await heldChunk?.abort().catch(() => {})
   await page.getByLabel('Upload a file').setInputFiles(uploadFile)
   await expect(page.locator('.transfer-progress')).toContainText('Upload verified')
+  await expect(page.getByRole('alert')).toContainText('File list is unavailable.')
+  await expect(page.locator('.transfer-progress')).not.toContainText('Upload stopped.')
   await expect(unfinishedPanel.getByRole('button', { name: 'Clear resume selection', exact: true })).toHaveCount(0)
   expect(uploadedOffset).toBe(7)
   expect(chunkRequests).toBe(1)
   expect(duplicateTransfers).toBe(0)
   expect(await page.evaluate(key => localStorage.getItem(key), uploadKey)).toBeNull()
+  fileListUnavailable = false
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await page.unroute('**/api/v1/files')
   await page.unroute(`**/api/v1/transfers/${uploadId}`)
   await page.unroute('**/api/v1/transfers')
   await page.unroute(`**/api/v1/transfers/${uploadId}/chunks`)

@@ -101,33 +101,37 @@ test('Jobs refreshes stay serialized when one response fails before the other co
   await page.unrouteAll({ behavior: 'wait' })
 })
 
-test('leaving Jobs aborts pending reads and reopening starts a fresh refresh', async ({ page }) => {
-  let hold = true
-  const held: Route[] = []
-  const requests = { jobs: 0, files: 0 }
-  await page.route('**/api/v1/**', route => {
-    const path = new URL(route.request().url()).pathname
-    if (path === '/api/v1/setup') return route.fulfill({ json: { claimed: true, development: true } })
-    if (path === '/api/v1/session') return route.fulfill({ json: { device: { id: 'fixture-owner', name: 'Fixture owner', capabilities: ['admin', 'jobs', 'files'], createdAt: 1, revokedAt: null }, verifiedAt: 1, expiresAt: 9999999999 } })
-    if (path === '/api/v1/host/report') return route.fulfill({ json: { generatedAt: new Date().toISOString(), host: { os: 'linux', architecture: 'amd64' }, checks: [], prerequisitesMet: false, executionEnabled: false } })
-    if (path === '/api/v1/apps') return route.fulfill({ json: { apps: [], runtimeConfigured: false } })
-    if (path === '/api/v1/jobs' || path === '/api/v1/files') {
-      requests[path === '/api/v1/jobs' ? 'jobs' : 'files']++
-      if (hold) { held.push(route); return }
-      return route.fulfill({ json: [] })
-    }
-    return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Unused fixture endpoint' } } })
+for (const screen of ['Jobs', 'Files'] as const) {
+  test(`leaving ${screen} aborts pending reads and reopening starts a fresh refresh`, async ({ page }) => {
+    let hold = true
+    const held: Route[] = []
+    const paths = screen === 'Jobs' ? ['/api/v1/jobs', '/api/v1/files'] : ['/api/v1/files', '/api/v1/files/storage', '/api/v1/transfers']
+    const requests: Record<string, number> = Object.fromEntries(paths.map(path => [path, 0]))
+    await page.route('**/api/v1/**', route => {
+      const path = new URL(route.request().url()).pathname
+      if (path === '/api/v1/setup') return route.fulfill({ json: { claimed: true, development: true } })
+      if (path === '/api/v1/session') return route.fulfill({ json: { device: { id: 'fixture-owner', name: 'Fixture owner', capabilities: ['admin', 'jobs', 'files'], createdAt: 1, revokedAt: null }, verifiedAt: 1, expiresAt: 9999999999 } })
+      if (path === '/api/v1/host/report') return route.fulfill({ json: { generatedAt: new Date().toISOString(), host: { os: 'linux', architecture: 'amd64' }, checks: [], prerequisitesMet: false, executionEnabled: false } })
+      if (path === '/api/v1/apps') return route.fulfill({ json: { apps: [], runtimeConfigured: false } })
+      if (paths.includes(path)) {
+        requests[path]++
+        if (hold) { held.push(route); return }
+        if (path === '/api/v1/files/storage') return route.fulfill({ json: { quotaBytes: 12 * 2 ** 30, storedBytes: 0, trashBytes: 0, uploadReservedBytes: 0, jobReservedBytes: 0, cleanupReservedBytes: 0, chargedBytes: 0, availableBytes: 12 * 2 ** 30 } })
+        return route.fulfill({ json: [] })
+      }
+      return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Unused fixture endpoint' } } })
+    })
+    await page.goto('/')
+    await page.locator('nav').getByRole('button', { name: screen, exact: false }).click()
+    await expect.poll(() => held.length).toBe(paths.length)
+    const aborted = held.map(route => page.waitForEvent('requestfailed', { timeout: 3000, predicate: request => request === route.request() }))
+    await page.locator('nav').getByRole('button', { name: 'Overview', exact: false }).click()
+    for (const request of await Promise.all(aborted)) expect(request.failure()).not.toBeNull()
+    for (const route of held) await route.abort().catch(() => {})
+    hold = false
+    await page.locator('nav').getByRole('button', { name: screen, exact: false }).click()
+    await expect(page.getByText(screen === 'Jobs' ? 'Last observed' : 'File list last observed', { exact: false })).toBeVisible()
+    await expect(page.getByRole('alert')).toHaveCount(0)
+    expect(requests).toEqual(Object.fromEntries(paths.map(path => [path, 2])))
   })
-  await page.goto('/')
-  await page.locator('nav').getByRole('button', { name: 'Jobs', exact: false }).click()
-  await expect.poll(() => held.length).toBe(2)
-  const aborted = held.map(route => page.waitForEvent('requestfailed', { timeout: 3000, predicate: request => request === route.request() }))
-  await page.locator('nav').getByRole('button', { name: 'Overview', exact: false }).click()
-  for (const request of await Promise.all(aborted)) expect(request.failure()).not.toBeNull()
-  for (const route of held) await route.abort().catch(() => {})
-  hold = false
-  await page.locator('nav').getByRole('button', { name: 'Jobs', exact: false }).click()
-  await expect(page.getByText('Last observed', { exact: false })).toBeVisible()
-  await expect(page.getByRole('alert')).toHaveCount(0)
-  expect(requests).toEqual({ jobs: 2, files: 2 })
-})
+}
