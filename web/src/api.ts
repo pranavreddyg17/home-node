@@ -3,14 +3,14 @@ export type Session = { device: Device; verifiedAt: number; expiresAt: number }
 export class APIError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message) }
 }
-export async function api<T>(path: string, body?: unknown, cancellation?: AbortSignal): Promise<T> {
+export async function api<T>(path: string, body?: unknown, cancellation?: AbortSignal, headers: Record<string, string> = {}): Promise<T> {
   const deadline = body === undefined ? AbortSignal.timeout(15000) : undefined
   const signal = deadline && cancellation ? AbortSignal.any([deadline, cancellation]) : deadline ?? cancellation
   try {
     const response = await fetch(`/api/v1${path}`, {
       method: body === undefined ? 'GET' : 'POST',
       credentials: 'same-origin', cache: 'no-store', signal,
-      headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+      headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
     const value = await response.json()

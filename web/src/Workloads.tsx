@@ -97,7 +97,24 @@ export function Files() {
         }
       }
       if (pause.current) { setPhase('Paused. Select the same file to resume.'); return }
-      if (!transfer) { transfer = await api<Transfer>('/transfers', { name: file.name, size: file.size, sha256: hash }); localStorage.setItem(storageKey, transfer.id) }
+      if (!transfer) {
+        const intentKey = `${storageKey}:creation`
+        const savedIntent = localStorage.getItem(intentKey)
+        const intent: { key: string; name: string } = savedIntent ? JSON.parse(savedIntent) : { key: crypto.randomUUID(), name: file.name }
+        if (!intent || typeof intent.key !== 'string' || !/^[a-f0-9-]{36}$/.test(intent.key) || typeof intent.name !== 'string') {
+          throw new Error('The saved upload request is unavailable. Refresh Files and choose an unfinished upload before retrying.')
+        }
+        localStorage.setItem(intentKey, JSON.stringify(intent))
+        transfer = await api<Transfer>('/transfers', { name: intent.name, size: file.size, sha256: hash }, undefined, { 'Idempotency-Key': intent.key })
+        if (!transfer || !/^[a-f0-9]{32}$/.test(transfer.id) || transfer.size !== file.size || transfer.sha256 !== hash || !Number.isSafeInteger(transfer.offset) || transfer.offset < 0 || transfer.offset > file.size) {
+          throw new Error('The upload response does not match this file. Refresh Files before retrying.')
+        }
+        localStorage.setItem(storageKey, transfer.id)
+        localStorage.removeItem(intentKey)
+        if (!['uploading', 'verifying', 'ready'].includes(transfer.state) || transfer.expiresAt * 1000 <= Date.now()) {
+          throw new Error('The previous upload is no longer resumable. Refresh Files to check its cleanup status before starting another upload.')
+        }
+      }
       if (target) localStorage.setItem(storageKey, transfer.id)
       if (transfer.state !== 'ready') setPendingUpload({ id: transfer.id, storageKey })
       setPhase('Uploading'); setProgress(file.size ? transfer.offset / file.size : 1)

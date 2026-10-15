@@ -119,7 +119,13 @@ func (s *Server) createTransfer(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &body) {
 		return
 	}
-	item, err := s.Workloads.CreateTransfer(r.Context(), actor(r).Device.ID, body.Name, body.Size, body.SHA256)
+	var item workload.Transfer
+	var err error
+	if key := r.Header.Get("Idempotency-Key"); key != "" {
+		item, err = s.Workloads.CreateTransferWithKey(r.Context(), actor(r).Device.ID, body.Name, body.Size, body.SHA256, key)
+	} else {
+		item, err = s.Workloads.CreateTransfer(r.Context(), actor(r).Device.ID, body.Name, body.Size, body.SHA256)
+	}
 	if err != nil {
 		workloadError(w, err)
 		return

@@ -276,6 +276,35 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.unroute(`**/api/v1/transfers/${recoveredUpload.id}/cancel`)
   await page.getByRole('button', { name: 'Refresh', exact: true }).click()
   await expect(unfinishedPanel).toContainText('No unfinished uploads were reported')
+  // The creation request committed, but its reply was lost before a transfer
+  // bookmark could be saved. Reopening the page must reuse the original key.
+  const creationId = 'd'.repeat(32)
+  const emptyHash = createHash('sha256').update(Buffer.alloc(0)).digest('hex')
+  const creationMarker = `homenode-transfer:${emptyHash}:0`
+  let creationKey = '', creationRequests = 0
+  await page.route('**/api/v1/transfers', async route => {
+    if (route.request().method() === 'GET') return route.continue()
+    creationRequests++
+    const key = route.request().headers()['idempotency-key']
+    const body = route.request().postDataJSON()
+    expect(body).toEqual({ name: 'empty-retry.txt', size: 0, sha256: emptyHash })
+    if (creationRequests === 1) { creationKey = key; expect(key).toHaveLength(36); return route.abort('connectionreset') }
+    expect(key).toBe(creationKey)
+    return route.fulfill({ status: 201, json: { id: creationId, name: body.name, size: 0, sha256: emptyHash, offset: 0, state: 'uploading', expiresAt: Math.floor(Date.now() / 1000) + 3600 } })
+  })
+  await page.route(`**/api/v1/transfers/${creationId}/finalize`, route => route.fulfill({ json: { id: creationId } }))
+  await page.getByLabel('Upload a file').setInputFiles({ name: 'empty-retry.txt', mimeType: 'text/plain', buffer: Buffer.alloc(0) })
+  await expect(page.locator('.transfer-progress')).toContainText('Upload stopped.')
+  expect(await page.evaluate(key => localStorage.getItem(key), creationMarker)).toBeNull()
+  expect(JSON.parse((await page.evaluate(key => localStorage.getItem(key), `${creationMarker}:creation`))!).key).toBe(creationKey)
+  await page.reload()
+  await page.locator('nav').getByRole('button', { name: 'Files', exact: false }).click()
+  await page.getByLabel('Upload a file').setInputFiles({ name: 'renamed-empty.txt', mimeType: 'text/plain', buffer: Buffer.alloc(0) })
+  await expect(page.locator('.transfer-progress')).toContainText('Upload verified')
+  expect(creationRequests).toBe(2)
+  expect(await page.evaluate(key => localStorage.getItem(key), `${creationMarker}:creation`)).toBeNull()
+  await page.unroute('**/api/v1/transfers')
+  await page.unroute(`**/api/v1/transfers/${creationId}/finalize`)
   // Browser transport fixture; native guest and authenticated API have separate evidence.
   const uploadContent = Buffer.from('Resume the original transfer after a temporary outage.')
   const uploadHash = createHash('sha256').update(uploadContent).digest('hex')

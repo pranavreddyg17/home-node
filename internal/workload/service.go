@@ -103,16 +103,50 @@ type File struct {
 }
 
 func (s *Service) CreateTransfer(ctx context.Context, device, name string, size int64, hash string) (Transfer, error) {
+	return s.createTransfer(ctx, device, name, size, hash, "")
+}
+
+func (s *Service) CreateTransferWithKey(ctx context.Context, device, name string, size int64, hash, key string) (Transfer, error) {
+	if len(key) < 16 || len(key) > 128 {
+		return Transfer{}, ErrInvalid
+	}
+	return s.createTransfer(ctx, device, name, size, hash, key)
+}
+
+func (s *Service) createTransfer(ctx context.Context, device, name string, size int64, hash, key string) (Transfer, error) {
 	if !validName(name) || size < 0 || size > MaxFileBytes || !hashPattern.MatchString(hash) {
 		return Transfer{}, ErrInvalid
 	}
-	if _, err := s.app(ctx, "files"); err != nil {
-		return Transfer{}, err
-	}
+	_, appErr := s.app(ctx, "files")
 	transfer := Transfer{ID: state.Random(), Name: name, Size: size, SHA256: hash, State: "uploading", ExpiresAt: time.Now().Add(24 * time.Hour).Unix()}
 	err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		var creation Operation
+		if key != "" {
+			var replay bool
+			var err error
+			creation, replay, err = operation(tx, device, key, "transfer.create", struct {
+				Name   string
+				Size   int64
+				SHA256 string
+			}{name, size, hash})
+			if err != nil {
+				return err
+			}
+			if replay {
+				var result struct {
+					TransferID string `json:"transferId"`
+				}
+				if creation.State != "succeeded" || json.Unmarshal(creation.Result, &result) != nil || !guestproto.ValidID(result.TransferID) {
+					return ErrConflict
+				}
+				return tx.QueryRow("SELECT id,name,size,sha256,offset,state,expires_at FROM transfers WHERE id=? AND device_id=?", result.TransferID, device).Scan(&transfer.ID, &transfer.Name, &transfer.Size, &transfer.SHA256, &transfer.Offset, &transfer.State, &transfer.ExpiresAt)
+			}
+		}
 		if err := state.RequireAdmission(tx); err != nil {
 			return errors.Join(ErrConflict, err)
+		}
+		if appErr != nil {
+			return appErr
 		}
 		usage, err := filesStorage(ctx, tx)
 		if err != nil {
@@ -125,6 +159,13 @@ func (s *Service) CreateTransfer(ctx context.Context, device, name string, size 
 			return ErrCapacity
 		}
 		_, err = tx.Exec("INSERT INTO transfers(id,device_id,name,size,sha256,state,created_at,expires_at) VALUES(?,?,?,?,?,'uploading',?,?)", transfer.ID, device, name, size, hash, time.Now().Unix(), transfer.ExpiresAt)
+		if err == nil && key != "" {
+			result, encodeErr := json.Marshal(map[string]string{"transferId": transfer.ID})
+			if encodeErr != nil {
+				return encodeErr
+			}
+			_, err = tx.Exec("UPDATE operations SET state='succeeded',result=?,updated_at=? WHERE id=?", string(result), time.Now().Unix(), creation.ID)
+		}
 		return err
 	})
 	return transfer, err
