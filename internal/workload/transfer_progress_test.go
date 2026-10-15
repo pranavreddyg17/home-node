@@ -102,6 +102,65 @@ func TestTransferRecoversLostRepliesAfterControllerReopen(t *testing.T) {
 	}
 }
 
+func TestCancelledTransferRetainsQuotaAcrossLostDeletionReply(t *testing.T) {
+	s, backend, device := service(t)
+	ctx := context.Background()
+	startFiles(t, s, device)
+	data := []byte("discarded partial upload")
+	transfer, err := s.CreateTransfer(ctx, device, "discard.txt", int64(len(data)), sum(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Upload(ctx, device, transfer.ID, 0, data, sum(data)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CancelTransfer(ctx, device, transfer.ID); err != nil {
+		t.Fatal(err)
+	}
+	s.Backend = lostTransferReplyBackend{Backend: backend, operation: "delete"}
+	if err := s.expireTransfer(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatal("deletion reply not lost", err)
+	}
+	var databasePath string
+	if err := s.Store.DB.QueryRow("SELECT file FROM pragma_database_list WHERE name='main'").Scan(&databasePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err := state.Open(filepath.Dir(databasePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	s = New(store, backend, 1)
+	checkReservation := func(want int64) {
+		t.Helper()
+		var reserved int64
+		if err := store.DB.QueryRow("SELECT coalesce(sum(size),0) FROM transfers WHERE state IN('uploading','verifying','cancelling')").Scan(&reserved); err != nil || reserved != want {
+			t.Fatal("unexpected reservation", reserved, want, err)
+		}
+	}
+	checkReservation(int64(len(data)))
+	if _, err := s.Upload(ctx, device, transfer.ID, 0, data, sum(data)); !errors.Is(err, ErrConflict) {
+		t.Fatal("cancelled upload resumed", err)
+	}
+	if _, err := s.Finalize(ctx, device, transfer.ID); !errors.Is(err, ErrConflict) {
+		t.Fatal("cancelled upload finalized", err)
+	}
+	if err := s.expireTransfer(ctx); err != nil {
+		t.Fatal("cleanup replay failed", err)
+	}
+	checkReservation(0)
+	observed, err := s.Transfer(ctx, device, transfer.ID)
+	if err != nil || observed.State != "cancelled" {
+		t.Fatal("cancellation not acknowledged", observed, err)
+	}
+	if err := s.expireTransfer(ctx); err != nil {
+		t.Fatal("completed cleanup replay failed", err)
+	}
+}
+
 func TestUploadReplayCannotRewindAcknowledgedProgress(t *testing.T) {
 	s, backend, device := service(t)
 	ctx := context.Background()
