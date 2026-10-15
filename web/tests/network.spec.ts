@@ -51,3 +51,44 @@ test('slow AI status reads do not overlap and polling recovers after refusal', a
   expect(maximum).toBe(1)
   await page.locator('nav').getByRole('button', { name: 'Overview', exact: false }).click()
 })
+
+test('Jobs refreshes stay serialized when one response fails before the other completes', async ({ page }) => {
+  let activeJobs = 0, activeFiles = 0, maxJobs = 0, maxFiles = 0, completedJobs = 0
+  await page.route('**/api/v1/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    if (path === '/api/v1/setup') return route.fulfill({ json: { claimed: true, development: true } })
+    if (path === '/api/v1/session') return route.fulfill({ json: { device: { id: 'fixture-owner', name: 'Fixture owner', capabilities: ['admin', 'jobs', 'files'], createdAt: 1, revokedAt: null }, verifiedAt: 1, expiresAt: 9999999999 } })
+    if (path === '/api/v1/host/report') return route.fulfill({ json: { generatedAt: new Date().toISOString(), host: { os: 'linux', architecture: 'amd64' }, checks: [], prerequisitesMet: false, executionEnabled: false } })
+    if (path === '/api/v1/apps') return route.fulfill({ json: { apps: [], runtimeConfigured: false } })
+    if (path === '/api/v1/jobs') {
+      activeJobs++; maxJobs = Math.max(maxJobs, activeJobs)
+      await new Promise(resolve => setTimeout(resolve, 2800))
+      activeJobs--; completedJobs++
+      if (completedJobs === 1) return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture jobs temporarily unavailable' } } })
+      return route.fulfill({ json: [] })
+    }
+    if (path === '/api/v1/files') {
+      activeFiles++; maxFiles = Math.max(maxFiles, activeFiles)
+      await new Promise(resolve => setTimeout(resolve, 3500))
+      activeFiles--
+      return route.fulfill({ json: [] })
+    }
+    return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Unused fixture endpoint' } } })
+  })
+  await page.goto('/')
+  await page.locator('nav').getByRole('button', { name: 'Jobs', exact: false }).click()
+  await expect(page.getByText('Reading job status…', { exact: true })).toBeVisible()
+  await expect(page.getByText('No jobs yet. Upload a video in Files to get started.', { exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await expect.poll(() => completedJobs, { timeout: 5000 }).toBe(1)
+  // The failed jobs request must not permit another files read while its
+  // original companion response is still pending.
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('Job status is unavailable.')
+  await expect(page.getByText('Last observed', { exact: false })).toBeVisible({ timeout: 12000 })
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  expect(completedJobs).toBeGreaterThanOrEqual(2)
+  expect(maxJobs).toBe(1)
+  expect(maxFiles).toBe(1)
+  await page.unrouteAll({ behavior: 'wait' })
+})

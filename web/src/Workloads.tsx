@@ -189,11 +189,46 @@ export function Jobs({ session }: { session: Session }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [checkedAt, setCheckedAt] = useState<Date | null>(null)
-  const refresh = async () => { const [jobList, fileList] = await Promise.all([api<Job[]>('/jobs'), api<FileInfo[]>('/files')]); setJobs(jobList); setFiles(fileList.filter(f => !f.trashUntil)); setCheckedAt(new Date()) }
-  useEffect(() => { void refresh().catch(e => setError(message(e))); const timer = setInterval(() => { void refresh().catch(e => setError(message(e))) }, 2000); return () => clearInterval(timer) }, [])
-  const run = async (work: () => Promise<unknown>) => { setBusy(true); setError(''); try { await work(); await refresh() } catch (e) { setError(message(e)) } finally { setBusy(false) } }
-  return <div className="stack">{error && <p className="form-error" role="alert">{error}</p>}<section className="panel"><h2>Convert a video</h2><p>Choose an uploaded file and a maintained MP4 preset. Each attempt runs in a separate VM. Closing this page does not stop it.</p><form onSubmit={e => { e.preventDefault(); void run(() => action(session.device.id, '/jobs', { inputId: input, preset, retryGroup: '' })) }}><label>Input file<select value={input} required onChange={e => setInput(e.target.value)}><option value="">Select a file</option>{files.map(file => <option key={file.id} value={file.id}>{file.name} · {bytes(file.size)}</option>)}</select></label><label>Conversion preset<select value={preset} onChange={e => setPreset(e.target.value)}><option value="mp4-720p">MP4 · Up to 720p</option><option value="mp4-1080p">MP4 · Up to 1080p</option></select></label><button className="primary" disabled={busy || !input}>Queue conversion</button></form></section>
-    <section className="panel"><div className="section-heading"><h2>Job attempts</h2><button onClick={() => void refresh().catch(e => setError(message(e)))}>Refresh</button></div>{!jobs.length && <p>No jobs yet. Upload a video in Files to get started.</p>}{jobs.map(job => <article className="file-row" key={job.attemptId}><div><strong>{files.find(f => f.id === job.inputId)?.name ?? 'Video conversion'}</strong><p>{job.preset} · {new Date(job.createdAt * 1000).toLocaleString()}</p><span className="state-pill">{job.state}</span>{job.cleanupPending && <p>Temporary workload cleanup is pending; HomeNode will retry.</p>}{job.errorCode && job.errorCode !== 'CLEANUP_PENDING' && <p>{job.errorCode.replaceAll('_', ' ').toLowerCase()}</p>}<small className="attempt-label">Attempt {job.attemptId.slice(0, 10)}</small></div><div className="button-row">{['queued', 'preparing', 'running', 'finalizing'].includes(job.state) && <button disabled={busy} onClick={() => void run(() => api(`/jobs/${job.id}/cancel`, { attemptId: job.attemptId }))}>Cancel</button>}{['failed', 'cancelled', 'interrupted'].includes(job.state) && <button disabled={busy} onClick={() => void run(() => action(session.device.id, '/jobs', { inputId: job.inputId, preset: job.preset, retryGroup: job.id }))}>Retry as new attempt</button>}{job.state === 'succeeded' && job.outputId && <a className="download-link" href={`/api/v1/files/${job.outputId}/download`} download>Download result</a>}</div></article>)}{checkedAt && <p className="timestamp">Last observed {checkedAt.toLocaleTimeString()}</p>}</section>
+  const [refreshError, setRefreshError] = useState('')
+  const mounted = useRef(false)
+  const generation = useRef(0)
+  const refreshing = useRef<Promise<void> | null>(null)
+  const refreshAbort = useRef<AbortController | null>(null)
+  const refresh = (fresh = false): Promise<void> => {
+    if (!mounted.current) return Promise.resolve()
+    if (refreshing.current) return fresh ? refreshing.current.then(() => refresh()) : refreshing.current
+    const epoch = generation.current
+    const controller = new AbortController()
+    refreshAbort.current = controller
+    // An early failure must not start a new poll while its companion read
+    // still occupies network/controller capacity.
+    const request: Promise<void> = Promise.allSettled([
+      api<Job[]>('/jobs', undefined, controller.signal), api<FileInfo[]>('/files', undefined, controller.signal),
+    ]).then(([jobList, fileList]) => {
+      if (jobList.status === 'rejected') throw jobList.reason
+      if (fileList.status === 'rejected') throw fileList.reason
+      if (!mounted.current || generation.current !== epoch) return
+      setJobs(jobList.value); setFiles(fileList.value.filter(f => !f.trashUntil)); setCheckedAt(new Date()); setRefreshError('')
+    }).catch(e => {
+      if (mounted.current && generation.current === epoch) setRefreshError(message(e))
+      throw e
+    }).finally(() => {
+      if (refreshing.current === request) refreshing.current = null
+      if (refreshAbort.current === controller) refreshAbort.current = null
+    })
+    refreshing.current = request
+    return request
+  }
+  useEffect(() => {
+    mounted.current = true; generation.current++
+    const poll = () => { void refresh().catch(() => {}) }
+    poll()
+    const timer = setInterval(poll, 2000)
+    return () => { mounted.current = false; generation.current++; clearInterval(timer); refreshAbort.current?.abort(); refreshAbort.current = null; refreshing.current = null }
+  }, [])
+  const run = async (work: () => Promise<unknown>) => { setBusy(true); setError(''); try { await work(); await refresh(true).catch(() => {}) } catch (e) { setError(message(e)) } finally { setBusy(false) } }
+  return <div className="stack">{error && <p className="form-error" role="alert">{error}</p>}{refreshError && <p className="form-error" role="alert">Job status is unavailable. {refreshError}</p>}<section className="panel"><h2>Convert a video</h2><p>Choose an uploaded file and a maintained MP4 preset. Each attempt runs in a separate VM. Closing this page does not stop it.</p><form onSubmit={e => { e.preventDefault(); void run(() => action(session.device.id, '/jobs', { inputId: input, preset, retryGroup: '' })) }}><label>Input file<select value={input} required onChange={e => setInput(e.target.value)}><option value="">Select a file</option>{files.map(file => <option key={file.id} value={file.id}>{file.name} · {bytes(file.size)}</option>)}</select></label><label>Conversion preset<select value={preset} onChange={e => setPreset(e.target.value)}><option value="mp4-720p">MP4 · Up to 720p</option><option value="mp4-1080p">MP4 · Up to 1080p</option></select></label><button className="primary" disabled={busy || !input}>Queue conversion</button></form></section>
+    <section className="panel"><div className="section-heading"><h2>Job attempts</h2><button onClick={() => void refresh().catch(() => {})}>Refresh</button></div>{!checkedAt ? <p role="status">{refreshError ? 'Job status has not been loaded.' : 'Reading job status…'}</p> : !jobs.length && <p>No jobs yet. Upload a video in Files to get started.</p>}{jobs.map(job => <article className="file-row" key={job.attemptId}><div><strong>{files.find(f => f.id === job.inputId)?.name ?? 'Video conversion'}</strong><p>{job.preset} · {new Date(job.createdAt * 1000).toLocaleString()}</p><span className="state-pill">{job.state}</span>{job.cleanupPending && <p>Temporary workload cleanup is pending; HomeNode will retry.</p>}{job.errorCode && job.errorCode !== 'CLEANUP_PENDING' && <p>{job.errorCode.replaceAll('_', ' ').toLowerCase()}</p>}<small className="attempt-label">Attempt {job.attemptId.slice(0, 10)}</small></div><div className="button-row">{['queued', 'preparing', 'running', 'finalizing'].includes(job.state) && <button disabled={busy} onClick={() => void run(() => api(`/jobs/${job.id}/cancel`, { attemptId: job.attemptId }))}>Cancel</button>}{['failed', 'cancelled', 'interrupted'].includes(job.state) && <button disabled={busy} onClick={() => void run(() => action(session.device.id, '/jobs', { inputId: job.inputId, preset: job.preset, retryGroup: job.id }))}>Retry as new attempt</button>}{job.state === 'succeeded' && job.outputId && <a className="download-link" href={`/api/v1/files/${job.outputId}/download`} download>Download result</a>}</div></article>)}{checkedAt && <p className="timestamp">Last observed {checkedAt.toLocaleTimeString()}</p>}</section>
   </div>
 }
 
