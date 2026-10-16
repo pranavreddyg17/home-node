@@ -70,7 +70,10 @@ the fixture namespaces to ensure it cannot hide a missing socket restriction.
 This uses the production socket-binding helper with a veth surrogate, not
 production TUN/daemon admission, installed services, TLS or actual tailnet ACLs.
 The retained initial run proves these socket-helper checks at that source.
-Later interface-recreation and health-watcher changes still need native runs.
+The subsequent [source c77a593 run](evidence/private-ingress-c77a593.json)
+passed interface recreation and manual listener reopening, as well as the
+component suite. The watched-child observation and executable TLS shutdown
+test were added later and still need native runs.
 
 The fixture also deletes and recreates its permitted interface, verifies a
 different kernel interface index, and repeats the route/control checks. The

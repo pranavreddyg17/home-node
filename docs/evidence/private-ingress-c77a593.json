@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "c77a5930d3e31aa3aee95aa8c218c9b326311e1c",
+  "workflowRun": 38940861529,
+  "job": 117107832460,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/38940861529",
+  "conclusion": "success",
+  "logSHA256": "212f61e3965f3e22d20cf188a8fa2df83acb61f21cfa503ffeb0a0388835ff54",
+  "assertions": [
+    "Listeners execute as UID/GID 65534 with zero inherited, permitted, effective, bounding and ambient capabilities",
+    "Production device-binding helper accepts permitted veth ingress before and after negative checks",
+    "LAN source 10.210.2.2 and routed CGNAT source 100.100.2.2 cannot connect to bound listener",
+    "Unbound control accepts every corresponding route",
+    "Fresh namespaces use no Tailscale firewall rules; reverse-path filtering disabled only in those namespaces",
+    "After interface deletion and recreation with a different kernel index, old bound listener refuses permitted and LAN routes while unbound control accepts them",
+    "New bound listener on recreated interface restores permitted ingress and refuses LAN/CGNAT routes"
+  ],
+  "limits": [
+    "Veth surrogate, not production point-to-point TUN or running-daemon identity admission",
+    "Raw TCP fixture, not installed HTTPS gateway/controller or systemd confinement",
+    "Does not qualify actual Tailscale ACLs, physical devices, passkeys or relays",
+    "Does not include later watched-child real-interface observation or executable TLS shutdown test"
+  ]
+}
