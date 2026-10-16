@@ -17,6 +17,12 @@ Stop into forced termination. If reconciliation observes a running app, its
 next explicit Stop again records cooperative shutdown. Maintenance admission
 remains closed throughout an unconfirmed stop.
 
+Startup reconciliation accepts an inspection only when its instance and
+workload match, its revision is positive and within the protocol bound, and its
+state is running, stopped or interrupted. An unavailable or invalid observation
+leaves an existing stopping fence intact. The management revision never moves
+backward, including when a refused command did not advance the runtime revision.
+
 The operation and app transition commit in one transaction. A failed metadata
 write rolls back both. Superseding app intent and interrupted operation
 authority are preserved rather than overwritten by an older completion.

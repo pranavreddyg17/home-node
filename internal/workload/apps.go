@@ -277,9 +277,12 @@ func (s *Service) Reconcile(ctx context.Context) error {
 	}
 	for _, a := range apps {
 		phase := "failed"
+		if a.State == "stopping" {
+			phase = "stopping"
+		}
 		if s.Backend != nil {
-			observed, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: state.Random(), Action: "inspect", InstanceID: a.InstanceID, PolicyGeneration: s.PolicyGeneration})
-			if err == nil {
+			observed, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: state.Random(), Action: "inspect", InstanceID: a.InstanceID, Workload: a.Workload, Revision: a.Revision, PolicyGeneration: s.PolicyGeneration})
+			if err == nil && observed.ID == a.InstanceID && observed.Workload == a.Workload && observed.Revision > 0 && observed.Revision <= 1<<53 && (observed.State == "running" || observed.State == "stopped" || observed.State == "interrupted") {
 				phase = observed.State
 				a.Revision = max(a.Revision, observed.Revision)
 			}
