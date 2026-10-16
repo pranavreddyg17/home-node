@@ -619,6 +619,13 @@ func (m *Manager) Audit(ctx context.Context) error {
 				if probeErr != nil {
 					stop = true
 				} else if !running {
+					var owner string
+					if err := m.Store.DB.QueryRowContext(ctx, "SELECT value FROM settings WHERE key=?", shutdownOwnerKey(id)).Scan(&owner); err != nil {
+						return err
+					}
+					if err := m.completeShutdown(ctx, id, owner, i.Revision, deadline); err != nil {
+						return err
+					}
 					continue
 				}
 			}

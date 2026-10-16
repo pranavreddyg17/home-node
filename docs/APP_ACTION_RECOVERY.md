@@ -65,6 +65,17 @@ owner through this browser control. Exposing a retry button for that state
 would not implement recovery; resolving the original shutdown receipt and
 runtime state remains necessary.
 
+If the guest exits within its admitted shutdown deadline but the completion
+reply is lost, the supervisor audit can now complete the original shutdown
+journal after observing domain exit. It checks the original owner receipt,
+instance, revision, desired state, deadline and pending operation, then records
+completion and deletes the receipts atomically. This dispatches no additional
+shutdown or forced stop. A foreign owner or failed journal write leaves the
+runtime transition unresolved. Controller startup can subsequently observe the
+stopped runtime and settle its own uncertain operation history. This does not
+yet refresh a running controller's recovery state automatically or qualify
+physical guest shutdown and disk consistency.
+
 The operation and app transition commit in one transaction. A failed metadata
 write rolls back both. Superseding app intent and interrupted operation
 authority are preserved rather than overwritten by an older completion.

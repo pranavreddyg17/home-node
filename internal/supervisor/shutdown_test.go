@@ -146,6 +146,53 @@ func (b *shutdownFixtureBackend) Shutdown(context.Context, string) error {
 	return nil
 }
 
+func TestAuditFinishesObservedShutdownAfterLostCompletion(t *testing.T) {
+	for _, scenario := range []string{"lost-completion", "foreign-owner", "transaction-failure"} {
+		t.Run(scenario, func(t *testing.T) {
+			m, original := newManager(t)
+			b := &shutdownFixtureBackend{fakeBackend: original, failure: errors.New("fixture completion lost")}
+			m.Backend = b
+			ctx := context.Background()
+			id := state.Random()
+			if _, err := m.Apply(ctx, Request{Version: 1, OperationID: state.Random(), Action: "start", Workload: "files", InstanceID: id, PolicyGeneration: 1, Revision: 1}); err != nil {
+				t.Fatal(err)
+			}
+			b.during = func() { b.running = false }
+			request := Request{Version: 1, OperationID: state.Random(), Action: "shutdown", InstanceID: id, PolicyGeneration: 1, Revision: 2}
+			if _, err := m.Apply(ctx, request); err == nil {
+				t.Fatal("fixture did not lose completion")
+			}
+			if scenario == "foreign-owner" {
+				if _, err := m.Store.DB.Exec("UPDATE settings SET value=? WHERE key=?", state.Random(), shutdownOwnerKey(id)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if scenario == "transaction-failure" {
+				if _, err := m.Store.DB.Exec(`CREATE TRIGGER fixture_completion BEFORE UPDATE ON runtime_operations WHEN NEW.state='succeeded' BEGIN SELECT RAISE(ABORT,'fixture failure'); END`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			err := m.Audit(ctx)
+			instance, inspectErr := m.Inspect(ctx, id)
+			if inspectErr != nil || b.stops != 0 || b.shutdowns != 1 {
+				t.Fatal(instance, inspectErr, b.stops, b.shutdowns)
+			}
+			if scenario != "lost-completion" {
+				if err == nil || instance.State != "shutting-down" {
+					t.Fatal("invalid or partial completion committed", instance, err)
+				}
+				return
+			}
+			if err != nil || instance.State != "stopped" {
+				t.Fatal("observed exit did not finish original journal", instance, err)
+			}
+			if _, err = m.Apply(ctx, request); err != nil || b.shutdowns != 1 {
+				t.Fatal("completed replay repeated shutdown", err, b.shutdowns)
+			}
+		})
+	}
+}
+
 func TestJournaledShutdownSuccessReplayAndInterveningTeardown(t *testing.T) {
 	for _, scenario := range []string{"success", "failure", "intervening-stop", "deadline-changed", "audit-interruption"} {
 		t.Run(scenario, func(t *testing.T) {

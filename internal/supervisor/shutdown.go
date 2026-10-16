@@ -151,10 +151,29 @@ func (m *Manager) shutdown(ctx context.Context, r Request) (Instance, error) {
 	if running {
 		return Instance{}, ErrPolicy
 	}
-	err = m.Store.Transaction(shutdownCtx, func(tx *sql.Tx) error {
-		result, err := tx.Exec(`UPDATE runtime_instances SET state='stopped' WHERE id=? AND state='shutting-down' AND revision=?
+	err = m.completeShutdown(shutdownCtx, r.InstanceID, r.OperationID, r.Revision, deadline)
+	if err != nil {
+		return Instance{}, err
+	}
+	return m.Inspect(ctx, r.InstanceID)
+}
+
+// completeShutdown records an observed exit without issuing another runtime effect.
+func (m *Manager) completeShutdown(ctx context.Context, instanceID, operationID string, revision, deadline int64) error {
+	if !guestproto.ValidID(instanceID) || !guestproto.ValidID(operationID) || revision < 1 || revision > 1<<53 {
+		return ErrPolicy
+	}
+	return m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		var completed bool
+		if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM runtime_instances r JOIN runtime_operations o ON o.instance_id=r.id WHERE r.id=? AND r.state='stopped' AND r.desired='stopped' AND r.revision=? AND o.id=? AND o.state='succeeded')`, instanceID, revision, operationID).Scan(&completed); err != nil {
+			return err
+		}
+		if completed {
+			return nil
+		}
+		result, err := tx.Exec(`UPDATE runtime_instances SET state='stopped' WHERE id=? AND state='shutting-down' AND desired='stopped' AND revision=?
    AND EXISTS(SELECT 1 FROM settings WHERE key=? AND value=?)
-   AND EXISTS(SELECT 1 FROM settings WHERE key=? AND value=? AND CAST(value AS INTEGER)>unixepoch())`, r.InstanceID, r.Revision, shutdownOwnerKey(r.InstanceID), r.OperationID, shutdownDeadlineKey(r.InstanceID), strconv.FormatInt(deadline, 10))
+   AND EXISTS(SELECT 1 FROM settings WHERE key=? AND value=? AND CAST(value AS INTEGER)>unixepoch())`, instanceID, revision, shutdownOwnerKey(instanceID), operationID, shutdownDeadlineKey(instanceID), strconv.FormatInt(deadline, 10))
 		if err != nil {
 			return err
 		}
@@ -165,7 +184,7 @@ func (m *Manager) shutdown(ctx context.Context, r Request) (Instance, error) {
 		if count != 1 {
 			return ErrPolicy
 		}
-		result, err = tx.Exec("UPDATE runtime_operations SET state='succeeded' WHERE id=? AND state='pending'", r.OperationID)
+		result, err = tx.Exec("UPDATE runtime_operations SET state='succeeded' WHERE id=? AND instance_id=? AND state='pending'", operationID, instanceID)
 		if err != nil {
 			return err
 		}
@@ -176,13 +195,9 @@ func (m *Manager) shutdown(ctx context.Context, r Request) (Instance, error) {
 		if count != 1 {
 			return ErrPolicy
 		}
-		_, err = tx.Exec("DELETE FROM settings WHERE key IN(?,?,?)", shutdownOwnerKey(r.InstanceID), shutdownDeadlineKey(r.InstanceID), shutdownSocketRevisionKey(r.InstanceID))
+		_, err = tx.Exec("DELETE FROM settings WHERE key IN(?,?,?)", shutdownOwnerKey(instanceID), shutdownDeadlineKey(instanceID), shutdownSocketRevisionKey(instanceID))
 		return err
 	})
-	if err != nil {
-		return Instance{}, err
-	}
-	return m.Inspect(ctx, r.InstanceID)
 }
 
 // bindShutdownSocketRevision runs in the same transaction as the stop request.
