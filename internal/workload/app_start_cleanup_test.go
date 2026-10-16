@@ -57,6 +57,10 @@ func TestUncertainStartupTeardownUsesOnlyIntendedInstanceAndRevision(t *testing.
 			}
 			expected := "failed"
 			if scenario == "cleanup-fails" {
+				apps, err := s.Apps(ctx)
+				if err != nil || len(apps) != 1 || !apps[0].RequiresAttention {
+					t.Fatal("unresolved cleanup hidden from app status", apps, err)
+				}
 				expected = "requires-action"
 			}
 			if result.State != expected {

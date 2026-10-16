@@ -17,11 +17,12 @@ import (
 )
 
 type App struct {
-	Revision   int64  `json:"revision"`
-	Workload   string `json:"workload"`
-	InstanceID string `json:"instanceId"`
-	State      string `json:"state"`
-	UpdatedAt  int64  `json:"updatedAt"`
+	RequiresAttention bool   `json:"requiresAttention"`
+	Revision          int64  `json:"revision"`
+	Workload          string `json:"workload"`
+	InstanceID        string `json:"instanceId"`
+	State             string `json:"state"`
+	UpdatedAt         int64  `json:"updatedAt"`
 }
 type appIntent struct {
 	CooperativeStop bool   `json:"cooperativeStop,omitempty"`
@@ -33,14 +34,14 @@ type appIntent struct {
 
 func (s *Service) Apps(ctx context.Context) ([]App, error) {
 	apps := []App{}
-	rows, err := s.Store.DB.QueryContext(ctx, "SELECT workload,instance_id,state,updated_at,revision FROM apps ORDER BY workload")
+	rows, err := s.Store.DB.QueryContext(ctx, "SELECT workload,instance_id,state,updated_at,revision,EXISTS(SELECT 1 FROM operations WHERE operations.id=apps.operation_id AND operations.state='requires-action') FROM apps ORDER BY workload")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var a App
-		if err = rows.Scan(&a.Workload, &a.InstanceID, &a.State, &a.UpdatedAt, &a.Revision); err != nil {
+		if err = rows.Scan(&a.Workload, &a.InstanceID, &a.State, &a.UpdatedAt, &a.Revision, &a.RequiresAttention); err != nil {
 			return nil, err
 		}
 		apps = append(apps, a)

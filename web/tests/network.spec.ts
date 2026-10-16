@@ -102,14 +102,14 @@ test('Jobs refreshes stay serialized when one response fails before the other co
 })
 
 test('Apps observes an unacknowledged transition and disables actions while status is unavailable', async ({ page }) => {
-  let running = false, unavailable = false, mutations = 0
+  let running = false, unavailable = false, attention = false, mutations = 0
   await page.route('**/api/v1/**', route => {
     const path = new URL(route.request().url()).pathname
     if (route.request().method() !== 'GET') mutations++
     if (path === '/api/v1/setup') return route.fulfill({ json: { claimed: true, development: true } })
     if (path === '/api/v1/session') return route.fulfill({ json: { device: { id: 'fixture-owner', name: 'Fixture owner', capabilities: ['admin'], createdAt: 1, revokedAt: null }, verifiedAt: 1, expiresAt: 9999999999 } })
     if (path === '/api/v1/host/report') return route.fulfill({ json: { generatedAt: new Date().toISOString(), host: { os: 'linux', architecture: 'amd64' }, checks: [], prerequisitesMet: false, executionEnabled: false } })
-    if (path === '/api/v1/apps') return unavailable ? route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture app status unavailable' } } }) : route.fulfill({ json: { runtimeConfigured: true, apps: [{ workload: 'files', instanceId: 'a'.repeat(32), state: running ? 'running' : 'starting', updatedAt: 1 }] } })
+    if (path === '/api/v1/apps') return unavailable ? route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture app status unavailable' } } }) : route.fulfill({ json: { runtimeConfigured: true, apps: [{ workload: 'files', instanceId: 'a'.repeat(32), state: attention ? 'failed' : running ? 'running' : 'starting', requiresAttention: attention, updatedAt: 1 }] } })
     return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Unused fixture endpoint' } } })
   })
   await page.goto('/')
@@ -126,6 +126,11 @@ test('Apps observes an unacknowledged transition and disables actions while stat
   await page.getByRole('button', { name: 'Refresh status', exact: true }).click()
   await expect(page.getByRole('alert')).toHaveCount(0)
   await expect(filesApp.getByRole('button', { name: 'Stop app', exact: true })).toBeEnabled()
+  attention = true
+  await page.reload()
+  await page.locator('nav').getByRole('button', { name: 'Apps', exact: false }).click()
+  await expect(filesApp.getByRole('status')).toContainText('This app needs recovery.')
+  await expect(filesApp.getByRole('button', { name: 'Start Files', exact: true })).toBeDisabled()
   expect(mutations).toBe(0)
 })
 

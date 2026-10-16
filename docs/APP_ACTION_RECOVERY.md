@@ -23,6 +23,12 @@ state is running, stopped or interrupted. An unavailable or invalid observation
 leaves an existing stopping fence intact. The management revision never moves
 backward, including when a refused command did not advance the runtime revision.
 
+The app status response includes a `requiresAttention` flag derived from its
+current operation. The browser retains this warning across reloads, disables
+Start and avoids polling a transition that cannot complete itself. This exposes
+the recovery requirement; it does not authorize clearing the operation or
+provide a complete guided repair workflow.
+
 The operation and app transition commit in one transaction. A failed metadata
 write rolls back both. Superseding app intent and interrupted operation
 authority are preserved rather than overwritten by an older completion.

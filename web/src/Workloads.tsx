@@ -4,7 +4,7 @@ import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
 import { APIError, api, message, type Session } from './api'
 
-type App = { workload: string; instanceId: string; state: string; updatedAt: number }
+type App = { requiresAttention?: boolean; workload: string; instanceId: string; state: string; updatedAt: number }
 type Operation = { id: string; state: string; result: { code?: string } }
 type FileInfo = { id: string; name: string; size: number; sha256: string; createdAt: number; trashUntil: number | null }
 type Transfer = { id: string; name: string; size: number; sha256: string; offset: number; state: string; expiresAt: number }
@@ -57,7 +57,7 @@ export function Apps({ session, verify }: { session: Session; verify: () => Prom
     void refresh()
     return () => { mounted.current = false; generation.current++; refreshAbort.current?.abort(); refreshAbort.current = null; refreshing.current = null }
   }, [])
-  const transitioning = apps?.some(app => ['starting', 'stopping'].includes(app.state)) ?? false
+  const transitioning = apps?.some(app => !app.requiresAttention && ['starting', 'stopping'].includes(app.state)) ?? false
   useEffect(() => {
     if (!transitioning) return
     const timer = setInterval(() => { void refresh() }, 1000)
@@ -89,7 +89,7 @@ export function Apps({ session, verify }: { session: Session; verify: () => Prom
       {session.device.capabilities.includes('admin') && <button className="refresh-button" onClick={() => void verify().catch(e => setError(message(e)))}>Verify passkey for app changes</button>}
       {checkedAt && <p className="timestamp">App status last observed {checkedAt.toLocaleTimeString()}</p>}
     </section>
-    {(['files', 'ai'] as const).map(name => { const app = apps?.find(a => a.workload === name); const phase = app?.state ?? (apps === null ? 'unknown' : 'absent'); return <section className="panel" key={name} aria-label={name === 'files' ? 'Private Files' : 'Private AI'}><div className="section-heading"><h2>{name === 'files' ? 'Private Files' : 'Private AI'}</h2><span className="state-pill">{phase}</span></div><p>{name === 'files' ? 'Your files live on a dedicated guest data disk. No public sharing or host folders are exposed.' : 'CPU inference runs in its own guest, with a verified model profile and no cloud fallback or administrative tools.'}</p><p>Network access: none. Installation uses a signed catalog and a verified immutable system image.</p><div className="button-row"><button disabled={apps === null || Boolean(refreshError) || !configured || busy || ['starting', 'stopping', 'running'].includes(phase) || !session.device.capabilities.includes('admin')} onClick={() => void run(name, 'start')}>Start {name === 'files' ? 'Files' : 'AI'}</button><button disabled={apps === null || Boolean(refreshError) || !configured || busy || !['running', 'starting'].includes(phase) || !session.device.capabilities.includes('admin')} onClick={() => { if (window.confirm('Stop this app? Active requests may be interrupted. Its data will be retained.')) void run(name, 'stop') }}>Stop app</button></div></section> })}
+    {(['files', 'ai'] as const).map(name => { const app = apps?.find(a => a.workload === name); const phase = app?.state ?? (apps === null ? 'unknown' : 'absent'); return <section className="panel" key={name} aria-label={name === 'files' ? 'Private Files' : 'Private AI'}><div className="section-heading"><h2>{name === 'files' ? 'Private Files' : 'Private AI'}</h2><span className="state-pill">{phase}</span></div><p>{name === 'files' ? 'Your files live on a dedicated guest data disk. No public sharing or host folders are exposed.' : 'CPU inference runs in its own guest, with a verified model profile and no cloud fallback or administrative tools.'}</p><p>Network access: none. Installation uses a signed catalog and a verified immutable system image.</p>{app?.requiresAttention && <p className="inline-notice" role="status">This app needs recovery. Its last runtime action could not be confirmed. Refresh status after the host administrator has reconciled the workload service. Starting it again is blocked to protect its data.</p>}<div className="button-row"><button disabled={Boolean(app?.requiresAttention) || apps === null || Boolean(refreshError) || !configured || busy || ['starting', 'stopping', 'running'].includes(phase) || !session.device.capabilities.includes('admin')} onClick={() => void run(name, 'start')}>Start {name === 'files' ? 'Files' : 'AI'}</button><button disabled={apps === null || Boolean(refreshError) || !configured || busy || !['running', 'starting'].includes(phase) || !session.device.capabilities.includes('admin')} onClick={() => { if (window.confirm('Stop this app? Active requests may be interrupted. Its data will be retained.')) void run(name, 'stop') }}>Stop app</button></div></section> })}
   </div>
 }
 
