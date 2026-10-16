@@ -147,3 +147,54 @@ func TestReconcileStopSettlementRollsBackTogether(t *testing.T) {
 		t.Fatal("partial recovery committed", apps, err)
 	}
 }
+
+func TestLiveObservationSettlesUncertainAppWithoutReplayingCommands(t *testing.T) {
+	s, original, device := service(t)
+	b := &uncertainStartBackend{testBackend: original, scenario: "cleanup-fails"}
+	s.Backend = b
+	ctx := context.Background()
+	start, err := s.AppAction(ctx, device, state.Random(), "files", "start")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.observeUncertainApps(ctx); err != nil || len(b.requests) != 0 {
+		t.Fatal("observer dispatched pending command", b.requests, err)
+	}
+	if err = s.processApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	original.running = false
+	if err = s.observeUncertainApps(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(b.requests) != 3 || b.requests[2].Action != "inspect" {
+		t.Fatal("observer repeated runtime effects", b.requests)
+	}
+	op, err := s.Operation(ctx, device, start.ID)
+	if err != nil || op.State != "interrupted" {
+		t.Fatal(op, err)
+	}
+	apps, err := s.Apps(ctx)
+	if err != nil || len(apps) != 1 || apps[0].State != "stopped" || apps[0].RequiresAttention {
+		t.Fatal("live recovery remained blocked", apps, err)
+	}
+	if err = s.observeUncertainApps(ctx); err != nil || len(b.requests) != 3 {
+		t.Fatal("settled operation was inspected repeatedly", b.requests, err)
+	}
+}
+
+func TestLiveObservationPreservesUncertainRunningStateDuringOutage(t *testing.T) {
+	s, _, device := service(t)
+	startFiles(t, s, device)
+	if _, err := s.Store.DB.Exec("UPDATE operations SET state='requires-action'"); err != nil {
+		t.Fatal(err)
+	}
+	s.Backend = nil
+	if err := s.observeUncertainApps(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	apps, err := s.Apps(context.Background())
+	if err != nil || len(apps) != 1 || apps[0].State != "running" || !apps[0].RequiresAttention {
+		t.Fatal("outage changed recovery mode", apps, err)
+	}
+}

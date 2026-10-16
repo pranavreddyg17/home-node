@@ -72,9 +72,14 @@ instance, revision, desired state, deadline and pending operation, then records
 completion and deletes the receipts atomically. This dispatches no additional
 shutdown or forced stop. A foreign owner or failed journal write leaves the
 runtime transition unresolved. Controller startup can subsequently observe the
-stopped runtime and settle its own uncertain operation history. This does not
-yet refresh a running controller's recovery state automatically or qualify
-physical guest shutdown and disk consistency.
+stopped runtime and settle its own uncertain operation history. A running
+controller now also observes apps requiring attention through a serialized
+background worker, with a ten-second inspection deadline per app. This worker
+never marks executing commands uncertain, never retries commands and skips
+settled apps. Failed observations preserve the last known app state. Validated
+stopped observations use the same atomic settlement and stale-snapshot guards
+as startup. The browser's Refresh status retrieves the recovered state.
+Physical guest shutdown and disk consistency remain unqualified.
 
 The operation and app transition commit in one transaction. A failed metadata
 write rolls back both. Superseding app intent and interrupted operation

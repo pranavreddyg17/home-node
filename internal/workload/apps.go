@@ -299,46 +299,75 @@ func (s *Service) Reconcile(ctx context.Context) error {
 		return err
 	}
 	for _, a := range apps {
-		originalRevision := a.Revision
-		phase := "failed"
-		if a.State == "stopping" {
-			phase = "stopping"
-		}
-		if s.Backend != nil {
-			observed, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: state.Random(), Action: "inspect", InstanceID: a.InstanceID, Workload: a.Workload, Revision: a.Revision, PolicyGeneration: s.PolicyGeneration})
-			if err == nil && observed.ID == a.InstanceID && observed.Workload == a.Workload && observed.Revision > 0 && observed.Revision <= 1<<53 && (observed.State == "running" || observed.State == "stopped" || observed.State == "interrupted") {
-				phase = observed.State
-				a.Revision = max(a.Revision, observed.Revision)
-			}
-		}
-		if err = s.Store.Transaction(ctx, func(tx *sql.Tx) error {
-			updated, err := tx.Exec("UPDATE apps SET state=?,updated_at=?,revision=? WHERE workload=? AND instance_id=? AND revision=? AND state=?", phase, time.Now().Unix(), a.Revision, a.Workload, a.InstanceID, originalRevision, a.State)
-			if err != nil {
-				return err
-			}
-			count, err := updated.RowsAffected()
-			if err != nil || count != 1 {
-				return err
-			}
-			if phase != "stopped" || !a.RequiresAttention {
-				return nil
-			}
-			// Inspection establishes current inactivity, not successful execution
-			// of the original command. Retain its payload and mark it interrupted.
-			var operationID string
-			if err := tx.QueryRow("SELECT operation_id FROM apps WHERE workload=?", a.Workload).Scan(&operationID); err != nil {
-				return err
-			}
-			return settleAppRecovery(tx, operationID, a.Workload, a.InstanceID, a.Revision+1)
-		}); err != nil {
+		if err := s.observeAppSnapshot(ctx, a); err != nil {
 			return err
 		}
 	}
 	return s.reconcileGenerations(ctx)
 }
+
+// observeUncertainApps never changes executing authority or dispatches commands.
+func (s *Service) observeUncertainApps(ctx context.Context) error {
+	apps, err := s.Apps(ctx)
+	if err != nil {
+		return err
+	}
+	for _, app := range apps {
+		if !app.RequiresAttention {
+			continue
+		}
+		probe, cancel := context.WithTimeout(ctx, 10*time.Second)
+		err := s.observeAppSnapshot(probe, app)
+		cancel()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) observeAppSnapshot(ctx context.Context, a App) error {
+	originalRevision := a.Revision
+	phase := "failed"
+	if a.RequiresAttention || a.State == "stopping" {
+		phase = a.State
+	}
+	if s.Backend != nil {
+		observed, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: state.Random(), Action: "inspect", InstanceID: a.InstanceID, Workload: a.Workload, Revision: a.Revision, PolicyGeneration: s.PolicyGeneration})
+		if err == nil && observed.ID == a.InstanceID && observed.Workload == a.Workload && observed.Revision > 0 && observed.Revision <= 1<<53 && (observed.State == "running" || observed.State == "stopped" || observed.State == "interrupted") {
+			phase = observed.State
+			a.Revision = max(a.Revision, observed.Revision)
+		}
+	}
+	if err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		updated, err := tx.Exec("UPDATE apps SET state=?,updated_at=?,revision=? WHERE workload=? AND instance_id=? AND revision=? AND state=?", phase, time.Now().Unix(), a.Revision, a.Workload, a.InstanceID, originalRevision, a.State)
+		if err != nil {
+			return err
+		}
+		count, err := updated.RowsAffected()
+		if err != nil || count != 1 {
+			return err
+		}
+		if phase != "stopped" || !a.RequiresAttention {
+			return nil
+		}
+		// Inspection establishes current inactivity, not successful execution
+		// of the original command. Retain its payload and mark it interrupted.
+		var operationID string
+		if err := tx.QueryRow("SELECT operation_id FROM apps WHERE workload=?", a.Workload).Scan(&operationID); err != nil {
+			return err
+		}
+		return settleAppRecovery(tx, operationID, a.Workload, a.InstanceID, a.Revision+1)
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (s *Service) Run(ctx context.Context) {
 	var workers sync.WaitGroup
-	for _, work := range []func(context.Context) error{func(ctx context.Context) error { return s.processAppKind(ctx, "app.start") }, func(ctx context.Context) error { return s.processAppKind(ctx, "app.stop") }, s.processJob, s.processGeneration, s.expireTransfer, s.expireTrash, s.cleanupJobResources, s.cleanupOrphanObject, s.processConversationDeletion} {
+	for _, work := range []func(context.Context) error{func(ctx context.Context) error { return s.processAppKind(ctx, "app.start") }, func(ctx context.Context) error { return s.processAppKind(ctx, "app.stop") }, s.processJob, s.processGeneration, s.expireTransfer, s.expireTrash, s.cleanupJobResources, s.cleanupOrphanObject, s.processConversationDeletion, s.observeUncertainApps} {
 		workers.Add(1)
 		go func(fn func(context.Context) error) {
 			defer workers.Done()
