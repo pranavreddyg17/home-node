@@ -21,6 +21,15 @@ def run(*args):
     return subprocess.run(args, check=True, capture_output=True, text=True, timeout=15).stdout
 
 
+def source_hardening(path):
+    source = configparser.ConfigParser(interpolation=None)
+    source.optionxform = str
+    service_text = pathlib.Path(path).read_text().split("[Service]\n", 1)[1].split("\n[", 1)[0]
+    source.read_string("[Service]\n" + service_text)
+    hardening = ("UMask", "NoNewPrivileges", "ProtectSystem", "ProtectHome", "PrivateTmp", "PrivateDevices", "ProtectKernelTunables", "ProtectKernelModules", "ProtectControlGroups", "RestrictSUIDSGID", "LockPersonality", "RestrictRealtime", "RestrictNamespaces", "CapabilityBoundingSet", "AmbientCapabilities", "RestrictAddressFamilies", "InaccessiblePaths", "MemoryMax", "TasksMax")
+    return [f"--property={key}={source['Service'][key]}" for key in hardening]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--test-binary", required=True)
@@ -30,14 +39,7 @@ def main():
         raise SystemExit("requires explicitly opted-in root on disposable Linux")
     release = platform.freedesktop_os_release()
     print("ENV " + json.dumps({"kernel": platform.release(), "architecture": platform.machine(), "distribution": release.get("ID"), "distributionVersion": release.get("VERSION_ID"), "python": platform.python_version(), "iproute": run("ip", "-Version").strip()}, sort_keys=True), flush=True)
-    source = configparser.ConfigParser(interpolation=None)
-    source.optionxform = str
-    # systemd permits repeated conditions in [Unit]; parse only [Service]
-    # strictly so unrelated conditions do not defeat the hardening check.
-    service_text = pathlib.Path(args.source_service).read_text().split("[Service]\n", 1)[1].split("\n[", 1)[0]
-    source.read_string("[Service]\n" + service_text)
-    hardening = ("UMask", "NoNewPrivileges", "ProtectSystem", "ProtectHome", "PrivateTmp", "PrivateDevices", "ProtectKernelTunables", "ProtectKernelModules", "ProtectControlGroups", "RestrictSUIDSGID", "LockPersonality", "RestrictRealtime", "RestrictNamespaces", "CapabilityBoundingSet", "AmbientCapabilities", "RestrictAddressFamilies", "InaccessiblePaths", "MemoryMax", "TasksMax")
-    properties = [f"--property={key}={source['Service'][key]}" for key in hardening]
+    properties = source_hardening(args.source_service)
     server, peer = f"hn-is-{os.getpid()}", f"hn-ip-{os.getpid()}"
     namespaces, children, retired, units = [], [], set(), []
     with tempfile.TemporaryDirectory(prefix="homenode-ingress-") as temporary:

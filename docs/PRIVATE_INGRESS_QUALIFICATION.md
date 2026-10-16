@@ -121,6 +121,20 @@ kernel/environment and source-service digest. This still does not qualify
 the installed executable or coordinated service lifecycle. Source gateway unit changes
 trigger the focused workflow so changes to those protections are retested.
 
+`gateway_startup_fixture.py` adds a separate actual-executable qualification.
+It refuses existing HomeNode account/group names, creates disposable named
+identities, builds a fixture certificate, and starts the real gateway with the
+source hardening properties in a fresh TUN namespace. A controlled daemon
+status executable is mounted only into the service; the controller is a
+minimal Unix acceptor running under the named controller UID. The actual
+gateway must load protected TLS files, authenticate that serving peer, open
+the configured listener, and exit unsuccessfully for readmission after address
+loss. An unsafe world-readable key must refuse startup before listening.
+Native execution is pending. This does not qualify TLS handshakes over a real
+overlay, controller application workflows, signed installation, real daemon
+enrollment or installed restart ordering. Fixture accounts, units and network
+namespaces are removed on teardown; it must never run on the owner's host.
+
 The baseline must enforce overlay-only ingress to the configured HTTPS port
 without granting the gateway firewall administration or daemon administration.
 Qualify the kernel-enforced listener restriction and its service lifecycle. A startup

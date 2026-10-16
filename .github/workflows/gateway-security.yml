@@ -6,6 +6,7 @@ on:
       - 'internal/gatewaytransport/**'
       - 'internal/networkcheck/**'
       - 'packaging/inspection/private_ingress_fixture.py'
+      - 'packaging/inspection/gateway_startup_fixture.py'
       - 'packaging/systemd/homenode-gateway.service'
       - 'internal/control/gateway*'
       - 'internal/control/server.go'
@@ -19,6 +20,7 @@ on:
       - 'internal/gatewaytransport/**'
       - 'internal/networkcheck/**'
       - 'packaging/inspection/private_ingress_fixture.py'
+      - 'packaging/inspection/gateway_startup_fixture.py'
       - 'packaging/systemd/homenode-gateway.service'
       - 'internal/control/gateway*'
       - 'internal/control/server.go'
@@ -57,3 +59,7 @@ jobs:
           sudo env HOMENODE_PRIVATE_INGRESS_FIXTURE=1 python3 packaging/inspection/private_ingress_fixture.py --test-binary /tmp/homenode-networkcheck-ingress.test --source-service packaging/systemd/homenode-gateway.service
       - name: Test actual TLS across distinct kernel identities
         run: sudo env HOMENODE_GATEWAY_PEER_INTEGRATION=1 "$(command -v go)" test ./internal/gatewaytransport -run '^TestRootDistinctControllerGatewayPeers$' -count=1 -v
+      - name: Test actual gateway startup under source hardening
+        run: |
+          go build -o /tmp/homenode-gateway-startup ./cmd/homenode-gateway
+          sudo env HOMENODE_GATEWAY_STARTUP_FIXTURE=1 python3 packaging/inspection/gateway_startup_fixture.py --gateway-binary /tmp/homenode-gateway-startup --source-service packaging/systemd/homenode-gateway.service
