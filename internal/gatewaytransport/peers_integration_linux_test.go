@@ -237,6 +237,33 @@ func nativeGatewayTLS(t *testing.T, proxy http.Handler, origin string) {
 	if readErr != nil || response.StatusCode != 200 || string(body) != "qualified peer" || response.TLS == nil || response.TLS.Version != tls.VersionTLS13 || len(response.TLS.VerifiedChains) == 0 {
 		t.Fatal("TLS/peer mediation failed", response.StatusCode, string(body), readErr)
 	}
+	wrongHost, err := http.NewRequest("GET", origin+"/api/v1/healthz", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongHost.Host = "foreign.example:8787"
+	refused, err := client.Do(wrongHost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refused.Body.Close()
+	if refused.StatusCode != http.StatusForbidden {
+		t.Fatal("foreign HTTP origin crossed gateway", refused.StatusCode)
+	}
+	for _, scenario := range []string{"untrusted-root", "wrong-server-name"} {
+		untrusted := transport.Clone()
+		if scenario == "untrusted-root" {
+			untrusted.TLSClientConfig.RootCAs = x509.NewCertPool()
+		} else {
+			untrusted.TLSClientConfig.ServerName = "foreign.example"
+		}
+		response, err := (&http.Client{Transport: untrusted, Timeout: 3 * time.Second}).Get(origin + "/api/v1/healthz")
+		untrusted.CloseIdleConnections()
+		if err == nil {
+			response.Body.Close()
+			t.Fatal("unqualified certificate accepted", scenario)
+		}
+	}
 	legacy := transport.Clone()
 	legacy.TLSClientConfig.MinVersion, legacy.TLSClientConfig.MaxVersion = tls.VersionTLS12, tls.VersionTLS12
 	defer legacy.CloseIdleConnections()
