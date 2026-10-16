@@ -31,6 +31,11 @@ unavailable and empty states, supports retry, and aborts obsolete reads on
 conversation switch. Generation polling is serialized, aborts on exit, and
 clears its read error after recovery.
 
+History and export distinguish an existing empty conversation from a missing
+one. Existence and generation IDs are read in one metadata transaction before
+guest content reads. Missing conversations return 404 and malformed IDs return
+400 after authentication; a deleted conversation is not presented as empty.
+
 Deletion uses a fresh passkey-approved action. An acknowledged pending deletion
 marks the conversation unavailable for new messages. The browser observes its
 durable deletion status through the conversation list, without keeping a

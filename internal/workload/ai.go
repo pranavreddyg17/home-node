@@ -171,21 +171,29 @@ func (s *Service) Generation(ctx context.Context, id string) (Generation, error)
 	return g, nil
 }
 func (s *Service) History(ctx context.Context, id string) ([]Generation, error) {
-	rows, err := s.Store.DB.QueryContext(ctx, "SELECT id FROM generations WHERE conversation_id=? ORDER BY created_at,rowid LIMIT 100", id)
-	if err != nil {
-		return nil, err
+	if !guestproto.ValidID(id) {
+		return nil, ErrInvalid
 	}
 	ids := []string{}
-	for rows.Next() {
-		var id string
-		if err = rows.Scan(&id); err != nil {
-			rows.Close()
-			return nil, err
+	err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		var existing string
+		if err := tx.QueryRow("SELECT id FROM conversations WHERE id=?", id).Scan(&existing); err != nil {
+			return err
 		}
-		ids = append(ids, id)
-	}
-	err = rows.Err()
-	rows.Close()
+		rows, err := tx.Query("SELECT id FROM generations WHERE conversation_id=? ORDER BY created_at,rowid LIMIT 100", id)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var generationID string
+			if err := rows.Scan(&generationID); err != nil {
+				return err
+			}
+			ids = append(ids, generationID)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, err
 	}

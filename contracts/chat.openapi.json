@@ -124,7 +124,7 @@
     "/ai/conversations/{id}/history": {
       "get": {
         "operationId": "conversationHistory",
-        "description": "Read up to 100 stored generations from the AI guest, oldest first. A conversation with no saved generations can return an empty list without contacting the guest; failure to read saved guest content is an error. Requires ai capability.",
+        "description": "Read up to 100 stored generations from the AI guest, oldest first. A conversation with no saved generations can return an empty list without contacting the guest; failure to read saved guest content is an error. Requires ai capability. Missing conversations return 404 instead of an empty history/export; malformed resource IDs return 400, after authentication.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ConversationID"
@@ -169,7 +169,7 @@
     "/ai/conversations/{id}/export": {
       "get": {
         "operationId": "exportConversation",
-        "description": "Download JSON history as attachment homenode-conversation.json. Requires ai capability.",
+        "description": "Download JSON history as attachment homenode-conversation.json. Requires ai capability. Missing conversations return 404 instead of an empty history/export; malformed resource IDs return 400, after authentication.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ConversationID"
