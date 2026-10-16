@@ -342,18 +342,37 @@ func (s *Service) CancelGeneration(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	var phase string
-	err = s.Store.DB.QueryRowContext(ctx, "UPDATE generations SET state=CASE WHEN state IN('staging','queued') THEN 'cancelled' ELSE 'cancelling' END,updated_at=? WHERE id=? AND state IN('staging','queued','running','cancelling') RETURNING state", time.Now().Unix(), id).Scan(&phase)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if phase == "cancelled" {
-		return s.endGeneration(ctx, g, "cancelled", "CANCELLED")
-	}
-	return nil
+	return s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		var phase string
+		err := tx.QueryRow("UPDATE generations SET state=CASE WHEN state IN('staging','queued') THEN 'cancelled' ELSE 'cancelling' END,updated_at=? WHERE id=? AND state IN('staging','queued','running','cancelling') RETURNING state", time.Now().Unix(), id).Scan(&phase)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if phase != "cancelled" {
+			return nil
+		}
+		// Staging and queued work has not acquired runtime execution. Its
+		// terminal record, operation result and event must survive together.
+		result, err := tx.Exec("UPDATE operations SET state='failed',result=?,updated_at=? WHERE id=? AND kind='generation' AND state='pending'", `{"code":"CANCELLED"}`, time.Now().Unix(), g.OperationID)
+		if err != nil {
+			return err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return ErrConflict
+		}
+		var device string
+		if err := tx.QueryRow("SELECT device_id FROM generations WHERE id=?", id).Scan(&device); err != nil {
+			return err
+		}
+		return state.Event(tx, device, "generation.cancelled", id, map[string]string{"code": "CANCELLED"})
+	})
 }
 func (s *Service) processGeneration(ctx context.Context) error {
 	if s.Backend == nil {
@@ -445,10 +464,19 @@ func (s *Service) processGeneration(ctx context.Context) error {
 	}
 }
 func (s *Service) endGeneration(ctx context.Context, g Generation, phase, code string) error {
+	if phase != "succeeded" && phase != "failed" && phase != "cancelled" && phase != "interrupted" {
+		return ErrConflict
+	}
 	return s.Store.Transaction(ctx, func(tx *sql.Tx) error {
 		var device, current string
 		if err := tx.QueryRow("SELECT state FROM generations WHERE id=?", g.ID).Scan(&current); err != nil {
 			return err
+		}
+		if current == "succeeded" || current == "failed" || current == "cancelled" || current == "interrupted" {
+			return nil
+		}
+		if current != "staging" && current != "queued" && current != "running" && current != "cancelling" {
+			return ErrConflict
 		}
 		if current == "cancelling" && phase == "succeeded" {
 			phase = "cancelled"

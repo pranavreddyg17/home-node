@@ -39,6 +39,13 @@ readable when the guest explicitly reports that prompt object missing. Other
 guest read failures remain errors. Replaying the original request returns that
 cancelled generation; a new intentional request needs a new key.
 
+Cancelling staging or queued work commits its terminal generation record,
+operation result and cancellation event in one metadata transaction. A failed
+operation write rolls the whole change back. Repeated cancellation emits no
+duplicate terminal event, and a late worker completion cannot replace an
+already terminal result. Running work still requests cooperative cancellation;
+the request acknowledgment is not proof that inference has already stopped.
+
 History and export distinguish an existing empty conversation from a missing
 one. Existence and generation IDs are read in one metadata transaction before
 guest content reads. Missing conversations return 404 and malformed IDs return
