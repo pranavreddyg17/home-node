@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "6c3166bf2736688aaa9eebc0cf9ffff469482b55",
+  "workflowRun": 38941704162,
+  "job": 117111357703,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/38941704162",
+  "conclusion": "success",
+  "logSHA256": "ab26632a0a4814e157db0ac90e1688e0b99cc32a8acc92f480e338f298206959",
+  "assertions": [
+    "Listeners execute as UID/GID 65534 with zero inherited, permitted, effective, bounding and ambient capabilities",
+    "Production device-binding helper accepts permitted veth ingress before and after negative checks",
+    "LAN source 10.210.2.2 and routed CGNAT source 100.100.2.2 cannot connect to bound listener",
+    "Unbound control accepts every corresponding route",
+    "Fresh namespaces use no Tailscale firewall rules; reverse-path filtering disabled only in those namespaces",
+    "After interface deletion and recreation with a different kernel index, old bound listener refuses permitted and LAN routes while unbound control accepts them",
+    "New bound listener on recreated interface restores permitted ingress and refuses LAN/CGNAT routes",
+    "Additional watched child accepts permitted traffic before replacement, observes real changed interface index, closes Accept and exits cleanly within five seconds",
+    "Unfiltered networkcheck race suite includes deterministic real TCP concurrent-accept refusal after failed health observation",
+    "Unfiltered gateway command race suite includes certificate-verified TLS request cancellation after listener failure and exhausted drain deadline",
+    "Capability-free production ListenTailnet opens on real point-to-point kernel TUN with configured address",
+    "Removing TUN address closes blocked Accept through production one-second watcher",
+    "Fresh production admission refuses missing TUN address with identity error"
+  ],
+  "limits": [
+    "Veth surrogate, not production point-to-point TUN or running-daemon identity admission",
+    "Raw TCP fixture, not installed HTTPS gateway/controller or systemd confinement",
+    "Does not qualify actual Tailscale ACLs, physical devices, passkeys or relays",
+    "Real TUN phase does not transmit packets or run tailscaled; later source-systemd confinement and legacy direct-listener changes are outside this source"
+  ]
+}

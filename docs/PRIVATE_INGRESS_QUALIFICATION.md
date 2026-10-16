@@ -102,7 +102,8 @@ missing address with `ErrIdentity`. This phase requires `/dev/net/tun` in the
 disposable runner. It does not transmit packets through the TUN, run a real
 Tailscale daemon, load certificates or start installed services. The earlier
 veth phase remains the ingress packet-path evidence. Native qualification for
-this newly added phase is pending.
+this phase passed in [source 6c3166b's native run](evidence/private-ingress-6c3166b.json).
+That evidence does not include the later source-systemd confinement phase.
 
 An additional systemd phase copies the gateway source unit's hardening
 properties, including its empty capability sets, address-family restriction,
