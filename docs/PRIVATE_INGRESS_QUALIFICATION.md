@@ -25,6 +25,14 @@ Any configuration, interface, socket-option or readback failure prevents the
 listener from opening. It does not add capabilities to the service. Custom
 TUN names and userspace networking are unsupported by this baseline.
 
+A one-second health watcher checks the current interface index, flags and
+configured address. An invalid observation closes the listener instead of
+retargeting it. The executable's existing shutdown path then exits and the
+installed `Restart=on-failure` policy repeats all startup admission. Normal
+listener close stops the watcher. Component race tests check that health
+failure unblocks Accept and that both failure and normal close stop the
+watcher; they do not prove installed systemd or daemon restart behavior.
+
 The selected mechanism filters packets at the socket independently of the
 Tailscale firewall chains. Linux documents that device-bound sockets process
 only packets received on that interface; the supported Linux 6.8 implementation
@@ -37,8 +45,10 @@ against a compromised gateway process opening additional sockets.
 Linux component tests exercise a real loopback-bound listener, readback,
 successful accept, nonexistent interfaces and mismatched interface indices.
 They do not replace the namespace, interface lifecycle or installed-service
-qualification below. No native Linux execution result is retained yet for
-this change; macOS checks only compile the Linux test binary.
+qualification below. Focused Ubuntu run 38940153931 at source be3ab03 passed
+the initial namespace fixture and component suite; see
+[retained evidence](evidence/private-ingress-be3ab03.json). macOS checks only
+compile the Linux-specific test binary.
 
 The focused gateway workflow additionally compiles the test binary and runs
 `packaging/inspection/private_ingress_fixture.py` on disposable Ubuntu. Its
@@ -51,7 +61,8 @@ no Tailscale firewall rules. Reverse-path filtering is disabled only inside
 the fixture namespaces to ensure it cannot hide a missing socket restriction.
 This uses the production socket-binding helper with a veth surrogate, not
 production TUN/daemon admission, installed services, TLS or actual tailnet ACLs.
-Native execution remains pending until a retained successful run exists.
+The retained initial run proves these socket-helper checks at that source.
+Later interface-recreation and health-watcher changes still need native runs.
 
 The fixture also deletes and recreates its permitted interface, verifies a
 different kernel interface index, and repeats the route/control checks. The

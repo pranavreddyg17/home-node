@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"strconv"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -20,6 +21,21 @@ func ListenTailnet(ctx context.Context, c Config) (net.Listener, error) {
 	if _, err := ValidateConfiguration(c); err != nil {
 		return nil, err
 	}
+	device, err := tailnetInterface(c)
+	if err != nil {
+		return nil, err
+	}
+	listener, err := listenOnDevice(ctx, net.JoinHostPort(c.Bind, strconv.Itoa(c.Port)), device)
+	if err != nil {
+		return nil, err
+	}
+	return watchListener(listener, time.Second, func() bool {
+		current, err := tailnetInterface(c)
+		return err == nil && current.Index == device.Index
+	}), nil
+}
+
+func tailnetInterface(c Config) (*net.Interface, error) {
 	device, err := net.InterfaceByName("tailscale0")
 	if err != nil || device.Flags&net.FlagUp == 0 || device.Flags&net.FlagLoopback != 0 || device.Flags&net.FlagPointToPoint == 0 {
 		return nil, fmt.Errorf("private ingress requires the active tailscale0 TUN interface: %w", ErrIdentity)
@@ -39,7 +55,7 @@ func ListenTailnet(ctx context.Context, c Config) (net.Listener, error) {
 	if !found {
 		return nil, fmt.Errorf("private bind address is not assigned to tailscale0: %w", ErrIdentity)
 	}
-	return listenOnDevice(ctx, net.JoinHostPort(c.Bind, strconv.Itoa(c.Port)), device)
+	return device, nil
 }
 
 func listenOnDevice(ctx context.Context, address string, device *net.Interface) (net.Listener, error) {

@@ -54,9 +54,11 @@ does not open a socket and therefore does not prove this listener enforcement.
 Neither command proves effective tailnet ACLs.
 
 If the daemon recreates its interface, the existing listener remains tied to
-the old kernel interface index. Restart the gateway after the interface and
-node identity are restored; automatic interface lifecycle recovery is not yet
-qualified. Do not work around startup failure by granting the gateway network
+the old kernel interface index. The gateway checks the interface, index and
+configured address every second and closes its listener after an invalid
+observation. Its service then restarts and repeats identity/certificate
+admission. Installed automatic recovery is not yet qualified; use the local
+console to inspect a service that cannot recover. Do not work around startup failure by granting the gateway network
 administration capabilities or exposing a LAN listener. See the
 [private ingress qualification gate](PRIVATE_INGRESS_QUALIFICATION.md) for the
 remaining namespace, installed-service and physical-device evidence.
