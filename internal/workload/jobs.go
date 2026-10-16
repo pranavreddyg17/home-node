@@ -91,7 +91,7 @@ func (s *Service) CreateJob(ctx context.Context, device, key, input, preset, ret
 		if usage.activeJobs >= 8 {
 			return ErrConflict
 		}
-		if usage.ChargedBytes+MaxJobOutputBytes > StorageQuota {
+		if usage.ChargedBytes+MaxJobOutputBytes > StorageQuota || usage.AvailableFileEntries < 1 {
 			return ErrCapacity
 		}
 		group := retryGroup

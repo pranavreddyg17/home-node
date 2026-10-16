@@ -5,9 +5,15 @@ import (
 	"database/sql"
 )
 
+const FileEntryLimit = 10000
+
 // FilesStorage reports logical quota accounting, not measured guest free space.
 // Pending deletion remains charged until acknowledged by the guest.
 type FilesStorage struct {
+	FileEntryLimit       int   `json:"fileEntryLimit"`
+	StoredFileEntries    int   `json:"storedFileEntries"`
+	ReservedFileEntries  int   `json:"reservedFileEntries"`
+	AvailableFileEntries int   `json:"availableFileEntries"`
 	QuotaBytes           int64 `json:"quotaBytes"`
 	StoredBytes          int64 `json:"storedBytes"`
 	TrashBytes           int64 `json:"trashBytes"`
@@ -27,22 +33,25 @@ type storageQuerier interface {
 // One statement gives an internally consistent snapshot for both the read API
 // and admission inside the caller's existing transaction.
 func filesStorage(ctx context.Context, q storageQuerier) (FilesStorage, error) {
-	usage := FilesStorage{QuotaBytes: StorageQuota}
+	usage := FilesStorage{QuotaBytes: StorageQuota, FileEntryLimit: FileEntryLimit}
 	err := q.QueryRowContext(ctx, `SELECT
  (SELECT coalesce(sum(size),0) FROM files),
  (SELECT coalesce(sum(size),0) FROM files WHERE trash_until IS NOT NULL),
  (SELECT coalesce(sum(size),0) FROM transfers WHERE state IN('uploading','verifying','cancelling')),
  (SELECT count(*) FROM transfers WHERE state IN('uploading','verifying','cancelling')),
  (SELECT count(*) FROM jobs WHERE state IN('queued','preparing','running','finalizing','cancelling')),
- (SELECT count(*) FROM orphan_objects WHERE workload='files') * ?`, MaxJobOutputBytes).Scan(
+ (SELECT count(*) FROM orphan_objects WHERE workload='files') * ?,
+ (SELECT count(*) FROM files WHERE trash_until IS NULL OR trash_until>=0)`, MaxJobOutputBytes).Scan(
 		&usage.StoredBytes, &usage.TrashBytes, &usage.UploadReservedBytes,
-		&usage.activeTransfers, &usage.activeJobs, &usage.CleanupReservedBytes)
+		&usage.activeTransfers, &usage.activeJobs, &usage.CleanupReservedBytes, &usage.StoredFileEntries)
 	if err != nil {
 		return FilesStorage{}, err
 	}
 	usage.JobReservedBytes = int64(usage.activeJobs) * MaxJobOutputBytes
 	usage.ChargedBytes = usage.StoredBytes + usage.UploadReservedBytes + usage.JobReservedBytes + usage.CleanupReservedBytes
 	usage.AvailableBytes = max(0, usage.QuotaBytes-usage.ChargedBytes)
+	usage.ReservedFileEntries = usage.activeTransfers + usage.activeJobs
+	usage.AvailableFileEntries = max(0, FileEntryLimit-usage.StoredFileEntries-usage.ReservedFileEntries)
 	return usage, nil
 }
 

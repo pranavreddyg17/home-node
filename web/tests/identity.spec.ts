@@ -310,6 +310,7 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await expect(storagePanel.getByRole('meter', { name: 'Files quota usage' })).toHaveAttribute('max', String(12 * 2 ** 30))
   let storageAvailable = true
   await page.route('**/api/v1/files/storage', route => storageAvailable ? route.fulfill({ json: {
+    fileEntryLimit: 10000, storedFileEntries: 4, reservedFileEntries: 2, availableFileEntries: 9994,
     quotaBytes: 12 * 2 ** 30, storedBytes: 2 ** 30, trashBytes: 128 * 2 ** 20,
     uploadReservedBytes: 256 * 2 ** 20, jobReservedBytes: 512 * 2 ** 20, cleanupReservedBytes: 256 * 2 ** 20,
     chargedBytes: 2 * 2 ** 30, availableBytes: 10 * 2 ** 30,
@@ -317,6 +318,7 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.getByRole('button', { name: 'Refresh', exact: true }).click()
   await expect(storagePanel).toContainText('2.00 GiB of 12.00 GiB charged')
   await expect(storagePanel).toContainText('128.0 MiB in trash')
+  await expect(storagePanel).toContainText('File entries: 4 saved or in Trash + 2 reserved')
   await expect(storagePanel).toContainText('Pending cleanup: 256.0 MiB')
   storageAvailable = false
   await page.getByRole('button', { name: 'Refresh', exact: true }).click()

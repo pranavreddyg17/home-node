@@ -3,6 +3,9 @@
 Every conversion has a durable attempt and operation. Reusing its creation key
 observes the same attempt. An intentional retry creates a new attempt and runtime
 instance in the original retry group; it does not silently rerun uncertain work.
+Admission reserves one active-file entry for the future output as well as its
+byte allowance. Uploads and conversion outputs share the same entry capacity;
+a new attempt cannot bypass it merely because the input or output is empty.
 
 Cancellation reads current attempt authority in a metadata transaction. A queued,
 preparing or cancelling attempt can become immediately cancelled only when

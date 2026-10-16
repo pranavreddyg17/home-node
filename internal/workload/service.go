@@ -155,7 +155,7 @@ func (s *Service) createTransfer(ctx context.Context, device, name string, size 
 		if usage.activeTransfers >= 16 {
 			return ErrConflict
 		}
-		if usage.ChargedBytes+size > StorageQuota {
+		if usage.ChargedBytes+size > StorageQuota || usage.AvailableFileEntries < 1 {
 			return ErrCapacity
 		}
 		_, err = tx.Exec("INSERT INTO transfers(id,device_id,name,size,sha256,state,created_at,expires_at) VALUES(?,?,?,?,?,'uploading',?,?)", transfer.ID, device, name, size, hash, time.Now().Unix(), transfer.ExpiresAt)
@@ -271,7 +271,7 @@ func (s *Service) File(ctx context.Context, id string) (File, error) {
 	return f, err
 }
 func (s *Service) Files(ctx context.Context) ([]File, error) {
-	rows, err := s.Store.DB.QueryContext(ctx, "SELECT id,name,size,sha256,created_at,trash_until FROM files WHERE trash_until IS NULL OR trash_until>=0 ORDER BY created_at DESC LIMIT 10000")
+	rows, err := s.Store.DB.QueryContext(ctx, "SELECT id,name,size,sha256,created_at,trash_until FROM files WHERE trash_until IS NULL OR trash_until>=0 ORDER BY created_at DESC LIMIT ?", FileEntryLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +290,7 @@ func (s *Service) Files(ctx context.Context) ([]File, error) {
 // ExportableFiles refuses an oversized manifest rather than silently exporting
 // the truncated ordinary file-list page. Trash is deliberately outside scope.
 func (s *Service) ExportableFiles(ctx context.Context) ([]File, error) {
-	rows, err := s.Store.DB.QueryContext(ctx, "SELECT id,name,size,sha256,created_at,trash_until FROM files WHERE trash_until IS NULL ORDER BY created_at,id LIMIT 10001")
+	rows, err := s.Store.DB.QueryContext(ctx, "SELECT id,name,size,sha256,created_at,trash_until FROM files WHERE trash_until IS NULL ORDER BY created_at,id LIMIT ?", FileEntryLimit+1)
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +302,7 @@ func (s *Service) ExportableFiles(ctx context.Context) ([]File, error) {
 			return nil, err
 		}
 		files = append(files, f)
-		if len(files) > 10000 {
+		if len(files) > FileEntryLimit {
 			return nil, ErrCapacity
 		}
 	}

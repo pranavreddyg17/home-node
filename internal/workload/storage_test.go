@@ -68,13 +68,13 @@ func TestFilesStorageTracksReservationsTrashAndCleanup(t *testing.T) {
 	if _, err := s.CancelTransfer(ctx, device, partial.ID); err != nil {
 		t.Fatal(err)
 	}
-	if usage := read(); usage.UploadReservedBytes != 7 {
+	if usage := read(); usage.UploadReservedBytes != 7 || usage.ReservedFileEntries != 2 {
 		t.Fatal("cancel released quota early", usage)
 	}
 	if err := s.expireTransfer(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if usage := read(); usage.UploadReservedBytes != 0 {
+	if usage := read(); usage.UploadReservedBytes != 0 || usage.ReservedFileEntries != 1 {
 		t.Fatal(usage)
 	}
 }

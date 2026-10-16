@@ -30,6 +30,16 @@ and manifest overhead. Exceeding either bound returns `EXPORT_LIMIT` before
 archive output rather than exporting a truncated list. Individual downloads
 remain available. Ensure the receiving device has enough space.
 
+New uploads and conversion outputs share a 10,000 active-file-entry limit in
+addition to the byte quota. Saved files and Trash consume entries; uploads and
+active job outputs reserve them before work is admitted, including zero-byte
+uploads. Cancellation/deletion releases its entry only when the corresponding
+never-started cancellation or guest cleanup is acknowledged. Removed-file
+tombstones no longer consume active entries. Files storage reports saved,
+reserved and available entry counts. Existing creation-key replay still works
+at capacity. This bounds active entries, not all historical metadata: durable
+replay/tombstone retention and its long-term storage policy remain separate work.
+
 This is a file export, not a consistent application backup. It contains no AI
 history, job records, identity credentials, app images or backup repository.
 Tests cover real guest-store bytes through the controller, empty objects,

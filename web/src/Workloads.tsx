@@ -8,7 +8,7 @@ type App = { requiresAttention?: boolean; workload: string; instanceId: string; 
 type Operation = { id: string; state: string; result: { code?: string } }
 type FileInfo = { id: string; name: string; size: number; sha256: string; createdAt: number; trashUntil: number | null }
 type Transfer = { id: string; name: string; size: number; sha256: string; offset: number; state: string; expiresAt: number }
-type StorageUsage = { quotaBytes: number; storedBytes: number; trashBytes: number; uploadReservedBytes: number; jobReservedBytes: number; cleanupReservedBytes: number; chargedBytes: number; availableBytes: number }
+type StorageUsage = { fileEntryLimit?: number; storedFileEntries?: number; reservedFileEntries?: number; availableFileEntries?: number; quotaBytes: number; storedBytes: number; trashBytes: number; uploadReservedBytes: number; jobReservedBytes: number; cleanupReservedBytes: number; chargedBytes: number; availableBytes: number }
 const bytes = (n: number) => n >= 2 ** 30 ? `${(n / 2 ** 30).toFixed(2)} GiB` : n >= 2 ** 20 ? `${(n / 2 ** 20).toFixed(1)} MiB` : n >= 1024 ? `${(n / 1024).toFixed(1)} KiB` : `${n} bytes`
 async function action<T>(device: string, path: string, body: unknown): Promise<T> {
   const digest = bytesToHex(sha256(new TextEncoder().encode(JSON.stringify(body))))
@@ -243,9 +243,9 @@ export function Files() {
     <section className="panel" aria-label="Files storage"><h2>Files storage</h2>{storage ? <>
       <p>{bytes(storage.chargedBytes)} of {bytes(storage.quotaBytes)} charged · {bytes(storage.availableBytes)} available in quota</p>
       <meter min={0} max={storage.quotaBytes} value={Math.min(storage.chargedBytes, storage.quotaBytes)} aria-label="Files quota usage" />
-      <p>Stored files: {bytes(storage.storedBytes)} including {bytes(storage.trashBytes)} in trash.</p>
+      <p>Stored files: {bytes(storage.storedBytes)} including {bytes(storage.trashBytes)} in trash.</p>{storage.fileEntryLimit !== undefined && <p>File entries: {storage.storedFileEntries} saved or in Trash + {storage.reservedFileEntries} reserved for uploads and job outputs, of {storage.fileEntryLimit}. {storage.availableFileEntries} available.</p>}
       <p>Reserved for uploads: {bytes(storage.uploadReservedBytes)} · Job outputs: {bytes(storage.jobReservedBytes)} · Pending cleanup: {bytes(storage.cleanupReservedBytes)}</p>
-      <p>Trash and cancelled uploads keep using quota until cleanup is acknowledged. Physical disk space may run out before this quota is reached.</p>
+      <p>Trash and cancelled uploads keep using quota and file entries until cleanup is acknowledged. Physical disk space may run out before this quota is reached.</p>
     </> : <p role="status">{storageError ? `Storage usage is unavailable. ${storageError}` : 'Reading storage usage…'}</p>}</section>
     <section className="panel" aria-label="Unfinished uploads"><h2>Unfinished uploads on this device</h2>
       <p>Choose Resume, then select the original file using Upload a file. Discarding an upload retains its quota reservation until Private Files acknowledges cleanup.</p>
