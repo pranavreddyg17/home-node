@@ -26,11 +26,19 @@ Publishing an observation also compares the original instance, revision and
 state. If another command changes the app during inspection, the stale result
 cannot overwrite that newer intent.
 
+When a validated inspection reports `stopped`, reconciliation atomically marks
+the app's unresolved start/stop operation `interrupted`, retaining its original
+payload. This settles current inactivity without claiming the original command
+succeeded or dispatching another runtime effect. Running, interrupted and
+invalid runtime observations do not settle the operation. A database failure
+rolls back both the app observation and operation settlement. Replaying the
+original key still returns the same operation and its recovered state.
+
 The app status response includes a `requiresAttention` flag derived from its
 current operation. The browser retains this warning across reloads, disables
 Start and avoids polling a transition that cannot complete itself. This exposes
-the recovery requirement; it does not authorize clearing the operation or
-provide a complete guided repair workflow.
+the recovery requirement; the browser cannot clear the operation and does not
+yet provide a complete guided repair workflow.
 
 The operation and app transition commit in one transaction. A failed metadata
 write rolls back both. Superseding app intent and interrupted operation

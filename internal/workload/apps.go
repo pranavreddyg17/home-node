@@ -289,7 +289,23 @@ func (s *Service) Reconcile(ctx context.Context) error {
 				a.Revision = max(a.Revision, observed.Revision)
 			}
 		}
-		if _, err = s.Store.DB.ExecContext(ctx, "UPDATE apps SET state=?,updated_at=?,revision=? WHERE workload=? AND instance_id=? AND revision=? AND state=?", phase, time.Now().Unix(), a.Revision, a.Workload, a.InstanceID, originalRevision, a.State); err != nil {
+		if err = s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+			updated, err := tx.Exec("UPDATE apps SET state=?,updated_at=?,revision=? WHERE workload=? AND instance_id=? AND revision=? AND state=?", phase, time.Now().Unix(), a.Revision, a.Workload, a.InstanceID, originalRevision, a.State)
+			if err != nil {
+				return err
+			}
+			count, err := updated.RowsAffected()
+			if err != nil || count != 1 {
+				return err
+			}
+			if phase != "stopped" || !a.RequiresAttention {
+				return nil
+			}
+			// Inspection establishes current inactivity, not successful execution
+			// of the original command. Retain its payload and mark it interrupted.
+			_, err = tx.Exec("UPDATE operations SET state='interrupted',updated_at=? WHERE id=(SELECT operation_id FROM apps WHERE workload=?) AND state='requires-action' AND kind IN('app.start','app.stop')", time.Now().Unix(), a.Workload)
+			return err
+		}); err != nil {
 			return err
 		}
 	}
