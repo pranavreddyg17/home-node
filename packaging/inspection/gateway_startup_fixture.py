@@ -121,7 +121,7 @@ while True:
                 unit = f"homenode-gateway-startup-{os.getpid()}-{case}.service"
                 units.append(unit)
                 base = "/run/homenode-startup"
-                return ["systemd-run", "--quiet", "--pipe", "--wait", "--collect", f"--unit={unit}", "--property=Type=exec", "--property=User=homenode-gateway", "--property=Group=homenode-gateway", "--property=SupplementaryGroups=homenode-proxy", f"--property=NetworkNamespacePath=/run/netns/{namespace}", f"--property=BindReadOnlyPaths={directory}:{base} {daemon}:/usr/bin/tailscale", f"--setenv=SSL_CERT_FILE={base}/ca.crt", *properties, f"{base}/gateway", "--bind", "100.100.1.2", "--port", "8787", "--origin", "https://home.example.ts.net:8787", "--controller-socket", f"{base}/control/control.sock", "--controller-uid", str(controller_uid), "--access-gid", str(bridge_gid), "--tls-cert", f"{base}/tls/server.crt", "--tls-key", f"{base}/tls/server.key"]
+                return ["systemd-run", "--quiet", "--pipe", "--wait", "--collect", f"--unit={unit}", "--property=Type=exec", "--property=User=homenode-gateway", "--property=Group=homenode-gateway", "--property=SupplementaryGroups=homenode-proxy", f"--property=NetworkNamespacePath=/run/netns/{namespace}", f"--property=BindReadOnlyPaths={directory}:{base} {daemon}:/usr/bin/tailscale", f"--setenv=SSL_CERT_FILE={base}/ca.crt", *properties, "/usr/bin/env", f"{base}/gateway", "--bind", "100.100.1.2", "--port", "8787", "--origin", "https://home.example.ts.net:8787", "--controller-socket", f"{base}/control/control.sock", "--controller-uid", str(controller_uid), "--access-gid", str(bridge_gid), "--tls-cert", f"{base}/tls/server.crt", "--tls-key", f"{base}/tls/server.key"]
 
             gateway = subprocess.Popen(command("valid"), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             children.append(gateway)
@@ -174,6 +174,11 @@ while True:
             for name in reversed(users):
                 run("userdel", name)
             for name in reversed(groups):
+                # userdel may remove an empty same-named private group.
+                try:
+                    grp.getgrnam(name)
+                except KeyError:
+                    continue
                 run("groupdel", name)
 
 
