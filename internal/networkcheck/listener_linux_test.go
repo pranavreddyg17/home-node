@@ -23,7 +23,7 @@ func TestIngressNamespaceListenerChild(t *testing.T) {
 	if mode == "" {
 		t.Skip("disposable Linux namespace fixture only")
 	}
-	if os.Geteuid() != 65534 || (mode != "bound" && mode != "control" && mode != "watched") {
+	if os.Geteuid() != 65534 || (mode != "bound" && mode != "control" && mode != "watched" && mode != "production" && mode != "production-refusal") {
 		t.Fatal("fixture child requires its unprivileged identity and known mode")
 	}
 	status, err := os.ReadFile("/proc/self/status")
@@ -43,7 +43,19 @@ func TestIngressNamespaceListenerChild(t *testing.T) {
 		}
 	}
 	var listener net.Listener
-	if mode == "bound" || mode == "watched" {
+	if mode == "production" || mode == "production-refusal" {
+		listener, err = ListenTailnet(context.Background(), Config{Bind: "100.100.1.2", Port: 8787, Origin: "https://home.example.ts.net:8787"})
+		if mode == "production-refusal" {
+			if listener != nil {
+				listener.Close()
+			}
+			if !errors.Is(err, ErrIdentity) {
+				t.Fatalf("missing TUN address did not refuse production admission: %v", err)
+			}
+			fmt.Println("ADMISSION-REFUSED")
+			return
+		}
+	} else if mode == "bound" || mode == "watched" {
 		device, lookupErr := net.InterfaceByName("tailscale0")
 		if lookupErr != nil {
 			t.Fatal(lookupErr)
@@ -66,7 +78,7 @@ func TestIngressNamespaceListenerChild(t *testing.T) {
 	for {
 		connection, err := listener.Accept()
 		if err != nil {
-			if mode == "watched" && errors.Is(err, net.ErrClosed) {
+			if (mode == "watched" || mode == "production") && errors.Is(err, net.ErrClosed) {
 				fmt.Println("WATCH-CLOSED")
 				return
 			}

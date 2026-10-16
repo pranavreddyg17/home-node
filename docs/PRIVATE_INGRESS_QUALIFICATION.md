@@ -92,6 +92,16 @@ within five seconds. It uses the production watcher with a ten-millisecond
 fixture interval and index observation on the veth surrogate; it does not
 exercise production point-to-point/address admission or installed restart.
 
+The final fixture phase creates a real kernel TUN named `tailscale0`, assigns
+the configured address and starts `ListenTailnet` as the same capability-free
+child. Removing that address must close its blocked Accept through the
+production one-second interface watcher; a fresh invocation must refuse the
+missing address with `ErrIdentity`. This phase requires `/dev/net/tun` in the
+disposable runner. It does not transmit packets through the TUN, run a real
+Tailscale daemon, load certificates or start installed services. The earlier
+veth phase remains the ingress packet-path evidence. Native qualification for
+this newly added phase is pending.
+
 The baseline must enforce overlay-only ingress to the configured HTTPS port
 without granting the gateway firewall administration or daemon administration.
 Qualify the kernel-enforced listener restriction and its service lifecycle. A startup

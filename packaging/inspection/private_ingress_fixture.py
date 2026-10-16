@@ -117,6 +117,25 @@ finally:
             check_cases("recreated-old-listener", bound_available=False)
             ports["bound"] = start_listener("bound")
             check_cases("restarted-listener")
+            # Exercise the complete production interface/address admission and
+            # one-second health observation against a real kernel TUN. Packet
+            # routing assertions above remain the separate veth qualification.
+            run("ip", "-n", server, "link", "delete", "tailscale0")
+            run("ip", "netns", "exec", server, "ip", "tuntap", "add", "dev", "tailscale0", "mode", "tun")
+            run("ip", "-n", server, "address", "add", "100.100.1.2/32", "dev", "tailscale0")
+            run("ip", "-n", server, "link", "set", "tailscale0", "up")
+            start_listener("production")
+            production_child = children[-1]
+            run("ip", "-n", server, "address", "delete", "100.100.1.2/32", "dev", "tailscale0")
+            production_output, _ = production_child.communicate(timeout=5)
+            if production_child.returncode != 0 or "WATCH-CLOSED" not in production_output:
+                raise RuntimeError(f"production TUN address observation did not close Accept: {production_output}")
+            retired.add(production_child)
+            # Admission must now refuse rather than exposing a fallback socket.
+            refusal = run("ip", "netns", "exec", server, "setpriv", "--reuid=65534", "--regid=65534", "--clear-groups", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "env", "HOMENODE_INGRESS_FIXTURE_CHILD=production-refusal", str(binary), "-test.run=^TestIngressNamespaceListenerChild$", "-test.timeout=10s")
+            if "ADMISSION-REFUSED" not in refusal:
+                raise RuntimeError("production listener did not refuse missing TUN address")
+            print("PASS real TUN production admission, address-loss shutdown and restart refusal", flush=True)
             print("PASS unprivileged device-bound ingress without host firewall rules", flush=True)
         finally:
             for child in children:
