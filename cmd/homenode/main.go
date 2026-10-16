@@ -184,11 +184,15 @@ func networkCheck(args []string) {
 	cert := flags.String("tls-cert", "/etc/homenode/tls/server.crt", "certificate PEM path")
 	key := flags.String("tls-key", "/etc/homenode/tls/server.key", "protected private key PEM path")
 	_ = flags.Parse(args)
-	certificate, err := networkcheck.Inspect(networkcheck.Config{Bind: *bind, Port: *port, Origin: *origin}, *cert, *key)
+	configuration := networkcheck.Config{Bind: *bind, Port: *port, Origin: *origin}
+	if err := networkcheck.CheckIngressInterface(configuration); err != nil {
+		fatal(err)
+	}
+	certificate, err := networkcheck.Inspect(configuration, *cert, *key)
 	if err != nil {
 		fatal(err)
 	}
-	if err = json.NewEncoder(os.Stdout).Encode(map[string]any{"identityValid": true, "certificateExpires": certificate.Leaf.NotAfter, "tailnetPolicyVerified": false, "phoneReachabilityVerified": false}); err != nil {
+	if err = json.NewEncoder(os.Stdout).Encode(map[string]any{"identityValid": true, "ingressInterfaceValid": true, "listenerBindingVerified": false, "certificateExpires": certificate.Leaf.NotAfter, "tailnetPolicyVerified": false, "phoneReachabilityVerified": false}); err != nil {
 		fatal(err)
 	}
 }

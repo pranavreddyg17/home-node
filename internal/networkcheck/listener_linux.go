@@ -14,6 +14,16 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// CheckIngressInterface is a read-only preflight. It neither opens a listener
+// nor proves socket-option support, effective tailnet policy or reachability.
+func CheckIngressInterface(c Config) error {
+	if _, err := ValidateConfiguration(c); err != nil {
+		return err
+	}
+	_, err := tailnetInterface(c)
+	return err
+}
+
 // ListenTailnet opens only the supported kernel-TUN ingress path. The daemon
 // identity and certificate must be admitted separately before calling this.
 // No wildcard/interface override or firewall-dependent fallback is supported.

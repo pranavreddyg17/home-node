@@ -53,7 +53,9 @@ listener to that device before opening TCP and verifies the kernel interface
 index. Missing interfaces, unsupported socket options and mismatched readback
 prevent startup; there is no wildcard fallback. Userspace Tailscale networking
 and custom TUN names are unsupported. The read-only `network-check` command
-does not open a socket and therefore does not prove this listener enforcement.
+also checks that interface's flags and configured address and reports
+`ingressInterfaceValid`. It does not open a socket and explicitly reports
+`listenerBindingVerified: false`; it therefore does not prove this listener enforcement.
 Neither command proves effective tailnet ACLs.
 
 If the daemon recreates its interface, the existing listener remains tied to

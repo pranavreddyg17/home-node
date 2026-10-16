@@ -44,7 +44,12 @@ func TestIngressNamespaceListenerChild(t *testing.T) {
 	}
 	var listener net.Listener
 	if mode == "production" || mode == "production-refusal" {
-		listener, err = ListenTailnet(context.Background(), Config{Bind: "100.100.1.2", Port: 8787, Origin: "https://home.example.ts.net:8787"})
+		configuration := Config{Bind: "100.100.1.2", Port: 8787, Origin: "https://home.example.ts.net:8787"}
+		preflightErr := CheckIngressInterface(configuration)
+		if (mode == "production" && preflightErr != nil) || (mode == "production-refusal" && !errors.Is(preflightErr, ErrIdentity)) {
+			t.Fatalf("read-only interface preflight disagreed with TUN address state: %v", preflightErr)
+		}
+		listener, err = ListenTailnet(context.Background(), configuration)
 		if mode == "production-refusal" {
 			if listener != nil {
 				listener.Close()
