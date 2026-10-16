@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "d28bd1d87899ce42f68a36a269f915ac4fe097d6",
+  "workflowRun": 38942388204,
+  "job": 117113502557,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/38942388204",
+  "conclusion": "success",
+  "logSHA256": "f62f7a4459b882df66ce0f8e38111407b92397851b7595c7b1a43b1a3d3b16ef",
+  "assertions": [
+    "Listeners execute as UID/GID 65534 with zero inherited, permitted, effective, bounding and ambient capabilities",
+    "Production device-binding helper accepts permitted veth ingress before and after negative checks",
+    "LAN source 10.210.2.2 and routed CGNAT source 100.100.2.2 cannot connect to bound listener",
+    "Unbound control accepts every corresponding route",
+    "Fresh namespaces use no Tailscale firewall rules; reverse-path filtering disabled only in those namespaces",
+    "After interface deletion and recreation with a different kernel index, old bound listener refuses permitted and LAN routes while unbound control accepts them",
+    "New bound listener on recreated interface restores permitted ingress and refuses LAN/CGNAT routes",
+    "Additional watched child accepts permitted traffic before replacement, observes real changed interface index, closes Accept and exits cleanly within five seconds",
+    "Unfiltered networkcheck race suite includes deterministic real TCP concurrent-accept refusal after failed health observation",
+    "Unfiltered gateway command race suite includes certificate-verified TLS request cancellation after listener failure and exhausted drain deadline",
+    "Capability-free production ListenTailnet opens on real point-to-point kernel TUN with configured address",
+    "Removing TUN address closes blocked Accept through production one-second watcher",
+    "Fresh production admission refuses missing TUN address with identity error",
+    "Transient systemd service applies gateway source hardening including empty capabilities, private devices, namespace/filesystem protections, permitted address families and resource limits",
+    "Production listener test binary under those source protections admits real TUN and closes Accept after configured address removal"
+  ],
+  "limits": [
+    "Veth surrogate, not production point-to-point TUN or running-daemon identity admission",
+    "Raw TCP fixture, not installed HTTPS gateway/controller or systemd confinement",
+    "Does not qualify actual Tailscale ACLs, physical devices, passkeys or relays",
+    "Source confinement uses a test executable, UID/GID 65534 and explicit binary/network namespace bindings; does not qualify installed gateway/controller executables, named identities, proxy group, certificate loading or actual service restart; later read-only preflight change is outside this source"
+  ],
+  "environment": {
+    "architecture": "x86_64",
+    "distribution": "ubuntu",
+    "distributionVersion": "24.04",
+    "iproute": "ip utility, iproute2-6.1.0, libbpf 1.3.0",
+    "kernel": "6.17.0-1022-azure",
+    "python": "3.12.3"
+  },
+  "gatewaySourceServiceSHA256": "c229f030cb8e99144b863a3e7f94cbaeb0289e91a678de2379c7431e543da236"
+}

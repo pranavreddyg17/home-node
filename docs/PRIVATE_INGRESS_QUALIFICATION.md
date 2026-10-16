@@ -115,7 +115,10 @@ still work. The fixture stops any attempted transient unit before namespace
 cleanup. This uses a test executable and explicit namespace/binary bindings;
 it excludes installed NSS identities, proxy group, protected certificate
 loading, controller mediation and actual gateway service restart. Native
-execution of this confinement phase is pending. Source gateway unit changes
+execution of this confinement phase passed in
+[source d28bd1d's run](evidence/private-ingress-d28bd1d.json), retaining the
+kernel/environment and source-service digest. This still does not qualify
+the installed executable or coordinated service lifecycle. Source gateway unit changes
 trigger the focused workflow so changes to those protections are retested.
 
 The baseline must enforce overlay-only ingress to the configured HTTPS port
