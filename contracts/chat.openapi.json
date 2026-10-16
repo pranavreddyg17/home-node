@@ -1,0 +1,711 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "HomeNode chat API",
+    "version": "0.1.0",
+    "description": "Implemented chat slice. Production requires trusted HTTPS and Secure HttpOnly SameSite=Strict __Host-homenode sessions with ai capability. All responses are no-store. Development uses homenode-dev on localhost. This contract does not claim model licensing/performance, guest erasure or installed-network qualification; other API slices remain separate."
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "security": [
+    {
+      "ChatSession": []
+    }
+  ],
+  "paths": {
+    "/ai/conversations": {
+      "get": {
+        "operationId": "listConversations",
+        "description": "List up to 100 household conversations, newest first. Deletion flags describe durable cleanup state. Requires ai capability.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List up to 100 household conversations, newest first. Deletion flags describe durable cleanup state. Requires ai capability.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "maxItems": 100,
+                  "items": {
+                    "$ref": "#/components/schemas/Conversation"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Structured error; includes unauthenticated (401), capability/approval/origin refusal (403), missing resource (404), conflicting state/maintenance (409), capacity (507), and unavailable workload (503).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createConversation",
+        "description": "Create a metadata-only conversation (maximum 100). The title must be nonblank, at most 80 UTF-8 bytes, and contain no NUL, CR, LF, slash or backslash. Matching keyed retries return the original existing conversation before maintenance/quota admission; changed intent conflicts. A deleted conversation is never recreated by replay.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Origin"
+          },
+          {
+            "$ref": "#/components/parameters/OptionalKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Create a metadata-only conversation (maximum 100). The title must be nonblank, at most 80 UTF-8 bytes, and contain no NUL, CR, LF, slash or backslash. Matching keyed retries return the original existing conversation before maintenance/quota admission; changed intent conflicts. A deleted conversation is never recreated by replay.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Structured error; includes unauthenticated (401), capability/approval/origin refusal (403), missing resource (404), conflicting state/maintenance (409), capacity (507), and unavailable workload (503).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "description": "Limit is 80 UTF-8 bytes, not only Unicode characters."
+                  }
+                },
+                "required": [
+                  "title"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/conversations/{id}/history": {
+      "get": {
+        "operationId": "conversationHistory",
+        "description": "Read up to 100 stored generations from the AI guest, oldest first. A conversation with no saved generations can return an empty list without contacting the guest; failure to read saved guest content is an error. Requires ai capability.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConversationID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read bounded stored generations from the AI guest. Guest unavailability is an error, not an empty history. Requires ai capability.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Generation"
+                  },
+                  "maxItems": 100
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Structured error; includes unauthenticated (401), capability/approval/origin refusal (403), missing resource (404), conflicting state/maintenance (409), capacity (507), and unavailable workload (503).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/conversations/{id}/export": {
+      "get": {
+        "operationId": "exportConversation",
+        "description": "Download JSON history as attachment homenode-conversation.json. Requires ai capability.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConversationID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Download JSON history as attachment homenode-conversation.json. Requires ai capability.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schema": {
+                      "type": "integer",
+                      "const": 1
+                    },
+                    "generations": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Generation"
+                      },
+                      "maxItems": 100
+                    }
+                  },
+                  "required": [
+                    "schema",
+                    "generations"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Structured error; includes unauthenticated (401), capability/approval/origin refusal (403), missing resource (404), conflicting state/maintenance (409), capacity (507), and unavailable workload (503).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/generations": {
+      "post": {
+        "operationId": "createGeneration",
+        "description": "Journal one generation with a stable device-bound key. Prompt must contain nonwhitespace text, be valid UTF-8 and at most 2048 UTF-8 bytes. Retries return the original generation; concurrent/changed intent and deletion conflicts refuse. Requires ai capability and a running AI app. Acceptance is not completed inference. Replay still requires an available AI app and readable existing history; only conversation creation bypasses maintenance/quota admission for observation of an existing result.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Origin"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredKey"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Journal one generation with a stable device-bound key. Prompt must contain nonwhitespace text, be valid UTF-8 and at most 2048 UTF-8 bytes. Retries return the original generation; concurrent/changed intent and deletion conflicts refuse. Requires ai capability and a running AI app. Acceptance is not completed inference.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Generation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Structured error; includes unauthenticated (401), capability/approval/origin refusal (403), missing resource (404), conflicting state/maintenance (409), capacity (507), and unavailable workload (503).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "$ref": "#/components/schemas/ResourceID"
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "description": "At most 2048 UTF-8 bytes; whitespace-only input is refused."
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "prompt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/generations/{id}": {
+      "get": {
+        "operationId": "generationStatus",
+        "description": "Observe generation state and accumulated output; client polling must remain serialized. Requires ai capability.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConversationID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Observe generation state and accumulated output; client polling must remain serialized. Requires ai capability.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Generation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Structured error; includes unauthenticated (401), capability/approval/origin refusal (403), missing resource (404), conflicting state/maintenance (409), capacity (507), and unavailable workload (503).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/generations/{id}/cancel": {
+      "post": {
+        "operationId": "cancelGeneration",
+        "description": "Request cancellation. Acknowledgment does not mean cancellation/guest cleanup has completed. Requires ai capability. The body is not read; first-party clients send an empty JSON object.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConversationID"
+          },
+          {
+            "$ref": "#/components/parameters/Origin"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Request cancellation. Acknowledgment does not mean cancellation/guest cleanup has completed. Requires ai capability.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cancellationRequested": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "cancellationRequested"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Structured error; includes unauthenticated (401), capability/approval/origin refusal (403), missing resource (404), conflicting state/maintenance (409), capacity (507), and unavailable workload (503).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/conversations/{id}/delete/approval": {
+      "post": {
+        "operationId": "beginConversationDeletionApproval",
+        "description": "Begin fresh passkey approval for irreversible stored-message deletion. Requires ai capability, an existing conversation and no active generations. Finish the ceremony through /auth/approval/finish in device-approvals.openapi.json. Preserve exact request bytes and the same key for dispatch.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConversationID"
+          },
+          {
+            "$ref": "#/components/parameters/Origin"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Begin fresh passkey approval for irreversible stored-message deletion. Requires ai capability, an existing conversation and no active generations. Finish the ceremony through /auth/approval/finish in device-approvals.openapi.json. Preserve exact request bytes and the same key for dispatch.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalBegin"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Structured error; includes unauthenticated (401), capability/approval/origin refusal (403), missing resource (404), conflicting state/maintenance (409), capacity (507), and unavailable workload (503).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyObject"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/conversations/{id}/delete": {
+      "post": {
+        "operationId": "deleteConversation",
+        "description": "Consume the exact approval and journal durable cleanup together. Observe deletionPending/deletionRequiresAction on the conversation list. Pending acknowledgment is not data erasure; new messages remain blocked during cleanup. Requires ai capability.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConversationID"
+          },
+          {
+            "$ref": "#/components/parameters/Origin"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredKey"
+          },
+          {
+            "$ref": "#/components/parameters/Approval"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Consume the exact approval and journal durable cleanup together. Observe deletionPending/deletionRequiresAction on the conversation list. Pending acknowledgment is not data erasure; new messages remain blocked during cleanup. Requires ai capability.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Structured error; includes unauthenticated (401), capability/approval/origin refusal (403), missing resource (404), conflicting state/maintenance (409), capacity (507), and unavailable workload (503).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyObject"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ChatSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-homenode"
+      }
+    },
+    "parameters": {
+      "Origin": {
+        "name": "Origin",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Must exactly match the configured HTTPS origin for every POST."
+      },
+      "ConversationID": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/ResourceID"
+        }
+      },
+      "RequiredKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128
+        },
+        "description": "Device-bound stable key. Reuse exactly the same intent after an unknown outcome."
+      },
+      "OptionalKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128
+        },
+        "description": "Recommended. With a key, creation is durable and replayable. Missing keys preserve the legacy non-idempotent behavior."
+      },
+      "Approval": {
+        "name": "X-Action-Approval",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Fresh passkey approval bound to this session, device, epoch, policy, exact request bytes, conversation and idempotency key."
+      }
+    },
+    "schemas": {
+      "ResourceID": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9_-]{20,64}$"
+      },
+      "Conversation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ResourceID"
+          },
+          "title": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "deletionPending": {
+            "type": "boolean"
+          },
+          "deletionRequiresAction": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "createdAt",
+          "deletionPending",
+          "deletionRequiresAction"
+        ],
+        "additionalProperties": false
+      },
+      "Generation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ResourceID"
+          },
+          "conversationId": {
+            "$ref": "#/components/schemas/ResourceID"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "staging",
+              "queued",
+              "running",
+              "cancelling",
+              "succeeded",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ]
+          },
+          "operationId": {
+            "$ref": "#/components/schemas/ResourceID"
+          },
+          "createdAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updatedAt": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "id",
+          "conversationId",
+          "prompt",
+          "output",
+          "state",
+          "operationId",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "EmptyObject": {
+        "$ref": "./device-approvals.openapi.json#/components/schemas/EmptyObject"
+      },
+      "ApprovalBegin": {
+        "$ref": "./device-approvals.openapi.json#/components/schemas/ApprovalBegin"
+      },
+      "Error": {
+        "$ref": "./device-approvals.openapi.json#/components/schemas/Error"
+      },
+      "Operation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ResourceID"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "executing",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled",
+              "interrupted",
+              "requires-action"
+            ]
+          },
+          "result": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "createdAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updatedAt": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "result",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

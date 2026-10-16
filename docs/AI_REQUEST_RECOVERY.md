@@ -1,5 +1,10 @@
 # Chat request recovery
 
+The [chat OpenAPI contract](../contracts/chat.openapi.json) describes the current
+conversation, history/export, generation/cancellation and approved deletion
+operations. It shares passkey ceremony schemas with the existing device
+approval contract. This is a chat slice, not the full product API freeze.
+
 Conversation creation accepts a device-bound idempotency key. The creation
 operation and conversation commit together. Matching retries return the same
 conversation before maintenance admission or quota checks; changed intent
