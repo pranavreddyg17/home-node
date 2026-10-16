@@ -391,7 +391,13 @@ func (s *Server) createConversation(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &body) {
 		return
 	}
-	item, err := s.Workloads.CreateConversation(r.Context(), body.Title)
+	var item workload.Conversation
+	var err error
+	if key := r.Header.Get("Idempotency-Key"); key != "" {
+		item, err = s.Workloads.CreateConversationWithKey(r.Context(), actor(r).Device.ID, key, body.Title)
+	} else {
+		item, err = s.Workloads.CreateConversation(r.Context(), body.Title)
+	}
 	if err != nil {
 		workloadError(w, err)
 		return

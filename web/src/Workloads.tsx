@@ -391,7 +391,22 @@ export function AI({ session, verify }: { session: Session; verify: () => Promis
     }, 1000)
     return () => { current = false; clearInterval(timer); controller?.abort() }
   }, [active])
-  const create = async () => { setBusy(true); setError(''); try { const conversation = await api<Conversation>('/ai/conversations', { title: `Conversation ${conversations.length + 1}` }); setConversations(items => [...items.filter(item => item.id !== conversation.id), conversation]); await refresh(true); setSelected(conversation.id) } catch (e) { setError(message(e)) } finally { setBusy(false) } }
+  const create = async () => {
+    setBusy(true); setError('')
+    try {
+      const marker = `homenode-conversation-create:${session.device.id}`
+      const saved = localStorage.getItem(marker)
+      const intent: { key: string; title: string } = saved ? JSON.parse(saved) : { key: crypto.randomUUID(), title: `Conversation ${conversations.length + 1}` }
+      if (!/^[a-f0-9-]{36}$/.test(intent.key) || typeof intent.title !== 'string' || intent.title.length > 80) throw new Error('The saved conversation request is invalid. Check existing conversations before attempting recovery.')
+      const encoded = JSON.stringify(intent)
+      localStorage.setItem(marker, encoded)
+      const conversation = await api<Conversation>('/ai/conversations', { title: intent.title }, AbortSignal.timeout(30000), { 'Idempotency-Key': intent.key })
+      if (localStorage.getItem(marker) === encoded) localStorage.removeItem(marker)
+      setConversations(items => [...items.filter(item => item.id !== conversation.id), conversation])
+      await refresh(true); setSelected(conversation.id)
+    } catch (e) { setError(message(e)) } finally { setBusy(false) }
+  }
+
   const send = async () => { setBusy(true); setError(''); try { const g = await action<Generation>(session.device.id, '/ai/generations', { conversationId: selected, prompt }); setHistory(items => items.some(item => item.id === g.id) ? items.map(item => item.id === g.id ? g : item) : [...items, g]); setPrompt(''); setActive(['queued', 'running', 'cancelling'].includes(g.state) ? g.id : null) } catch (e) { setError(message(e)) } finally { setBusy(false) } }
   const remove = async () => { if (!window.confirm('Delete this conversation and its stored messages? This cannot be undone.')) return; setBusy(true); setError(''); try { const op = await approvedAction<Operation>(`/ai/conversations/${selected}/delete`, {}, { 'Idempotency-Key': crypto.randomUUID() });
       let completed = false;

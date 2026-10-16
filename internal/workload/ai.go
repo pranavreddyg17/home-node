@@ -54,11 +54,43 @@ func (s *Service) Conversations(ctx context.Context) ([]Conversation, error) {
 	return items, rows.Err()
 }
 func (s *Service) CreateConversation(ctx context.Context, title string) (Conversation, error) {
+	return s.createConversation(ctx, "", "", title)
+}
+
+func (s *Service) CreateConversationWithKey(ctx context.Context, device, key, title string) (Conversation, error) {
+	if len(key) < 16 || len(key) > 128 {
+		return Conversation{}, ErrInvalid
+	}
+	return s.createConversation(ctx, device, key, title)
+}
+
+func (s *Service) createConversation(ctx context.Context, device, key, title string) (Conversation, error) {
 	if !validName(title) || len(title) > 80 {
 		return Conversation{}, ErrInvalid
 	}
 	item := Conversation{ID: state.Random(), Title: title, CreatedAt: time.Now().Unix()}
 	err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		var op Operation
+		if key != "" {
+			var replay bool
+			var err error
+			op, replay, err = operation(tx, device, key, "conversation.create", map[string]string{"title": title})
+			if err != nil {
+				return err
+			}
+			if replay {
+				var result struct {
+					ConversationID string `json:"conversationId"`
+				}
+				if op.State != "succeeded" || json.Unmarshal(op.Result, &result) != nil || !guestproto.ValidID(result.ConversationID) {
+					return ErrConflict
+				}
+				return tx.QueryRow(`SELECT c.id,c.title,c.created_at,
+EXISTS(SELECT 1 FROM operations o WHERE o.kind='conversation.delete' AND o.state IN('pending','running','requires-action') AND json_extract(CASE WHEN json_valid(o.result) THEN o.result ELSE '{}' END,'$.conversationId')=c.id),
+EXISTS(SELECT 1 FROM operations o WHERE o.kind='conversation.delete' AND o.state='requires-action' AND json_extract(CASE WHEN json_valid(o.result) THEN o.result ELSE '{}' END,'$.conversationId')=c.id)
+FROM conversations c WHERE c.id=?`, result.ConversationID).Scan(&item.ID, &item.Title, &item.CreatedAt, &item.DeletionPending, &item.DeletionRequiresAction)
+			}
+		}
 		if err := state.RequireAdmission(tx); err != nil {
 			return errors.Join(ErrConflict, err)
 		}
@@ -70,6 +102,10 @@ func (s *Service) CreateConversation(ctx context.Context, title string) (Convers
 			return ErrConflict
 		}
 		_, err := tx.Exec("INSERT INTO conversations VALUES(?,?,?)", item.ID, item.Title, item.CreatedAt)
+		if err == nil && key != "" {
+			result, _ := json.Marshal(map[string]string{"conversationId": item.ID})
+			_, err = tx.Exec("UPDATE operations SET state='succeeded',result=?,updated_at=? WHERE id=?", string(result), time.Now().Unix(), op.ID)
+		}
 		return err
 	})
 	return item, err

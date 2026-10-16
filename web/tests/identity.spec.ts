@@ -546,9 +546,32 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.unroute('**/api/v1/files')
   await page.unroute('**/api/v1/jobs')
   await page.locator('nav').getByRole('button', { name: 'AI', exact: false }).click()
+  let conversationRequests = 0, conversationCreationKey = '', conversationCreationTitle = '', createdConversationId = ''
+  await page.route('**/api/v1/ai/conversations', async route => {
+    if (route.request().method() !== 'POST') return route.continue()
+    conversationRequests++
+    const key = route.request().headers()['idempotency-key']
+    const title = route.request().postDataJSON().title
+    if (conversationRequests === 1) { conversationCreationKey = key; conversationCreationTitle = title }
+    else { expect(key).toBe(conversationCreationKey); expect(title).toBe(conversationCreationTitle) }
+    const response = await route.fetch()
+    const item = await response.json()
+    expect(response.status()).toBe(201)
+    if (conversationRequests === 1) { createdConversationId = item.id; return route.abort('connectionreset') }
+    expect(item.id).toBe(createdConversationId)
+    return route.fulfill({ response })
+  })
+  await page.getByRole('button', { name: 'New conversation' }).click()
+  await expect(page.getByRole('alert')).toBeVisible()
+  await page.reload()
+  await page.locator('nav').getByRole('button', { name: 'AI', exact: false }).click()
   await page.getByRole('button', { name: 'New conversation' }).click()
   await expect(page.getByLabel('Message', { exact: true })).toBeVisible()
   const conversationId = await page.locator('.conversation-picker select').inputValue()
+  expect(conversationId).toBe(createdConversationId)
+  expect(conversationRequests).toBe(2)
+  await expect(page.locator('.conversation-picker select option')).toHaveCount(2)
+  await page.unroute('**/api/v1/ai/conversations')
   const retryPrompt = 'Private prompt retained only by the server and current form'
   const completedGeneration = { id: '9'.repeat(32), conversationId, prompt: retryPrompt, output: 'Recovered answer', state: 'succeeded', createdAt: 1 }
   let generationRequests = 0, generationKey = ''
