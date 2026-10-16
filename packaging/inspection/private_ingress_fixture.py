@@ -71,7 +71,7 @@ s.settimeout(1)
 s.bind((sys.argv[1],0))
 try:
  s.connect(('100.100.1.2',int(sys.argv[2])))
- assert s.recv(100)==b'homenode-ingress\\n'
+ assert s.makefile('rb').readline(64)==b'homenode-ingress\\n'
  print('accepted')
 except (TimeoutError,ConnectionRefusedError,OSError):
  print('blocked')
