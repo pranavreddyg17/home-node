@@ -6,6 +6,7 @@ on:
       - 'internal/gatewaytransport/**'
       - 'internal/networkcheck/**'
       - 'packaging/inspection/private_ingress_fixture.py'
+      - 'packaging/systemd/homenode-gateway.service'
       - 'internal/control/gateway*'
       - 'internal/control/server.go'
       - 'internal/control/request_json*'
@@ -18,6 +19,7 @@ on:
       - 'internal/gatewaytransport/**'
       - 'internal/networkcheck/**'
       - 'packaging/inspection/private_ingress_fixture.py'
+      - 'packaging/systemd/homenode-gateway.service'
       - 'internal/control/gateway*'
       - 'internal/control/server.go'
       - 'internal/control/request_json*'
@@ -52,6 +54,6 @@ jobs:
       - name: Test device-bound ingress against routed LAN sources
         run: |
           go test -c ./internal/networkcheck -o /tmp/homenode-networkcheck-ingress.test
-          sudo env HOMENODE_PRIVATE_INGRESS_FIXTURE=1 python3 packaging/inspection/private_ingress_fixture.py --test-binary /tmp/homenode-networkcheck-ingress.test
+          sudo env HOMENODE_PRIVATE_INGRESS_FIXTURE=1 python3 packaging/inspection/private_ingress_fixture.py --test-binary /tmp/homenode-networkcheck-ingress.test --source-service packaging/systemd/homenode-gateway.service
       - name: Test actual TLS across distinct kernel identities
         run: sudo env HOMENODE_GATEWAY_PEER_INTEGRATION=1 "$(command -v go)" test ./internal/gatewaytransport -run '^TestRootDistinctControllerGatewayPeers$' -count=1 -v

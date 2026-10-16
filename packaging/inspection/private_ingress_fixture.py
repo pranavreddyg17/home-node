@@ -5,6 +5,7 @@ Run only in disposable CI with an explicitly opted-in, compiled Go test binary.
 The veth overlay surrogate proves socket ingress enforcement, not Tailscale.
 """
 import argparse
+import configparser
 import json
 import os
 import pathlib
@@ -23,13 +24,19 @@ def run(*args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--test-binary", required=True)
+    parser.add_argument("--source-service", required=True)
     args = parser.parse_args()
     if sys.platform != "linux" or os.geteuid() != 0 or os.environ.get("HOMENODE_PRIVATE_INGRESS_FIXTURE") != "1":
         raise SystemExit("requires explicitly opted-in root on disposable Linux")
     release = platform.freedesktop_os_release()
     print("ENV " + json.dumps({"kernel": platform.release(), "architecture": platform.machine(), "distribution": release.get("ID"), "distributionVersion": release.get("VERSION_ID"), "python": platform.python_version(), "iproute": run("ip", "-Version").strip()}, sort_keys=True), flush=True)
+    source = configparser.ConfigParser(interpolation=None)
+    source.optionxform = str
+    source.read(args.source_service)
+    hardening = ("UMask", "NoNewPrivileges", "ProtectSystem", "ProtectHome", "PrivateTmp", "PrivateDevices", "ProtectKernelTunables", "ProtectKernelModules", "ProtectControlGroups", "RestrictSUIDSGID", "LockPersonality", "RestrictRealtime", "RestrictNamespaces", "CapabilityBoundingSet", "AmbientCapabilities", "RestrictAddressFamilies", "InaccessiblePaths", "MemoryMax", "TasksMax")
+    properties = [f"--property={key}={source['Service'][key]}" for key in hardening]
     server, peer = f"hn-is-{os.getpid()}", f"hn-ip-{os.getpid()}"
-    namespaces, children, retired = [], [], set()
+    namespaces, children, retired, units = [], [], set(), []
     with tempfile.TemporaryDirectory(prefix="homenode-ingress-") as temporary:
         directory = pathlib.Path(temporary)
         directory.chmod(0o755)
@@ -54,8 +61,13 @@ def main():
             run("ip", "-n", server, "route", "add", "100.100.2.2/32", "via", "10.210.2.2", "dev", "lan")
 
             ports = {}
-            def start_listener(mode):
-                command = ["ip", "netns", "exec", server, "setpriv", "--reuid=65534", "--regid=65534", "--clear-groups", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "env", f"HOMENODE_INGRESS_FIXTURE_CHILD={mode}", str(binary), "-test.run=^TestIngressNamespaceListenerChild$", "-test.timeout=60s"]
+            def start_listener(mode, confined=False):
+                if confined:
+                    unit = f"homenode-ingress-{os.getpid()}.service"
+                    units.append(unit)
+                    command = ["systemd-run", "--quiet", "--pipe", "--wait", "--collect", f"--unit={unit}", "--property=Type=exec", "--property=User=65534", "--property=Group=65534", "--property=SupplementaryGroups=", f"--property=NetworkNamespacePath=/run/netns/{server}", f"--property=BindReadOnlyPaths={directory}:/run/homenode-ingress-fixture", *properties, "env", f"HOMENODE_INGRESS_FIXTURE_CHILD={mode}", "/run/homenode-ingress-fixture/networkcheck.test", "-test.run=^TestIngressNamespaceListenerChild$", "-test.timeout=60s"]
+                else:
+                    command = ["ip", "netns", "exec", server, "setpriv", "--reuid=65534", "--regid=65534", "--clear-groups", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "env", f"HOMENODE_INGRESS_FIXTURE_CHILD={mode}", str(binary), "-test.run=^TestIngressNamespaceListenerChild$", "-test.timeout=60s"]
                 child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
                 children.append(child)
                 if not select.select([child.stdout], [], [], 10)[0]:
@@ -139,8 +151,21 @@ finally:
             if "ADMISSION-REFUSED" not in refusal:
                 raise RuntimeError("production listener did not refuse missing TUN address")
             print("PASS real TUN production admission, address-loss shutdown and restart refusal", flush=True)
+            run("ip", "-n", server, "address", "add", "100.100.1.2/32", "dev", "tailscale0")
+            start_listener("production", confined=True)
+            confined_child = children[-1]
+            run("ip", "-n", server, "address", "delete", "100.100.1.2/32", "dev", "tailscale0")
+            confined_output, _ = confined_child.communicate(timeout=5)
+            if confined_child.returncode != 0 or "WATCH-CLOSED" not in confined_output:
+                raise RuntimeError(f"source-confined TUN observation did not close Accept: {confined_output}")
+            retired.add(confined_child)
+            print("PASS source gateway systemd hardening permits TUN admission and address-loss shutdown", flush=True)
             print("PASS unprivileged device-bound ingress without host firewall rules", flush=True)
         finally:
+            # Terminating the systemd-run client does not necessarily stop its
+            # service. Stop any attempted unit before deleting its namespace.
+            for unit in units:
+                subprocess.run(["systemctl", "stop", unit], check=False, capture_output=True, timeout=15)
             for child in children:
                 child.terminate()
                 try:

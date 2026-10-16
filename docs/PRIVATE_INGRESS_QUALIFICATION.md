@@ -104,6 +104,19 @@ Tailscale daemon, load certificates or start installed services. The earlier
 veth phase remains the ingress packet-path evidence. Native qualification for
 this newly added phase is pending.
 
+An additional systemd phase copies the gateway source unit's hardening
+properties, including its empty capability sets, address-family restriction,
+private devices, filesystem/namespace protections and resource limits. It
+starts the production-listener test child as UID/GID 65534 inside the fixture
+network namespace, with the test binary mounted read-only into `/run` so
+`PrivateTmp` remains enabled. TUN admission and address-loss shutdown must
+still work. The fixture stops any attempted transient unit before namespace
+cleanup. This uses a test executable and explicit namespace/binary bindings;
+it excludes installed NSS identities, proxy group, protected certificate
+loading, controller mediation and actual gateway service restart. Native
+execution of this confinement phase is pending. Source gateway unit changes
+trigger the focused workflow so changes to those protections are retested.
+
 The baseline must enforce overlay-only ingress to the configured HTTPS port
 without granting the gateway firewall administration or daemon administration.
 Qualify the kernel-enforced listener restriction and its service lifecycle. A startup
