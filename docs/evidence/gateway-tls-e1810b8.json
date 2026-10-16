@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "sourceRevision": "e1810b8334463aa925c1c0622c62c104d2033a4c",
+  "workflowRun": 38846425818,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38846425818",
+  "jobID": 116797887343,
+  "jobConclusion": "success",
+  "workflowConclusion": "success",
+  "logSHA256": "015e6a1167ff62319a76ebbb8a68e1a1af76fb96d448141b07ce5b49bb874a5e",
+  "environment": "Disposable Ubuntu 24.04 CI; loopback TLS, temporary Unix sockets, unprivileged controller fixture and opt-in root fixture with forked UID 991/992/994 processes",
+  "tests": [
+    "TestProductionControllerThroughAuthenticatedUnixGateway",
+    "TestProductionControllerAuthorizationOverRealGatewayTLS",
+    "TestRootTLSFileAdmission",
+    "TestRootTLSRejectsNamedReaderACL",
+    "TestRootDistinctControllerGatewayPeers"
+  ],
+  "qualifiedScope": [
+    "Gateway UID 992 forwards an actual certificate-verified TLS 1.3 HTTP request over a protected Unix socket to a distinct controller UID 991 using production proxy and peer-context handlers.",
+    "Public forwarding assertions are replaced at the private boundary; the distinct controller sees only the qualified synthetic client address and trusted HTTPS context.",
+    "TLS 1.2 handshake, untrusted certificate root, mismatched certificate server name and foreign HTTP Host cases refuse.",
+    "Foreign client UID 994 is refused; relabeling the listener socket to an expected owner UID 990 does not bypass the serving-kernel-peer pin to UID 991.",
+    "A separate unprivileged same-UID fixture constructs the production HTTPS controller and checks health, unauthenticated Files refusal, seeded Files-only access and device-administration refusal through real verified TLS and the production proxy.",
+    "That controller fixture marks its seeded device revoked and verifies that the same cookie receives HTTP 401 while reusing the already-established client TLS connection.",
+    "Production controller responses retain HSTS and no-store headers.",
+    "Separate root file-admission tests refuse protected-file ownership/link/mode/ACL violations; this does not combine protected certificate-file loading with the real-TLS peer fixture."
+  ],
+  "limitations": [
+    "Both TLS fixtures substitute a synthetic tailnet RemoteAddr for real loopback TCP addresses; no Tailscale enrollment, routing, device allowlist or overlay ACL is qualified.",
+    "TLS certificates are trusted test fixtures, not production issuance, protected certificate-file rotation or actual gateway-executable startup.",
+    "Distinct-UID transport uses a minimal controller handler; production controller authorization uses a same-UID fixture. These are separate checks rather than combined installed service confinement.",
+    "Sessions are seeded and revocation updates the fixture database directly; no WebAuthn enrollment, owner approval flow, active download/AI stream termination or physical-device propagation is qualified.",
+    "No installed systemd confinement, certificate rotation, physical-host operation, independent security review or complete release qualification."
+  ],
+  "releaseQualified": false
+}
