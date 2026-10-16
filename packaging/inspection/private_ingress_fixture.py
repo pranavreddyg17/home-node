@@ -32,7 +32,10 @@ def main():
     print("ENV " + json.dumps({"kernel": platform.release(), "architecture": platform.machine(), "distribution": release.get("ID"), "distributionVersion": release.get("VERSION_ID"), "python": platform.python_version(), "iproute": run("ip", "-Version").strip()}, sort_keys=True), flush=True)
     source = configparser.ConfigParser(interpolation=None)
     source.optionxform = str
-    source.read(args.source_service)
+    # systemd permits repeated conditions in [Unit]; parse only [Service]
+    # strictly so unrelated conditions do not defeat the hardening check.
+    service_text = pathlib.Path(args.source_service).read_text().split("[Service]\n", 1)[1].split("\n[", 1)[0]
+    source.read_string("[Service]\n" + service_text)
     hardening = ("UMask", "NoNewPrivileges", "ProtectSystem", "ProtectHome", "PrivateTmp", "PrivateDevices", "ProtectKernelTunables", "ProtectKernelModules", "ProtectControlGroups", "RestrictSUIDSGID", "LockPersonality", "RestrictRealtime", "RestrictNamespaces", "CapabilityBoundingSet", "AmbientCapabilities", "RestrictAddressFamilies", "InaccessiblePaths", "MemoryMax", "TasksMax")
     properties = [f"--property={key}={source['Service'][key]}" for key in hardening]
     server, peer = f"hn-is-{os.getpid()}", f"hn-ip-{os.getpid()}"
