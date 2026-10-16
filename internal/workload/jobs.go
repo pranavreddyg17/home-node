@@ -453,10 +453,19 @@ func (s *Service) waitGuest(ctx context.Context, id string, j Job) error {
 	}
 }
 func (s *Service) endJob(ctx context.Context, j Job, phase, code, output string) error {
+	if phase != "failed" && phase != "cancelled" && phase != "interrupted" {
+		return ErrInvalid
+	}
 	return s.Store.Transaction(ctx, func(tx *sql.Tx) error {
-		var device string
-		if err := tx.QueryRow("SELECT device_id FROM jobs WHERE id=?", j.AttemptID).Scan(&device); err != nil {
+		var device, current string
+		if err := tx.QueryRow("SELECT device_id,state FROM jobs WHERE id=?", j.AttemptID).Scan(&device, &current); err != nil {
 			return err
+		}
+		if current == "succeeded" || current == "failed" || current == "cancelled" || current == "interrupted" {
+			return nil
+		}
+		if current != "queued" && current != "preparing" && current != "running" && current != "finalizing" && current != "cancelling" {
+			return ErrConflict
 		}
 		if _, err := tx.Exec("UPDATE jobs SET state=?,error_code=?,updated_at=? WHERE id=? AND state<>'succeeded'", phase, code, time.Now().Unix(), j.AttemptID); err != nil {
 			return err
