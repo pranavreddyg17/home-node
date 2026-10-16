@@ -157,13 +157,21 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 403, "TLS_REQUIRED", "A trusted HTTPS connection is required.")
 		return
 	}
+	if len(r.Header.Values("Origin")) > 1 {
+		fail(w, 403, "ORIGIN_DENIED", "Send a single browser origin.")
+		return
+	}
 	if origin := r.Header.Get("Origin"); origin != "" && origin != s.config.Origin {
 		fail(w, 403, "ORIGIN_DENIED", "Cross-origin access is denied.")
 		return
 	}
-	if fetch := r.Header.Get("Sec-Fetch-Site"); fetch == "cross-site" {
-		fail(w, 403, "ORIGIN_DENIED", "Cross-site access is denied.")
-		return
+	if sites := r.Header.Values("Sec-Fetch-Site"); len(sites) > 0 {
+		// Same-site can still be a different origin. No sibling-site browser
+		// integration is authorized to use this first-party management surface.
+		if len(sites) != 1 || sites[0] != "same-origin" && sites[0] != "none" {
+			fail(w, 403, "ORIGIN_DENIED", "Use HomeNode directly at its configured origin.")
+			return
+		}
 	}
 	if r.Method != "GET" && r.Method != "HEAD" {
 		if r.Header.Get("Origin") != s.config.Origin {

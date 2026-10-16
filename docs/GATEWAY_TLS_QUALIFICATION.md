@@ -5,6 +5,13 @@ authenticated private Unix connection to the controller. The controller still
 enforces its own sessions, capabilities and origin checks after transport
 mediation.
 
+The first-party browser guard accepts absent fetch metadata for native clients,
+or a single `same-origin`/`none` value. It refuses `same-site` because a sibling
+site can still be a different origin, and rejects unknown or repeated fetch
+metadata and repeated Origin headers. POST requests still require the exact
+configured Origin. These headers are request-context checks, not authentication;
+native requests still need the normal session and capability checks.
+
 | Check | Fixture | Scope and limits |
 | --- | --- | --- |
 | Distinct kernel identities and serving-peer pinning | `gatewaytransport.TestRootDistinctControllerGatewayPeers` | Disposable Linux child processes for controller UID 991, gateway UID 992 and foreign UID 994. Earlier retained evidence uses simulated TLS state; the new retained run also covers real fixture TLS. |
