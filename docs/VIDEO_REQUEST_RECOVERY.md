@@ -18,6 +18,11 @@ Contradictory cleanup metadata refuses the never-started shortcut and retains
 the reservation. Started workload cleanup remains governed by its own persistent
 stop/purge journal.
 
+The Jobs screen offers Retry cancellation while an attempt remains cancelling.
+This repeats cancellation for the same group and attempt; it does not submit a
+new conversion. Retry as new attempt remains a separate explicit action after
+a terminal failure, cancellation or interruption.
+
 Succeeded, failed, cancelled and interrupted attempts are terminal. A late
 completion cannot replace their result or emit another terminal event. Cleanup
 may still be pending and visible separately; cancellation acknowledgment and

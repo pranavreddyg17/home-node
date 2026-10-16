@@ -162,6 +162,36 @@ test('AI list refresh failures stay separate from creation and leaving aborts th
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
+test('pending video cancellation retries the same attempt without starting another job', async ({ page }) => {
+  let cancellations = 0, newJobs = 0
+  const job = { id: 'fixture-group', attemptId: 'fixture-attempt', inputId: 'fixture-input', preset: 'mp4-720p', state: 'cancelling', createdAt: 1, outputId: null, errorCode: null, cleanupPending: false }
+  await page.route('**/api/v1/**', route => {
+    const path = new URL(route.request().url()).pathname
+    if (path === '/api/v1/setup') return route.fulfill({ json: { claimed: true, development: true } })
+    if (path === '/api/v1/session') return route.fulfill({ json: { device: { id: 'fixture-owner', name: 'Fixture owner', capabilities: ['jobs'], createdAt: 1, revokedAt: null }, verifiedAt: 1, expiresAt: 9999999999 } })
+    if (path === '/api/v1/host/report') return route.fulfill({ json: { generatedAt: new Date().toISOString(), host: { os: 'linux', architecture: 'amd64' }, checks: [], prerequisitesMet: false, executionEnabled: false } })
+    if (path === '/api/v1/apps') return route.fulfill({ json: { apps: [], runtimeConfigured: false } })
+    if (path === '/api/v1/files') return route.fulfill({ json: [] })
+    if (path === '/api/v1/jobs/fixture-group/cancel') {
+      cancellations++; expect(route.request().postDataJSON()).toEqual({ attemptId: job.attemptId })
+      job.state = 'cancelled'
+      return route.fulfill({ status: 202, json: { cancellationRequested: true } })
+    }
+    if (path === '/api/v1/jobs') {
+      if (route.request().method() === 'POST') newJobs++
+      return route.fulfill({ json: [job] })
+    }
+    return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Unused fixture endpoint' } } })
+  })
+  await page.goto('/')
+  await page.locator('nav').getByRole('button', { name: 'Jobs', exact: false }).click()
+  await expect(page.getByText('Cancellation is pending. Retrying keeps this attempt.', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Retry cancellation', exact: true }).click()
+  await expect(page.getByText('cancelled', { exact: true })).toBeVisible()
+  await expect(page.locator('.attempt-label')).toHaveCount(1)
+  expect(cancellations).toBe(1); expect(newJobs).toBe(0)
+})
+
 test('Jobs refreshes stay serialized when one response fails before the other completes', async ({ page }) => {
   let activeJobs = 0, activeFiles = 0, maxJobs = 0, maxFiles = 0, completedJobs = 0
   let fileAvailable = true
