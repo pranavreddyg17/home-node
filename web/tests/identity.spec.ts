@@ -622,9 +622,12 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.reload()
   await page.locator('nav').getByRole('button', { name: 'AI', exact: false }).click()
   await page.locator('.conversation-picker select').selectOption(conversationId)
+  let deletionOperationReads = 0
+  page.on('request', request => { if (request.method() === 'GET' && new URL(request.url()).pathname.startsWith('/api/v1/operations/')) deletionOperationReads++ })
   page.once('dialog', dialog => dialog.accept())
   await page.getByRole('button', { name: 'Delete conversation', exact: true }).click()
   await expect(page.getByLabel('Message', { exact: true })).not.toBeVisible()
+  expect(deletionOperationReads).toBe(0)
 
   await page.getByRole('button', { name: 'Devices', exact: false }).click()
   await page.getByLabel('Device name', { exact: true }).fill('Paired phone')

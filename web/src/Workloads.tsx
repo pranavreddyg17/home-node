@@ -408,16 +408,22 @@ export function AI({ session, verify }: { session: Session; verify: () => Promis
   }
 
   const send = async () => { setBusy(true); setError(''); try { const g = await action<Generation>(session.device.id, '/ai/generations', { conversationId: selected, prompt }); setHistory(items => items.some(item => item.id === g.id) ? items.map(item => item.id === g.id ? g : item) : [...items, g]); setPrompt(''); setActive(['queued', 'running', 'cancelling'].includes(g.state) ? g.id : null) } catch (e) { setError(message(e)) } finally { setBusy(false) } }
-  const remove = async () => { if (!window.confirm('Delete this conversation and its stored messages? This cannot be undone.')) return; setBusy(true); setError(''); try { const op = await approvedAction<Operation>(`/ai/conversations/${selected}/delete`, {}, { 'Idempotency-Key': crypto.randomUUID() });
-      let completed = false;
-      for (let i = 0; i < 120; i++) {
-        const status = await api<Operation>(`/operations/${op.id}`);
-        if (status.state === 'succeeded') { completed = true; break }
-        if (status.state !== 'pending') throw new Error('Deletion needs attention. Check its operation status.');
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-      if (!completed) throw new Error(`Deletion remains pending (operation ${op.id}). The server will retry cleanup; data has not been reported as deleted.`);
-      setSelected(''); await refresh(true) } catch (e) { setError(message(e)) } finally { setBusy(false) } }
+  const remove = async () => {
+    if (!window.confirm('Delete this conversation and its stored messages? This cannot be undone.')) return
+    const conversationId = selected
+    setBusy(true); setError('')
+    try {
+      const op = await approvedAction<Operation>(`/ai/conversations/${conversationId}/delete`, {}, { 'Idempotency-Key': crypto.randomUUID() })
+      if (!mounted.current) return
+      if (op.state === 'succeeded') {
+        setConversations(items => items.filter(item => item.id !== conversationId)); setSelected('')
+      } else if (['pending', 'running', 'requires-action'].includes(op.state)) {
+        setConversations(items => items.map(item => item.id === conversationId ? { ...item, deletionPending: true, deletionRequiresAction: op.state === 'requires-action' } : item))
+      } else throw new Error('Deletion did not complete. Refresh conversations to check its current state.')
+    } catch (e) { if (mounted.current) setError(message(e)) }
+    finally { await refresh(true); if (mounted.current) setBusy(false) }
+  }
+
   return <div className="stack">{error && <p className="form-error" role="alert">{error}</p>}<section className="panel"><div className="section-heading"><h2>Private AI</h2><div className="button-row"><button onClick={() => void refresh(true)}>Refresh conversations</button><button disabled={busy || !listLoaded || Boolean(listError)} onClick={() => void create()}>New conversation</button></div></div><p>Start the installed CPU model profile in Apps. Chat stays on the AI guest disk. The model has no network access or administrative tools.</p><p>Context includes up to eight recent turns within a bounded size. Responses are limited to 256 tokens in this profile.</p>{listError && <p className="form-error" role="alert">Conversation list is unavailable. {listError}</p>}{!listLoaded && <p role="status">{listError ? 'The conversation list has not been loaded.' : 'Reading conversations…'}</p>}<label className="conversation-picker">Conversation<select disabled={busy || !listLoaded || Boolean(listError)} value={selected} onChange={e => setSelected(e.target.value)}><option value="">Choose a conversation</option>{conversations.map(c => <option key={c.id} value={c.id}>{c.title}{c.deletionPending ? ' (deletion pending)' : ''}</option>)}</select></label>{selected && <div className="button-row"><a className="download-link" href={`/api/v1/ai/conversations/${selected}/export`} download>Export history</a><button disabled={busy || historyLoading || Boolean(historyError) || Boolean(active) || deleting} onClick={() => void remove()}>Delete conversation</button><button onClick={() => void verify().catch(e => setError(message(e)))}>Verify passkey</button></div>}</section>
     {selected && deleting && <p role="status">{deletionRequiresAction ? 'Deletion needs attention because its saved cleanup record is invalid. New messages remain disabled; check the server operation before attempting recovery.' : 'Deletion is pending. The server will retry cleanup automatically. New messages are disabled until cleanup finishes.'}</p>}
     {selected && !deleting && <section className="panel chat-panel"><div className="chat-history" aria-live="polite">{historyLoading ? <p role="status">Reading conversation history…</p> : historyError ? <div role="alert"><p>Conversation history is unavailable. {historyError}</p><button onClick={() => setHistoryRetry(value => value + 1)}>Retry history</button></div> : !history.length && <p>Ask your first question.</p>}{generationError && <p className="form-error" role="alert">Generation status is unavailable. {generationError}</p>}{history.map(g => <article key={g.id}><div className="chat-message user-message"><strong>You</strong><p>{g.prompt}</p></div><div className="chat-message assistant-message"><strong>Private AI</strong><p>{g.output || (['queued', 'running'].includes(g.state) ? 'Waiting for the local model…' : 'No response was completed.')}</p><small>{g.state}</small></div></article>)}</div><form onSubmit={e => { e.preventDefault(); void send() }}><label>Message<textarea value={prompt} onChange={e => setPrompt(e.target.value)} maxLength={2048} rows={4} required placeholder="Ask your local model…" /></label><div className="button-row"><button className="primary" disabled={busy || Boolean(listError) || historyLoading || Boolean(historyError) || Boolean(active) || !prompt.trim()}>Send message</button>{active && <button type="button" onClick={() => void api(`/ai/generations/${active}/cancel`, {}).catch(e => setError(message(e)))}>Cancel generation</button>}</div></form></section>}
