@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"io"
 	"net"
 	"net/http"
@@ -22,7 +23,8 @@ import (
 )
 
 // Opt-in disposable Linux root fixture; child processes have separate kernel
-// identities. This qualifies socket mediation, not Tailscale or HTTPS startup.
+// identities. This qualifies socket mediation and fixture TLS, not Tailscale or
+// installed gateway startup and confinement.
 func TestRootDistinctControllerGatewayPeers(t *testing.T) {
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_GATEWAY_PEER_INTEGRATION") != "1" {
 		t.Skip("disposable Linux root peer fixture is opt-in")
@@ -97,10 +99,13 @@ func TestRootDistinctControllerGatewayPeers(t *testing.T) {
 	for _, entry := range []struct {
 		role string
 		uid  uint32
-	}{{"gateway", 992}, {"foreign", 994}} {
+	}{{"gateway", 992}, {"gateway-tls", 992}, {"foreign", 994}} {
 		cmd := child(entry.role, entry.uid, 993)
 		if data, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("%s kernel peer fixture: %v (%s)", entry.role, err, data)
+		}
+		if entry.role == "gateway-tls" {
+			t.Log("distinct gateway/controller kernel peers passed actual certificate-verified TLS 1.3 mediation and TLS 1.2 refusal; tailnet address remains synthetic")
 		}
 	}
 	// Filesystem labels alone cannot authenticate the serving process. Give the
@@ -162,17 +167,25 @@ func TestNativeGatewayPeerChild(t *testing.T) {
 	} else if role == "foreign-controller" {
 		controllerUID = 990
 		want = 503
-	} else if role != "gateway" {
+	} else if role != "gateway" && role != "gateway-tls" {
 		t.Fatal("unknown child role")
 	}
 	if os.Geteuid() != uid {
 		t.Fatal("client kernel identity")
 	}
-	proxy, closeProxy, err := NewProxy(Config{Origin: "https://home.example.test:8787", Socket: socket, ControllerUID: controllerUID, AccessGID: 993})
+	origin := "https://home.example.test:8787"
+	if role == "gateway-tls" {
+		origin = "https://example.com:8787"
+	}
+	proxy, closeProxy, err := NewProxy(Config{Origin: origin, Socket: socket, ControllerUID: controllerUID, AccessGID: 993})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer closeProxy()
+	if role == "gateway-tls" {
+		nativeGatewayTLS(t, proxy, origin)
+		return
+	}
 	request := httptest.NewRequest("GET", "/api/v1/healthz", nil)
 	request.Host = "home.example.test:8787"
 	request.RemoteAddr = "100.64.0.2:12345"
@@ -184,5 +197,51 @@ func TestNativeGatewayPeerChild(t *testing.T) {
 	proxy.ServeHTTP(response, request)
 	if response.Code != want || (want == 200 && response.Body.String() != "qualified peer") {
 		t.Fatal("peer mediation status", strconv.Itoa(response.Code))
+	}
+}
+
+// Real loopback TLS and kernel Unix peers, with a synthetic tailnet address.
+// Certificate file ownership, installed services and overlay ACLs are separate.
+func nativeGatewayTLS(t *testing.T, proxy http.Handler, origin string) {
+	t.Helper()
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS == nil || r.TLS.Version != tls.VersionTLS13 {
+			t.Error("missing actual TLS 1.3 connection state")
+		}
+		r.RemoteAddr = "100.64.0.2:12345"
+		proxy.ServeHTTP(w, r)
+	}))
+	server.TLS = &tls.Config{MinVersion: tls.VersionTLS13, MaxVersion: tls.VersionTLS13}
+	server.StartTLS()
+	defer server.Close()
+	roots := x509.NewCertPool()
+	roots.AddCert(server.Certificate())
+	transport := &http.Transport{Proxy: nil, TLSClientConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS13, MaxVersion: tls.VersionTLS13}, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{Timeout: time.Second}).DialContext(ctx, "tcp", server.Listener.Addr().String())
+	}}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: 3 * time.Second}
+	request, err := http.NewRequest("GET", origin+"/api/v1/healthz", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Forwarded", "for=100.64.0.99;proto=http")
+	request.Header.Set(clientAddressHeader, "100.64.0.99")
+	request.Header.Set(clientTLSHeader, "unsafe")
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal("verified TLS gateway request", err)
+	}
+	body, readErr := io.ReadAll(io.LimitReader(response.Body, 4096))
+	response.Body.Close()
+	if readErr != nil || response.StatusCode != 200 || string(body) != "qualified peer" || response.TLS == nil || response.TLS.Version != tls.VersionTLS13 || len(response.TLS.VerifiedChains) == 0 {
+		t.Fatal("TLS/peer mediation failed", response.StatusCode, string(body), readErr)
+	}
+	legacy := transport.Clone()
+	legacy.TLSClientConfig.MinVersion, legacy.TLSClientConfig.MaxVersion = tls.VersionTLS12, tls.VersionTLS12
+	defer legacy.CloseIdleConnections()
+	if response, err := (&http.Client{Transport: legacy, Timeout: 3 * time.Second}).Get(origin + "/api/v1/healthz"); err == nil {
+		response.Body.Close()
+		t.Fatal("TLS 1.2 handshake was accepted")
 	}
 }

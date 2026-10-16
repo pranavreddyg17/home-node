@@ -32,5 +32,8 @@
     "Physical guest filesystem consistency, production disk lifecycle, backup, cross-VM isolation, performance and release qualification remain unverified.",
     "Overall workflow and artifact retention were still in progress when the log snapshot was captured."
   ],
-  "releaseQualified": false
+  "releaseQualified": false,
+  "jobConclusion": "success",
+  "workflowConclusion": "success",
+  "finalLogSHA256": "90419a236ca66915bc2ffffc07cdf4a6803deffcb779f2f06f3af95cebfba8d2"
 }

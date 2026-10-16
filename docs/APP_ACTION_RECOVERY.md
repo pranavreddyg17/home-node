@@ -114,3 +114,7 @@ authority are preserved rather than overwritten by an older completion.
 `maintenance_stop_test.go` exercise these rules with controlled runtime replies.
 They do not qualify installed VM shutdown, physical power loss, or the complete
 owner-facing recovery workflow. Those still need installed-system evidence.
+
+The full development guest-image workflow subsequently completed successfully
+for both Files and video. The evidence record retains the original snapshot
+boundary and adds the final job/workflow conclusions and final log digest.
