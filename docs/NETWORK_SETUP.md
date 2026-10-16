@@ -42,7 +42,10 @@ matching DNS name and matching listener/origin ports. It never transmits the key
 or emits its contents. The installed `homenode-gateway` runs the same checks before opening its
 HTTPS listener and authenticates the private controller socket using kernel
 peer credentials. The controller listens only on that Unix socket and cannot
-read the gateway key. Legacy direct HTTPS `serve` also checks the identity.
+read the gateway key. Legacy direct HTTPS `serve` also checks the identity and
+uses the same device-bound listener and interface health watcher. It does not
+provide the dedicated gateway's process separation and is not the installed
+production topology. Explicit development mode remains IPv4 loopback only.
 
 The dedicated production gateway additionally requires the configured IPv4
 address on an up, point-to-point kernel `tailscale0` interface. It binds the

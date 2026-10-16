@@ -320,7 +320,11 @@ func serve(args []string) {
 		listener, err = listenControllerProxy(*controllerSocket, uint32(*bridgeGID))
 	} else {
 		var rawListener net.Listener
-		rawListener, err = net.Listen("tcp", net.JoinHostPort(*address, strconv.Itoa(*port)))
+		if *dev {
+			rawListener, err = net.Listen("tcp4", net.JoinHostPort(*address, strconv.Itoa(*port)))
+		} else {
+			rawListener, err = networkcheck.ListenTailnet(context.Background(), networkcheck.Config{Bind: *address, Port: *port, Origin: *origin})
+		}
 		if err == nil {
 			listener, err = connectionbudget.New(rawListener, connectionbudget.DefaultTotal, connectionbudget.DefaultPerAddress)
 			if err != nil {
