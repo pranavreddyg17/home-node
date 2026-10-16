@@ -33,6 +33,11 @@ checks. The revocation fixture directly updates its seeded device record; it
 does not exercise owner approval, active download termination or overlay ACL
 propagation.
 
+The workflow also includes a bounded 15-second request-object fuzz run with two
+workers and triggers on parser changes. That check exercises ordinary JSON
+request parsing; it is not sustained protocol fuzzing, an independent security
+review or evidence for the supervisor/guest protocol gates.
+
 [Retained gateway TLS evidence](evidence/gateway-tls-e1810b8.json) records the
 source revision, successful workflow/job, log digest, assertions and limits.
 This qualifies those component paths at that source only.

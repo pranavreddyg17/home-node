@@ -7,6 +7,7 @@ on:
       - 'internal/networkcheck/**'
       - 'internal/control/gateway*'
       - 'internal/control/server.go'
+      - 'internal/control/request_json*'
       - 'cmd/homenode-gateway/**'
       - 'go.mod'
       - 'go.sum'
@@ -17,6 +18,7 @@ on:
       - 'internal/networkcheck/**'
       - 'internal/control/gateway*'
       - 'internal/control/server.go'
+      - 'internal/control/request_json*'
       - 'cmd/homenode-gateway/**'
       - 'go.mod'
       - 'go.sum'
@@ -41,6 +43,8 @@ jobs:
         run: go test -race ./internal/gatewaytransport ./internal/networkcheck ./cmd/homenode-gateway
       - name: Test production controller authorization over actual TLS
         run: go test -race ./internal/control -run '^TestProductionController(ThroughAuthenticatedUnixGateway|AuthorizationOverRealGatewayTLS)$' -count=1 -v
+      - name: Fuzz bounded request object parsing
+        run: go test ./internal/control -run '^$' -fuzz '^FuzzRequestObject$' -fuzztime=15s -parallel=2
       - name: Test protected root certificate admission
         run: sudo "$(command -v go)" test ./internal/networkcheck -run '^TestRootTLS(FileAdmission|RejectsNamedReaderACL)$' -count=1 -v
       - name: Test actual TLS across distinct kernel identities
