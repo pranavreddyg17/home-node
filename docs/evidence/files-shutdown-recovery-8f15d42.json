@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "sourceRevision": "8f15d42f9ac0dfbc683714f5130f72fdedaf4d8c",
+  "workflowRun": 38844381680,
+  "workflowURL": "https://github.com/pranavreddyg17/home-node/actions/runs/38844381680",
+  "jobID": 116791461785,
+  "jobStatusAtCapture": "in_progress",
+  "jobConclusionAtCapture": null,
+  "step": "Exercise Files image through reserved identity manager",
+  "stepConclusion": "success",
+  "stepCompletedAt": "2026-10-16T03:21:28Z",
+  "logSnapshotSHA256": "90419a236ca66915bc2ffffc07cdf4a6803deffcb779f2f06f3af95cebfba8d2",
+  "logSnapshotBoundary": "Downloaded job log after native test completion while development disk artifact upload remained in progress; not a claim that the whole job completed.",
+  "imageSHA256": "28a13bb06caf1d488f39e3675ec7806212c56f5937db4295d54954932f1bc120",
+  "environment": "Disposable Ubuntu 24.04 native KVM/libvirt CI; reserved identities and temporary fixture-owned image, channel and volume paths",
+  "tests": [
+    "TestNativeReservedFilesManagerLaunch"
+  ],
+  "qualifiedScope": [
+    "Actual unsigned development Files guest uses the production Linux backend, reserved identity Manager and socket provenance checks.",
+    "After first cooperative guest shutdown, a SQLite trigger rejects the original runtime operation completion write; the runtime remains journaled as shutting-down.",
+    "After removing the trigger, production supervisor audit observes domain exit and completes the original owner/revision/deadline-bound shutdown journal.",
+    "Replaying the original shutdown operation returns stopped without another guest launch.",
+    "The fixture restarts the same instance and reuses its transfer process; actual unprivileged transfer round trips and foreign-role refusals pass before and after recovery.",
+    "The surrounding fixture completes its 1 GiB object round trip, reconnect/replay, disk-full refusal and retained-object verification across the two launches."
+  ],
+  "limitations": [
+    "Injected database completion failure, not physical power loss or a real dropped network packet.",
+    "Direct Manager fixture with temporary qualified root paths, not installed controller/gateway/systemd confinement or HTTPS/passkey UI.",
+    "Controller/supervisor journal convergence is separately covered by a simulated-runtime integration test, not combined with this actual guest fixture.",
+    "Unsigned development image and ephemeral fixture catalog signing do not qualify a trusted release.",
+    "Physical guest filesystem consistency, production disk lifecycle, backup, cross-VM isolation, performance and release qualification remain unverified.",
+    "Overall workflow and artifact retention were still in progress when the log snapshot was captured."
+  ],
+  "releaseQualified": false
+}

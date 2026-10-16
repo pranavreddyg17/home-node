@@ -95,10 +95,16 @@ The opt-in Linux `TestNativeReservedFilesManagerLaunch` fixture now injects a
 completion-persistence failure after the actual Files guest's first shutdown.
 It retains the production Linux backend, reserved identities and socket
 provenance checks, then requires audit recovery and stable replay before the
-second launch and retained-file transfer checks. This is a pending native gate
-until its source revision passes the development guest-image workflow; local
-Linux compilation alone does not establish that result. The fixture must run
+second launch and retained-file transfer checks. Local Linux compilation alone does not qualify this native gate. The fixture must run
 only on the disposable Linux runner, never the owner's workstation.
+
+[Retained native recovery evidence](evidence/files-shutdown-recovery-8f15d42.json)
+records that this test passed at source `8f15d42` in run 38844381680. The log
+confirms the injected completion failure, audit recovery, stable replay and
+subsequent restart/transfer checks. The test step succeeded; the full job was
+still uploading its development disk artifact when this log snapshot was
+captured. This qualifies the direct Manager recovery path within that fixture,
+not installed controller/UI recovery or a production release.
 
 The operation and app transition commit in one transaction. A failed metadata
 write rolls back both. Superseding app intent and interrupted operation
