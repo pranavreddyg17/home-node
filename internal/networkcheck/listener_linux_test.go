@@ -4,12 +4,71 @@ package networkcheck
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"golang.org/x/sys/unix"
 )
+
+// Invoked only inside the disposable namespace fixture, after dropping all
+// capabilities and switching UID. The veth stands in for TUN ingress; this
+// exercises the production socket binding, not Tailscale identity admission.
+func TestIngressNamespaceListenerChild(t *testing.T) {
+	mode := os.Getenv("HOMENODE_INGRESS_FIXTURE_CHILD")
+	if mode == "" {
+		t.Skip("disposable Linux namespace fixture only")
+	}
+	if os.Geteuid() != 65534 || (mode != "bound" && mode != "control") {
+		t.Fatal("fixture child requires its unprivileged identity and known mode")
+	}
+	status, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, capability := range []string{"CapInh:", "CapPrm:", "CapEff:", "CapBnd:", "CapAmb:"} {
+		found := false
+		for line := range strings.SplitSeq(string(status), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) == 2 && fields[0] == capability {
+				found = fields[1] == "0000000000000000"
+			}
+		}
+		if !found {
+			t.Fatalf("fixture retained or could not verify %s", capability)
+		}
+	}
+	var listener net.Listener
+	if mode == "bound" {
+		device, lookupErr := net.InterfaceByName("tailscale0")
+		if lookupErr != nil {
+			t.Fatal(lookupErr)
+		}
+		listener, err = listenOnDevice(context.Background(), "100.100.1.2:0", device)
+	} else {
+		listener, err = net.Listen("tcp4", "100.100.1.2:0")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	fmt.Printf("READY %s\n", listener.Addr())
+	for {
+		connection, err := listener.Accept()
+		if err != nil {
+			t.Fatal(err)
+		}
+		connection.SetWriteDeadline(time.Now().Add(time.Second))
+		_, err = connection.Write([]byte("homenode-ingress\n"))
+		connection.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 func TestDeviceBoundListener(t *testing.T) {
 	device, err := net.InterfaceByName("lo")

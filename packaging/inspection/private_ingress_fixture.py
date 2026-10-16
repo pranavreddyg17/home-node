@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""Destructive networking is confined to fresh disposable Linux namespaces.
+
+Run only in disposable CI with an explicitly opted-in, compiled Go test binary.
+The veth overlay surrogate proves socket ingress enforcement, not Tailscale.
+"""
+import argparse
+import os
+import pathlib
+import select
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+def run(*args):
+    return subprocess.run(args, check=True, capture_output=True, text=True, timeout=15).stdout
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--test-binary", required=True)
+    args = parser.parse_args()
+    if sys.platform != "linux" or os.geteuid() != 0 or os.environ.get("HOMENODE_PRIVATE_INGRESS_FIXTURE") != "1":
+        raise SystemExit("requires explicitly opted-in root on disposable Linux")
+    server, peer = f"hn-is-{os.getpid()}", f"hn-ip-{os.getpid()}"
+    namespaces, children = [], []
+    with tempfile.TemporaryDirectory(prefix="homenode-ingress-") as temporary:
+        directory = pathlib.Path(temporary)
+        directory.chmod(0o755)
+        binary = directory / "networkcheck.test"
+        shutil.copyfile(args.test_binary, binary)
+        binary.chmod(0o755)
+        try:
+            for namespace in (server, peer):
+                run("ip", "netns", "add", namespace)
+                namespaces.append(namespace)
+                run("ip", "-n", namespace, "link", "set", "lo", "up")
+                # Disable reverse-path filtering only in these fresh namespaces
+                # so the LAN source test reaches the socket's own enforcement.
+                run("ip", "netns", "exec", namespace, "sysctl", "-qw", "net.ipv4.conf.all.rp_filter=0", "net.ipv4.conf.default.rp_filter=0")
+            for interface, peer_interface, subnet in (("tailscale0", "overlay", "10.210.1"), ("lan", "lan", "10.210.2")):
+                run("ip", "-n", server, "link", "add", interface, "type", "veth", "peer", "name", peer_interface, "netns", peer)
+                for namespace, name, host in ((server, interface, "1"), (peer, peer_interface, "2")):
+                    run("ip", "-n", namespace, "address", "add", f"{subnet}.{host}/30", "dev", name)
+                    run("ip", "-n", namespace, "link", "set", name, "up")
+            run("ip", "-n", server, "address", "add", "100.100.1.2/32", "dev", "tailscale0")
+            run("ip", "-n", peer, "address", "add", "100.100.2.2/32", "dev", "lo")
+            run("ip", "-n", server, "route", "add", "100.100.2.2/32", "via", "10.210.2.2", "dev", "lan")
+
+            ports = {}
+            for mode in ("bound", "control"):
+                command = ["ip", "netns", "exec", server, "setpriv", "--reuid=65534", "--regid=65534", "--clear-groups", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "env", f"HOMENODE_INGRESS_FIXTURE_CHILD={mode}", str(binary), "-test.run=^TestIngressNamespaceListenerChild$", "-test.timeout=60s"]
+                child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                children.append(child)
+                if not select.select([child.stdout], [], [], 10)[0]:
+                    raise RuntimeError(f"{mode} listener readiness timed out")
+                line = child.stdout.readline().strip()
+                if not line.startswith("READY 100.100.1.2:"):
+                    raise RuntimeError(f"{mode} listener did not start: {line}")
+                ports[mode] = int(line.rsplit(":", 1)[1])
+
+            client = """import socket,sys
+s=socket.socket()
+s.settimeout(1)
+s.bind((sys.argv[1],0))
+try:
+ s.connect(('100.100.1.2',int(sys.argv[2])))
+ assert s.recv(100)==b'homenode-ingress\\n'
+ print('accepted')
+except (TimeoutError,ConnectionRefusedError,OSError):
+ print('blocked')
+finally:
+ s.close()
+"""
+            cases = (("overlay", "10.210.1.1", "10.210.1.2", "accepted"), ("lan", "10.210.2.1", "10.210.2.2", "blocked"), ("lan", "10.210.2.1", "100.100.2.2", "blocked"), ("overlay", "10.210.1.1", "10.210.1.2", "accepted"))
+            for interface, gateway, source, expected in cases:
+                run("ip", "-n", peer, "route", "replace", "100.100.1.2/32", "via", gateway, "dev", interface)
+                # Both listeners must remain alive: a dead bound listener is
+                # never acceptable evidence for a negative connection attempt.
+                if any(child.poll() is not None for child in children):
+                    raise RuntimeError("listener exited during ingress checks")
+                for mode in ("control", "bound"):
+                    result = run("ip", "netns", "exec", peer, sys.executable, "-c", client, source, str(ports[mode])).strip()
+                    want = "accepted" if mode == "control" else expected
+                    if result != want:
+                        raise RuntimeError(f"{mode} {interface} source={source}: {result}, expected {want}")
+                    print(f"PASS {mode} ingress={interface} source={source}: {result}", flush=True)
+            print("PASS unprivileged device-bound ingress without host firewall rules", flush=True)
+        finally:
+            for child in children:
+                child.terminate()
+                try:
+                    child.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.communicate(timeout=5)
+            for namespace in reversed(namespaces):
+                run("ip", "netns", "delete", namespace)
+
+
+if __name__ == "__main__":
+    main()

@@ -40,6 +40,19 @@ They do not replace the namespace, interface lifecycle or installed-service
 qualification below. No native Linux execution result is retained yet for
 this change; macOS checks only compile the Linux test binary.
 
+The focused gateway workflow additionally compiles the test binary and runs
+`packaging/inspection/private_ingress_fixture.py` on disposable Ubuntu. Its
+explicit root opt-in creates two fresh network namespaces, drops all
+capabilities and switches the listener children to UID/GID 65534. Veth
+interfaces represent permitted and hostile ingress. The device-bound listener
+must accept the permitted path before and after refusing LAN and routed CGNAT
+sources; an unbound control must accept all those paths. The namespaces have
+no Tailscale firewall rules. Reverse-path filtering is disabled only inside
+the fixture namespaces to ensure it cannot hide a missing socket restriction.
+This uses the production socket-binding helper with a veth surrogate, not
+production TUN/daemon admission, installed services, TLS or actual tailnet ACLs.
+Native execution remains pending until a retained successful run exists.
+
 The baseline must enforce overlay-only ingress to the configured HTTPS port
 without granting the gateway firewall administration or daemon administration.
 Qualify the kernel-enforced listener restriction and its service lifecycle. A startup
