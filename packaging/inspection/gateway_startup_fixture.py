@@ -54,7 +54,9 @@ def main():
     properties = source_hardening(args.source_service)
     users, groups, units, children = [], [], [], []
     namespace = f"hn-gs-{os.getpid()}"
+    peer_namespace = f"hn-gp-{os.getpid()}"
     namespace_created = False
+    peer_namespace_created = False
     with tempfile.TemporaryDirectory(prefix="homenode-gateway-startup-") as temporary:
         directory = pathlib.Path(temporary)
         directory.chmod(0o755)
@@ -116,6 +118,41 @@ while True:
             run("ip", "netns", "exec", namespace, "ip", "tuntap", "add", "dev", "tailscale0", "mode", "tun")
             run("ip", "-n", namespace, "address", "add", "100.100.1.2/32", "dev", "tailscale0")
             run("ip", "-n", namespace, "link", "set", "tailscale0", "up")
+            run("ip", "netns", "add", peer_namespace)
+            peer_namespace_created = True
+            run("ip", "-n", peer_namespace, "link", "set", "lo", "up")
+            run("ip", "netns", "exec", peer_namespace, "ip", "tuntap", "add", "dev", "tailscale0", "mode", "tun")
+            run("ip", "-n", peer_namespace, "address", "add", "100.100.1.3/32", "dev", "tailscale0")
+            run("ip", "-n", peer_namespace, "link", "set", "tailscale0", "up")
+            run("ip", "-n", namespace, "link", "add", "carrier", "type", "veth", "peer", "name", "carrier", "netns", peer_namespace)
+            for ns, last, destination in ((namespace, "1", "100.100.1.3"), (peer_namespace, "2", "100.100.1.2")):
+                run("ip", "-n", ns, "link", "set", "tailscale0", "mtu", "1280")
+                run("ip", "-n", ns, "address", "add", f"10.212.0.{last}/30", "dev", "carrier")
+                run("ip", "-n", ns, "link", "set", "carrier", "up")
+                run("ip", "-n", ns, "route", "add", f"{destination}/32", "dev", "tailscale0")
+            # Test transport only: copy IPv4 frames between two kernel TUNs
+            # over an isolated veth carrier. No production VPN implementation
+            # or real tailnet enrollment is supplied by this helper.
+            relay_script = """import fcntl,os,select,socket,struct,sys
+tun=os.open('/dev/net/tun',os.O_RDWR)
+fcntl.ioctl(tun,0x400454ca,struct.pack('16sH22x',b'tailscale0',0x1001))
+udp=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+udp.bind((sys.argv[1],28991))
+udp.connect((sys.argv[2],28991))
+print('RELAY-READY',flush=True)
+while True:
+ readable,_,_=select.select([tun,udp],[],[],1)
+ if tun in readable:
+  packet=os.read(tun,65535)
+  if packet and packet[0]>>4==4: udp.send(packet)
+ if udp in readable:
+  packet=udp.recv(65535)
+  if packet and packet[0]>>4==4: os.write(tun,packet)
+"""
+            for ns, local, remote in ((namespace, "10.212.0.1", "10.212.0.2"), (peer_namespace, "10.212.0.2", "10.212.0.1")):
+                relay = subprocess.Popen(["ip", "netns", "exec", ns, sys.executable, "-u", "-c", relay_script, local, remote], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                children.append(relay)
+                ready(relay, "RELAY-READY")
 
             def command(case):
                 unit = f"homenode-gateway-startup-{os.getpid()}-{case}.service"
@@ -129,6 +166,23 @@ while True:
             listeners = run("ip", "netns", "exec", namespace, "ss", "-ltn")
             if "100.100.1.2%tailscale0:8787" not in listeners and "100.100.1.2:8787" not in listeners:
                 raise RuntimeError("gateway announced readiness without configured TCP listener")
+            client_script = """import http.client,socket,ssl,sys
+context=ssl.create_default_context(cafile=sys.argv[1])
+context.minimum_version=context.maximum_version=ssl.TLSVersion.TLSv1_3
+for path,host,expected in [('/api/v1/healthz','home.example.ts.net:8787',200),('/api/v1/files','home.example.ts.net:8787',401),('/api/v1/healthz','foreign.example.ts.net:8787',403)]:
+ with socket.create_connection(('100.100.1.2',8787),timeout=5) as raw:
+  with context.wrap_socket(raw,server_hostname='home.example.ts.net') as connection:
+   connection.sendall(('GET '+path+' HTTP/1.1\\r\\nHost: '+host+'\\r\\nConnection: close\\r\\n\\r\\n').encode())
+   response=http.client.HTTPResponse(connection)
+   response.begin()
+   assert response.status==expected,(path,response.status,expected)
+   response.read(65536)
+   print('HTTPS-PASS',path,expected,flush=True)
+"""
+            results = run("ip", "netns", "exec", peer_namespace, sys.executable, "-c", client_script, str(directory / "ca.crt"))
+            if results.count("HTTPS-PASS") != 3:
+                raise RuntimeError(f"actual HTTPS controller checks incomplete: {results}")
+            print("PASS actual TLS 1.3 over kernel TUN through gateway/controller executables: health, unauthenticated Files refusal and foreign Host refusal", flush=True)
             run("ip", "-n", namespace, "address", "delete", "100.100.1.2/32", "dev", "tailscale0")
             output, _ = gateway.communicate(timeout=15)
             if gateway.returncode == 0 or "private ingress interface changed" not in output:
@@ -171,6 +225,8 @@ while True:
                     child.communicate(timeout=5)
             if namespace_created:
                 run("ip", "netns", "delete", namespace)
+            if peer_namespace_created:
+                run("ip", "netns", "delete", peer_namespace)
             for name in reversed(users):
                 run("userdel", name)
             for name in reversed(groups):
