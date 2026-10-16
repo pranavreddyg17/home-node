@@ -32,6 +32,11 @@ confinement, real private-network devices, passkeys, revocation during live
 streams and physical-host operation still need end-to-end evidence. Passing
 component tests does not satisfy those release gates.
 
+The [private ingress qualification gate](PRIVATE_INGRESS_QUALIFICATION.md)
+separately tracks host firewall assumptions, spoofed CGNAT sources on LAN
+ingress and interface lifecycle. Running daemon identity checks do not verify
+those boundaries.
+
 The focused `Gateway security boundary` workflow runs these transport,
 certificate and controller checks on disposable Ubuntu, including explicitly
 opted-in distinct-UID children. It has independent concurrency and does not
