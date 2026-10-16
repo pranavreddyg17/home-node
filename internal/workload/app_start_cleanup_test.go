@@ -40,7 +40,8 @@ func TestUncertainStartupTeardownUsesOnlyIntendedInstanceAndRevision(t *testing.
 			b := &uncertainStartBackend{testBackend: original, scenario: scenario}
 			s.Backend = b
 			ctx := context.Background()
-			op, err := s.AppAction(ctx, device, state.Random(), "files", "start")
+			key := state.Random()
+			op, err := s.AppAction(ctx, device, key, "files", "start")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -63,6 +64,18 @@ func TestUncertainStartupTeardownUsesOnlyIntendedInstanceAndRevision(t *testing.
 			}
 			if err = s.processApp(ctx); err != nil || len(b.requests) != 2 {
 				t.Fatal("uncertain start retried automatically", b.requests, err)
+			}
+			if scenario == "cleanup-fails" {
+				if _, err = s.AppAction(ctx, device, state.Random(), "files", "start"); !errors.Is(err, ErrConflict) {
+					t.Fatal("new start replaced unresolved cleanup", err)
+				}
+				replay, err := s.AppAction(ctx, device, key, "files", "start")
+				if err != nil || replay.ID != op.ID {
+					t.Fatal("uncertain operation could not be observed by replay", replay, err)
+				}
+				if _, err = s.AppAction(ctx, device, state.Random(), "files", "stop"); err != nil {
+					t.Fatal("explicit cleanup stop was refused", err)
+				}
 			}
 		})
 	}

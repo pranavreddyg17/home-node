@@ -91,6 +91,17 @@ func (s *Service) appActionInTransaction(tx *sql.Tx, device, key, name, action s
 	if err := admission(tx); err != nil {
 		return Operation{}, errors.Join(ErrConflict, err)
 	}
+	// An uncertain runtime effect must be stopped or reconciled before a new
+	// start can replace its ownership record. Explicit stop remains available.
+	if action == "start" {
+		var uncertain int
+		if err := tx.QueryRow("SELECT count(*) FROM apps JOIN operations ON operations.id=apps.operation_id WHERE apps.workload=? AND operations.state='requires-action'", name).Scan(&uncertain); err != nil {
+			return Operation{}, err
+		}
+		if uncertain != 0 {
+			return Operation{}, ErrConflict
+		}
+	}
 	if phase == "stopping" || action == "start" && (phase == "running" || phase == "starting") {
 		return Operation{}, ErrConflict
 	}
