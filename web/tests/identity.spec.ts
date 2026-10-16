@@ -565,7 +565,7 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await expect(page.getByRole('alert')).toBeVisible()
   await page.reload()
   await page.locator('nav').getByRole('button', { name: 'AI', exact: false }).click()
-  await page.getByRole('button', { name: 'New conversation' }).click()
+  await page.getByRole('button', { name: 'Retry conversation creation', exact: true }).click()
   await expect(page.getByLabel('Message', { exact: true })).toBeVisible()
   const conversationId = await page.locator('.conversation-picker select').inputValue()
   expect(conversationId).toBe(createdConversationId)

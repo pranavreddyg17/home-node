@@ -17,6 +17,13 @@ intent only after acknowledgment. This marker contains no messages. A later
 intentional creation gets a fresh key. Message generation separately retains
 its device-bound retry key without storing prompt content locally.
 
+An unacknowledged creation is labelled Retry conversation creation after reload.
+If it cannot be resolved, the owner may confirm Forget pending request after
+loading the conversation list. That clears only the matching local marker; it
+does not delete a server conversation or dispatch another creation. Cancelling
+keeps the marker. A marker changed by another window is preserved and requires
+reopening AI before retrying the local action.
+
 Conversation-list reads share one in-flight request and abort when leaving AI.
 Read failures are separate from action errors. An acknowledged creation remains
 known even if its subsequent list refresh fails. History distinguishes loading,

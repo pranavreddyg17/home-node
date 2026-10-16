@@ -100,6 +100,7 @@ test('AI history failures can be retried and switching conversations aborts obso
 test('AI list refresh failures stay separate from creation and leaving aborts the read', async ({ page }) => {
   let unavailable = true, hold = false, created = false, mutations = 0, held: Route | undefined, cancelled = false
   const conversation = { id: 'created-fixture', title: 'Created fixture', createdAt: 1, deletionPending: false, deletionRequiresAction: false }
+  const pendingMarker = 'homenode-conversation-create:fixture-owner'
   page.on('requestfailed', request => { if (new URL(request.url()).pathname === '/api/v1/ai/conversations') cancelled = true })
   await page.route('**/api/v1/**', route => {
     const path = new URL(route.request().url()).pathname
@@ -117,12 +118,21 @@ test('AI list refresh failures stay separate from creation and leaving aborts th
     return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Unused fixture endpoint' } } })
   })
   await page.goto('/')
+  await page.evaluate(marker => localStorage.setItem(marker, JSON.stringify({ key: crypto.randomUUID(), title: 'Unacknowledged fixture' })), pendingMarker)
   await page.locator('nav').getByRole('button', { name: 'AI', exact: false }).click()
   await expect(page.getByRole('alert')).toContainText('Conversation list is unavailable.')
-  await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Retry conversation creation', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Forget pending request', exact: true })).toBeDisabled()
   unavailable = false
   await page.getByRole('button', { name: 'Refresh conversations', exact: true }).click()
   await expect(page.getByRole('alert')).toHaveCount(0)
+  page.once('dialog', dialog => dialog.dismiss())
+  await page.getByRole('button', { name: 'Forget pending request', exact: true }).click()
+  expect(await page.evaluate(marker => localStorage.getItem(marker), pendingMarker)).not.toBeNull()
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: 'Forget pending request', exact: true }).click()
+  expect(await page.evaluate(marker => localStorage.getItem(marker), pendingMarker)).toBeNull()
+  expect(mutations).toBe(0)
   await page.getByRole('button', { name: 'New conversation', exact: true }).click()
   await expect(page.getByRole('alert')).toHaveCount(1)
   await expect(page.getByRole('alert')).toContainText('Conversation list is unavailable.')
