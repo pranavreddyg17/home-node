@@ -81,6 +81,16 @@ stopped observations use the same atomic settlement and stale-snapshot guards
 as startup. The browser's Refresh status retrieves the recovered state.
 Physical guest shutdown and disk consistency remain unqualified.
 
+`app_runtime_recovery_test.go` connects the production controller workload
+service and supervisor Manager with separate SQLite journals, fixture immutable
+image bytes, a simulated runtime backend and the actual guest file store. It
+checks that lost completion retains the controller fence before audit, audit
+finishes the original native receipt, live observation settles the controller
+operation, original-key replay remains stable and an explicit restart can read
+the retained file. It asserts one shutdown and zero forced stops. This is
+cross-layer logic evidence; it does not execute QEMU, prove guest filesystem
+flush behavior, exercise installed services, or use private HTTPS/passkeys.
+
 The operation and app transition commit in one transaction. A failed metadata
 write rolls back both. Superseding app intent and interrupted operation
 authority are preserved rather than overwritten by an older completion.
