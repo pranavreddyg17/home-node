@@ -2,6 +2,7 @@ package workload
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -13,6 +14,47 @@ type uncertainStartBackend struct {
 	*testBackend
 	scenario string
 	requests []supervisor.Request
+}
+
+func TestExplicitCleanupSettlesOnlyItsLinkedUncertainStart(t *testing.T) {
+	for _, confirmed := range []bool{false, true} {
+		s, original, device := service(t)
+		b := &uncertainStartBackend{testBackend: original, scenario: "cleanup-fails"}
+		s.Backend = b
+		ctx := context.Background()
+		start, err := s.AppAction(ctx, device, state.Random(), "files", "start")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = s.processApp(ctx); err != nil {
+			t.Fatal(err)
+		}
+		stop, err := s.AppAction(ctx, device, state.Random(), "files", "stop")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var intent appIntent
+		if err = json.Unmarshal(stop.Result, &intent); err != nil || intent.PreviousOperationID != start.ID {
+			t.Fatal("cleanup lost predecessor", intent, err)
+		}
+		if confirmed {
+			b.scenario = "lost-reply"
+		}
+		if err = s.processApp(ctx); err != nil {
+			t.Fatal(err)
+		}
+		previous, err := s.Operation(ctx, device, start.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := "requires-action"
+		if confirmed {
+			expected = "interrupted"
+		}
+		if previous.State != expected {
+			t.Fatal("cleanup settlement was not tied to confirmation", previous, confirmed)
+		}
+	}
 }
 
 func (b *uncertainStartBackend) Apply(ctx context.Context, r supervisor.Request) (supervisor.Instance, error) {

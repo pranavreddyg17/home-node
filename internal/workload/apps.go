@@ -25,11 +25,12 @@ type App struct {
 	UpdatedAt         int64  `json:"updatedAt"`
 }
 type appIntent struct {
-	CooperativeStop bool   `json:"cooperativeStop,omitempty"`
-	Revision        int64  `json:"revision"`
-	Workload        string `json:"workload"`
-	Action          string `json:"action"`
-	InstanceID      string `json:"instanceId"`
+	PreviousOperationID string `json:"previousOperationId,omitempty"`
+	CooperativeStop     bool   `json:"cooperativeStop,omitempty"`
+	Revision            int64  `json:"revision"`
+	Workload            string `json:"workload"`
+	Action              string `json:"action"`
+	InstanceID          string `json:"instanceId"`
 }
 
 func (s *Service) Apps(ctx context.Context) ([]App, error) {
@@ -73,9 +74,9 @@ func (s *Service) appActionInTransaction(tx *sql.Tx, device, key, name, action s
 		return Operation{}, ErrUnavailable
 	}
 	var op Operation
-	var phase, instance string
+	var phase, instance, previousOperation string
 	var revision int64
-	err := tx.QueryRow("SELECT instance_id,state,revision FROM apps WHERE workload=?", name).Scan(&instance, &phase, &revision)
+	err := tx.QueryRow("SELECT instance_id,state,revision,coalesce(operation_id,'') FROM apps WHERE workload=?", name).Scan(&instance, &phase, &revision, &previousOperation)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return op, err
 	}
@@ -106,7 +107,17 @@ func (s *Service) appActionInTransaction(tx *sql.Tx, device, key, name, action s
 	if phase == "stopping" || action == "start" && (phase == "running" || phase == "starting") {
 		return Operation{}, ErrConflict
 	}
-	intent, _ := json.Marshal(appIntent{Workload: name, Action: action, InstanceID: instance, Revision: revision + 1, CooperativeStop: action == "stop" && phase == "running"})
+	intentData := appIntent{Workload: name, Action: action, InstanceID: instance, Revision: revision + 1, CooperativeStop: action == "stop" && phase == "running"}
+	if action == "stop" && previousOperation != "" {
+		var uncertain bool
+		if err := tx.QueryRow("SELECT EXISTS(SELECT 1 FROM operations WHERE id=? AND state='requires-action' AND kind IN('app.start','app.stop'))", previousOperation).Scan(&uncertain); err != nil {
+			return Operation{}, err
+		}
+		if uncertain {
+			intentData.PreviousOperationID = previousOperation
+		}
+	}
+	intent, _ := json.Marshal(intentData)
 	if _, err = tx.Exec("UPDATE operations SET result=? WHERE id=?", string(intent), op.ID); err != nil {
 		return op, err
 	}
@@ -254,6 +265,11 @@ func (s *Service) processAppKind(ctx context.Context, selectedKind string) error
 		}
 		if count != 1 {
 			return ErrConflict
+		}
+		if intent.Action == "stop" && intent.PreviousOperationID != "" {
+			if _, err = tx.Exec("UPDATE operations SET state='interrupted',updated_at=? WHERE id=? AND state='requires-action' AND kind IN('app.start','app.stop')", time.Now().Unix(), intent.PreviousOperationID); err != nil {
+				return err
+			}
 		}
 		return state.Event(tx, device, "operation.succeeded", opID, instance)
 	})

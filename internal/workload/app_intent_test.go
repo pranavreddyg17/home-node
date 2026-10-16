@@ -18,6 +18,8 @@ func TestInvalidAppIntentCannotReachRuntimeOrStarveValidIntent(t *testing.T) {
 		func(s string) string { return strings.Replace(s, `"revision":1`, `"revision":null`, 1) },
 		func(s string) string { return strings.Replace(s, `"action":"start"`, `"action":"inspect"`, 1) },
 		func(s string) string { return s[:len(s)-1] + `,"cooperativeStop":true}` },
+		func(s string) string { return s[:len(s)-1] + `,"previousOperationId":"invalid"}` },
+		func(s string) string { return s[:len(s)-1] + `,"previousOperationId":"` + state.Random() + `"}` },
 	} {
 		s, original, device := service(t)
 		ctx := context.Background()

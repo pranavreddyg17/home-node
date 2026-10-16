@@ -39,6 +39,8 @@ func parseAppIntent(payload, kind string) (appIntent, error) {
 			target = &intent.InstanceID
 		case "cooperativeStop":
 			target = &intent.CooperativeStop
+		case "previousOperationId":
+			target = &intent.PreviousOperationID
 		default:
 			return intent, ErrConflict
 		}
@@ -52,6 +54,9 @@ func parseAppIntent(payload, kind string) (appIntent, error) {
 		return intent, ErrConflict
 	}
 	if _, err = d.Token(); err != io.EOF {
+		return intent, ErrConflict
+	}
+	if seen["previousOperationId"] && (!guestproto.ValidID(intent.PreviousOperationID) || intent.Action != "stop") {
 		return intent, ErrConflict
 	}
 	if !seen["revision"] || !seen["workload"] || !seen["action"] || !seen["instanceId"] || intent.Revision < 1 || intent.Revision > 1<<53 || !guestproto.ValidID(intent.InstanceID) || (intent.Workload != "files" && intent.Workload != "ai") || (intent.Action != "start" && intent.Action != "stop") || kind != "app."+intent.Action || intent.CooperativeStop && intent.Action != "stop" {

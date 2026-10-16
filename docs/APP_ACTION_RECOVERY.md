@@ -34,6 +34,13 @@ invalid runtime observations do not settle the operation. A database failure
 rolls back both the app observation and operation settlement. Replaying the
 original key still returns the same operation and its recovered state.
 
+An explicit stop records its immediately preceding unresolved app operation in
+the durable stop intent. A confirmed stop settles that predecessor as
+interrupted in the same transaction as its own completion; a failed stop does
+not. This covers direct cleanup of an uncertain start. Recovery of longer
+chains after repeated cleanup failures still needs implementation and tests;
+the global maintenance check continues to reject any unresolved ancestors.
+
 The app status response includes a `requiresAttention` flag derived from its
 current operation. The browser retains this warning across reloads, disables
 Start and avoids polling a transition that cannot complete itself. This exposes
