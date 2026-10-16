@@ -90,6 +90,9 @@ func (s *Service) appActionInTransaction(tx *sql.Tx, device, key, name, action s
 	if err != nil || replay {
 		return op, err
 	}
+	if revision < 0 || revision >= 1<<53 {
+		return Operation{}, ErrConflict
+	}
 	if err := admission(tx); err != nil {
 		return Operation{}, errors.Join(ErrConflict, err)
 	}

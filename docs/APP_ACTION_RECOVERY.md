@@ -54,6 +54,17 @@ command. The browser cannot clear an operation directly. Uncertain shutdowns,
 invalid histories and unavailable runtime inspection still need host-side
 reconciliation; the complete guided repair workflow remains unfinished.
 
+A new command cannot increment a negative revision or a revision already at
+the protocol ceiling (`2^53`). Existing idempotency keys still return their
+original operation despite damaged current metadata. Rejected new commands
+roll back their operation insertion.
+
+The supervisor currently admits a fresh cooperative shutdown only from its
+running state. A runtime already shutting down cannot be given a new shutdown
+owner through this browser control. Exposing a retry button for that state
+would not implement recovery; resolving the original shutdown receipt and
+runtime state remains necessary.
+
 The operation and app transition commit in one transaction. A failed metadata
 write rolls back both. Superseding app intent and interrupted operation
 authority are preserved rather than overwritten by an older completion.

@@ -2,6 +2,7 @@ package workload
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/pranavreddyg17/home-node/internal/state"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestReconcileRejectsUnboundObservationWithoutClearingStopFence(t *testing.T) {
-	for _, scenario := range []string{"id", "workload", "revision-zero", "revision-overflow", "state"} {
+	for _, scenario := range []string{"id", "workload", "revision-zero", "revision-overflow", "state", "unavailable", "unconfigured"} {
 		t.Run(scenario, func(t *testing.T) {
 			s, original, device := service(t)
 			startFiles(t, s, device)
@@ -36,11 +37,17 @@ func TestReconcileRejectsUnboundObservationWithoutClearingStopFence(t *testing.T
 				}
 				return i
 			}}
+			if scenario == "unavailable" {
+				s.Backend.(*alteredAppReplyBackend).failure = errors.New("fixture inspection unavailable")
+			}
+			if scenario == "unconfigured" {
+				s.Backend = nil
+			}
 			if err = s.Reconcile(ctx); err != nil {
 				t.Fatal(err)
 			}
 			apps, err := s.Apps(ctx)
-			if err != nil || len(apps) != 1 || apps[0].State != "stopping" || apps[0].Revision != 2 {
+			if err != nil || len(apps) != 1 || apps[0].State != "stopping" || apps[0].Revision != 2 || !apps[0].RequiresAttention {
 				t.Fatal("invalid inspection cleared stop fence", apps, err)
 			}
 		})
