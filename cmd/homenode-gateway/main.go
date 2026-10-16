@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -115,10 +116,19 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	server := &http.Server{Handler: proxy, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13, SessionTicketsDisabled: true, GetCertificate: source.GetCertificate}}
+	slog.Info("HomeNode private gateway listening", "origin", *origin)
+	if err := servePrivateHTTPS(ctx, server, listener, 10*time.Second); err != nil {
+		fatal(err)
+	}
+}
+
+func servePrivateHTTPS(parent context.Context, server *http.Server, listener net.Listener, grace time.Duration) error {
+	ctx, cancelServe := context.WithCancel(parent)
+	defer cancelServe()
 	done := make(chan error, 1)
 	go func() {
 		<-ctx.Done()
-		deadline, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		deadline, cancel := context.WithTimeout(context.Background(), grace)
 		defer cancel()
 		err := server.Shutdown(deadline)
 		if err != nil {
@@ -126,13 +136,10 @@ func main() {
 		}
 		done <- err
 	}()
-	slog.Info("HomeNode private gateway listening", "origin", *origin)
-	err = server.ServeTLS(listener, "", "")
-	stop()
+	err := server.ServeTLS(listener, "", "")
+	cancelServe()
 	if errors.Is(err, http.ErrServerClosed) {
 		err = nil
 	}
-	if err = errors.Join(err, <-done); err != nil {
-		fatal(err)
-	}
+	return errors.Join(err, <-done)
 }

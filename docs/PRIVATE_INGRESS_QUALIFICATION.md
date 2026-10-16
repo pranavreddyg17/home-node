@@ -33,6 +33,14 @@ listener close stops the watcher. Component race tests check that health
 failure unblocks Accept and that both failure and normal close stop the
 watcher; they do not prove installed systemd or daemon restart behavior.
 
+`cmd/homenode-gateway.TestListenerFailureClosesActiveTLSAfterGrace` exercises
+the executable's shared serving/shutdown function with certificate-verified
+TLS and an active request that waits for cancellation. External listener close
+must retain a non-success result for service restart; expiration of the drain
+deadline must force server close and cancel that request. The test uses a
+20-millisecond grace period; production uses ten seconds. It does not exercise
+systemd, real passkeys or the production proxy's workload stream lifecycle.
+
 The selected mechanism filters packets at the socket independently of the
 Tailscale firewall chains. Linux documents that device-bound sockets process
 only packets received on that interface; the supported Linux 6.8 implementation
