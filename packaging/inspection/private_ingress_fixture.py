@@ -8,6 +8,7 @@ import argparse
 import json
 import os
 import pathlib
+import platform
 import select
 import shutil
 import subprocess
@@ -25,6 +26,8 @@ def main():
     args = parser.parse_args()
     if sys.platform != "linux" or os.geteuid() != 0 or os.environ.get("HOMENODE_PRIVATE_INGRESS_FIXTURE") != "1":
         raise SystemExit("requires explicitly opted-in root on disposable Linux")
+    release = platform.freedesktop_os_release()
+    print("ENV " + json.dumps({"kernel": platform.release(), "architecture": platform.machine(), "distribution": release.get("ID"), "distributionVersion": release.get("VERSION_ID"), "python": platform.python_version(), "iproute": run("ip", "-Version").strip()}, sort_keys=True), flush=True)
     server, peer = f"hn-is-{os.getpid()}", f"hn-ip-{os.getpid()}"
     namespaces, children, retired = [], [], set()
     with tempfile.TemporaryDirectory(prefix="homenode-ingress-") as temporary:
