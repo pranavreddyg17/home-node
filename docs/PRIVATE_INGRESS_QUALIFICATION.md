@@ -32,6 +32,10 @@ installed `Restart=on-failure` policy repeats all startup admission. Normal
 listener close stops the watcher. Component race tests check that health
 failure unblocks Accept and that both failure and normal close stop the
 watcher; they do not prove installed systemd or daemon restart behavior.
+Accept also discards a connection returned concurrently with a failed health
+observation and reports an explicit ingress identity error. A gated real TCP
+test holds an accepted connection until after the failed observation to check
+this ordering, while ordinary close must remain a normal closed-listener error.
 
 `cmd/homenode-gateway.TestListenerFailureClosesActiveTLSAfterGrace` exercises
 the executable's shared serving/shutdown function with certificate-verified
@@ -72,8 +76,10 @@ production TUN/daemon admission, installed services, TLS or actual tailnet ACLs.
 The retained initial run proves these socket-helper checks at that source.
 The subsequent [source c77a593 run](evidence/private-ingress-c77a593.json)
 passed interface recreation and manual listener reopening, as well as the
-component suite. The watched-child observation and executable TLS shutdown
-test were added later and still need native runs.
+component suite. The [source 87ba848 run](evidence/private-ingress-87ba848.json)
+subsequently passed the watched child's real interface-index observation and
+Accept closure. The concurrent-accept guard and executable TLS shutdown test
+were added later and still need native runs.
 
 The fixture also deletes and recreates its permitted interface, verifies a
 different kernel interface index, and repeats the route/control checks. The
