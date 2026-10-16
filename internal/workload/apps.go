@@ -277,6 +277,7 @@ func (s *Service) Reconcile(ctx context.Context) error {
 		return err
 	}
 	for _, a := range apps {
+		originalRevision := a.Revision
 		phase := "failed"
 		if a.State == "stopping" {
 			phase = "stopping"
@@ -288,7 +289,7 @@ func (s *Service) Reconcile(ctx context.Context) error {
 				a.Revision = max(a.Revision, observed.Revision)
 			}
 		}
-		if _, err = s.Store.DB.ExecContext(ctx, "UPDATE apps SET state=?,updated_at=?,revision=? WHERE workload=?", phase, time.Now().Unix(), a.Revision, a.Workload); err != nil {
+		if _, err = s.Store.DB.ExecContext(ctx, "UPDATE apps SET state=?,updated_at=?,revision=? WHERE workload=? AND instance_id=? AND revision=? AND state=?", phase, time.Now().Unix(), a.Revision, a.Workload, a.InstanceID, originalRevision, a.State); err != nil {
 			return err
 		}
 	}

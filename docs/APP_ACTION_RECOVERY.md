@@ -22,6 +22,9 @@ workload match, its revision is positive and within the protocol bound, and its
 state is running, stopped or interrupted. An unavailable or invalid observation
 leaves an existing stopping fence intact. The management revision never moves
 backward, including when a refused command did not advance the runtime revision.
+Publishing an observation also compares the original instance, revision and
+state. If another command changes the app during inspection, the stale result
+cannot overwrite that newer intent.
 
 The app status response includes a `requiresAttention` flag derived from its
 current operation. The browser retains this warning across reloads, disables
