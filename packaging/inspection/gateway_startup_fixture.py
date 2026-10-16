@@ -134,6 +134,23 @@ while True:
             if "TLS key" not in denied.stdout + denied.stderr:
                 raise RuntimeError(f"unsafe key refusal was not reached: {denied.stdout}{denied.stderr}")
             print("PASS actual gateway refuses unsafe protected key before listener startup", flush=True)
+            (tls_directory / "server.key").chmod(0o640)
+            peer.terminate()
+            peer.communicate(timeout=5)
+            (control / "control.sock").unlink()
+            # Root serves a replacement endpoint but labels it with the
+            # expected controller ownership. Filesystem labels cannot replace
+            # the serving process identity returned by SO_PEERCRED.
+            foreign_peer = subprocess.Popen([sys.executable, "-u", "-c", peer_script, str(control / "control.sock")], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            children.append(foreign_peer)
+            ready(foreign_peer, "CONTROLLER-READY")
+            os.chown(control / "control.sock", controller_uid, bridge_gid)
+            denied = subprocess.run(command("foreign-peer"), capture_output=True, text=True, timeout=15)
+            if denied.returncode == 0 or "HomeNode private gateway listening" in denied.stdout + denied.stderr:
+                raise RuntimeError("actual gateway exposed listener for foreign serving peer")
+            if "private controller endpoint is not ready or its identity differs" not in denied.stdout + denied.stderr:
+                raise RuntimeError(f"foreign kernel peer refusal was not reached: {denied.stdout}{denied.stderr}")
+            print("PASS actual gateway refuses foreign controller kernel peer despite expected socket ownership", flush=True)
         finally:
             for unit in units:
                 subprocess.run(["systemctl", "stop", unit], capture_output=True, timeout=15)

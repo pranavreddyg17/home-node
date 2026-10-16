@@ -130,6 +130,9 @@ minimal Unix acceptor running under the named controller UID. The actual
 gateway must load protected TLS files, authenticate that serving peer, open
 the configured listener, and exit unsuccessfully for readmission after address
 loss. An unsafe world-readable key must refuse startup before listening.
+Replacing the controller acceptor with a root process while preserving the
+expected socket owner/group must also refuse startup: metadata alone must not
+satisfy serving-peer authentication.
 Native execution is pending. This does not qualify TLS handshakes over a real
 overlay, controller application workflows, signed installation, real daemon
 enrollment or installed restart ordering. Fixture accounts, units and network
