@@ -97,6 +97,52 @@ test('AI history failures can be retried and switching conversations aborts obso
   await expect(page.getByRole('button', { name: 'Send message', exact: true })).toBeEnabled()
 })
 
+test('AI list refresh failures stay separate from creation and leaving aborts the read', async ({ page }) => {
+  let unavailable = true, hold = false, created = false, mutations = 0, held: Route | undefined, cancelled = false
+  const conversation = { id: 'created-fixture', title: 'Created fixture', createdAt: 1, deletionPending: false, deletionRequiresAction: false }
+  page.on('requestfailed', request => { if (new URL(request.url()).pathname === '/api/v1/ai/conversations') cancelled = true })
+  await page.route('**/api/v1/**', route => {
+    const path = new URL(route.request().url()).pathname
+    if (path === '/api/v1/setup') return route.fulfill({ json: { claimed: true, development: true } })
+    if (path === '/api/v1/session') return route.fulfill({ json: { device: { id: 'fixture-owner', name: 'Fixture owner', capabilities: ['admin', 'ai'], createdAt: 1, revokedAt: null }, verifiedAt: 1, expiresAt: 9999999999 } })
+    if (path === '/api/v1/host/report') return route.fulfill({ json: { generatedAt: new Date().toISOString(), host: { os: 'linux', architecture: 'amd64' }, checks: [], prerequisitesMet: false, executionEnabled: false } })
+    if (path === '/api/v1/apps') return route.fulfill({ json: { apps: [], runtimeConfigured: false } })
+    if (path.endsWith('/history')) return route.fulfill({ json: [] })
+    if (path === '/api/v1/ai/conversations') {
+      if (route.request().method() === 'POST') { mutations++; created = true; unavailable = true; return route.fulfill({ status: 201, json: conversation }) }
+      if (hold) { held = route; return }
+      if (unavailable) return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture list unavailable' } } })
+      return route.fulfill({ json: created ? [conversation] : [] })
+    }
+    return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Unused fixture endpoint' } } })
+  })
+  await page.goto('/')
+  await page.locator('nav').getByRole('button', { name: 'AI', exact: false }).click()
+  await expect(page.getByRole('alert')).toContainText('Conversation list is unavailable.')
+  await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeDisabled()
+  unavailable = false
+  await page.getByRole('button', { name: 'Refresh conversations', exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await page.getByRole('button', { name: 'New conversation', exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveCount(1)
+  await expect(page.getByRole('alert')).toContainText('Conversation list is unavailable.')
+  await expect(page.locator('.conversation-picker select')).toHaveValue(conversation.id)
+  expect(mutations).toBe(1)
+  unavailable = false
+  await page.getByRole('button', { name: 'Refresh conversations', exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  hold = true
+  await page.getByRole('button', { name: 'Refresh conversations', exact: true }).click()
+  await expect.poll(() => Boolean(held)).toBe(true)
+  await page.locator('nav').getByRole('button', { name: 'Overview', exact: false }).click()
+  await expect.poll(() => cancelled, { timeout: 3000 }).toBe(true)
+  await held?.abort().catch(() => {})
+  hold = false
+  await page.locator('nav').getByRole('button', { name: 'AI', exact: false }).click()
+  await expect(page.locator('.conversation-picker select')).toBeEnabled()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
 test('Jobs refreshes stay serialized when one response fails before the other completes', async ({ page }) => {
   let activeJobs = 0, activeFiles = 0, maxJobs = 0, maxFiles = 0, completedJobs = 0
   let fileAvailable = true
