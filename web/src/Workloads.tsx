@@ -24,23 +24,72 @@ async function action<T>(device: string, path: string, body: unknown): Promise<T
 }
 
 export function Apps({ session, verify }: { session: Session; verify: () => Promise<void> }) {
-  const [apps, setApps] = useState<App[]>([])
-  const [configured, setConfigured] = useState(false)
+  const [apps, setApps] = useState<App[] | null>(null)
+  const [configured, setConfigured] = useState<boolean | null>(null)
   const [operation, setOperation] = useState<Operation | null>(null)
   const [error, setError] = useState('')
+  const [refreshError, setRefreshError] = useState('')
+  const [operationError, setOperationError] = useState('')
+  const [checkedAt, setCheckedAt] = useState<Date | null>(null)
   const [busy, setBusy] = useState(false)
-  const refresh = async () => { const data = await api<{ apps: App[]; runtimeConfigured: boolean }>('/apps'); setApps(data.apps); setConfigured(data.runtimeConfigured) }
-  useEffect(() => { void refresh().catch(e => setError(message(e))) }, [])
+  const mounted = useRef(false)
+  const generation = useRef(0)
+  const refreshing = useRef<Promise<void> | null>(null)
+  const refreshAbort = useRef<AbortController | null>(null)
+  const refresh = (fresh = false): Promise<void> => {
+    if (!mounted.current) return Promise.resolve()
+    if (refreshing.current) return fresh ? refreshing.current.then(() => refresh()) : refreshing.current
+    const epoch = generation.current
+    const controller = new AbortController()
+    refreshAbort.current = controller
+    const request: Promise<void> = api<{ apps: App[]; runtimeConfigured: boolean }>('/apps', undefined, controller.signal).then(data => {
+      if (!mounted.current || generation.current !== epoch) return
+      setApps(data.apps); setConfigured(data.runtimeConfigured); setRefreshError(''); setCheckedAt(new Date())
+    }).catch(e => { if (mounted.current && generation.current === epoch) setRefreshError(message(e)) }).finally(() => {
+      if (refreshing.current === request) refreshing.current = null
+      if (refreshAbort.current === controller) refreshAbort.current = null
+    })
+    refreshing.current = request
+    return request
+  }
+  useEffect(() => {
+    mounted.current = true; generation.current++
+    void refresh()
+    return () => { mounted.current = false; generation.current++; refreshAbort.current?.abort(); refreshAbort.current = null; refreshing.current = null }
+  }, [])
+  const transitioning = apps?.some(app => ['starting', 'stopping'].includes(app.state)) ?? false
+  useEffect(() => {
+    if (!transitioning) return
+    const timer = setInterval(() => { void refresh() }, 1000)
+    return () => clearInterval(timer)
+  }, [transitioning])
   useEffect(() => {
     if (!operation || !['pending', 'executing'].includes(operation.state)) return
-    let active = true
-    let polling = false
-    const timer = setInterval(() => { if (polling) return; polling = true; void api<Operation>(`/operations/${operation.id}`).then(async op => { if (active) { setOperation(op); await refresh() } }).catch(e => { if (active) setError(message(e)) }).finally(() => { polling = false }) }, 1000)
-    return () => { active = false; clearInterval(timer) }
+    let active = true, polling = false
+    let controller: AbortController | null = null
+    const timer = setInterval(() => {
+      if (polling) return
+      polling = true; controller = new AbortController()
+      void api<Operation>(`/operations/${operation.id}`, undefined, controller.signal).then(async op => {
+        if (active) { setOperation(op); setOperationError(''); await refresh(true) }
+      }).catch(e => { if (active) setOperationError(message(e)) }).finally(() => { polling = false })
+    }, 1000)
+    return () => { active = false; clearInterval(timer); controller?.abort() }
   }, [operation?.id, operation?.state])
-  const run = async (name: string, command: string) => { setBusy(true); setError(''); try { setOperation(await approvedAction<Operation>(`/apps/${name}/actions`, { action: command }, { 'Idempotency-Key': crypto.randomUUID() })); await refresh() } catch (e) { setError(message(e)) } finally { setBusy(false) } }
-  return <div className="stack">{error && <p className="form-error" role="alert">{error}</p>}{!configured && <p className="inline-notice">Workload services are not configured on this host. A supported Linux host and verified guest images are required.</p>}{operation && <p role="status">App operation: {operation.state}{operation.result.code ? ` · ${operation.result.code}` : ''}</p>}{session.device.capabilities.includes('admin') && <button className="refresh-button" onClick={() => void verify().catch(e => setError(message(e)))}>Verify passkey for app changes</button>}
-    {(['files', 'ai'] as const).map(name => { const app = apps.find(a => a.workload === name); const phase = app?.state ?? 'absent'; return <section className="panel" key={name}><div className="section-heading"><h2>{name === 'files' ? 'Private Files' : 'Private AI'}</h2><span className="state-pill">{phase}</span></div><p>{name === 'files' ? 'Your files live on a dedicated guest data disk. No public sharing or host folders are exposed.' : 'CPU inference runs in its own guest, with a verified model profile and no cloud fallback or administrative tools.'}</p><p>Network access: none. Installation uses a signed catalog and a verified immutable system image.</p><div className="button-row"><button disabled={!configured || busy || ['starting', 'stopping', 'running'].includes(phase) || !session.device.capabilities.includes('admin')} onClick={() => void run(name, 'start')}>Start {name === 'files' ? 'Files' : 'AI'}</button><button disabled={!configured || busy || !['running', 'starting'].includes(phase) || !session.device.capabilities.includes('admin')} onClick={() => { if (window.confirm('Stop this app? Active requests may be interrupted. Its data will be retained.')) void run(name, 'stop') }}>Stop app</button></div></section> })}
+  const run = async (name: string, command: string) => {
+    setBusy(true); setError(''); setOperationError('')
+    try { setOperation(await approvedAction<Operation>(`/apps/${name}/actions`, { action: command }, { 'Idempotency-Key': crypto.randomUUID() })) }
+    catch (e) { setError(message(e)) }
+    finally { await refresh(true); setBusy(false) }
+  }
+  return <div className="stack">{error && <p className="form-error" role="alert">{error}</p>}{refreshError && <p className="form-error" role="alert">App status is unavailable. {refreshError}</p>}{operationError && <p className="form-error" role="alert">Operation status is unavailable. {operationError}</p>}
+    <section className="panel" aria-label="App service status"><div className="section-heading"><h2>App services</h2><button onClick={() => void refresh(true)}>Refresh status</button></div>
+      {configured === null ? <p role="status">{refreshError ? 'Workload service configuration has not been verified.' : 'Checking workload service configuration…'}</p> : configured === false && <p className="inline-notice">Workload services are not configured on this host. A supported Linux host and verified guest images are required.</p>}
+      {operation && <p role="status">App operation: {operation.state}{operation.result.code ? ` · ${operation.result.code}` : ''}</p>}
+      {session.device.capabilities.includes('admin') && <button className="refresh-button" onClick={() => void verify().catch(e => setError(message(e)))}>Verify passkey for app changes</button>}
+      {checkedAt && <p className="timestamp">App status last observed {checkedAt.toLocaleTimeString()}</p>}
+    </section>
+    {(['files', 'ai'] as const).map(name => { const app = apps?.find(a => a.workload === name); const phase = app?.state ?? (apps === null ? 'unknown' : 'absent'); return <section className="panel" key={name} aria-label={name === 'files' ? 'Private Files' : 'Private AI'}><div className="section-heading"><h2>{name === 'files' ? 'Private Files' : 'Private AI'}</h2><span className="state-pill">{phase}</span></div><p>{name === 'files' ? 'Your files live on a dedicated guest data disk. No public sharing or host folders are exposed.' : 'CPU inference runs in its own guest, with a verified model profile and no cloud fallback or administrative tools.'}</p><p>Network access: none. Installation uses a signed catalog and a verified immutable system image.</p><div className="button-row"><button disabled={apps === null || Boolean(refreshError) || !configured || busy || ['starting', 'stopping', 'running'].includes(phase) || !session.device.capabilities.includes('admin')} onClick={() => void run(name, 'start')}>Start {name === 'files' ? 'Files' : 'AI'}</button><button disabled={apps === null || Boolean(refreshError) || !configured || busy || !['running', 'starting'].includes(phase) || !session.device.capabilities.includes('admin')} onClick={() => { if (window.confirm('Stop this app? Active requests may be interrupted. Its data will be retained.')) void run(name, 'stop') }}>Stop app</button></div></section> })}
   </div>
 }
 

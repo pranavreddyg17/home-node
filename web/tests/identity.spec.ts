@@ -230,6 +230,51 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.setViewportSize({ width: 390, height: 844 })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.setViewportSize({ width: 1280, height: 900 })
+  // UI transport fixture: a passkey-approved command is accepted, while its
+  // response stalls. Observing the transition must not submit another command.
+  let appPhase = 'absent', appRequests = 0, appApprovalKey = ''
+  let heldAppAction: Route | undefined
+  await page.route('**/api/v1/apps', route => route.fulfill({ json: { runtimeConfigured: true, apps: appPhase === 'absent' ? [] : [{ workload: 'files', instanceId: '6'.repeat(32), state: appPhase, updatedAt: 1 }] } }))
+  await page.route('**/api/v1/apps/files/actions/approval', route => {
+    expect(route.request().postDataJSON()).toEqual({ action: 'start' })
+    appApprovalKey = route.request().headers()['idempotency-key']
+    return route.fulfill({ json: { options: { publicKey: { challenge: 'YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo', rpId: 'localhost', userVerification: 'required', timeout: 10000 } }, challengeToken: 'app-fixture-challenge' } })
+  })
+  await page.route('**/api/v1/auth/approval/finish', route => {
+    expect(route.request().headers()['x-approval-challenge']).toBe('app-fixture-challenge')
+    expect(route.request().postDataJSON().type).toBe('public-key')
+    return route.fulfill({ json: { approvalToken: 'app-fixture-grant' } })
+  })
+  await page.route('**/api/v1/apps/files/actions', route => {
+    appRequests++; appPhase = 'starting'; heldAppAction = route
+    expect(route.request().postDataJSON()).toEqual({ action: 'start' })
+    expect(route.request().headers()['idempotency-key']).toBe(appApprovalKey)
+    expect(route.request().headers()['x-action-approval']).toBe('app-fixture-grant')
+  })
+  await page.locator('nav').getByRole('button', { name: 'Apps', exact: false }).click()
+  const filesApp = page.getByRole('region', { name: 'Private Files', exact: true })
+  await expect(filesApp.getByRole('button', { name: 'Start Files', exact: true })).toBeEnabled()
+  // Exercise native signal cancellation quickly while verifying the production
+  // HTTP bound is 30 seconds; passkey interaction keeps its own timeout.
+  await page.evaluate(() => {
+    const original = AbortSignal.timeout.bind(AbortSignal)
+    const requested: number[] = []
+    Object.assign(window, { approvalTimeouts: requested, restoreApprovalTimeout: () => { AbortSignal.timeout = original } })
+    AbortSignal.timeout = milliseconds => { requested.push(milliseconds); return original(milliseconds === 30000 ? 1000 : milliseconds) }
+  })
+  await filesApp.getByRole('button', { name: 'Start Files', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('The request timed out. Check its current status before retrying.')
+  await expect(filesApp.getByText('starting', { exact: true })).toBeVisible()
+  appPhase = 'running'
+  await expect(filesApp.getByText('running', { exact: true })).toBeVisible()
+  expect(appRequests).toBe(1)
+  expect((await page.evaluate(() => (window as unknown as { approvalTimeouts: number[] }).approvalTimeouts)).filter(value => value === 30000).length).toBeGreaterThanOrEqual(3)
+  await page.evaluate(() => (window as unknown as { restoreApprovalTimeout: () => void }).restoreApprovalTimeout())
+  await heldAppAction?.abort().catch(() => {})
+  await page.unroute('**/api/v1/apps')
+  await page.unroute('**/api/v1/apps/files/actions/approval')
+  await page.unroute('**/api/v1/apps/files/actions')
+  await page.unroute('**/api/v1/auth/approval/finish')
   await page.locator('nav').getByRole('button', { name: 'Files', exact: false }).click()
   await expect(page.getByRole('heading', { name: 'Your files' })).toBeVisible()
   await page.route('**/api/v1/files', route => route.fulfill({ json: [{ id: '0'.repeat(32), name: 'expired-retention.txt', size: 1, sha256: '1'.repeat(64), createdAt: 1, trashUntil: 0 }] }))

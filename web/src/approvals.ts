@@ -2,10 +2,19 @@ import { startAuthentication, type PublicKeyCredentialRequestOptionsJSON } from 
 import { APIError } from './api'
 
 async function send<R,>(target: string, bytes: string, headers: Record<string, string> = {}): Promise<R> {
-    const response = await fetch(`/api/v1${target}`, { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', ...headers }, body: bytes })
+  // Bound each network exchange independently of the owner's passkey prompt.
+  const signal = AbortSignal.timeout(30000)
+  try {
+    const response = await fetch(`/api/v1${target}`, { method: 'POST', credentials: 'same-origin', cache: 'no-store', signal, headers: { 'Content-Type': 'application/json', ...headers }, body: bytes })
     const value = await response.json()
     if (!response.ok) throw new APIError(response.status, value.error?.code ?? 'REQUEST_FAILED', value.error?.message ?? 'The action failed.')
     return value as R
+  } catch (error) {
+    if (signal.aborted && signal.reason instanceof DOMException && signal.reason.name === 'TimeoutError') {
+      throw new APIError(0, 'ACTION_RESULT_UNKNOWN', 'The request timed out. Check its current status before retrying.')
+    }
+    throw error
+  }
 }
 
 export async function approveExactAction(path: string, exactBody: string, requestHeaders: Record<string, string> = {}): Promise<string> {

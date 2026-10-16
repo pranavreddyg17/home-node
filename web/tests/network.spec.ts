@@ -101,27 +101,59 @@ test('Jobs refreshes stay serialized when one response fails before the other co
   await page.unrouteAll({ behavior: 'wait' })
 })
 
-for (const screen of ['Jobs', 'Files'] as const) {
+test('Apps observes an unacknowledged transition and disables actions while status is unavailable', async ({ page }) => {
+  let running = false, unavailable = false, mutations = 0
+  await page.route('**/api/v1/**', route => {
+    const path = new URL(route.request().url()).pathname
+    if (route.request().method() !== 'GET') mutations++
+    if (path === '/api/v1/setup') return route.fulfill({ json: { claimed: true, development: true } })
+    if (path === '/api/v1/session') return route.fulfill({ json: { device: { id: 'fixture-owner', name: 'Fixture owner', capabilities: ['admin'], createdAt: 1, revokedAt: null }, verifiedAt: 1, expiresAt: 9999999999 } })
+    if (path === '/api/v1/host/report') return route.fulfill({ json: { generatedAt: new Date().toISOString(), host: { os: 'linux', architecture: 'amd64' }, checks: [], prerequisitesMet: false, executionEnabled: false } })
+    if (path === '/api/v1/apps') return unavailable ? route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture app status unavailable' } } }) : route.fulfill({ json: { runtimeConfigured: true, apps: [{ workload: 'files', instanceId: 'a'.repeat(32), state: running ? 'running' : 'starting', updatedAt: 1 }] } })
+    return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Unused fixture endpoint' } } })
+  })
+  await page.goto('/')
+  await page.locator('nav').getByRole('button', { name: 'Apps', exact: false }).click()
+  const filesApp = page.getByRole('region', { name: 'Private Files', exact: true })
+  await expect(filesApp.getByText('starting', { exact: true })).toBeVisible()
+  running = true
+  await expect(filesApp.getByText('running', { exact: true })).toBeVisible()
+  unavailable = true
+  await page.getByRole('button', { name: 'Refresh status', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('App status is unavailable.')
+  await expect(filesApp.getByRole('button', { name: 'Stop app', exact: true })).toBeDisabled()
+  unavailable = false
+  await page.getByRole('button', { name: 'Refresh status', exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(filesApp.getByRole('button', { name: 'Stop app', exact: true })).toBeEnabled()
+  expect(mutations).toBe(0)
+})
+
+for (const screen of ['Jobs', 'Files', 'Apps'] as const) {
   test(`leaving ${screen} aborts pending reads and reopening starts a fresh refresh`, async ({ page }) => {
-    let hold = true
+    let hold = false
     const held: Route[] = []
-    const paths = screen === 'Jobs' ? ['/api/v1/jobs', '/api/v1/files'] : ['/api/v1/files', '/api/v1/files/storage', '/api/v1/transfers']
+    const paths = screen === 'Jobs' ? ['/api/v1/jobs', '/api/v1/files'] : screen === 'Files' ? ['/api/v1/files', '/api/v1/files/storage', '/api/v1/transfers'] : ['/api/v1/apps']
     const requests: Record<string, number> = Object.fromEntries(paths.map(path => [path, 0]))
     await page.route('**/api/v1/**', route => {
       const path = new URL(route.request().url()).pathname
       if (path === '/api/v1/setup') return route.fulfill({ json: { claimed: true, development: true } })
       if (path === '/api/v1/session') return route.fulfill({ json: { device: { id: 'fixture-owner', name: 'Fixture owner', capabilities: ['admin', 'jobs', 'files'], createdAt: 1, revokedAt: null }, verifiedAt: 1, expiresAt: 9999999999 } })
       if (path === '/api/v1/host/report') return route.fulfill({ json: { generatedAt: new Date().toISOString(), host: { os: 'linux', architecture: 'amd64' }, checks: [], prerequisitesMet: false, executionEnabled: false } })
-      if (path === '/api/v1/apps') return route.fulfill({ json: { apps: [], runtimeConfigured: false } })
       if (paths.includes(path)) {
         requests[path]++
         if (hold) { held.push(route); return }
+        if (path === '/api/v1/apps') return route.fulfill({ json: { apps: [], runtimeConfigured: false } })
         if (path === '/api/v1/files/storage') return route.fulfill({ json: { quotaBytes: 12 * 2 ** 30, storedBytes: 0, trashBytes: 0, uploadReservedBytes: 0, jobReservedBytes: 0, cleanupReservedBytes: 0, chargedBytes: 0, availableBytes: 12 * 2 ** 30 } })
         return route.fulfill({ json: [] })
       }
+      if (path === '/api/v1/apps') return route.fulfill({ json: { apps: [], runtimeConfigured: false } })
       return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Unused fixture endpoint' } } })
     })
     await page.goto('/')
+    await expect(page.getByText('CHECKS PASSED', { exact: true })).toBeVisible()
+    for (const path of paths) requests[path] = 0
+    hold = true
     await page.locator('nav').getByRole('button', { name: screen, exact: false }).click()
     await expect.poll(() => held.length).toBe(paths.length)
     const aborted = held.map(route => page.waitForEvent('requestfailed', { timeout: 3000, predicate: request => request === route.request() }))
@@ -130,7 +162,7 @@ for (const screen of ['Jobs', 'Files'] as const) {
     for (const route of held) await route.abort().catch(() => {})
     hold = false
     await page.locator('nav').getByRole('button', { name: screen, exact: false }).click()
-    await expect(page.getByText(screen === 'Jobs' ? 'Last observed' : 'File list last observed', { exact: false })).toBeVisible()
+    await expect(page.getByText(screen === 'Jobs' ? 'Last observed' : screen === 'Files' ? 'File list last observed' : 'App status last observed', { exact: false })).toBeVisible()
     await expect(page.getByRole('alert')).toHaveCount(0)
     expect(requests).toEqual(Object.fromEntries(paths.map(path => [path, 2])))
   })
