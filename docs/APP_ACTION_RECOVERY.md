@@ -91,6 +91,15 @@ the retained file. It asserts one shutdown and zero forced stops. This is
 cross-layer logic evidence; it does not execute QEMU, prove guest filesystem
 flush behavior, exercise installed services, or use private HTTPS/passkeys.
 
+The opt-in Linux `TestNativeReservedFilesManagerLaunch` fixture now injects a
+completion-persistence failure after the actual Files guest's first shutdown.
+It retains the production Linux backend, reserved identities and socket
+provenance checks, then requires audit recovery and stable replay before the
+second launch and retained-file transfer checks. This is a pending native gate
+until its source revision passes the development guest-image workflow; local
+Linux compilation alone does not establish that result. The fixture must run
+only on the disposable Linux runner, never the owner's workstation.
+
 The operation and app transition commit in one transaction. A failed metadata
 write rolls back both. Superseding app intent and interrupted operation
 authority are preserved rather than overwritten by an older completion.

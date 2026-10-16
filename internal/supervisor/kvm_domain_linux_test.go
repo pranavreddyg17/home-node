@@ -605,7 +605,35 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 		if filesImage {
 			stop.Action = "shutdown"
 		}
+		lostCompletion := filesImage && attempt == 0
+		if lostCompletion {
+			// Fail only completion persistence after the actual guest exits.
+			// Keep the production Linux backend and its socket provenance checks.
+			if _, err := store.DB.Exec(`CREATE TRIGGER fixture_lost_shutdown BEFORE UPDATE ON runtime_operations WHEN NEW.state='succeeded' BEGIN SELECT RAISE(ABORT,'fixture lost shutdown completion'); END`); err != nil {
+				t.Fatal(err)
+			}
+		}
 		instance, err = m.Apply(ctx, stop)
+		if lostCompletion {
+			if err == nil || !strings.Contains(err.Error(), "fixture lost shutdown completion") {
+				t.Fatal("native shutdown did not reach injected completion failure", instance, err)
+			}
+			pending, inspectErr := m.Inspect(ctx, stop.InstanceID)
+			if inspectErr != nil || pending.State != "shutting-down" {
+				t.Fatal("lost completion did not retain native journal", pending, inspectErr)
+			}
+			if _, err := store.DB.Exec("DROP TRIGGER fixture_lost_shutdown"); err != nil {
+				t.Fatal(err)
+			}
+			if err := m.Audit(ctx); err != nil {
+				t.Fatal("native observed-exit recovery", err)
+			}
+			instance, err = m.Apply(ctx, stop)
+			if err != nil || instance.State != "stopped" {
+				t.Fatal("native recovered shutdown replay", instance, err)
+			}
+			t.Log("actual Files guest exit survived injected completion persistence failure; audit completed original shutdown and replay retained stopped state")
+		}
 		if err != nil || instance.State != "stopped" {
 			t.Fatal("native manager", stop.Action, instance, err)
 		}
