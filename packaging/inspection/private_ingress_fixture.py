@@ -26,7 +26,7 @@ def main():
     if sys.platform != "linux" or os.geteuid() != 0 or os.environ.get("HOMENODE_PRIVATE_INGRESS_FIXTURE") != "1":
         raise SystemExit("requires explicitly opted-in root on disposable Linux")
     server, peer = f"hn-is-{os.getpid()}", f"hn-ip-{os.getpid()}"
-    namespaces, children = [], []
+    namespaces, children, retired = [], [], set()
     with tempfile.TemporaryDirectory(prefix="homenode-ingress-") as temporary:
         directory = pathlib.Path(temporary)
         directory.chmod(0o755)
@@ -64,6 +64,8 @@ def main():
 
             for mode in ("bound", "control"):
                 ports[mode] = start_listener(mode)
+            ports["watched"] = start_listener("watched")
+            watched_child = children[-1]
 
             client = """import socket,sys
 s=socket.socket()
@@ -84,7 +86,7 @@ finally:
                     run("ip", "-n", peer, "route", "replace", "100.100.1.2/32", "via", gateway, "dev", interface)
                     # Both listeners must remain alive: a dead bound listener is
                     # never acceptable evidence for a negative connection attempt.
-                    if any(child.poll() is not None for child in children):
+                    if any(child.poll() is not None for child in children if child not in retired):
                         raise RuntimeError("listener exited during ingress checks")
                     for mode in ("control", "bound"):
                         result = run("ip", "netns", "exec", peer, sys.executable, "-c", client, source, str(ports[mode])).strip()
@@ -94,6 +96,9 @@ finally:
                         print(f"PASS {phase} {mode} ingress={interface} source={source}: {result}", flush=True)
 
             check_cases("initial")
+            result = run("ip", "netns", "exec", peer, sys.executable, "-c", client, "10.210.1.2", str(ports["watched"])).strip()
+            if result != "accepted":
+                raise RuntimeError("watched listener did not accept permitted ingress before replacement")
             old_index = json.loads(run("ip", "-j", "-n", server, "link", "show", "tailscale0"))[0]["ifindex"]
             run("ip", "-n", server, "link", "delete", "tailscale0")
             run("ip", "-n", server, "link", "add", "tailscale0", "type", "veth", "peer", "name", "overlay", "netns", peer)
@@ -104,6 +109,11 @@ finally:
             new_index = json.loads(run("ip", "-j", "-n", server, "link", "show", "tailscale0"))[0]["ifindex"]
             if old_index == new_index:
                 raise RuntimeError("fixture did not replace the kernel interface index")
+            watched_output, _ = watched_child.communicate(timeout=5)
+            if watched_child.returncode != 0 or "WATCH-CLOSED" not in watched_output:
+                raise RuntimeError(f"interface watcher did not stop Accept: {watched_output}")
+            retired.add(watched_child)
+            print("PASS interface watcher closed Accept after real interface replacement", flush=True)
             check_cases("recreated-old-listener", bound_available=False)
             ports["bound"] = start_listener("bound")
             check_cases("restarted-listener")

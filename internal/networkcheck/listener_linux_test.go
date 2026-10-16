@@ -4,6 +4,7 @@ package networkcheck
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -22,7 +23,7 @@ func TestIngressNamespaceListenerChild(t *testing.T) {
 	if mode == "" {
 		t.Skip("disposable Linux namespace fixture only")
 	}
-	if os.Geteuid() != 65534 || (mode != "bound" && mode != "control") {
+	if os.Geteuid() != 65534 || (mode != "bound" && mode != "control" && mode != "watched") {
 		t.Fatal("fixture child requires its unprivileged identity and known mode")
 	}
 	status, err := os.ReadFile("/proc/self/status")
@@ -42,12 +43,18 @@ func TestIngressNamespaceListenerChild(t *testing.T) {
 		}
 	}
 	var listener net.Listener
-	if mode == "bound" {
+	if mode == "bound" || mode == "watched" {
 		device, lookupErr := net.InterfaceByName("tailscale0")
 		if lookupErr != nil {
 			t.Fatal(lookupErr)
 		}
 		listener, err = listenOnDevice(context.Background(), "100.100.1.2:0", device)
+		if err == nil && mode == "watched" {
+			listener = watchListener(listener, 10*time.Millisecond, func() bool {
+				current, err := net.InterfaceByName("tailscale0")
+				return err == nil && current.Index == device.Index
+			})
+		}
 	} else {
 		listener, err = net.Listen("tcp4", "100.100.1.2:0")
 	}
@@ -59,6 +66,10 @@ func TestIngressNamespaceListenerChild(t *testing.T) {
 	for {
 		connection, err := listener.Accept()
 		if err != nil {
+			if mode == "watched" && errors.Is(err, net.ErrClosed) {
+				fmt.Println("WATCH-CLOSED")
+				return
+			}
 			t.Fatal(err)
 		}
 		connection.SetWriteDeadline(time.Now().Add(time.Second))

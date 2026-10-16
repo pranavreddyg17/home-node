@@ -69,6 +69,11 @@ different kernel interface index, and repeats the route/control checks. The
 old listener must refuse all paths after replacement; a freshly opened bound
 listener must restore only permitted ingress. This exercises manual listener
 reopening, not automatic gateway restart or real daemon TUN recreation.
+An additional watched child accepts permitted traffic before replacement and
+must observe the real index change, close its blocked Accept and exit cleanly
+within five seconds. It uses the production watcher with a ten-millisecond
+fixture interval and index observation on the veth surrogate; it does not
+exercise production point-to-point/address admission or installed restart.
 
 The baseline must enforce overlay-only ingress to the configured HTTPS port
 without granting the gateway firewall administration or daemon administration.
