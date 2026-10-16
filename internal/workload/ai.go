@@ -37,6 +37,8 @@ type objectReference struct {
 	SHA256 string `json:"sha256"`
 }
 
+var errPromptNotFound = errors.New("generation prompt object not found")
+
 func (s *Service) Conversations(ctx context.Context) ([]Conversation, error) {
 	rows, err := s.Store.DB.QueryContext(ctx, "SELECT c.id,c.title,c.created_at,EXISTS(SELECT 1 FROM operations o WHERE o.kind='conversation.delete' AND o.state IN('pending','running','requires-action') AND json_extract(CASE WHEN json_valid(o.result) THEN o.result ELSE '{}' END,'$.conversationId')=c.id),EXISTS(SELECT 1 FROM operations o WHERE o.kind='conversation.delete' AND o.state='requires-action' AND json_extract(CASE WHEN json_valid(o.result) THEN o.result ELSE '{}' END,'$.conversationId')=c.id) FROM conversations c ORDER BY c.created_at DESC LIMIT 100")
 	if err != nil {
@@ -126,6 +128,9 @@ func (s *Service) readPrompt(ctx context.Context, instance string, reference obj
 	}
 	response, err := s.call(ctx, instance, guestproto.Request{Operation: "download", ObjectID: reference.ID})
 	if err != nil {
+		if errors.Is(err, ErrConflict) && response.Error == "NOT_FOUND" {
+			return nil, errors.Join(ErrConflict, errPromptNotFound)
+		}
 		return nil, err
 	}
 	if int64(len(response.Data)) != reference.Size || sum(response.Data) != reference.SHA256 {
@@ -154,6 +159,11 @@ func (s *Service) Generation(ctx context.Context, id string) (Generation, error)
 	}
 	messages, err := s.readPrompt(ctx, instance, g.reference)
 	if err != nil {
+		// Cancellation may precede the first successful prompt upload. Its
+		// terminal state remains observable without inventing message content.
+		if g.State == "cancelled" && errors.Is(err, errPromptNotFound) {
+			return g, nil
+		}
 		return g, err
 	}
 	g.Prompt = messages[len(messages)-1].Content

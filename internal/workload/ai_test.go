@@ -3,6 +3,7 @@ package workload
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -10,6 +11,59 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/state"
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
 )
+
+type interruptedAIUpload struct {
+	*aiBackend
+	failUpload bool
+	readError  string
+}
+
+func (b *interruptedAIUpload) Call(ctx context.Context, id string, r guestproto.Request) (guestproto.Response, error) {
+	if r.Operation == "upload" && b.failUpload {
+		return guestproto.Response{}, errors.New("fixture upload interrupted before write")
+	}
+	if r.Operation == "download" && b.readError != "" {
+		return guestproto.Response{Error: b.readError}, nil
+	}
+	return b.aiBackend.Call(ctx, id, r)
+}
+
+func TestCancelledStagingGenerationRemainsReadableWithoutPromptObject(t *testing.T) {
+	s, base, device, conversation := aiService(t)
+	b := &interruptedAIUpload{aiBackend: base, failUpload: true}
+	s.Backend = b
+	ctx := context.Background()
+	key := state.Random()
+	if _, err := s.CreateGeneration(ctx, device, key, conversation.ID, "Interrupted fixture prompt"); err == nil {
+		t.Fatal("fixture did not interrupt submission")
+	}
+	history, err := s.History(ctx, conversation.ID)
+	if err != nil || len(history) != 1 || history[0].State != "staging" {
+		t.Fatal(history, err)
+	}
+	id := history[0].ID
+	if err = s.CancelGeneration(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	g, err := s.Generation(ctx, id)
+	if err != nil || g.State != "cancelled" || g.Prompt != "" || g.Output != "" || base.calls != 0 {
+		t.Fatal("cancelled unstored prompt became unreadable or ran", g, err, base.calls)
+	}
+	b.readError = "OPERATION_FAILED"
+	if _, err = s.Generation(ctx, id); err == nil {
+		t.Fatal("unrelated guest read failure was hidden")
+	}
+	b.readError = ""
+	b.failUpload = false
+	replay, err := s.CreateGeneration(ctx, device, key, conversation.ID, "Interrupted fixture prompt")
+	if err != nil || replay.ID != id || replay.State != "cancelled" {
+		t.Fatal("cancelled request replay restarted work", replay, err)
+	}
+	next, err := s.CreateGeneration(ctx, device, state.Random(), conversation.ID, "A new explicit fixture prompt")
+	if err != nil || next.ID == id || next.State != "queued" {
+		t.Fatal("cancelled staging blocked new explicit request", next, err)
+	}
+}
 
 type aiBackend struct {
 	base    *testBackend

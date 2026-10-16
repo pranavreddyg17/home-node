@@ -59,6 +59,8 @@ test('slow AI status reads do not overlap and polling recovers after refusal', a
 
 test('AI history failures can be retried and switching conversations aborts obsolete reads', async ({ page }) => {
   let unavailable = true, hold = false, held: Route | undefined, cancelled = false
+  let generationCancelled = false, cancellationRequests = 0
+  const staging = { id: 'staged-fixture', conversationId: 'first', prompt: '', output: '', state: 'staging', createdAt: 1 }
   page.on('requestfailed', request => { if (new URL(request.url()).pathname === '/api/v1/ai/conversations/first/history') cancelled = true })
   await page.route('**/api/v1/**', route => {
     const path = new URL(route.request().url()).pathname
@@ -70,9 +72,11 @@ test('AI history failures can be retried and switching conversations aborts obso
     if (path === '/api/v1/ai/conversations/first/history') {
       if (hold) { held = route; return }
       if (unavailable) return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture history unavailable' } } })
-      return route.fulfill({ json: [] })
+      return route.fulfill({ json: [{ ...staging, state: generationCancelled ? 'cancelled' : 'staging' }] })
     }
     if (path === '/api/v1/ai/conversations/second/history') return route.fulfill({ json: [] })
+    if (path === '/api/v1/ai/generations/staged-fixture') return route.fulfill({ json: { ...staging, state: generationCancelled ? 'cancelled' : 'staging' } })
+    if (path === '/api/v1/ai/generations/staged-fixture/cancel') { cancellationRequests++; generationCancelled = true; return route.fulfill({ status: 202, json: { cancellationRequested: true } }) }
     return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Unused fixture endpoint' } } })
   })
   await page.goto('/')
@@ -94,6 +98,11 @@ test('AI history failures can be retried and switching conversations aborts obso
   hold = false; unavailable = false
   await picker.selectOption('first')
   await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByText('Message submission was interrupted. Cancel this request before sending another message.', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Send message', exact: true })).toBeDisabled()
+  await page.getByRole('button', { name: 'Cancel generation', exact: true }).click()
+  await expect(page.getByText('cancelled', { exact: true })).toBeVisible()
+  expect(cancellationRequests).toBe(1)
   await expect(page.getByRole('button', { name: 'Send message', exact: true })).toBeEnabled()
 })
 

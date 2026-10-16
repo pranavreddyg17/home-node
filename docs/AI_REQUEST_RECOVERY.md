@@ -31,6 +31,14 @@ unavailable and empty states, supports retry, and aborts obsolete reads on
 conversation switch. Generation polling is serialized, aborts on exit, and
 clears its read error after recovery.
 
+A staged generation left by interrupted prompt upload is active for browser
+admission and can be cancelled after reload. The UI identifies interrupted
+submission and does not invent the unavailable original message. If cancellation
+precedes the first successful prompt upload, its terminal cancelled state remains
+readable when the guest explicitly reports that prompt object missing. Other
+guest read failures remain errors. Replaying the original request returns that
+cancelled generation; a new intentional request needs a new key.
+
 History and export distinguish an existing empty conversation from a missing
 one. Existence and generation IDs are read in one metadata transaction before
 guest content reads. Missing conversations return 404 and malformed IDs return
