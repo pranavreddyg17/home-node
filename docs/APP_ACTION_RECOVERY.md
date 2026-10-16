@@ -47,8 +47,12 @@ check continues to reject unresolved operations elsewhere.
 The app status response includes a `requiresAttention` flag derived from its
 current operation. The browser retains this warning across reloads, disables
 Start and avoids polling a transition that cannot complete itself. This exposes
-the recovery requirement; the browser cannot clear the operation and does not
-yet provide a complete guided repair workflow.
+the recovery requirement. For an uncertain failed start, an administrator can
+choose Clean up app, confirm interruption of any remaining instance and approve
+the existing stop action with a passkey. Cancelling confirmation dispatches no
+command. The browser cannot clear an operation directly. Uncertain shutdowns,
+invalid histories and unavailable runtime inspection still need host-side
+reconciliation; the complete guided repair workflow remains unfinished.
 
 The operation and app transition commit in one transaction. A failed metadata
 write rolls back both. Superseding app intent and interrupted operation

@@ -232,11 +232,11 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.setViewportSize({ width: 1280, height: 900 })
   // UI transport fixture: a passkey-approved command is accepted, while its
   // response stalls. Observing the transition must not submit another command.
-  let appPhase = 'absent', appRequests = 0, appApprovalKey = ''
+  let appPhase = 'absent', appRequests = 0, appApprovalKey = '', appCommand = 'start', appAttention = false
   let heldAppAction: Route | undefined
-  await page.route('**/api/v1/apps', route => route.fulfill({ json: { runtimeConfigured: true, apps: appPhase === 'absent' ? [] : [{ workload: 'files', instanceId: '6'.repeat(32), state: appPhase, updatedAt: 1 }] } }))
+  await page.route('**/api/v1/apps', route => route.fulfill({ json: { runtimeConfigured: true, apps: appPhase === 'absent' ? [] : [{ workload: 'files', instanceId: '6'.repeat(32), state: appPhase, requiresAttention: appAttention, updatedAt: 1 }] } }))
   await page.route('**/api/v1/apps/files/actions/approval', route => {
-    expect(route.request().postDataJSON()).toEqual({ action: 'start' })
+    expect(route.request().postDataJSON()).toEqual({ action: appCommand })
     appApprovalKey = route.request().headers()['idempotency-key']
     return route.fulfill({ json: { options: { publicKey: { challenge: 'YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo', rpId: 'localhost', userVerification: 'required', timeout: 10000 } }, challengeToken: 'app-fixture-challenge' } })
   })
@@ -246,10 +246,12 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
     return route.fulfill({ json: { approvalToken: 'app-fixture-grant' } })
   })
   await page.route('**/api/v1/apps/files/actions', route => {
-    appRequests++; appPhase = 'starting'; heldAppAction = route
-    expect(route.request().postDataJSON()).toEqual({ action: 'start' })
+    appRequests++
+    if (appCommand === 'start') { appPhase = 'starting'; heldAppAction = route }
+    expect(route.request().postDataJSON()).toEqual({ action: appCommand })
     expect(route.request().headers()['idempotency-key']).toBe(appApprovalKey)
     expect(route.request().headers()['x-action-approval']).toBe('app-fixture-grant')
+    if (appCommand === 'stop') { appPhase = 'stopped'; appAttention = false; return route.fulfill({ status: 202, json: { id: 'fixture-cleanup', state: 'succeeded', result: {} } }) }
   })
   await page.locator('nav').getByRole('button', { name: 'Apps', exact: false }).click()
   const filesApp = page.getByRole('region', { name: 'Private Files', exact: true })
@@ -271,6 +273,17 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   expect((await page.evaluate(() => (window as unknown as { approvalTimeouts: number[] }).approvalTimeouts)).filter(value => value === 30000).length).toBeGreaterThanOrEqual(3)
   await page.evaluate(() => (window as unknown as { restoreApprovalTimeout: () => void }).restoreApprovalTimeout())
   await heldAppAction?.abort().catch(() => {})
+  appCommand = 'stop'; appPhase = 'failed'; appAttention = true
+  await page.getByRole('button', { name: 'Refresh status', exact: true }).click()
+  await expect(filesApp.getByRole('button', { name: 'Start Files', exact: true })).toBeDisabled()
+  page.once('dialog', dialog => dialog.dismiss())
+  await filesApp.getByRole('button', { name: 'Clean up app', exact: true }).click()
+  expect(appRequests).toBe(1)
+  page.once('dialog', async dialog => { expect(dialog.message()).toContain('Its data will be retained.'); await dialog.accept() })
+  await filesApp.getByRole('button', { name: 'Clean up app', exact: true }).click()
+  await expect(filesApp.getByText('stopped', { exact: true })).toBeVisible()
+  expect(appRequests).toBe(2)
+  await expect(filesApp.getByRole('button', { name: 'Start Files', exact: true })).toBeEnabled()
   await page.unroute('**/api/v1/apps')
   await page.unroute('**/api/v1/apps/files/actions/approval')
   await page.unroute('**/api/v1/apps/files/actions')
