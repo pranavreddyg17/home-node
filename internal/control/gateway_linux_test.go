@@ -10,13 +10,16 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/gatewaytransport"
+	"github.com/pranavreddyg17/home-node/internal/state"
 	"github.com/pranavreddyg17/home-node/internal/supervisor"
 )
 
@@ -80,9 +83,15 @@ func TestProductionControllerAuthorizationOverRealGatewayTLS(t *testing.T) {
 	if os.Geteuid() == 0 || os.Getegid() == 0 {
 		t.Skip("unprivileged same-identity fixture")
 	}
-	controller := testServer(t)
-	controller.config.Development = false
-	controller.config.Origin, controller.host = "https://example.com", "example.com"
+	store, err := state.Open(filepath.Join(t.TempDir(), "state"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	controller, err := New(store, Config{Origin: "https://example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	token := seedSession(t, controller, `["files"]`)
 	handler, err := gatewaytransport.ControllerHandler(uint32(os.Geteuid()), controller)
 	if err != nil {
@@ -147,5 +156,24 @@ func TestProductionControllerAuthorizationOverRealGatewayTLS(t *testing.T) {
 		if readErr != nil || response.StatusCode != entry.status || response.TLS == nil || response.TLS.Version != tls.VersionTLS13 || len(response.TLS.VerifiedChains) == 0 || response.Header.Get("Strict-Transport-Security") == "" || response.Header.Get("Cache-Control") != "no-store" {
 			t.Fatal("TLS/controller authorization mismatch", entry.path, response.StatusCode, entry.status, readErr)
 		}
+	}
+	if _, err = controller.Store.DB.Exec("UPDATE devices SET revoked_at=? WHERE id='device'", time.Now().Unix()); err != nil {
+		t.Fatal(err)
+	}
+	var reused atomic.Bool
+	request, err := http.NewRequest("GET", controller.config.Origin+"/api/v1/files", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.AddCookie(&http.Cookie{Name: controller.cookie, Value: token})
+	request = request.WithContext(httptrace.WithClientTrace(request.Context(), &httptrace.ClientTrace{GotConn: func(info httptrace.GotConnInfo) { reused.Store(info.Reused) }}))
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, readErr := io.ReadAll(io.LimitReader(response.Body, 4096))
+	response.Body.Close()
+	if readErr != nil || response.StatusCode != http.StatusUnauthorized || !reused.Load() {
+		t.Fatal("revoked session retained access over existing TLS connection", response.StatusCode, reused.Load(), readErr)
 	}
 }

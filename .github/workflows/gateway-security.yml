@@ -1,0 +1,47 @@
+name: Gateway security boundary
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'internal/gatewaytransport/**'
+      - 'internal/networkcheck/**'
+      - 'internal/control/gateway*'
+      - 'internal/control/server.go'
+      - 'cmd/homenode-gateway/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/gateway-security.yml'
+  pull_request:
+    paths:
+      - 'internal/gatewaytransport/**'
+      - 'internal/networkcheck/**'
+      - 'internal/control/gateway*'
+      - 'internal/control/server.go'
+      - 'cmd/homenode-gateway/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/gateway-security.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gateway-security-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.26.9'
+          cache: true
+      - name: Test gateway transport and certificate source
+        run: go test -race ./internal/gatewaytransport ./internal/networkcheck ./cmd/homenode-gateway
+      - name: Test production controller authorization over actual TLS
+        run: go test -race ./internal/control -run '^TestProductionController(ThroughAuthenticatedUnixGateway|AuthorizationOverRealGatewayTLS)$' -count=1 -v
+      - name: Test protected root certificate admission
+        run: sudo "$(command -v go)" test ./internal/networkcheck -run '^TestRootTLS(FileAdmission|RejectsNamedReaderACL)$' -count=1 -v
+      - name: Test actual TLS across distinct kernel identities
+        run: sudo env HOMENODE_GATEWAY_PEER_INTEGRATION=1 "$(command -v go)" test ./internal/gatewaytransport -run '^TestRootDistinctControllerGatewayPeers$' -count=1 -v
