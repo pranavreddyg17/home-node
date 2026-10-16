@@ -130,20 +130,55 @@ func (s *Service) CreateJob(ctx context.Context, device, key, input, preset, ret
 	return s.attempt(ctx, attemptID)
 }
 func (s *Service) CancelJob(ctx context.Context, device, id, attemptID string) error {
-	j, err := s.attempt(ctx, attemptID)
-	if err != nil || j.ID != id {
-		return ErrInvalid
-	}
-	if j.State == "succeeded" || j.State == "failed" || j.State == "cancelled" || j.State == "interrupted" {
-		return nil
-	}
-	_, err = s.Store.DB.ExecContext(ctx, "UPDATE jobs SET state='cancelling',updated_at=? WHERE id=? AND state IN('queued','preparing','running','finalizing')", time.Now().Unix(), attemptID)
+	var j Job
+	stopRequired := false
+	err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		var err error
+		j, err = scanJob(tx.QueryRow("SELECT "+jobColumns+" FROM jobs WHERE id=?", attemptID))
+		if err != nil || j.ID != id {
+			return ErrInvalid
+		}
+		if j.State == "succeeded" || j.State == "failed" || j.State == "cancelled" || j.State == "interrupted" {
+			return nil
+		}
+		if j.State != "queued" && j.State != "preparing" && j.State != "running" && j.State != "finalizing" && j.State != "cancelling" {
+			return ErrConflict
+		}
+		if !j.StartRequested && (j.State == "queued" || j.State == "preparing" || j.State == "cancelling") {
+			var cleanup bool
+			if err := tx.QueryRow("SELECT EXISTS(SELECT 1 FROM settings WHERE key=?)", cleanupKey(j.AttemptID)).Scan(&cleanup); err != nil {
+				return err
+			}
+			if cleanup {
+				return ErrConflict
+			}
+			if _, err := tx.Exec("UPDATE jobs SET state='cancelled',error_code='CANCELLED',updated_at=? WHERE id=?", time.Now().Unix(), j.AttemptID); err != nil {
+				return err
+			}
+			result, err := tx.Exec("UPDATE operations SET state='failed',result=?,updated_at=? WHERE id=? AND kind='job' AND state IN('pending','executing')", `{"code":"CANCELLED"}`, time.Now().Unix(), j.OperationID)
+			if err != nil {
+				return err
+			}
+			count, err := result.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if count != 1 {
+				return ErrConflict
+			}
+			return state.Event(tx, device, "job.cancelled", j.ID, map[string]string{"attemptId": j.AttemptID, "code": "CANCELLED"})
+		}
+		_, err = tx.Exec("UPDATE jobs SET state='cancelling',updated_at=? WHERE id=?", time.Now().Unix(), j.AttemptID)
+		stopRequired = j.StartRequested
+		return err
+	})
 	if err != nil {
 		return err
 	}
+
 	// The worker observes intent between chunks and polls. Stop enforcement does
 	// not depend on the guest honoring its cancel request.
-	if j.State != "queued" && s.Backend != nil {
+	if stopRequired && s.Backend != nil {
 		_, err = s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: state.Random(), Action: "stop", Revision: 2, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration})
 		if err != nil {
 			return err
