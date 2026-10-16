@@ -37,6 +37,7 @@ func (s *Server) workloadRoutes() {
 	s.mux.Handle("POST /api/v1/transfers/{id}/finalize", s.require("files", false, http.HandlerFunc(s.finalize)))
 	s.mux.Handle("POST /api/v1/transfers/{id}/cancel", s.require("files", false, http.HandlerFunc(s.cancelTransfer)))
 	s.mux.Handle("GET /api/v1/files", s.require("files", false, http.HandlerFunc(s.files)))
+	s.mux.Handle("GET /api/v1/files/export", s.require("files", false, http.HandlerFunc(s.exportFiles)))
 	s.mux.Handle("GET /api/v1/files/storage", s.require("files", false, http.HandlerFunc(s.filesStorage)))
 	s.mux.Handle("POST /api/v1/files/{id}/actions", s.require("files", false, http.HandlerFunc(s.changeFile)))
 	s.mux.Handle("GET /api/v1/files/{id}/download", s.require("files", false, http.HandlerFunc(s.download)))

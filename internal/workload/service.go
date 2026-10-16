@@ -286,6 +286,28 @@ func (s *Service) Files(ctx context.Context) ([]File, error) {
 	}
 	return files, rows.Err()
 }
+
+// ExportableFiles refuses an oversized manifest rather than silently exporting
+// the truncated ordinary file-list page. Trash is deliberately outside scope.
+func (s *Service) ExportableFiles(ctx context.Context) ([]File, error) {
+	rows, err := s.Store.DB.QueryContext(ctx, "SELECT id,name,size,sha256,created_at,trash_until FROM files WHERE trash_until IS NULL ORDER BY created_at,id LIMIT 10001")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	files := []File{}
+	for rows.Next() {
+		var f File
+		if err := rows.Scan(&f.ID, &f.Name, &f.Size, &f.SHA256, &f.CreatedAt, &f.TrashUntil); err != nil {
+			return nil, err
+		}
+		files = append(files, f)
+		if len(files) > 10000 {
+			return nil, ErrCapacity
+		}
+	}
+	return files, rows.Err()
+}
 func (s *Service) ChangeFile(ctx context.Context, device, id, action, name string) error {
 	if !guestproto.ValidID(id) {
 		return ErrInvalid

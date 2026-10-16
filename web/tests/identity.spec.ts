@@ -290,6 +290,11 @@ test('enroll, pair with limited access, revoke, sign in, and recover', async ({ 
   await page.unroute('**/api/v1/auth/approval/finish')
   await page.locator('nav').getByRole('button', { name: 'Files', exact: false }).click()
   await expect(page.getByRole('heading', { name: 'Your files' })).toBeVisible()
+  const archiveDownload = page.waitForEvent('download')
+  await page.getByRole('link', { name: 'Export saved files', exact: true }).click()
+  const exported = await archiveDownload
+  expect(exported.suggestedFilename()).toBe('homenode-saved-files.zip')
+  expect(await exported.failure()).toBeNull()
   await page.route('**/api/v1/files', route => route.fulfill({ json: [{ id: '0'.repeat(32), name: 'expired-retention.txt', size: 1, sha256: '1'.repeat(64), createdAt: 1, trashUntil: 0 }] }))
   await page.getByRole('button', { name: 'Refresh', exact: true }).click()
   await expect(page.getByText('expired-retention.txt', { exact: true })).toHaveCount(0)
