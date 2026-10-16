@@ -43,6 +43,23 @@ or emits its contents. The installed `homenode-gateway` runs the same checks bef
 HTTPS listener and authenticates the private controller socket using kernel
 peer credentials. The controller listens only on that Unix socket and cannot
 read the gateway key. Legacy direct HTTPS `serve` also checks the identity.
+
+The dedicated production gateway additionally requires the configured IPv4
+address on an up, point-to-point kernel `tailscale0` interface. It binds the
+listener to that device before opening TCP and verifies the kernel interface
+index. Missing interfaces, unsupported socket options and mismatched readback
+prevent startup; there is no wildcard fallback. Userspace Tailscale networking
+and custom TUN names are unsupported. The read-only `network-check` command
+does not open a socket and therefore does not prove this listener enforcement.
+Neither command proves effective tailnet ACLs.
+
+If the daemon recreates its interface, the existing listener remains tied to
+the old kernel interface index. Restart the gateway after the interface and
+node identity are restored; automatic interface lifecycle recovery is not yet
+qualified. Do not work around startup failure by granting the gateway network
+administration capabilities or exposing a LAN listener. See the
+[private ingress qualification gate](PRIVATE_INGRESS_QUALIFICATION.md) for the
+remaining namespace, installed-service and physical-device evidence.
 Failure does not fall back to HTTP.
 
 `identityValid` proves only those checks. Output explicitly reports that tailnet
