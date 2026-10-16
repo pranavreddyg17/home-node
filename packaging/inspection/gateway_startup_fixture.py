@@ -178,11 +178,30 @@ for path,host,expected in [('/api/v1/healthz','home.example.ts.net:8787',200),('
    assert response.status==expected,(path,response.status,expected)
    response.read(65536)
    print('HTTPS-PASS',path,expected,flush=True)
+for name,hostname,client_context in [('wrong-hostname','wrong.example.ts.net',context),('untrusted-root','home.example.ts.net',ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT))]:
+ try:
+  with socket.create_connection(('100.100.1.2',8787),timeout=5) as raw:
+   with client_context.wrap_socket(raw,server_hostname=hostname):
+    raise AssertionError('invalid certificate accepted: '+name)
+ except ssl.SSLCertVerificationError:
+  print('TLS-REFUSAL-PASS',name,flush=True)
+old=ssl.create_default_context(cafile=sys.argv[1])
+old.minimum_version=old.maximum_version=ssl.TLSVersion.TLSv1_2
+try:
+ with socket.create_connection(('100.100.1.2',8787),timeout=5) as raw:
+  with old.wrap_socket(raw,server_hostname='home.example.ts.net'):
+   raise AssertionError('TLS 1.2 accepted')
+except ssl.SSLError as error:
+ assert error.reason=='TLSV1_ALERT_PROTOCOL_VERSION',error
+ print('TLS-REFUSAL-PASS','TLS-1.2',flush=True)
 """
             results = run("ip", "netns", "exec", peer_namespace, sys.executable, "-c", client_script, str(directory / "ca.crt"))
             if results.count("HTTPS-PASS") != 3:
                 raise RuntimeError(f"actual HTTPS controller checks incomplete: {results}")
+            if results.count("TLS-REFUSAL-PASS") != 3:
+                raise RuntimeError(f"actual TLS refusal checks incomplete: {results}")
             print("PASS actual TLS 1.3 over kernel TUN through gateway/controller executables: health, unauthenticated Files refusal and foreign Host refusal", flush=True)
+            print("PASS actual TLS refuses untrusted root, wrong certificate hostname and TLS 1.2 over kernel TUN", flush=True)
             run("ip", "-n", namespace, "address", "delete", "100.100.1.2/32", "dev", "tailscale0")
             output, _ = gateway.communicate(timeout=15)
             if gateway.returncode == 0 or "private ingress interface changed" not in output:

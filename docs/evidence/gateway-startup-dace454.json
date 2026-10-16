@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "dace454d8e9ff08bf871685e323f948b3fe5fb89",
+  "workflowRun": 38944041271,
+  "job": 117118545690,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/38944041271",
+  "conclusion": "success",
+  "logSHA256": "abae995f2e2368173651b0151e13d453a6365d0c5af6ab49bbf930bbd8ad27a3",
+  "environment": {
+    "architecture": "x86_64",
+    "distribution": "ubuntu",
+    "distributionVersion": "24.04",
+    "iproute": "ip utility, iproute2-6.1.0, libbpf 1.3.0",
+    "kernel": "6.17.0-1022-azure",
+    "python": "3.12.3"
+  },
+  "assertions": [
+    "Actual gateway and controller executables use disposable named NSS identities with distinct UIDs",
+    "Gateway applies source service hardening, reads protected root-owned gateway-group TLS key and trusts fixture certificate",
+    "Running-daemon identity is supplied by a service-only mounted controlled status executable",
+    "Gateway authenticates actual controller Unix serving peer before listener readiness",
+    "TUN address removal causes actual gateway unsuccessful exit for readmission",
+    "World-readable key refuses startup before listener readiness",
+    "Foreign root controller process refuses startup despite expected socket owner/group labels"
+  ],
+  "limits": [
+    "Startup fixture only: source excludes later HTTPS packet relay and request tests",
+    "No actual Tailscale daemon, encryption, ACLs, real certificates/passkeys or allowed/denied physical devices",
+    "Transient systemd unit and temporary paths, not signed installed package or shipped unit lifecycle",
+    "Controller runs actual executable without privileged workload backend; no authenticated workload, UI or VM operations"
+  ]
+}

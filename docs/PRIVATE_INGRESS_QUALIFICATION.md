@@ -134,7 +134,9 @@ loss. An unsafe world-readable key must refuse startup before listening.
 Replacing the controller acceptor with a root process while preserving the
 expected socket owner/group must also refuse startup: metadata alone must not
 satisfy serving-peer authentication.
-Native execution is pending. This does not qualify TLS handshakes over a real
+The startup portion passed in
+[source dace454's run](evidence/gateway-startup-dace454.json). The later packet
+and HTTPS checks remain outside that source. This does not qualify TLS handshakes over a real
 overlay, complete authenticated controller workflows, signed installation, real daemon
 enrollment or installed restart ordering. Fixture accounts, units and network
 namespaces are removed on teardown; it must never run on the owner's host.
@@ -144,7 +146,11 @@ IPv4 packet relays over an isolated veth carrier. This is test transport only,
 not Tailscale or production VPN code. It sends certificate-verified TLS 1.3 to
 the actual gateway and private controller: public health must succeed,
 unauthenticated Files must return 401, and a foreign HTTP Host must return
-403. Neither TLS state nor client RemoteAddr is fabricated. The TUN MTU is
+403. Neither TLS state nor client RemoteAddr is fabricated.
+The same packet path must refuse certificate verification with an untrusted
+root or wrong certificate hostname, and refuse TLS 1.2 with a protocol-version
+alert. These use real client TLS validation rather than altered request state.
+The TUN MTU is
 1280 solely to keep fixture UDP encapsulation within its carrier MTU; this is
 not a reference-hardware throughput or production MTU qualification.
 See [kernel TUN interface semantics](https://docs.kernel.org/networking/tuntap.html).
