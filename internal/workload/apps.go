@@ -114,6 +114,9 @@ func (s *Service) appActionInTransaction(tx *sql.Tx, device, key, name, action s
 			return Operation{}, err
 		}
 		if uncertain {
+			if _, err := appRecoveryChain(tx, previousOperation, name, instance, revision+1); err != nil {
+				return Operation{}, err
+			}
 			intentData.PreviousOperationID = previousOperation
 		}
 	}
@@ -267,7 +270,7 @@ func (s *Service) processAppKind(ctx context.Context, selectedKind string) error
 			return ErrConflict
 		}
 		if intent.Action == "stop" && intent.PreviousOperationID != "" {
-			if _, err = tx.Exec("UPDATE operations SET state='interrupted',updated_at=? WHERE id=? AND state='requires-action' AND kind IN('app.start','app.stop')", time.Now().Unix(), intent.PreviousOperationID); err != nil {
+			if err = settleAppRecovery(tx, intent.PreviousOperationID, intent.Workload, intent.InstanceID, intent.Revision); err != nil {
 				return err
 			}
 		}
@@ -319,8 +322,11 @@ func (s *Service) Reconcile(ctx context.Context) error {
 			}
 			// Inspection establishes current inactivity, not successful execution
 			// of the original command. Retain its payload and mark it interrupted.
-			_, err = tx.Exec("UPDATE operations SET state='interrupted',updated_at=? WHERE id=(SELECT operation_id FROM apps WHERE workload=?) AND state='requires-action' AND kind IN('app.start','app.stop')", time.Now().Unix(), a.Workload)
-			return err
+			var operationID string
+			if err := tx.QueryRow("SELECT operation_id FROM apps WHERE workload=?", a.Workload).Scan(&operationID); err != nil {
+				return err
+			}
+			return settleAppRecovery(tx, operationID, a.Workload, a.InstanceID, a.Revision+1)
 		}); err != nil {
 			return err
 		}

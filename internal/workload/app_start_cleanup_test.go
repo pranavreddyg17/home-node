@@ -57,6 +57,81 @@ func TestExplicitCleanupSettlesOnlyItsLinkedUncertainStart(t *testing.T) {
 	}
 }
 
+func TestRecoverySettlesRepeatedCleanupFailures(t *testing.T) {
+	for _, observeStopped := range []bool{false, true} {
+		s, original, device := service(t)
+		b := &uncertainStartBackend{testBackend: original, scenario: "cleanup-fails"}
+		s.Backend = b
+		ctx := context.Background()
+		start, err := s.AppAction(ctx, device, state.Random(), "files", "start")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = s.processApp(ctx); err != nil {
+			t.Fatal(err)
+		}
+		stop, err := s.AppAction(ctx, device, state.Random(), "files", "stop")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = s.processApp(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if observeStopped {
+			original.running = false
+		}
+		if err = s.Reconcile(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if !observeStopped {
+			if _, err = s.AppAction(ctx, device, state.Random(), "files", "stop"); err != nil {
+				t.Fatal(err)
+			}
+			if err = s.processApp(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, id := range []string{start.ID, stop.ID} {
+			op, err := s.Operation(ctx, device, id)
+			if err != nil || op.State != "interrupted" {
+				t.Fatal("ancestor remained unresolved", op, err)
+			}
+		}
+	}
+}
+
+func TestInvalidRecoveryLinksCannotAdmitRuntimeCleanup(t *testing.T) {
+	for _, field := range []string{"previousOperationId", "workload", "revision"} {
+		s, original, device := service(t)
+		b := &uncertainStartBackend{testBackend: original, scenario: "cleanup-fails"}
+		s.Backend = b
+		ctx := context.Background()
+		op, err := s.AppAction(ctx, device, state.Random(), "files", "start")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = s.processApp(ctx); err != nil {
+			t.Fatal(err)
+		}
+		var value any = op.ID
+		if field == "workload" {
+			value = "ai"
+		}
+		if field == "revision" {
+			value = 99
+		}
+		if _, err = s.Store.DB.Exec("UPDATE operations SET result=json_set(result,?,?) WHERE id=?", "$.intent."+field, value, op.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = s.AppAction(ctx, device, state.Random(), "files", "stop"); !errors.Is(err, ErrConflict) {
+			t.Fatal("invalid recovery admitted", field, err)
+		}
+		if len(b.requests) != 2 {
+			t.Fatal("invalid recovery reached runtime", b.requests)
+		}
+	}
+}
+
 func (b *uncertainStartBackend) Apply(ctx context.Context, r supervisor.Request) (supervisor.Instance, error) {
 	b.requests = append(b.requests, r)
 	if r.Action == "stop" && b.scenario == "cleanup-fails" {
