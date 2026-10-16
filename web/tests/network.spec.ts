@@ -47,9 +47,54 @@ test('slow AI status reads do not overlap and polling recovers after refusal', a
   await page.locator('nav').getByRole('button', { name: 'AI', exact: false }).click()
   await page.locator('.conversation-picker select').selectOption('fixture-chat')
   await expect(page.getByText('Status recovered', { exact: true })).toBeVisible({ timeout: 12000 })
+  await expect(page.getByRole('alert')).toHaveCount(0)
   expect(completed).toBeGreaterThanOrEqual(2)
   expect(maximum).toBe(1)
+  let cancelled = false
+  page.on('requestfailed', request => { if (new URL(request.url()).pathname === '/api/v1/ai/generations/fixture-generation') cancelled = true })
+  await expect.poll(() => active).toBe(1)
   await page.locator('nav').getByRole('button', { name: 'Overview', exact: false }).click()
+  await expect.poll(() => cancelled, { timeout: 3000 }).toBe(true)
+})
+
+test('AI history failures can be retried and switching conversations aborts obsolete reads', async ({ page }) => {
+  let unavailable = true, hold = false, held: Route | undefined, cancelled = false
+  page.on('requestfailed', request => { if (new URL(request.url()).pathname === '/api/v1/ai/conversations/first/history') cancelled = true })
+  await page.route('**/api/v1/**', route => {
+    const path = new URL(route.request().url()).pathname
+    if (path === '/api/v1/setup') return route.fulfill({ json: { claimed: true, development: true } })
+    if (path === '/api/v1/session') return route.fulfill({ json: { device: { id: 'fixture-owner', name: 'Fixture owner', capabilities: ['admin', 'ai'], createdAt: 1, revokedAt: null }, verifiedAt: 1, expiresAt: 9999999999 } })
+    if (path === '/api/v1/host/report') return route.fulfill({ json: { generatedAt: new Date().toISOString(), host: { os: 'linux', architecture: 'amd64' }, checks: [], prerequisitesMet: false, executionEnabled: false } })
+    if (path === '/api/v1/apps') return route.fulfill({ json: { apps: [], runtimeConfigured: false } })
+    if (path === '/api/v1/ai/conversations') return route.fulfill({ json: ['first', 'second'].map(id => ({ id, title: id, createdAt: 1, deletionPending: false, deletionRequiresAction: false })) })
+    if (path === '/api/v1/ai/conversations/first/history') {
+      if (hold) { held = route; return }
+      if (unavailable) return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Fixture history unavailable' } } })
+      return route.fulfill({ json: [] })
+    }
+    if (path === '/api/v1/ai/conversations/second/history') return route.fulfill({ json: [] })
+    return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Unused fixture endpoint' } } })
+  })
+  await page.goto('/')
+  await page.locator('nav').getByRole('button', { name: 'AI', exact: false }).click()
+  const picker = page.locator('.conversation-picker select')
+  await picker.selectOption('first')
+  await expect(page.getByRole('alert')).toContainText('Conversation history is unavailable.')
+  await expect(page.getByText('Ask your first question.', { exact: true })).toHaveCount(0)
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Fixture question')
+  await expect(page.getByRole('button', { name: 'Send message', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Delete conversation', exact: true })).toBeDisabled()
+  hold = true
+  await page.getByRole('button', { name: 'Retry history', exact: true }).click()
+  await expect.poll(() => Boolean(held)).toBe(true)
+  await picker.selectOption('second')
+  await expect.poll(() => cancelled, { timeout: 3000 }).toBe(true)
+  await expect(page.getByText('Ask your first question.', { exact: true })).toBeVisible()
+  await held?.abort().catch(() => {})
+  hold = false; unavailable = false
+  await picker.selectOption('first')
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Send message', exact: true })).toBeEnabled()
 })
 
 test('Jobs refreshes stay serialized when one response fails before the other completes', async ({ page }) => {
