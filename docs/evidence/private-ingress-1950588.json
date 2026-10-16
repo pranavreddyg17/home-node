@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "19505889680a3db5b9b7691bb2cd6ae2eda00deb",
+  "workflowRun": 38941486696,
+  "job": 117109965932,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/38941486696",
+  "conclusion": "success",
+  "logSHA256": "5c2c7497d6fc8b157195f15e14b31ca9056bfba7439904fff42a5b815502fedb",
+  "assertions": [
+    "Listeners execute as UID/GID 65534 with zero inherited, permitted, effective, bounding and ambient capabilities",
+    "Production device-binding helper accepts permitted veth ingress before and after negative checks",
+    "LAN source 10.210.2.2 and routed CGNAT source 100.100.2.2 cannot connect to bound listener",
+    "Unbound control accepts every corresponding route",
+    "Fresh namespaces use no Tailscale firewall rules; reverse-path filtering disabled only in those namespaces",
+    "After interface deletion and recreation with a different kernel index, old bound listener refuses permitted and LAN routes while unbound control accepts them",
+    "New bound listener on recreated interface restores permitted ingress and refuses LAN/CGNAT routes",
+    "Additional watched child accepts permitted traffic before replacement, observes real changed interface index, closes Accept and exits cleanly within five seconds",
+    "Unfiltered networkcheck race suite includes deterministic real TCP concurrent-accept refusal after failed health observation",
+    "Unfiltered gateway command race suite includes certificate-verified TLS request cancellation after listener failure and exhausted drain deadline"
+  ],
+  "limits": [
+    "Veth surrogate, not production point-to-point TUN or running-daemon identity admission",
+    "Raw TCP fixture, not installed HTTPS gateway/controller or systemd confinement",
+    "Does not qualify actual Tailscale ACLs, physical devices, passkeys or relays",
+    "Watcher child uses ten-millisecond fixture interval and index check on veth; native real-TUN production admission and later legacy direct-listener change are outside this source"
+  ]
+}

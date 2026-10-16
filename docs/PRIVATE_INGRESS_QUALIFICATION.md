@@ -78,8 +78,10 @@ The subsequent [source c77a593 run](evidence/private-ingress-c77a593.json)
 passed interface recreation and manual listener reopening, as well as the
 component suite. The [source 87ba848 run](evidence/private-ingress-87ba848.json)
 subsequently passed the watched child's real interface-index observation and
-Accept closure. The concurrent-accept guard and executable TLS shutdown test
-were added later and still need native runs.
+Accept closure. The [source 1950588 run](evidence/private-ingress-1950588.json)
+then passed the unfiltered component race suites including the concurrent-accept
+guard and executable TLS shutdown test. Real-TUN admission and the later legacy
+direct-listener change remain outside that retained source.
 
 The fixture also deletes and recreates its permitted interface, verifies a
 different kernel interface index, and repeats the route/control checks. The
