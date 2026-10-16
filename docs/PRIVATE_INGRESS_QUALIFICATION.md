@@ -15,12 +15,34 @@ drop for CGNAT sources arriving outside `tailscale0`. `nodivert` creates rules
 without activating them; `off` does not create them. The installed rule names
 alone therefore do not prove enforcement. See [upstream netfilter modes](https://tailscale.com/docs/reference/netfilter-modes).
 
-## Enforcement work
+## Implemented listener enforcement; qualification pending
+
+The production gateway now uses `networkcheck.ListenTailnet`: it requires an
+up, non-loopback, point-to-point `tailscale0` with the configured address,
+sets `SO_BINDTODEVICE` before TCP bind/listen, and reads back
+`SO_BINDTOIFINDEX` to verify the same interface index. It opens IPv4 only.
+Any configuration, interface, socket-option or readback failure prevents the
+listener from opening. It does not add capabilities to the service. Custom
+TUN names and userspace networking are unsupported by this baseline.
+
+The selected mechanism filters packets at the socket independently of the
+Tailscale firewall chains. Linux documents that device-bound sockets process
+only packets received on that interface; the supported Linux 6.8 implementation
+permits the initial binding of an unbound socket without `CAP_NET_RAW`.
+See [socket semantics](https://www.man7.org/linux/man-pages/man7/socket.7.html)
+and [kernel implementation](https://github.com/torvalds/linux/blob/v6.8/net/core/sock.c).
+This does not defend against a host administrator changing interfaces or
+against a compromised gateway process opening additional sockets.
+
+Linux component tests exercise a real loopback-bound listener, readback,
+successful accept, nonexistent interfaces and mismatched interface indices.
+They do not replace the namespace, interface lifecycle or installed-service
+qualification below. No native Linux execution result is retained yet for
+this change; macOS checks only compile the Linux test binary.
 
 The baseline must enforce overlay-only ingress to the configured HTTPS port
 without granting the gateway firewall administration or daemon administration.
-Qualify either a kernel-enforced interface restriction on its listener/service
-or a separately privileged, narrowly scoped host firewall lifecycle. A startup
+Qualify the kernel-enforced listener restriction and its service lifecycle. A startup
 declaration that the administrator selected `on` is insufficient evidence.
 Do not parse unrestricted daemon debug output into diagnostics or grant the
 gateway access to daemon state files to infer firewall configuration.

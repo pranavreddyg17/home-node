@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -103,7 +102,7 @@ func main() {
 	if err != nil {
 		fatal(errors.New("private controller endpoint is not ready or its identity differs"))
 	}
-	raw, err := net.Listen("tcp", net.JoinHostPort(*bind, strconv.Itoa(*port)))
+	raw, err := networkcheck.ListenTailnet(context.Background(), networkcheck.Config{Bind: *bind, Port: *port, Origin: *origin})
 	if err != nil {
 		fatal(err)
 	}
