@@ -53,6 +53,12 @@ This uses the production socket-binding helper with a veth surrogate, not
 production TUN/daemon admission, installed services, TLS or actual tailnet ACLs.
 Native execution remains pending until a retained successful run exists.
 
+The fixture also deletes and recreates its permitted interface, verifies a
+different kernel interface index, and repeats the route/control checks. The
+old listener must refuse all paths after replacement; a freshly opened bound
+listener must restore only permitted ingress. This exercises manual listener
+reopening, not automatic gateway restart or real daemon TUN recreation.
+
 The baseline must enforce overlay-only ingress to the configured HTTPS port
 without granting the gateway firewall administration or daemon administration.
 Qualify the kernel-enforced listener restriction and its service lifecycle. A startup

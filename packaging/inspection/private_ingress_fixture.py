@@ -5,6 +5,7 @@ Run only in disposable CI with an explicitly opted-in, compiled Go test binary.
 The veth overlay surrogate proves socket ingress enforcement, not Tailscale.
 """
 import argparse
+import json
 import os
 import pathlib
 import select
@@ -50,7 +51,7 @@ def main():
             run("ip", "-n", server, "route", "add", "100.100.2.2/32", "via", "10.210.2.2", "dev", "lan")
 
             ports = {}
-            for mode in ("bound", "control"):
+            def start_listener(mode):
                 command = ["ip", "netns", "exec", server, "setpriv", "--reuid=65534", "--regid=65534", "--clear-groups", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "env", f"HOMENODE_INGRESS_FIXTURE_CHILD={mode}", str(binary), "-test.run=^TestIngressNamespaceListenerChild$", "-test.timeout=60s"]
                 child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
                 children.append(child)
@@ -59,7 +60,10 @@ def main():
                 line = child.stdout.readline().strip()
                 if not line.startswith("READY 100.100.1.2:"):
                     raise RuntimeError(f"{mode} listener did not start: {line}")
-                ports[mode] = int(line.rsplit(":", 1)[1])
+                return int(line.rsplit(":", 1)[1])
+
+            for mode in ("bound", "control"):
+                ports[mode] = start_listener(mode)
 
             client = """import socket,sys
 s=socket.socket()
@@ -75,18 +79,34 @@ finally:
  s.close()
 """
             cases = (("overlay", "10.210.1.1", "10.210.1.2", "accepted"), ("lan", "10.210.2.1", "10.210.2.2", "blocked"), ("lan", "10.210.2.1", "100.100.2.2", "blocked"), ("overlay", "10.210.1.1", "10.210.1.2", "accepted"))
-            for interface, gateway, source, expected in cases:
-                run("ip", "-n", peer, "route", "replace", "100.100.1.2/32", "via", gateway, "dev", interface)
-                # Both listeners must remain alive: a dead bound listener is
-                # never acceptable evidence for a negative connection attempt.
-                if any(child.poll() is not None for child in children):
-                    raise RuntimeError("listener exited during ingress checks")
-                for mode in ("control", "bound"):
-                    result = run("ip", "netns", "exec", peer, sys.executable, "-c", client, source, str(ports[mode])).strip()
-                    want = "accepted" if mode == "control" else expected
-                    if result != want:
-                        raise RuntimeError(f"{mode} {interface} source={source}: {result}, expected {want}")
-                    print(f"PASS {mode} ingress={interface} source={source}: {result}", flush=True)
+            def check_cases(phase, bound_available=True):
+                for interface, gateway, source, expected in cases:
+                    run("ip", "-n", peer, "route", "replace", "100.100.1.2/32", "via", gateway, "dev", interface)
+                    # Both listeners must remain alive: a dead bound listener is
+                    # never acceptable evidence for a negative connection attempt.
+                    if any(child.poll() is not None for child in children):
+                        raise RuntimeError("listener exited during ingress checks")
+                    for mode in ("control", "bound"):
+                        result = run("ip", "netns", "exec", peer, sys.executable, "-c", client, source, str(ports[mode])).strip()
+                        want = "accepted" if mode == "control" else (expected if bound_available else "blocked")
+                        if result != want:
+                            raise RuntimeError(f"{mode} {interface} source={source}: {result}, expected {want}")
+                        print(f"PASS {phase} {mode} ingress={interface} source={source}: {result}", flush=True)
+
+            check_cases("initial")
+            old_index = json.loads(run("ip", "-j", "-n", server, "link", "show", "tailscale0"))[0]["ifindex"]
+            run("ip", "-n", server, "link", "delete", "tailscale0")
+            run("ip", "-n", server, "link", "add", "tailscale0", "type", "veth", "peer", "name", "overlay", "netns", peer)
+            for namespace, name, host in ((server, "tailscale0", "1"), (peer, "overlay", "2")):
+                run("ip", "-n", namespace, "address", "add", f"10.210.1.{host}/30", "dev", name)
+                run("ip", "-n", namespace, "link", "set", name, "up")
+            run("ip", "-n", server, "address", "add", "100.100.1.2/32", "dev", "tailscale0")
+            new_index = json.loads(run("ip", "-j", "-n", server, "link", "show", "tailscale0"))[0]["ifindex"]
+            if old_index == new_index:
+                raise RuntimeError("fixture did not replace the kernel interface index")
+            check_cases("recreated-old-listener", bound_available=False)
+            ports["bound"] = start_listener("bound")
+            check_cases("restarted-listener")
             print("PASS unprivileged device-bound ingress without host firewall rules", flush=True)
         finally:
             for child in children:
