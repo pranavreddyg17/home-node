@@ -3,6 +3,7 @@
 package control
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -253,7 +254,14 @@ func fail(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": message}})
 }
 func decode(w http.ResponseWriter, r *http.Request, value any) bool {
-	d := json.NewDecoder(r.Body)
+	// ServeHTTP applies the route-specific smaller limit. This independent
+	// ceiling also bounds direct handler use and prevalidation allocation.
+	body, err := io.ReadAll(io.LimitReader(r.Body, (512<<10)+1))
+	if err != nil || len(body) > 512<<10 || !unambiguousRequestObject(body) {
+		fail(w, 400, "INVALID_REQUEST", "The request is malformed, ambiguous or too large.")
+		return false
+	}
+	d := json.NewDecoder(bytes.NewReader(body))
 	d.DisallowUnknownFields()
 	if err := d.Decode(value); err != nil {
 		fail(w, 400, "INVALID_REQUEST", "The request is malformed or too large.")

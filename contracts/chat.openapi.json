@@ -3,7 +3,7 @@
   "info": {
     "title": "HomeNode chat API",
     "version": "0.1.0",
-    "description": "Implemented chat slice. Production requires trusted HTTPS and Secure HttpOnly SameSite=Strict __Host-homenode sessions with ai capability. All responses are no-store. Development uses homenode-dev on localhost. This contract does not claim model licensing/performance, guest erasure or installed-network qualification; other API slices remain separate."
+    "description": "Implemented chat slice. Production requires trusted HTTPS and Secure HttpOnly SameSite=Strict __Host-homenode sessions with ai capability. All responses are no-store. Development uses homenode-dev on localhost. This contract does not claim model licensing/performance, guest erasure or installed-network qualification; other API slices remain separate. Endpoints that decode ordinary JSON request bodies require one valid UTF-8 object, reject duplicate/case-equivalent member names recursively, and limit nesting to 32 levels and each object to 128 members. Existing route-specific byte limits still apply."
   },
   "servers": [
     {
