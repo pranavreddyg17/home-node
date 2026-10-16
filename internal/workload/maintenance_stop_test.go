@@ -117,7 +117,7 @@ func TestMaintenanceShutdownFailureRetainsBarrierWithoutForcedFallback(t *testin
 		t.Fatal(err)
 	}
 	result, err := s.Operation(ctx, device, op.ID)
-	if err != nil || result.State != "failed" || len(b.requests) != 1 || b.requests[0].Action != "shutdown" {
+	if err != nil || result.State != "requires-action" || len(b.requests) != 1 || b.requests[0].Action != "shutdown" {
 		t.Fatal(result, b.requests, err)
 	}
 	inventory, err := s.Store.InspectMaintenance(ctx, token)

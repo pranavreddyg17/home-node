@@ -350,12 +350,19 @@ func (s *Service) failApp(ctx context.Context, operationID, device string, inten
 		if !owned {
 			code = "SUPERSEDED"
 		}
-		result := map[string]string{"code": code}
+		operationState, appState, event := "failed", "failed", "operation.failed"
+		result := map[string]any{"code": code}
+		if owned && from == "executing" && intent.Action == "stop" {
+			// A transport error or invalid reply does not prove shutdown. Keep
+			// the stopping fence until reconciliation observes the runtime.
+			operationState, appState, event = "requires-action", "stopping", "operation.requires-action"
+			result["code"], result["intent"] = "STOP_CONFIRMATION_REQUIRED", intent
+		}
 		encoded, err := json.Marshal(result)
 		if err != nil {
 			return err
 		}
-		update, err := tx.Exec("UPDATE operations SET state='failed',result=?,updated_at=? WHERE id=? AND device_id=? AND state=?", string(encoded), time.Now().Unix(), operationID, device, from)
+		update, err := tx.Exec("UPDATE operations SET state=?,result=?,updated_at=? WHERE id=? AND device_id=? AND state=?", operationState, string(encoded), time.Now().Unix(), operationID, device, from)
 		if err != nil {
 			return err
 		}
@@ -367,11 +374,11 @@ func (s *Service) failApp(ctx context.Context, operationID, device string, inten
 			return ErrConflict
 		}
 		if owned {
-			if _, err = tx.Exec("UPDATE apps SET state='failed',updated_at=? WHERE workload=? AND operation_id=? AND revision=?", time.Now().Unix(), intent.Workload, operationID, intent.Revision); err != nil {
+			if _, err = tx.Exec("UPDATE apps SET state=?,updated_at=? WHERE workload=? AND operation_id=? AND revision=?", appState, time.Now().Unix(), intent.Workload, operationID, intent.Revision); err != nil {
 				return err
 			}
 		}
-		return state.Event(tx, device, "operation.failed", operationID, result)
+		return state.Event(tx, device, event, operationID, result)
 	})
 }
 

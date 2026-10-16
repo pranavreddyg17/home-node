@@ -52,7 +52,7 @@ func TestRunningAppStopPersistsCooperativeIntentWithoutForcedFallback(t *testing
 		}
 		expected := "succeeded"
 		if refuse {
-			expected = "failed"
+			expected = "requires-action"
 		}
 		if result.State != expected {
 			t.Fatal("incorrect shutdown result", result)
@@ -62,6 +62,24 @@ func TestRunningAppStopPersistsCooperativeIntentWithoutForcedFallback(t *testing
 		}
 		if err = s.processApp(ctx); err != nil || len(b.requests) != 1 {
 			t.Fatal("retry repeated runtime effects", b.requests, err)
+		}
+		if refuse {
+			for _, action := range []string{"start", "stop"} {
+				if _, err = s.AppAction(ctx, device, state.Random(), "files", action); !errors.Is(err, ErrConflict) {
+					t.Fatal("uncertain shutdown lost its fence", action, err)
+				}
+			}
+			if err = s.Reconcile(ctx); err != nil {
+				t.Fatal(err)
+			}
+			cleanup, err := s.AppAction(ctx, device, state.Random(), "files", "stop")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var retryIntent appIntent
+			if err = json.Unmarshal(cleanup.Result, &retryIntent); err != nil || !retryIntent.CooperativeStop {
+				t.Fatal("reconciled running app escalated to forced stop", retryIntent, err)
+			}
 		}
 	}
 }
@@ -192,7 +210,7 @@ func TestAppFailureTransactionRollsBackWhenMetadataWriteFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.Store.DB.Exec(`CREATE TRIGGER fixture_failure BEFORE UPDATE ON apps WHEN NEW.state='failed' BEGIN SELECT RAISE(ABORT,'injected metadata write failure'); END`); err != nil {
+	if _, err = s.Store.DB.Exec(`CREATE TRIGGER fixture_failure BEFORE UPDATE ON apps BEGIN SELECT RAISE(ABORT,'injected metadata write failure'); END`); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.processApp(ctx); err == nil {
