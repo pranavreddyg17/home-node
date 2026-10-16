@@ -125,8 +125,9 @@ trigger the focused workflow so changes to those protections are retested.
 It refuses existing HomeNode account/group names, creates disposable named
 identities, builds a fixture certificate, and starts the real gateway with the
 source hardening properties in a fresh TUN namespace. A controlled daemon
-status executable is mounted only into the service; the controller is a
-minimal Unix acceptor running under the named controller UID. The actual
+status executable is mounted only into the service; the actual controller
+executable runs its private Unix listener under the named controller UID with
+private fixture state and no privileged workload backend. The actual
 gateway must load protected TLS files, authenticate that serving peer, open
 the configured listener, and exit unsuccessfully for readmission after address
 loss. An unsafe world-readable key must refuse startup before listening.

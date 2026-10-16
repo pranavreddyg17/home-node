@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Actual gateway startup in disposable Linux; daemon/controller are fixtures."""
+"""Actual gateway/controller startup in disposable Linux; daemon is a fixture."""
 import argparse
 import grp
 import os
@@ -31,11 +31,12 @@ def ready(process, marker, timeout=12):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--gateway-binary", required=True)
+    parser.add_argument("--controller-binary", required=True)
     parser.add_argument("--source-service", required=True)
     args = parser.parse_args()
     if sys.platform != "linux" or os.geteuid() != 0 or os.environ.get("HOMENODE_GATEWAY_STARTUP_FIXTURE") != "1":
         raise SystemExit("requires explicitly opted-in root on disposable Linux")
-    names = ("homenode", "homenode-gateway", "homenode-proxy")
+    names = ("homenode", "homenode-gateway", "homenode-proxy", "homenode-runtime")
     for name in names:
         try:
             grp.getgrnam(name)
@@ -70,6 +71,13 @@ def main():
             bridge_gid = grp.getgrnam("homenode-proxy").gr_gid
             shutil.copyfile(args.gateway_binary, directory / "gateway")
             (directory / "gateway").chmod(0o755)
+            shutil.copyfile(args.controller_binary, directory / "controller")
+            (directory / "controller").chmod(0o755)
+            for name in ("state", "data"):
+                private = directory / name
+                private.mkdir(mode=0o700)
+                os.chown(private, controller_uid, controller_gid)
+            (directory / "web").mkdir(mode=0o755)
             tls_directory = directory / "tls"
             tls_directory.mkdir(mode=0o750)
             os.chown(tls_directory, 0, gateway_gid)
@@ -98,9 +106,9 @@ while True:
  c,_=s.accept()
  c.close()
 """
-            peer = subprocess.Popen(["setpriv", f"--reuid={controller_uid}", f"--regid={controller_gid}", f"--groups={bridge_gid}", sys.executable, "-u", "-c", peer_script, str(control / "control.sock")], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            peer = subprocess.Popen(["setpriv", f"--reuid={controller_uid}", f"--regid={controller_gid}", f"--groups={bridge_gid}", str(directory / "controller"), "serve", "--controller-socket", str(control / "control.sock"), "--gateway-uid", str(pwd.getpwnam("homenode-gateway").pw_uid), "--access-gid", str(bridge_gid), "--bind", "100.100.1.2", "--origin", "https://home.example.ts.net:8787", "--state-dir", str(directory / "state"), "--data-root", str(directory / "data"), "--web-dir", str(directory / "web")], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             children.append(peer)
-            ready(peer, "CONTROLLER-READY")
+            ready(peer, "HomeNode listening")
             os.chown(control / "control.sock", controller_uid, bridge_gid)
             run("ip", "netns", "add", namespace)
             namespace_created = True
@@ -137,7 +145,7 @@ while True:
             (tls_directory / "server.key").chmod(0o640)
             peer.terminate()
             peer.communicate(timeout=5)
-            (control / "control.sock").unlink()
+            (control / "control.sock").unlink(missing_ok=True)
             # Root serves a replacement endpoint but labels it with the
             # expected controller ownership. Filesystem labels cannot replace
             # the serving process identity returned by SO_PEERCRED.
