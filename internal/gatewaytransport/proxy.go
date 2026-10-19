@@ -46,6 +46,10 @@ func NewProxy(config Config) (http.Handler, func(), error) {
 			if response.StatusCode == http.StatusSwitchingProtocols {
 				return ErrTransport
 			}
+			if response.Header.Get("Cache-Control") == "" {
+				response.Header.Set("Cache-Control", "no-store")
+			}
+			response.Header.Set("X-Content-Type-Options", "nosniff")
 			return nil
 		},
 		Rewrite: func(request *httputil.ProxyRequest) {
@@ -89,6 +93,11 @@ func NewProxy(config Config) (http.Handler, func(), error) {
 			return
 		}
 		defer budget.release(client)
+		// ReverseProxy adds upstream values rather than replacing existing
+		// headers. Refusal defaults must not duplicate the controller's policy
+		// or conflict with its immutable, content-addressed frontend assets.
+		w.Header().Del("Cache-Control")
+		w.Header().Del("X-Content-Type-Options")
 		proxy.ServeHTTP(w, r)
 	})
 	return handler, transport.CloseIdleConnections, nil

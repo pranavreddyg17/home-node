@@ -227,6 +227,16 @@ physical passkeys, mobile accessibility or dynamically imported chunks. Native
 execution of this extension is pending. The focused workflow now triggers on
 frontend, identity and controller entry-point changes as well as transport.
 
+The first native frontend run at source 1202c63 failed on duplicated response
+headers: refusal defaults on the downstream writer were added to the
+controller's forwarded values. The proxy now clears those defaults before
+forwarding, supplies no-store when upstream omits cache policy, and normalizes
+nosniff once. This preserves explicit immutable asset caching and keeps direct
+refusals/errors non-cacheable. The Unix peer regression checks single header
+values for API responses, asset responses and transport failures. The original
+strict frontend delivery assertions remain in place; native requalification
+of the correction is pending.
+
 The next extension moves the actual controller into a transient systemd unit
 using its source hardening properties. Fixture state/data/socket directories
 are explicitly mapped writable, while named controller/runtime/proxy groups
