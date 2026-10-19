@@ -105,6 +105,7 @@ def main():
             controller_gid = grp.getgrnam("homenode").gr_gid
             gateway_gid = grp.getgrnam("homenode-gateway").gr_gid
             bridge_gid = grp.getgrnam("homenode-proxy").gr_gid
+            runtime_gid = grp.getgrnam("homenode-runtime").gr_gid
             shutil.copyfile(args.gateway_binary, directory / "gateway")
             (directory / "gateway").chmod(0o755)
             shutil.copyfile(args.controller_binary, directory / "controller")
@@ -347,6 +348,20 @@ print('CARRIER-REFUSED-WITH-CONTROLS',flush=True)
                 raise RuntimeError(f"actual gateway did not exit for readmission after address loss: {output}")
             print("PASS actual gateway named identities, protected TLS load, controller peer admission and TUN-loss exit", flush=True)
             run("ip", "-n", namespace, "address", "add", "100.100.1.2/32", "dev", "tailscale0")
+            run("groupmod", "--non-unique", "--gid", str(gateway_gid), "homenode-runtime")
+            try:
+                alias_gateway = subprocess.run(command("aliased-groups"), capture_output=True, text=True, timeout=15)
+                if alias_gateway.returncode == 0 or "gateway requires its dedicated Linux identity" not in alias_gateway.stdout + alias_gateway.stderr:
+                    raise RuntimeError("gateway did not refuse aliased runtime/private key group at identity admission")
+                alias_unit = f"homenode-controller-alias-{os.getpid()}.service"
+                units.append(alias_unit)
+                alias_command = [f"--unit={alias_unit}" if argument.startswith("--unit=") else argument for argument in controller_command]
+                alias_controller = subprocess.run(alias_command, capture_output=True, text=True, timeout=15)
+                if alias_controller.returncode == 0 or "invalid dedicated controller proxy configuration" not in alias_controller.stdout + alias_controller.stderr:
+                    raise RuntimeError("controller did not refuse aliased runtime/private key group at identity admission")
+            finally:
+                run("groupmod", "--gid", str(runtime_gid), "homenode-runtime")
+            print("PASS actual gateway/controller refuse aliased NSS runtime and private TLS-key groups", flush=True)
             (tls_directory / "server.key").chmod(0o644)
             denied = subprocess.run(command("bad-key"), capture_output=True, text=True, timeout=15)
             if denied.returncode == 0 or "HomeNode private gateway listening" in denied.stdout + denied.stderr:

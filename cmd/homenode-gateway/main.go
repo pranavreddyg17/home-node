@@ -64,7 +64,23 @@ func installedIdentity(controllerUID, bridgeGID uint32) error {
 	if err != nil || bridge.Gid != strconv.FormatUint(uint64(bridgeGID), 10) {
 		return gatewaytransport.ErrTransport
 	}
-	return nil
+	controllerGroup, err := user.LookupGroup("homenode")
+	if err != nil || controller.Gid != controllerGroup.Gid || gateway.Gid != ownGroup.Gid {
+		return gatewaytransport.ErrTransport
+	}
+	runtimeGroup, err := user.LookupGroup("homenode-runtime")
+	if err != nil {
+		return gatewaytransport.ErrTransport
+	}
+	controllerGID, err := strconv.ParseUint(controllerGroup.Gid, 10, 32)
+	if err != nil {
+		return gatewaytransport.ErrTransport
+	}
+	runtimeGID, err := strconv.ParseUint(runtimeGroup.Gid, 10, 32)
+	if err != nil {
+		return gatewaytransport.ErrTransport
+	}
+	return gatewaytransport.ValidateRoleGroups(uint32(controllerGID), uint32(os.Getegid()), bridgeGID, uint32(runtimeGID))
 }
 
 func main() {

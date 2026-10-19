@@ -249,6 +249,16 @@ observations and exercised API behavior, not every filesystem/syscall denial,
 resource-pressure limit, canonical installed path or signed service lifecycle.
 Native execution of this dual-service extension is pending.
 
+Startup additionally requires distinct numeric GIDs for the named controller,
+gateway-key, proxy and runtime groups, and primary user GIDs matching their
+named role groups. Otherwise an aliased runtime group could become an allowed
+controller group while sharing private TLS-key access. The shared validator
+tests all pairwise aliases and root/out-of-policy values. The disposable
+fixture temporarily aliases the runtime GID to the gateway-key GID and requires
+both actual executables to fail identity admission, then restores the group.
+This is an explicit disposable NSS negative test, never an owner-host action.
+Native execution of this admission extension is pending.
+
 The baseline must enforce overlay-only ingress to the configured HTTPS port
 without granting the gateway firewall administration or daemon administration.
 Qualify the kernel-enforced listener restriction and its service lifecycle. A startup

@@ -24,21 +24,36 @@ func controllerProxyIdentity(socket string, dev bool, gatewayUID, bridgeGID uint
 	if err := validateControllerProxy(runtime.GOOS, socket, dev, os.Geteuid(), os.Getegid(), gatewayUID, bridgeGID, cert, key); err != nil {
 		return err
 	}
+	var gatewayPrimaryGroup string
 	for name, expected := range map[string]string{"homenode": strconv.Itoa(os.Geteuid()), "homenode-gateway": strconv.FormatUint(uint64(gatewayUID), 10)} {
 		account, err := user.Lookup(name)
 		if err != nil || account.Uid != expected {
 			return gatewaytransport.ErrTransport
 		}
+		if name == "homenode" && account.Gid != strconv.Itoa(os.Getegid()) {
+			return gatewaytransport.ErrTransport
+		}
+		if name == "homenode-gateway" {
+			gatewayPrimaryGroup = account.Gid
+		}
 	}
 	allowed := map[int]bool{}
-	for _, name := range []string{"homenode", "homenode-proxy", "homenode-runtime"} {
+	roleGroups := map[string]uint32{}
+	for _, name := range []string{"homenode", "homenode-gateway", "homenode-proxy", "homenode-runtime"} {
 		group, err := user.LookupGroup(name)
 		if err != nil {
 			return gatewaytransport.ErrTransport
 		}
 		id, err := strconv.Atoi(group.Gid)
-		if err != nil {
+		if err != nil || id <= 0 || id > 1<<31-1 {
 			return gatewaytransport.ErrTransport
+		}
+		roleGroups[name] = uint32(id)
+		if name == "homenode-gateway" {
+			if group.Gid != gatewayPrimaryGroup {
+				return gatewaytransport.ErrTransport
+			}
+			continue // private key group must never become an allowed controller group
 		}
 		if name == "homenode" && id != os.Getegid() {
 			return gatewaytransport.ErrTransport
@@ -47,6 +62,9 @@ func controllerProxyIdentity(socket string, dev bool, gatewayUID, bridgeGID uint
 			return gatewaytransport.ErrTransport
 		}
 		allowed[id] = true
+	}
+	if err := gatewaytransport.ValidateRoleGroups(roleGroups["homenode"], roleGroups["homenode-gateway"], roleGroups["homenode-proxy"], roleGroups["homenode-runtime"]); err != nil {
+		return err
 	}
 	groups, err := os.Getgroups()
 	if err != nil {
