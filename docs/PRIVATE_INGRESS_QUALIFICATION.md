@@ -216,6 +216,17 @@ SSE revocation through the real gateway/controller path, not guest download,
 inference or conversion streams. Native execution passed in that same
 [source dbcd5c2 run](evidence/https-recovery-dbcd5c2.json).
 
+The fixture is next extended to build the real first-party frontend and serve
+it through the controller's web directory. A certificate-verifying client
+fetches the index and its referenced JavaScript/CSS over the kernel TUN path,
+compares bytes to build-output SHA-256 values, and checks MIME types, no-store
+for HTML, immutable caching for assets, HSTS, nosniff, frame denial and the
+restrictive CSP. Referenced scripts/styles must use local `/assets/` paths.
+This qualifies static delivery only, not browser rendering, navigation,
+physical passkeys, mobile accessibility or dynamically imported chunks. Native
+execution of this extension is pending. The focused workflow now triggers on
+frontend, identity and controller entry-point changes as well as transport.
+
 The baseline must enforce overlay-only ingress to the configured HTTPS port
 without granting the gateway firewall administration or daemon administration.
 Qualify the kernel-enforced listener restriction and its service lifecycle. A startup

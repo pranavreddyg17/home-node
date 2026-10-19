@@ -5,6 +5,10 @@ on:
     paths:
       - 'internal/gatewaytransport/**'
       - 'internal/networkcheck/**'
+      - 'internal/identity/**'
+      - 'cmd/homenode/main.go'
+      - 'cmd/homenode/controller_proxy.go'
+      - 'web/**'
       - 'packaging/inspection/private_ingress_fixture.py'
       - 'packaging/inspection/gateway_startup_fixture.py'
       - 'packaging/systemd/homenode-gateway.service'
@@ -19,6 +23,10 @@ on:
     paths:
       - 'internal/gatewaytransport/**'
       - 'internal/networkcheck/**'
+      - 'internal/identity/**'
+      - 'cmd/homenode/main.go'
+      - 'cmd/homenode/controller_proxy.go'
+      - 'web/**'
       - 'packaging/inspection/private_ingress_fixture.py'
       - 'packaging/inspection/gateway_startup_fixture.py'
       - 'packaging/systemd/homenode-gateway.service'
@@ -59,9 +67,19 @@ jobs:
           sudo env HOMENODE_PRIVATE_INGRESS_FIXTURE=1 python3 packaging/inspection/private_ingress_fixture.py --test-binary /tmp/homenode-networkcheck-ingress.test --source-service packaging/systemd/homenode-gateway.service
       - name: Test actual TLS across distinct kernel identities
         run: sudo env HOMENODE_GATEWAY_PEER_INTEGRATION=1 "$(command -v go)" test ./internal/gatewaytransport -run '^TestRootDistinctControllerGatewayPeers$' -count=1 -v
-      - name: Test actual gateway startup under source hardening
+      - name: Build gateway/controller executables and native identity client
         run: |
           go build -o /tmp/homenode-gateway-startup ./cmd/homenode-gateway
           go build -o /tmp/homenode-controller-startup ./cmd/homenode
           go test -c ./cmd/homenode-gateway -o /tmp/homenode-https-identity.test
-          sudo env HOMENODE_GATEWAY_STARTUP_FIXTURE=1 python3 packaging/inspection/gateway_startup_fixture.py --gateway-binary /tmp/homenode-gateway-startup --controller-binary /tmp/homenode-controller-startup --identity-client-binary /tmp/homenode-https-identity.test --source-service packaging/systemd/homenode-gateway.service
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build first-party frontend for native HTTPS
+        run: |
+          npm --prefix web ci
+          npm --prefix web run build
+      - name: Test executable HTTPS identity and frontend delivery
+        run: sudo env HOMENODE_GATEWAY_STARTUP_FIXTURE=1 python3 packaging/inspection/gateway_startup_fixture.py --gateway-binary /tmp/homenode-gateway-startup --controller-binary /tmp/homenode-controller-startup --identity-client-binary /tmp/homenode-https-identity.test --web-dist web/dist --source-service packaging/systemd/homenode-gateway.service

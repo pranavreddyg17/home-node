@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Actual gateway/controller startup in disposable Linux; daemon is a fixture."""
 import argparse
+import hashlib
 import grp
 import json
 import os
@@ -34,10 +35,22 @@ def main():
     parser.add_argument("--gateway-binary", required=True)
     parser.add_argument("--controller-binary", required=True)
     parser.add_argument("--identity-client-binary", required=True)
+    parser.add_argument("--web-dist", required=True)
     parser.add_argument("--source-service", required=True)
     args = parser.parse_args()
     if sys.platform != "linux" or os.geteuid() != 0 or os.environ.get("HOMENODE_GATEWAY_STARTUP_FIXTURE") != "1":
         raise SystemExit("requires explicitly opted-in root on disposable Linux")
+    web_dist = pathlib.Path(args.web_dist).resolve(strict=True)
+    web_manifest = {}
+    for asset in web_dist.rglob("*"):
+        if asset.is_symlink():
+            raise RuntimeError("fixture frontend must not contain symlinks")
+        if asset.is_file():
+            if asset.stat().st_size > 8 << 20 or len(web_manifest) >= 512:
+                raise RuntimeError("fixture frontend exceeds serving bounds")
+            web_manifest["/" + asset.relative_to(web_dist).as_posix()] = hashlib.sha256(asset.read_bytes()).hexdigest()
+    if "/index.html" not in web_manifest:
+        raise RuntimeError("built frontend index missing")
     names = ("homenode", "homenode-gateway", "homenode-proxy", "homenode-runtime")
     for name in names:
         try:
@@ -83,7 +96,7 @@ def main():
                 private = directory / name
                 private.mkdir(mode=0o700)
                 os.chown(private, controller_uid, controller_gid)
-            (directory / "web").mkdir(mode=0o755)
+            shutil.copytree(web_dist, directory / "web")
             tls_directory = directory / "tls"
             tls_directory.mkdir(mode=0o750)
             os.chown(tls_directory, 0, gateway_gid)
@@ -206,6 +219,49 @@ except ssl.SSLError as error:
                 raise RuntimeError(f"actual TLS refusal checks incomplete: {results}")
             print("PASS actual TLS 1.3 over kernel TUN through gateway/controller executables: health, unauthenticated Files refusal and foreign Host refusal", flush=True)
             print("PASS actual TLS refuses untrusted root, wrong certificate hostname and TLS 1.2 over kernel TUN", flush=True)
+            frontend_client = """import hashlib,html.parser,http.client,json,socket,ssl,sys
+expected=json.load(sys.stdin)
+context=ssl.create_default_context(cafile=sys.argv[1])
+context.minimum_version=ssl.TLSVersion.TLSv1_3
+def fetch(path):
+ with socket.create_connection(('100.100.1.2',8787),timeout=5) as raw:
+  with context.wrap_socket(raw,server_hostname='home.example.ts.net') as connection:
+   connection.sendall(('GET '+path+' HTTP/1.1\\r\\nHost: home.example.ts.net:8787\\r\\nConnection: close\\r\\n\\r\\n').encode())
+   response=http.client.HTTPResponse(connection)
+   response.begin()
+   assert response.status==200,(path,response.status)
+   data=response.read((8<<20)+1)
+   assert len(data)<=8<<20
+   assert hashlib.sha256(data).hexdigest()==expected[path if path!='/' else '/index.html']
+   assert response.getheader('X-Content-Type-Options')=='nosniff'
+   assert response.getheader('Strict-Transport-Security')
+   assert response.getheader('X-Frame-Options')=='DENY'
+   csp=response.getheader('Content-Security-Policy','')
+   for directive in [\"default-src 'none'\",\"script-src 'self'\",\"connect-src 'self'\",\"frame-ancestors 'none'\",\"base-uri 'none'\"]: assert directive in csp
+   assert \"'unsafe-inline'\" not in csp and \"'unsafe-eval'\" not in csp
+   cache=response.getheader('Cache-Control')
+   assert cache==('no-store' if path=='/' else 'public, max-age=31536000, immutable')
+   return data,response.getheader('Content-Type','').split(';')[0]
+class Assets(html.parser.HTMLParser):
+ def __init__(self): super().__init__(); self.scripts=[]; self.styles=[]
+ def handle_starttag(self,tag,attributes):
+  a=dict(attributes)
+  if tag=='script' and a.get('src'): self.scripts.append(a['src'])
+  if tag=='link' and a.get('rel')=='stylesheet': self.styles.append(a['href'])
+index,content_type=fetch('/')
+assert content_type=='text/html'
+assets=Assets(); assets.feed(index.decode())
+assert assets.scripts and assets.styles
+for path in assets.scripts+assets.styles:
+ assert path.startswith('/assets/') and path in expected
+ _,kind=fetch(path)
+ assert kind in (('text/javascript','application/javascript') if path in assets.scripts else ('text/css',))
+print('FRONTEND-HTTPS-PASS',flush=True)
+"""
+            frontend_result = subprocess.run(["ip", "netns", "exec", peer_namespace, sys.executable, "-c", frontend_client, str(directory / "ca.crt")], input=json.dumps(web_manifest), capture_output=True, text=True, timeout=30)
+            if frontend_result.returncode != 0 or "FRONTEND-HTTPS-PASS" not in frontend_result.stdout:
+                raise RuntimeError(f"built frontend HTTPS delivery failed: {frontend_result.stdout}{frontend_result.stderr}")
+            print("PASS built frontend HTML/JS/CSS hashes, CSP, HTTPS and cache policy through actual gateway/controller", flush=True)
             setup_output = run("setpriv", f"--reuid={controller_uid}", f"--regid={controller_gid}", f"--groups={bridge_gid}", str(directory / "controller"), "setup-code", "--state-dir", str(directory / "state"))
             setup_code = setup_output.strip().splitlines()[-1]
             identity_input = json.dumps({"RootPEM": str(directory / "ca.crt"), "SetupCode": setup_code})
