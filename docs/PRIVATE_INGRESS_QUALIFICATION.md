@@ -182,6 +182,16 @@ generates its own key and protocol responses; this is server verification,
 not physical user verification, passkey hardware or browser UX evidence.
 Native execution of this phase is pending.
 
+The protocol client is further extended to pair a second, Files-only device
+with its own credential and cookie jar using a fresh signed owner approval.
+It must refuse an invitation without approval, a changed body under the grant,
+and a consumed grant replay. The paired device can list Files but cannot list
+devices. A separately approved owner revocation must cause that device's next
+Files request to fail on a reused, certificate-verified TLS connection. All
+mutations use public APIs; no fixture database writes establish authorization.
+This does not test revocation during an active workload stream or physical
+device enrollment. Native execution of this extension is pending.
+
 The baseline must enforce overlay-only ingress to the configured HTTPS port
 without granting the gateway firewall administration or daemon administration.
 Qualify the kernel-enforced listener restriction and its service lifecycle. A startup
