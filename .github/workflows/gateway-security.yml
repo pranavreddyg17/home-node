@@ -12,6 +12,7 @@ on:
       - 'packaging/inspection/private_ingress_fixture.py'
       - 'packaging/inspection/gateway_startup_fixture.py'
       - 'packaging/systemd/homenode-gateway.service'
+      - 'packaging/systemd/homenode-control.service'
       - 'internal/control/gateway*'
       - 'internal/control/server.go'
       - 'internal/control/request_json*'
@@ -30,6 +31,7 @@ on:
       - 'packaging/inspection/private_ingress_fixture.py'
       - 'packaging/inspection/gateway_startup_fixture.py'
       - 'packaging/systemd/homenode-gateway.service'
+      - 'packaging/systemd/homenode-control.service'
       - 'internal/control/gateway*'
       - 'internal/control/server.go'
       - 'internal/control/request_json*'
@@ -82,4 +84,4 @@ jobs:
           npm --prefix web ci
           npm --prefix web run build
       - name: Test executable HTTPS identity and frontend delivery
-        run: sudo env HOMENODE_GATEWAY_STARTUP_FIXTURE=1 python3 packaging/inspection/gateway_startup_fixture.py --gateway-binary /tmp/homenode-gateway-startup --controller-binary /tmp/homenode-controller-startup --identity-client-binary /tmp/homenode-https-identity.test --web-dist web/dist --source-service packaging/systemd/homenode-gateway.service
+        run: sudo env HOMENODE_GATEWAY_STARTUP_FIXTURE=1 python3 packaging/inspection/gateway_startup_fixture.py --gateway-binary /tmp/homenode-gateway-startup --controller-binary /tmp/homenode-controller-startup --identity-client-binary /tmp/homenode-https-identity.test --web-dist web/dist --source-service packaging/systemd/homenode-gateway.service --controller-source-service packaging/systemd/homenode-control.service

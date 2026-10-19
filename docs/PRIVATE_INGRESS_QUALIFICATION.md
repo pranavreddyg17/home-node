@@ -227,6 +227,18 @@ physical passkeys, mobile accessibility or dynamically imported chunks. Native
 execution of this extension is pending. The focused workflow now triggers on
 frontend, identity and controller entry-point changes as well as transport.
 
+The next extension moves the actual controller into a transient systemd unit
+using its source hardening properties. Fixture state/data/socket directories
+are explicitly mapped writable, while named controller/runtime/proxy groups
+remain separate from the gateway's TLS-key group. The controller unit is
+stopped explicitly before the foreign serving-peer negative case. Both
+running application executables are observed through their unit MainPID and
+`/proc`: executable inode, effective UID/GID, empty capability sets,
+NoNewPrivileges and seccomp mode must match expectations. This proves those
+observations and exercised API behavior, not every filesystem/syscall denial,
+resource-pressure limit, canonical installed path or signed service lifecycle.
+Native execution of this dual-service extension is pending.
+
 The baseline must enforce overlay-only ingress to the configured HTTPS port
 without granting the gateway firewall administration or daemon administration.
 Qualify the kernel-enforced listener restriction and its service lifecycle. A startup

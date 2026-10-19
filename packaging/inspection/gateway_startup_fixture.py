@@ -30,6 +30,23 @@ def ready(process, marker, timeout=12):
     raise RuntimeError(f"process did not reach {marker}: {''.join(lines)}")
 
 
+def observe_service(unit, binary, uid, gid):
+    pid = int(run("systemctl", "show", unit, "--property=MainPID", "--value").strip())
+    if pid <= 1:
+        raise RuntimeError("native service has no running main process")
+    expected, actual = os.stat(binary), os.stat(f"/proc/{pid}/exe")
+    if (expected.st_dev, expected.st_ino) != (actual.st_dev, actual.st_ino):
+        raise RuntimeError("native service is not executing the copied application binary")
+    fields = dict(line.split(":", 1) for line in pathlib.Path(f"/proc/{pid}/status").read_text().splitlines() if ":" in line)
+    if int(fields["Uid"].split()[1]) != uid or int(fields["Gid"].split()[1]) != gid:
+        raise RuntimeError("native service kernel identity differs from named account")
+    for name in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb"):
+        if fields[name].strip() != "0000000000000000":
+            raise RuntimeError(f"native service retained {name}")
+    if fields["NoNewPrivs"].strip() != "1" or fields["Seccomp"].strip() != "2":
+        raise RuntimeError("native service lacks kernel no-new-privileges or seccomp filtering")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--gateway-binary", required=True)
@@ -37,6 +54,7 @@ def main():
     parser.add_argument("--identity-client-binary", required=True)
     parser.add_argument("--web-dist", required=True)
     parser.add_argument("--source-service", required=True)
+    parser.add_argument("--controller-source-service", required=True)
     args = parser.parse_args()
     if sys.platform != "linux" or os.geteuid() != 0 or os.environ.get("HOMENODE_GATEWAY_STARTUP_FIXTURE") != "1":
         raise SystemExit("requires explicitly opted-in root on disposable Linux")
@@ -67,6 +85,7 @@ def main():
         else:
             raise RuntimeError(f"refusing preexisting account {name}")
     properties = source_hardening(args.source_service)
+    controller_properties = source_hardening(args.controller_source_service)
     users, groups, units, children = [], [], [], []
     namespace = f"hn-gs-{os.getpid()}"
     peer_namespace = f"hn-gp-{os.getpid()}"
@@ -125,9 +144,14 @@ while True:
  c,_=s.accept()
  c.close()
 """
-            peer = subprocess.Popen(["setpriv", f"--reuid={controller_uid}", f"--regid={controller_gid}", f"--groups={bridge_gid}", str(directory / "controller"), "serve", "--controller-socket", str(control / "control.sock"), "--gateway-uid", str(pwd.getpwnam("homenode-gateway").pw_uid), "--access-gid", str(bridge_gid), "--bind", "100.100.1.2", "--origin", "https://home.example.ts.net:8787", "--state-dir", str(directory / "state"), "--data-root", str(directory / "data"), "--web-dir", str(directory / "web")], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            controller_unit = f"homenode-controller-startup-{os.getpid()}.service"
+            units.append(controller_unit)
+            controller_base = "/run/homenode-startup"
+            controller_command = ["systemd-run", "--quiet", "--pipe", "--wait", "--collect", f"--unit={controller_unit}", "--property=Type=exec", "--property=User=homenode", "--property=Group=homenode", "--property=SupplementaryGroups=homenode-proxy homenode-runtime", f"--property=BindPaths={directory}:{controller_base}", f"--property=ReadWritePaths={controller_base}/state {controller_base}/data {controller_base}/control", *controller_properties, "/usr/bin/env", f"{controller_base}/controller", "serve", "--controller-socket", f"{controller_base}/control/control.sock", "--gateway-uid", str(pwd.getpwnam("homenode-gateway").pw_uid), "--access-gid", str(bridge_gid), "--bind", "100.100.1.2", "--origin", "https://home.example.ts.net:8787", "--state-dir", f"{controller_base}/state", "--data-root", f"{controller_base}/data", "--web-dir", f"{controller_base}/web"]
+            peer = subprocess.Popen(controller_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             children.append(peer)
             ready(peer, "HomeNode listening")
+            observe_service(controller_unit, directory / "controller", controller_uid, controller_gid)
             os.chown(control / "control.sock", controller_uid, bridge_gid)
             run("ip", "netns", "add", namespace)
             namespace_created = True
@@ -180,6 +204,8 @@ while True:
             gateway = subprocess.Popen(command("valid"), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             children.append(gateway)
             ready(gateway, "HomeNode private gateway listening")
+            observe_service(units[-1], directory / "gateway", pwd.getpwnam("homenode-gateway").pw_uid, gateway_gid)
+            print("PASS actual gateway/controller kernel identities, zero capabilities, no-new-privileges and seccomp observed", flush=True)
             listeners = run("ip", "netns", "exec", namespace, "ss", "-ltn")
             if "100.100.1.2%tailscale0:8787" not in listeners and "100.100.1.2:8787" not in listeners:
                 raise RuntimeError("gateway announced readiness without configured TCP listener")
@@ -329,7 +355,7 @@ print('CARRIER-REFUSED-WITH-CONTROLS',flush=True)
                 raise RuntimeError(f"unsafe key refusal was not reached: {denied.stdout}{denied.stderr}")
             print("PASS actual gateway refuses unsafe protected key before listener startup", flush=True)
             (tls_directory / "server.key").chmod(0o640)
-            peer.terminate()
+            run("systemctl", "stop", controller_unit)
             peer.communicate(timeout=5)
             (control / "control.sock").unlink(missing_ok=True)
             # Root serves a replacement endpoint but labels it with the
