@@ -57,6 +57,7 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Transport: transport, Jar: jar, Timeout: 5 * time.Second}
 	var approvalChallenge, actionApproval string
+	var idempotencyKey string
 	var traceNext, reused bool
 	request := func(method, path string, payload any, status int) []byte {
 		t.Helper()
@@ -70,6 +71,9 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 		}
 		req.Header.Set("Origin", origin)
 		req.Header.Set("Content-Type", "application/json")
+		if idempotencyKey != "" {
+			req.Header.Set("Idempotency-Key", idempotencyKey)
+		}
 		if approvalChallenge != "" {
 			req.Header.Set("X-Approval-Challenge", approvalChallenge)
 		}
@@ -202,6 +206,9 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 			t.Fatal("signed sensitive approval did not return grant")
 		}
 		return grant.ApprovalToken
+	}
+	if os.Getenv("HOMENODE_NATIVE_HTTPS_FILES") == "1" {
+		nativeHTTPSFilesRoundTrip(t, client, origin, request, approve, &actionApproval, &idempotencyKey)
 	}
 	pairBody := map[string]any{"name": "Native Files device", "capabilities": []string{"files"}}
 	request(http.MethodPost, "/api/v1/devices/pair", pairBody, 403)

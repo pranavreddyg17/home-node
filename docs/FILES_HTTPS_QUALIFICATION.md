@@ -44,6 +44,20 @@ Required demonstration:
    original request identity, and verify bytes and operation outcomes. Record
    source, image digest, policy, role identities and bounded diagnostics.
 
+The generated HTTPS identity client now has an explicit
+`HOMENODE_NATIVE_HTTPS_FILES=1` mode for the joined fixture. It refuses a
+controller without configured workload sockets or with existing file metadata.
+Using the enrolled owner, it obtains fresh signed app approvals, starts Files,
+polls the actual operation, creates a 32 KiB transfer with the same request key
+twice, observes committed chunks, verifies downloaded bytes and Range/ETag,
+exercises Trash/restore and completed ZIP contents, then stops/starts Files and
+checks retained bytes before a final stop. It neither seeds state nor supplies a
+memory workload backend. The current gateway fixture does not enable this mode:
+it must first be joined to fresh native supervisor/transfer services. The mode
+has compiled for Linux but has not executed against a guest. Its bounded smoke
+payload does not satisfy the 1 GiB, network-loss, active-transfer revocation,
+quota or complete service-restart requirements above.
+
 Fixture-signed development catalogs are distinct from release publisher trust.
 Passing this integration would still leave physical networking, browser/mobile
 acceptance, signed installation and the remaining product release gates open.
