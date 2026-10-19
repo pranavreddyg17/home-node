@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "dbcd5c2498fff7588273b31bf78708c9280e9e7f",
+  "workflowRun": 39300594036,
+  "job": 118224468690,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/39300594036",
+  "conclusion": "success",
+  "logSHA256": "e6842ca9521d2de3b13023e2bc49d02288d5b6bf74702e1a6a0eb6fb471bd57d",
+  "environment": {
+    "architecture": "x86_64",
+    "distribution": "ubuntu",
+    "distributionVersion": "24.04",
+    "iproute": "ip utility, iproute2-6.1.0, libbpf 1.3.0",
+    "kernel": "6.17.0-1022-azure",
+    "python": "3.12.3"
+  },
+  "assertions": [
+    "Actual gateway and controller executables use disposable named NSS identities with distinct UIDs",
+    "Gateway applies source service hardening, reads protected root-owned gateway-group TLS key and trusts fixture certificate",
+    "Running-daemon identity is supplied by a service-only mounted controlled status executable",
+    "Gateway authenticates actual controller Unix serving peer before listener readiness",
+    "TUN address removal causes actual gateway unsuccessful exit for readmission",
+    "World-readable key refuses startup before listener readiness",
+    "Foreign root controller process refuses startup despite expected socket owner/group labels",
+    "Actual certificate-verified TLS 1.3 traverses kernel TUN interfaces into gateway and actual private controller, with no fabricated TLS state or client address",
+    "Public controller health returns 200, unauthenticated Files returns 401 and foreign HTTP Host returns 403",
+    "Real clients refuse untrusted root and mismatched certificate hostname; server refuses TLS 1.2 with protocol-version alert",
+    "Actual gateway TLS refuses CGNAT source routed through carrier veth while gateway remains live",
+    "Certificate-verified unbound TLS control succeeds on same carrier route before and after gateway refusal; both server processes stay live",
+    "Reverse-path filtering disabled only in fixture namespaces so it cannot supply the ingress refusal",
+    "Actual console setup code authorizes WebAuthn registration over certificate-verified TLS through actual gateway and controller",
+    "Registration returns eight recovery codes; identity responses enforce HSTS, no-store and Secure/HttpOnly/host-only/SameSite=Strict cookies",
+    "Authenticated device listing succeeds, logout removes access, wrong-origin and missing-UV signed login responses are refused, valid ES256 login restores access",
+    "No credential or session is seeded directly into controller storage",
+    "Fresh ES256-signed owner approval creates a Files-only pairing invitation; absent approval, changed body and consumed grant replay are refused",
+    "Second generated credential and separate cookie jar enroll through invitation; Files listing succeeds and device administration returns 403",
+    "A distinct signed owner approval revokes paired device; subsequent Files request returns 401 on a reused verified TLS connection",
+    "Paired authenticated event stream publishes heartbeats before revocation and reaches clean EOF before eight-second client deadline, shorter than normal 25-second stream lifetime",
+    "Recovery code issues only one replacement invitation and does not retire existing session before replacement commits",
+    "Replacement protocol credential enrollment rotates recovery material, retires old session and credential, and refuses unused old recovery code",
+    "Replacement credential logs in successfully after logout"
+  ],
+  "limits": [
+    "Generated protocol authenticators, not browser/passkey hardware or physical user verification; active stream result covers SSE only, not guest download/inference/conversion streams",
+    "No production Tailscale enrollment/encryption/ACLs, public-CA issuance, physical passkeys or allowed/denied physical devices",
+    "Transient systemd unit and temporary paths, not signed installed package or shipped unit lifecycle",
+    "Controller runs actual executable without privileged workload backend; no authenticated workload, UI or VM operations"
+  ]
+}

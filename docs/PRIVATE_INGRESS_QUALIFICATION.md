@@ -204,7 +204,8 @@ credential, refuse another unused code from the old set, and successfully
 log in after logout. These requests use the real HTTPS APIs and generated
 protocol credentials. They do not qualify encrypted backup restore,
 replacement-host recovery, physical authenticators or browser UX. Native
-execution of this recovery extension is pending.
+execution of this recovery extension passed in
+[source dbcd5c2's run](evidence/https-recovery-dbcd5c2.json).
 
 The paired device also opens an actual authenticated event stream before
 revocation and receives its initial heartbeat. After the approved revoke,
@@ -212,7 +213,8 @@ the stream must reach clean EOF within its eight-second client deadline,
 shorter than the controller's normal 25-second stream lifetime. A timeout,
 transport error or oversized drain fails the check. This exercises active
 SSE revocation through the real gateway/controller path, not guest download,
-inference or conversion streams. Native execution is pending.
+inference or conversion streams. Native execution passed in that same
+[source dbcd5c2 run](evidence/https-recovery-dbcd5c2.json).
 
 The baseline must enforce overlay-only ingress to the configured HTTPS port
 without granting the gateway firewall administration or daemon administration.
