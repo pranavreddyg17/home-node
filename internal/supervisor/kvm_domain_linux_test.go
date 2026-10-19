@@ -592,7 +592,7 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 			if err != nil {
 				t.Fatal("native Files manager channel admission", err)
 			}
-			roundTripNativeFilesChannel(t, ctx, clientScript, channel, backend.TransferGID, r.InstanceID, attempt)
+			roundTripNativeFilesChannel(t, ctx, clientScript, channel, m.Policy.TransferUID, backend.TransferGID, r.InstanceID, attempt)
 			if attempt == 0 {
 				var stopTransfer func()
 				exerciseTransfer, stopTransfer = startNativeFilesTransfer(t, ctx, base, clientScript, r.InstanceID, m, backend.TransferGID)

@@ -10,11 +10,13 @@ import overlay
 
 
 def main():
-    if sys.platform != "linux" or os.geteuid() != 1 or os.getenv("HOMENODE_FILES_MANAGER_INTEGRATION") != "1":
+    if sys.platform != "linux" or os.geteuid() == 0 or os.getenv("HOMENODE_FILES_MANAGER_INTEGRATION") != "1":
         raise ValueError("explicit disposable Linux controller UID required")
-    if len(sys.argv) != 5:
+    if len(sys.argv) != 6:
         raise ValueError("bounded runtime fixture inputs required")
-    path, instance, action, uid_text = sys.argv[1:]
+    path, instance, action, uid_text, controller_text = sys.argv[1:]
+    if re.fullmatch(r"[1-9][0-9]{0,9}", controller_text) is None or not 0 < int(controller_text) <= 2147483647 or os.geteuid() != int(controller_text):
+        raise ValueError("accepted controller policy identity required")
     if not os.path.isabs(path) or re.fullmatch(r"[A-Za-z0-9_-]{20,64}", instance) is None or action not in ("start", "shutdown") or re.fullmatch(r"[1-9][0-9]{4,9}", uid_text) is None:
         raise ValueError("bounded runtime fixture inputs required")
     uid = int(uid_text)

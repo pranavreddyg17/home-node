@@ -44,7 +44,7 @@ func startNativeFilesTransfer(t *testing.T, ctx context.Context, base, script, i
 		}
 	}()
 	go func() { _ = server.Serve(listener) }()
-	exercise, stop := startNativeFilesTransferAt(t, ctx, base, script, instanceID, runtimeSocket, m.Channels, gid)
+	exercise, stop := startNativeFilesTransferAt(t, ctx, base, script, instanceID, runtimeSocket, m.Channels, gid, m.Policy.ControllerUID, m.Policy.TransferUID)
 	retained = true
 	return exercise, func() {
 		stop()
@@ -55,8 +55,11 @@ func startNativeFilesTransfer(t *testing.T, ctx context.Context, base, script, i
 
 // Reuse the shipped transfer/client path against either the real executable's
 // socket or the direct Manager fixture. Peer authorization stays server-side.
-func startNativeFilesTransferAt(t *testing.T, ctx context.Context, base, script, instanceID, runtimeSocket, channels string, gid int) (func(), func()) {
+func startNativeFilesTransferAt(t *testing.T, ctx context.Context, base, script, instanceID, runtimeSocket, channels string, gid int, controllerUID, transferUID uint32) (func(), func()) {
 	t.Helper()
+	if gid < 1 || gid > 1<<31-1 || controllerUID == 0 || transferUID == 0 || controllerUID == transferUID || controllerUID > 1<<31-1 || transferUID > 1<<31-1 {
+		t.Fatal("invalid native transfer role identities")
+	}
 	binary := "/usr/lib/homenode-fixtures/homenode-transfer"
 	info, err := os.Lstat(binary)
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0755 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
@@ -71,7 +74,7 @@ func startNativeFilesTransferAt(t *testing.T, ctx context.Context, base, script,
 	if err := os.Mkdir(directory, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chown(directory, 2, gid); err != nil {
+	if err := os.Chown(directory, int(transferUID), gid); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chmod(directory, 0750); err != nil {
@@ -80,12 +83,12 @@ func startNativeFilesTransferAt(t *testing.T, ctx context.Context, base, script,
 	transferSocket := filepath.Join(directory, "transfer.sock")
 	childCtx, cancel := context.WithCancel(ctx)
 	command := exec.CommandContext(childCtx, binary, "-socket", transferSocket, "-supervisor", runtimeSocket,
-		"-channels", channels, "-controller-uid", "1", "-access-gid", strconv.Itoa(gid), "-policy-generation", "1")
+		"-channels", channels, "-controller-uid", strconv.FormatUint(uint64(controllerUID), 10), "-access-gid", strconv.Itoa(gid), "-policy-generation", "1")
 	command.Dir = base
 	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin"}
 	var diagnostics boundedOutput
 	command.Stdout, command.Stderr = &diagnostics, &diagnostics
-	command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 2, Gid: uint32(gid), Groups: []uint32{}}}
+	command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: transferUID, Gid: uint32(gid), Groups: []uint32{}}}
 	command.WaitDelay = 3 * time.Second
 	if err := command.Start(); err != nil {
 		cancel()
@@ -105,10 +108,14 @@ func startNativeFilesTransferAt(t *testing.T, ctx context.Context, base, script,
 	}()
 	client := filepath.Join(filepath.Dir(script), "manager_transfer.py")
 	exercise := func() {
+		foreignUID := uint32(3)
+		for foreignUID == controllerUID || foreignUID == transferUID {
+			foreignUID++
+		}
 		for _, scenario := range []struct {
 			uid  uint32
 			mode string
-		}{{3, "deny"}, {2, "runtime-deny"}, {1, "allow"}} {
+		}{{foreignUID, "deny"}, {transferUID, "runtime-deny"}, {controllerUID, "allow"}} {
 			endpoint := transferSocket
 			if scenario.mode == "runtime-deny" {
 				endpoint = runtimeSocket

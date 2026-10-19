@@ -116,18 +116,18 @@ func stageNativeFilesClient(t *testing.T, base string) string {
 	return filepath.Join(directory, "manager_channel.py")
 }
 
-func roundTripNativeFilesChannel(t *testing.T, ctx context.Context, script, channel string, transferGID int, objectID string, attempt int64) {
+func roundTripNativeFilesChannel(t *testing.T, ctx context.Context, script, channel string, transferUID uint32, transferGID int, objectID string, attempt int64) {
 	t.Helper()
-	if !filepath.IsAbs(script) || transferGID < 1 || transferGID > 1<<31-1 {
+	if !filepath.IsAbs(script) || transferUID == 0 || transferUID > 1<<31-1 || transferGID < 1 || transferGID > 1<<31-1 {
 		t.Fatal("invalid native Files client authority")
 	}
 	cmd := exec.CommandContext(ctx, "/usr/bin/python3", "-B", script, channel, objectID, strconv.FormatInt(attempt, 10))
 	cmd.Dir = filepath.Dir(script)
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOMENODE_FILES_MANAGER_INTEGRATION=1"}
 	cmd.WaitDelay = time.Second
-	// UID 2 is the fixture's transfer UID; primary group grants channel traversal.
+	// The accepted policy's transfer UID and group grant channel traversal.
 	// No supplementary KVM group or root privilege is passed to the client.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 2, Gid: uint32(transferGID), Groups: []uint32{}}}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: transferUID, Gid: uint32(transferGID), Groups: []uint32{}}}
 	output, err := cmd.CombinedOutput()
 	if err != nil || string(output) != "development Files channel round trip passed\n" {
 		t.Fatal("native Files client round trip", err, string(output))

@@ -175,8 +175,8 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images,
 		}
 	}
 	started = true // A failed request may still have committed native effects.
-	nativeFilesRuntimeRequest(t, childCtx, script, socket, instanceID, "start", policy.GuestIdentity.FirstUID, transferGID)
-	exercise, stopTransfer := startNativeFilesTransferAt(t, childCtx, directory, script, instanceID, socket, filepath.Join(directory, "channels"), transferGID)
+	nativeFilesRuntimeRequest(t, childCtx, script, socket, instanceID, "start", policy.ControllerUID, policy.GuestIdentity.FirstUID, transferGID)
+	exercise, stopTransfer := startNativeFilesTransferAt(t, childCtx, directory, script, instanceID, socket, filepath.Join(directory, "channels"), transferGID, policy.ControllerUID, policy.TransferUID)
 	transferStopped := false
 	defer func() {
 		if !transferStopped {
@@ -186,7 +186,7 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images,
 	exercise()
 	stopTransfer()
 	transferStopped = true
-	nativeFilesRuntimeRequest(t, childCtx, script, socket, instanceID, "shutdown", policy.GuestIdentity.FirstUID, transferGID)
+	nativeFilesRuntimeRequest(t, childCtx, script, socket, instanceID, "shutdown", policy.ControllerUID, policy.GuestIdentity.FirstUID, transferGID)
 	if err := command.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatal(err)
 	}
@@ -233,12 +233,15 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images,
 	t.Log("actual supervisor executable accepted fixture-signed Files catalog and reserved policy, launched actual Files guest, completed unprivileged transfer and role refusals, and cooperatively shut down; installed services and release remain unqualified")
 }
 
-func nativeFilesRuntimeRequest(t *testing.T, ctx context.Context, script, socket, instanceID, action string, guestUID uint32, gid int) {
+func nativeFilesRuntimeRequest(t *testing.T, ctx context.Context, script, socket, instanceID, action string, controllerUID, guestUID uint32, gid int) {
 	t.Helper()
-	command := exec.CommandContext(ctx, "/usr/bin/python3", "-B", filepath.Join(filepath.Dir(script), "manager_runtime.py"), socket, instanceID, action, strconv.FormatUint(uint64(guestUID), 10))
+	if controllerUID == 0 || controllerUID > 1<<31-1 || gid < 1 || gid > 1<<31-1 {
+		t.Fatal("invalid native controller authority")
+	}
+	command := exec.CommandContext(ctx, "/usr/bin/python3", "-B", filepath.Join(filepath.Dir(script), "manager_runtime.py"), socket, instanceID, action, strconv.FormatUint(uint64(guestUID), 10), strconv.FormatUint(uint64(controllerUID), 10))
 	command.Dir = filepath.Dir(script)
 	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "HOMENODE_FILES_MANAGER_INTEGRATION=1"}
-	command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 1, Gid: uint32(gid), Groups: []uint32{}}}
+	command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: controllerUID, Gid: uint32(gid), Groups: []uint32{}}}
 	command.WaitDelay = time.Second
 	output, err := command.CombinedOutput()
 	if err != nil || string(output) != "development runtime "+action+" passed\n" {
