@@ -192,7 +192,9 @@ devices. A separately approved owner revocation must cause that device's next
 Files request to fail on a reused, certificate-verified TLS connection. All
 mutations use public APIs; no fixture database writes establish authorization.
 This does not test revocation during an active workload stream or physical
-device enrollment. Native execution of this extension is pending.
+device enrollment. Native execution of approved pairing and reused-TLS
+revocation passed in [source 5333cab's run](evidence/https-pairing-5333cab.json).
+It excludes the later identity recovery and active-SSE extension.
 
 The client is further extended with identity recovery. A recovery code may
 issue only one replacement invitation; issuing it alone must preserve the
