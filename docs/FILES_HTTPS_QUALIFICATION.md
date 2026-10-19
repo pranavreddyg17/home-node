@@ -16,9 +16,13 @@ from that accepted policy rather than hardcoding them, including transfer
 directory ownership, process credentials, runtime requests and negative-role
 checks. The runtime client receives the expected controller UID explicitly and
 still requires matching kernel credentials and disposable integration opt-in.
-Linux compilation passes; native regression of the helper refactor and named
-Files roles is pending. Run 39305868215 covers the preceding helper refactor at
-`6af6bcc`; it does not cover the subsequent named-role change.
+Linux compilation passes. Run 39305868215 passed the helper refactor at
+`6af6bcc`: its log confirms actual KVM Files guest execution, the supervisor and
+transfer executables, role refusals, direct 1 GiB object transfer, disk-full
+handling and retained restart. The executable transfer exercise is separately
+bounded; the 1 GiB result is not an HTTPS transfer demonstration. Named Files
+roles remain pending; that later change is not covered by this run. See
+`evidence/files-policy-roles-6af6bcc.json`.
 
 The next integration must join these paths with fresh, distinct named service
 identities and the real supervisor/transfer sockets. It must preserve catalog

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "6af6bcc957d6a2958aa5ea0e121108e8ebe4733c",
+  "workflowRun": 39305868215,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/39305868215",
+  "conclusion": "success",
+  "logSHA256": "ca2b2b821ec12e421c4c40e5bd3a22f1dede0641f30a18a3045bc0ac0a59f093",
+  "observedAssertions": [
+    "--- PASS: TestNativeReservedFilesManagerLaunch (202.55s)",
+    "actual supervisor executable accepted fixture-signed Files catalog and reserved policy, launched actual Files guest",
+    "actual unprivileged transfer binary round trip, foreign controller UID refusal and transfer UID runtime-stop refusal passed",
+    "development Files manager launch, 1 GiB object round trip, disk-full refusal and cleanup, audit, cooperative shutdown and identity-retaining restart completed"
+  ],
+  "limitations": [
+    "This revision still uses numeric controller UID 1 and transfer UID 2; later named service account changes are not covered.",
+    "The 1 GiB round trip uses the native manager guest channel; the executable transfer exercise is bounded separately.",
+    "No authenticated public controller, HTTPS upload or browser path is exercised.",
+    "Development image and fixture catalog trust do not qualify signed release artifacts or installed services."
+  ]
+}
