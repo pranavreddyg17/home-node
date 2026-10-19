@@ -104,6 +104,7 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 	request(http.MethodGet, "/api/v1/session", nil, 401)
 	enc := base64.RawURLEncoding.EncodeToString
 	rpHash := sha256.Sum256([]byte("home.example.ts.net"))
+	var recoveryCodes []string
 	enroll := func(code, deviceName string, recoveryCount int) (*ecdsa.PrivateKey, []byte, string) {
 		t.Helper()
 		creation := request(http.MethodPost, "/api/v1/auth/register/begin", map[string]string{"code": code, "name": deviceName}, 200)
@@ -142,6 +143,9 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 		var result struct{ RecoveryCodes []string }
 		if json.Unmarshal(finished, &result) != nil || len(result.RecoveryCodes) != recoveryCount {
 			t.Fatal("owner enrollment did not return expected recovery material")
+		}
+		if recoveryCount > 0 {
+			recoveryCodes = append([]string{}, result.RecoveryCodes...)
 		}
 		return key, credential, options.PublicKey.User.ID
 	}
@@ -233,4 +237,41 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 	if !reused {
 		t.Fatal("revocation did not exercise a reused verified TLS connection")
 	}
+	traceNext = false
+	client = owner
+	oldRecovery, unusedOldRecovery := recoveryCodes[0], recoveryCodes[1]
+	recoveryData := request(http.MethodPost, "/api/v1/auth/recover", map[string]string{"code": oldRecovery}, 200)
+	request(http.MethodPost, "/api/v1/auth/recover", map[string]string{"code": oldRecovery}, 403)
+	request(http.MethodGet, "/api/v1/devices", nil, 200) // replacement has not committed
+	var replacementInvitation struct{ Code string }
+	if json.Unmarshal(recoveryData, &replacementInvitation) != nil || replacementInvitation.Code == "" {
+		t.Fatal("replacement enrollment invitation missing")
+	}
+	replacementJar, _ := cookiejar.New(nil)
+	replacement := &http.Client{Transport: transport, Jar: replacementJar, Timeout: 5 * time.Second}
+	client = replacement
+	newKey, newCredential, newHandle := enroll(replacementInvitation.Code, "Recovered HTTPS owner", 8)
+	if recoveryCodes[0] == oldRecovery || recoveryCodes[0] == unusedOldRecovery {
+		t.Fatal("replacement identity reused old recovery material")
+	}
+	request(http.MethodGet, "/api/v1/devices", nil, 200)
+	request(http.MethodPost, "/api/v1/auth/recover", map[string]string{"code": unusedOldRecovery}, 403)
+	client = owner
+	request(http.MethodGet, "/api/v1/devices", nil, 401)
+	begin := request(http.MethodPost, "/api/v1/auth/login/begin", map[string]any{}, 200)
+	var retiredOptions struct{ PublicKey struct{ Challenge string } }
+	if json.Unmarshal(begin, &retiredOptions) != nil || retiredOptions.PublicKey.Challenge == "" {
+		t.Fatal("retired credential test challenge missing")
+	}
+	request(http.MethodPost, "/api/v1/auth/login/finish", sign(retiredOptions.PublicKey.Challenge, origin, 5, counter+1), 403)
+	key, credential, userHandle = newKey, newCredential, newHandle
+	client = replacement
+	request(http.MethodPost, "/api/v1/logout", map[string]any{}, 200)
+	begin = request(http.MethodPost, "/api/v1/auth/login/begin", map[string]any{}, 200)
+	var replacementOptions struct{ PublicKey struct{ Challenge string } }
+	if json.Unmarshal(begin, &replacementOptions) != nil || replacementOptions.PublicKey.Challenge == "" {
+		t.Fatal("replacement credential login challenge missing")
+	}
+	request(http.MethodPost, "/api/v1/auth/login/finish", sign(replacementOptions.PublicKey.Challenge, origin, 5, 1), 200)
+	request(http.MethodGet, "/api/v1/devices", nil, 200)
 }

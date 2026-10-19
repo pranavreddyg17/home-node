@@ -194,6 +194,16 @@ mutations use public APIs; no fixture database writes establish authorization.
 This does not test revocation during an active workload stream or physical
 device enrollment. Native execution of this extension is pending.
 
+The client is further extended with identity recovery. A recovery code may
+issue only one replacement invitation; issuing it alone must preserve the
+old authenticated session until replacement enrollment commits. A new
+credential must rotate recovery material, retire the old session and
+credential, refuse another unused code from the old set, and successfully
+log in after logout. These requests use the real HTTPS APIs and generated
+protocol credentials. They do not qualify encrypted backup restore,
+replacement-host recovery, physical authenticators or browser UX. Native
+execution of this recovery extension is pending.
+
 The baseline must enforce overlay-only ingress to the configured HTTPS port
 without granting the gateway firewall administration or daemon administration.
 Qualify the kernel-enforced listener restriction and its service lifecycle. A startup

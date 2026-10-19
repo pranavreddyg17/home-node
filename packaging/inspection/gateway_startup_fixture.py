@@ -212,7 +212,7 @@ except ssl.SSLError as error:
             identity_client = subprocess.run(["ip", "netns", "exec", peer_namespace, "env", "HOMENODE_NATIVE_HTTPS_IDENTITY=1", str(directory / "identity-client.test"), "-test.run=^TestNativeHTTPSIdentityClient$", "-test.timeout=40s", "-test.v"], input=identity_input, capture_output=True, text=True, timeout=45)
             if identity_client.returncode != 0 or "--- PASS: TestNativeHTTPSIdentityClient" not in identity_client.stdout:
                 raise RuntimeError(f"native HTTPS identity protocol failed: {identity_client.stdout}{identity_client.stderr}")
-            print("PASS actual HTTPS owner registration, protected cookies, signed login/approval, limited pairing and reused-TLS revocation", flush=True)
+            print("PASS actual HTTPS identity: registration, signed approval, limited pairing, reused-TLS revocation and replacement recovery", flush=True)
             control_tls_script = """import socket,ssl,sys
 context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 context.minimum_version=ssl.TLSVersion.TLSv1_3
