@@ -2,6 +2,7 @@
 """Actual gateway/controller startup in disposable Linux; daemon is a fixture."""
 import argparse
 import grp
+import json
 import os
 import pathlib
 import pwd
@@ -32,6 +33,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--gateway-binary", required=True)
     parser.add_argument("--controller-binary", required=True)
+    parser.add_argument("--identity-client-binary", required=True)
     parser.add_argument("--source-service", required=True)
     args = parser.parse_args()
     if sys.platform != "linux" or os.geteuid() != 0 or os.environ.get("HOMENODE_GATEWAY_STARTUP_FIXTURE") != "1":
@@ -75,6 +77,8 @@ def main():
             (directory / "gateway").chmod(0o755)
             shutil.copyfile(args.controller_binary, directory / "controller")
             (directory / "controller").chmod(0o755)
+            shutil.copyfile(args.identity_client_binary, directory / "identity-client.test")
+            (directory / "identity-client.test").chmod(0o755)
             for name in ("state", "data"):
                 private = directory / name
                 private.mkdir(mode=0o700)
@@ -202,6 +206,13 @@ except ssl.SSLError as error:
                 raise RuntimeError(f"actual TLS refusal checks incomplete: {results}")
             print("PASS actual TLS 1.3 over kernel TUN through gateway/controller executables: health, unauthenticated Files refusal and foreign Host refusal", flush=True)
             print("PASS actual TLS refuses untrusted root, wrong certificate hostname and TLS 1.2 over kernel TUN", flush=True)
+            setup_output = run("setpriv", f"--reuid={controller_uid}", f"--regid={controller_gid}", f"--groups={bridge_gid}", str(directory / "controller"), "setup-code", "--state-dir", str(directory / "state"))
+            setup_code = setup_output.strip().splitlines()[-1]
+            identity_input = json.dumps({"RootPEM": str(directory / "ca.crt"), "SetupCode": setup_code})
+            identity_client = subprocess.run(["ip", "netns", "exec", peer_namespace, "env", "HOMENODE_NATIVE_HTTPS_IDENTITY=1", str(directory / "identity-client.test"), "-test.run=^TestNativeHTTPSIdentityClient$", "-test.timeout=40s", "-test.v"], input=identity_input, capture_output=True, text=True, timeout=45)
+            if identity_client.returncode != 0:
+                raise RuntimeError(f"native HTTPS identity protocol failed: {identity_client.stdout}{identity_client.stderr}")
+            print("PASS actual HTTPS owner registration, protected cookies, logout, signed login and origin/UV refusals", flush=True)
             control_tls_script = """import socket,ssl,sys
 context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 context.minimum_version=ssl.TLSVersion.TLSv1_3

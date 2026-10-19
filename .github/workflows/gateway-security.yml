@@ -63,4 +63,5 @@ jobs:
         run: |
           go build -o /tmp/homenode-gateway-startup ./cmd/homenode-gateway
           go build -o /tmp/homenode-controller-startup ./cmd/homenode
-          sudo env HOMENODE_GATEWAY_STARTUP_FIXTURE=1 python3 packaging/inspection/gateway_startup_fixture.py --gateway-binary /tmp/homenode-gateway-startup --controller-binary /tmp/homenode-controller-startup --source-service packaging/systemd/homenode-gateway.service
+          go test -c ./cmd/homenode-gateway -o /tmp/homenode-https-identity.test
+          sudo env HOMENODE_GATEWAY_STARTUP_FIXTURE=1 python3 packaging/inspection/gateway_startup_fixture.py --gateway-binary /tmp/homenode-gateway-startup --controller-binary /tmp/homenode-controller-startup --identity-client-binary /tmp/homenode-https-identity.test --source-service packaging/systemd/homenode-gateway.service

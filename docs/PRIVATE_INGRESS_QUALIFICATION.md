@@ -168,6 +168,18 @@ only on these fixture namespace interfaces so it cannot conceal a missing
 socket restriction. This checks the real gateway's ingress path without
 claiming a Tailscale ACL or physical-device result. Native execution is pending.
 
+The next identity phase obtains a setup code through the actual controller's
+console CLI and sends it to a generated protocol authenticator through stdin.
+The client performs registration, authenticated device listing, logout and
+ES256-signed login over the same certificate-verified HTTPS/TUN path. Wrong
+client-data origin and absent user-verification flags must be rejected before
+a valid signed login succeeds. It checks Secure, HttpOnly, host-only,
+SameSite=Strict cookies, HSTS and no-store responses. No session or credential
+is inserted directly into controller storage. The fixture's authenticator
+generates its own key and protocol responses; this is server verification,
+not physical user verification, passkey hardware or browser UX evidence.
+Native execution of this phase is pending.
+
 The baseline must enforce overlay-only ingress to the configured HTTPS port
 without granting the gateway firewall administration or daemon administration.
 Qualify the kernel-enforced listener restriction and its service lifecycle. A startup
