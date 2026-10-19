@@ -202,6 +202,52 @@ except ssl.SSLError as error:
                 raise RuntimeError(f"actual TLS refusal checks incomplete: {results}")
             print("PASS actual TLS 1.3 over kernel TUN through gateway/controller executables: health, unauthenticated Files refusal and foreign Host refusal", flush=True)
             print("PASS actual TLS refuses untrusted root, wrong certificate hostname and TLS 1.2 over kernel TUN", flush=True)
+            control_tls_script = """import socket,ssl,sys
+context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+context.minimum_version=ssl.TLSVersion.TLSv1_3
+context.load_cert_chain(sys.argv[1],sys.argv[2])
+server=socket.socket()
+server.bind(('100.100.1.2',8788))
+server.listen()
+print('CONTROL-TLS-READY',flush=True)
+while True:
+ raw,_=server.accept()
+ with context.wrap_socket(raw,server_side=True) as connection:
+  connection.settimeout(3)
+  connection.recv(4096)
+  connection.sendall(b'HTTP/1.1 200 OK\\r\\nContent-Length: 7\\r\\nConnection: close\\r\\n\\r\\ncontrol')
+"""
+            control_tls = subprocess.Popen(["ip", "netns", "exec", namespace, sys.executable, "-u", "-c", control_tls_script, str(tls_directory / "server.crt"), str(tls_directory / "server.key")], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            children.append(control_tls)
+            ready(control_tls, "CONTROL-TLS-READY")
+            for ns, interface in ((namespace, "wire0"), (peer_namespace, "wire1")):
+                run("ip", "netns", "exec", ns, "sysctl", "-qw", "net.ipv4.conf.all.rp_filter=0", f"net.ipv4.conf.{interface}.rp_filter=0", "net.ipv4.conf.tailscale0.rp_filter=0")
+            run("ip", "-n", peer_namespace, "route", "replace", "100.100.1.2/32", "via", "10.212.0.1", "dev", "wire1", "src", "100.100.1.3")
+            carrier_client = """import http.client,socket,ssl,sys
+context=ssl.create_default_context(cafile=sys.argv[1])
+context.minimum_version=ssl.TLSVersion.TLSv1_3
+def control():
+ with socket.create_connection(('100.100.1.2',8788),timeout=3,source_address=('100.100.1.3',0)) as raw:
+  with context.wrap_socket(raw,server_hostname='home.example.ts.net') as connection:
+   connection.sendall(b'GET / HTTP/1.1\\r\\nHost: home.example.ts.net:8788\\r\\nConnection: close\\r\\n\\r\\n')
+   response=http.client.HTTPResponse(connection)
+   response.begin()
+   assert response.status==200 and response.read(64)==b'control'
+control()
+try:
+ with socket.create_connection(('100.100.1.2',8787),timeout=2,source_address=('100.100.1.3',0)) as raw:
+  with context.wrap_socket(raw,server_hostname='home.example.ts.net'):
+   raise AssertionError('carrier CGNAT path reached actual gateway TLS')
+except (TimeoutError,ConnectionRefusedError,ConnectionResetError):
+ pass
+control()
+print('CARRIER-REFUSED-WITH-CONTROLS',flush=True)
+"""
+            carrier_result = run("ip", "netns", "exec", peer_namespace, sys.executable, "-c", carrier_client, str(directory / "ca.crt"))
+            if "CARRIER-REFUSED-WITH-CONTROLS" not in carrier_result or gateway.poll() is not None or control_tls.poll() is not None:
+                raise RuntimeError("carrier refusal did not preserve live gateway and positive TLS controls")
+            run("ip", "-n", peer_namespace, "route", "replace", "100.100.1.2/32", "dev", "tailscale0")
+            print("PASS actual gateway refuses carrier CGNAT ingress while unbound TLS control works before and after", flush=True)
             run("ip", "-n", namespace, "address", "delete", "100.100.1.2/32", "dev", "tailscale0")
             output, _ = gateway.communicate(timeout=15)
             if gateway.returncode == 0 or "private ingress interface changed" not in output:

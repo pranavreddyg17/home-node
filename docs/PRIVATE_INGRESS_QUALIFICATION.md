@@ -156,6 +156,14 @@ not a reference-hardware throughput or production MTU qualification.
 See [kernel TUN interface semantics](https://docs.kernel.org/networking/tuntap.html).
 Native execution of this packet/HTTPS phase is pending.
 
+The fixture also routes the peer's same CGNAT source over the carrier veth
+instead of TUN. A separate unbound TLS control endpoint must work over that
+route both before and after the actual gateway's TLS connection is refused.
+Both server processes must remain live. Reverse-path filtering is disabled
+only on these fixture namespace interfaces so it cannot conceal a missing
+socket restriction. This checks the real gateway's ingress path without
+claiming a Tailscale ACL or physical-device result. Native execution is pending.
+
 The baseline must enforce overlay-only ingress to the configured HTTPS port
 without granting the gateway firewall administration or daemon administration.
 Qualify the kernel-enforced listener restriction and its service lifecycle. A startup
