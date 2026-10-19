@@ -180,7 +180,9 @@ SameSite=Strict cookies, HSTS and no-store responses. No session or credential
 is inserted directly into controller storage. The fixture's authenticator
 generates its own key and protocol responses; this is server verification,
 not physical user verification, passkey hardware or browser UX evidence.
-Native execution of this phase is pending.
+Native execution of this owner identity phase passed in
+[source 79897a4's run](evidence/https-identity-79897a4.json). It excludes the
+later approved pairing and reused-TLS revocation extension below.
 
 The protocol client is further extended to pair a second, Files-only device
 with its own credential and cookie jar using a fresh signed owner approval.
