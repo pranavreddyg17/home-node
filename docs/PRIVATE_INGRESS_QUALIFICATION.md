@@ -224,7 +224,8 @@ for HTML, immutable caching for assets, HSTS, nosniff, frame denial and the
 restrictive CSP. Referenced scripts/styles must use local `/assets/` paths.
 This qualifies static delivery only, not browser rendering, navigation,
 physical passkeys, mobile accessibility or dynamically imported chunks. Native
-execution of this extension is pending. The focused workflow now triggers on
+execution of this extension passed in
+[source 250629a's run](evidence/https-frontend-250629a.json). The focused workflow now triggers on
 frontend, identity and controller entry-point changes as well as transport.
 
 The first native frontend run at source 1202c63 failed on duplicated response
@@ -235,7 +236,7 @@ nosniff once. This preserves explicit immutable asset caching and keeps direct
 refusals/errors non-cacheable. The Unix peer regression checks single header
 values for API responses, asset responses and transport failures. The original
 strict frontend delivery assertions remain in place; native requalification
-of the correction is pending.
+of the correction passed in that source 250629a run.
 
 The next extension moves the actual controller into a transient systemd unit
 using its source hardening properties. Fixture state/data/socket directories
@@ -247,7 +248,8 @@ running application executables are observed through their unit MainPID and
 NoNewPrivileges and seccomp mode must match expectations. This proves those
 observations and exercised API behavior, not every filesystem/syscall denial,
 resource-pressure limit, canonical installed path or signed service lifecycle.
-Native execution of this dual-service extension is pending.
+Native execution of this dual-service extension passed in that same
+[source 250629a run](evidence/https-frontend-250629a.json).
 
 Startup additionally requires distinct numeric GIDs for the named controller,
 gateway-key, proxy and runtime groups, and primary user GIDs matching their
