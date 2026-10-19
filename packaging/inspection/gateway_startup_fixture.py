@@ -361,6 +361,12 @@ print('CARRIER-REFUSED-WITH-CONTROLS',flush=True)
                     raise RuntimeError("controller did not refuse aliased runtime/private key group at identity admission")
             finally:
                 run("groupmod", "--gid", str(runtime_gid), "homenode-runtime")
+                # Restoring an aliased numeric GID can also rewrite passwd
+                # primary groups that shared that number. Reconcile the
+                # fixture's named gateway account before subsequent cases.
+                run("usermod", "--gid", str(gateway_gid), "homenode-gateway")
+                if pwd.getpwnam("homenode-gateway").pw_gid != gateway_gid or grp.getgrnam("homenode-runtime").gr_gid != runtime_gid:
+                    raise RuntimeError("fixture role identities were not restored after alias test")
             print("PASS actual gateway/controller refuse aliased NSS runtime and private TLS-key groups", flush=True)
             (tls_directory / "server.key").chmod(0o644)
             denied = subprocess.run(command("bad-key"), capture_output=True, text=True, timeout=15)
