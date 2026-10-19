@@ -5,13 +5,20 @@ privileged workload backend. Its authenticated Files listing is metadata-only;
 it is not an upload, guest execution or retained-data demonstration.
 
 The separate native Files fixture already launches an actual unsigned Files
-guest through the supervisor and transfer executables. Its current policy
-uses controller UID 1 and transfer UID 2. The helper clients now take identities
+guest through the supervisor and transfer executables. The Files fixture now
+creates fresh `homenode` and `homenode-transfer` system accounts with distinct
+private groups and a shared `homenode-runtime` group on its explicitly disposable
+Linux runner. It refuses existing names, uses the observed IDs in policy and
+channel/socket ownership, and removes only accounts it created after teardown.
+The synthetic firmware-only fixture retains its original numeric identities.
+The helper clients now take identities
 from that accepted policy rather than hardcoding them, including transfer
 directory ownership, process credentials, runtime requests and negative-role
 checks. The runtime client receives the expected controller UID explicitly and
 still requires matching kernel credentials and disposable integration opt-in.
-Linux compilation passes; native regression of this helper refactor is pending.
+Linux compilation passes; native regression of the helper refactor and named
+Files roles is pending. Run 39305868215 covers the preceding helper refactor at
+`6af6bcc`; it does not cover the subsequent named-role change.
 
 The next integration must join these paths with fresh, distinct named service
 identities and the real supervisor/transfer sockets. It must preserve catalog

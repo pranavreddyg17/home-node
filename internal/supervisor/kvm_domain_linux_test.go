@@ -127,6 +127,10 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool, managerLaunch .
 		t.Fatal("insufficient unused experiment identities")
 	}
 	uid, transferGID := ids[0], ids[1]
+	controllerUID, transferUID := uint32(1), uint32(2)
+	if len(managerLaunch) > 1 && managerLaunch[1] {
+		controllerUID, transferUID, transferGID = nativeFilesServiceIdentities(t, ctx)
+	}
 	base, err := os.MkdirTemp("/tmp", "hn-kvm-")
 	if err != nil {
 		t.Fatal(err)
@@ -494,7 +498,7 @@ for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.arg
 	}
 	if len(managerLaunch) != 0 && managerLaunch[0] {
 		filesImage := len(managerLaunch) > 1 && managerLaunch[1]
-		runNativeReservedManagerLifecycle(t, ctx, base, domain, backend, &safeCleanup, filesImage)
+		runNativeReservedManagerLifecycle(t, ctx, base, domain, backend, &safeCleanup, filesImage, controllerUID, transferUID)
 	}
 }
 
@@ -515,7 +519,7 @@ func nativeFixtureCommand(ctx context.Context, name string, args ...string) (str
 	return output.String(), err
 }
 
-func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base string, previous Domain, backend LinuxBackend, safeCleanup *bool, filesImage bool) {
+func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base string, previous Domain, backend LinuxBackend, safeCleanup *bool, filesImage bool, controllerUID, transferUID uint32) {
 	t.Helper()
 	contents, err := os.ReadFile(previous.SystemPath)
 	if err != nil {
@@ -552,13 +556,13 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 	}
 	defer store.Close()
 	identity := ReservedGuestPolicy{Version: 1, FirstUID: previous.GuestUID, LastUID: previous.GuestUID, GuestGID: previous.GuestGID}
-	pool, err := QualifyReservedGuestPolicy(ctx, identity, []uint32{1, 2}, []uint32{uint32(backend.TransferGID), uint32(backend.TransferGID)})
+	pool, err := QualifyReservedGuestPolicy(ctx, identity, []uint32{controllerUID, transferUID}, []uint32{uint32(backend.TransferGID), uint32(backend.TransferGID)})
 	if err != nil {
 		t.Fatal("native published policy qualification", err)
 	}
 	m := &Manager{Store: store, Backend: backend, Images: images, Volumes: filepath.Dir(previous.DataPath), Channels: channels,
 		GuestUIDPool: &pool, GuestGID: previous.GuestGID,
-		Policy:   Policy{GuestIdentity: &identity, Generation: 1, MemoryMiB: 1024, VCPUs: 1, MaxInstances: 1, DiskReserveBytes: 4 * catalog.GiB, ControllerUID: 1, TransferUID: 2},
+		Policy:   Policy{GuestIdentity: &identity, Generation: 1, MemoryMiB: 1024, VCPUs: 1, MaxInstances: 1, DiskReserveBytes: 4 * catalog.GiB, ControllerUID: controllerUID, TransferUID: transferUID},
 		Manifest: catalog.Manifest{Schema: 1, Version: 1, Expires: time.Now().Add(time.Hour), Images: []catalog.Image{image}}}
 	if filesImage {
 		nativeFilesSupervisorEntry(t, ctx, base, images, clientScript, image, m.Policy, backend.TransferGID, safeCleanup)
