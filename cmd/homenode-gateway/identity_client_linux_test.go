@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/ecdsa"
@@ -224,13 +225,50 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 	if json.Unmarshal(sessionData, &pairedSession) != nil || pairedSession.Device.ID == "" {
 		t.Fatal("paired device session missing")
 	}
+	streamContext, cancelStream := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancelStream()
+	streamRequest, err := http.NewRequestWithContext(streamContext, http.MethodGet, origin+"/api/v1/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	streamRequest.Header.Set("Origin", origin)
+	streamClient := &http.Client{Transport: transport, Jar: pairedJar}
+	stream, err := streamClient.Do(streamRequest)
+	if err != nil {
+		t.Fatal("paired HTTPS event stream failed to open")
+	}
+	defer stream.Body.Close()
+	if stream.StatusCode != 200 || stream.TLS == nil || len(stream.TLS.VerifiedChains) == 0 || stream.Header.Get("Content-Type") != "text/event-stream" {
+		t.Fatal("paired event stream did not establish verified HTTPS")
+	}
+	reader := bufio.NewReader(stream.Body)
+	readHeartbeat := func() {
+		t.Helper()
+		for line := 0; line < 200; line++ {
+			data, err := reader.ReadSlice('\n')
+			if err != nil {
+				t.Fatal("paired event stream ended before heartbeat")
+			}
+			if bytes.Equal(bytes.TrimSpace(data), []byte(": heartbeat")) {
+				return
+			}
+		}
+		t.Fatal("paired event stream did not publish initial heartbeat")
+	}
+	readHeartbeat()
 	client = owner
 	revokePath := "/api/v1/devices/" + pairedSession.Device.ID + "/revoke"
 	empty := map[string]any{}
 	request(http.MethodPost, revokePath, empty, 403)
 	actionApproval = approve(revokePath, empty)
+	readHeartbeat() // still active after approval, immediately before revocation
 	request(http.MethodPost, revokePath, empty, 200)
 	actionApproval = ""
+	remaining, err := io.ReadAll(io.LimitReader(reader, (128<<10)+1))
+	if err != nil || len(remaining) > 128<<10 || streamContext.Err() != nil {
+		t.Fatal("revoked device event stream did not end before its normal lifetime")
+	}
+	stream.Body.Close()
 	client = paired
 	traceNext = true
 	request(http.MethodGet, "/api/v1/files", nil, 401)
