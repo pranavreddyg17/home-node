@@ -154,7 +154,11 @@ The TUN MTU is
 1280 solely to keep fixture UDP encapsulation within its carrier MTU; this is
 not a reference-hardware throughput or production MTU qualification.
 See [kernel TUN interface semantics](https://docs.kernel.org/networking/tuntap.html).
-Native execution of this packet/HTTPS phase is pending.
+Native execution of this packet/HTTPS phase passed in
+[source be52c11's run](evidence/gateway-https-be52c11.json). Its retained
+assertions include all three real-client TLS negative cases and the executable
+startup, key-access and serving-peer checks. It excludes the later carrier
+CGNAT route/control case below.
 
 The fixture also routes the peer's same CGNAT source over the carrier veth
 instead of TUN. A separate unbound TLS control endpoint must work over that

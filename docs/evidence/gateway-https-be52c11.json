@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "be52c11f9105dce94dded0a484f198e227b2fc20",
+  "workflowRun": 39298176448,
+  "job": 118216073911,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/39298176448",
+  "conclusion": "success",
+  "logSHA256": "684f49c01d764e669a2e6b714292515ab8bd18ed6492917743c7991c8d1ebda8",
+  "environment": {
+    "architecture": "x86_64",
+    "distribution": "ubuntu",
+    "distributionVersion": "24.04",
+    "iproute": "ip utility, iproute2-6.1.0, libbpf 1.3.0",
+    "kernel": "6.17.0-1022-azure",
+    "python": "3.12.3"
+  },
+  "assertions": [
+    "Actual gateway and controller executables use disposable named NSS identities with distinct UIDs",
+    "Gateway applies source service hardening, reads protected root-owned gateway-group TLS key and trusts fixture certificate",
+    "Running-daemon identity is supplied by a service-only mounted controlled status executable",
+    "Gateway authenticates actual controller Unix serving peer before listener readiness",
+    "TUN address removal causes actual gateway unsuccessful exit for readmission",
+    "World-readable key refuses startup before listener readiness",
+    "Foreign root controller process refuses startup despite expected socket owner/group labels",
+    "Actual certificate-verified TLS 1.3 traverses kernel TUN interfaces into gateway and actual private controller, with no fabricated TLS state or client address",
+    "Public controller health returns 200, unauthenticated Files returns 401 and foreign HTTP Host returns 403",
+    "Real clients refuse untrusted root and mismatched certificate hostname; server refuses TLS 1.2 with protocol-version alert"
+  ],
+  "limits": [
+    "Packet transport is fixture-only TUN-to-TUN IPv4 relay over isolated veth, not production Tailscale; excludes later carrier CGNAT ingress case",
+    "No actual Tailscale daemon, encryption, ACLs, real certificates/passkeys or allowed/denied physical devices",
+    "Transient systemd unit and temporary paths, not signed installed package or shipped unit lifecycle",
+    "Controller runs actual executable without privileged workload backend; no authenticated workload, UI or VM operations"
+  ]
+}
