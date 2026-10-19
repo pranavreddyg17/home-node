@@ -57,7 +57,8 @@ func TestMaintenanceClientSocketReplay(t *testing.T) {
 	done := make(chan struct{})
 	go func() { defer close(done); _ = server.Serve(listener) }()
 	defer func() { server.Close(); <-done }()
-	client := NewMaintenance(socket)
+	// Protocol-only fixture: the production constructor pins the root listener.
+	client := &MaintenanceClient{client: socketClient(socket)}
 	defer client.client.CloseIdleConnections()
 	for i := 0; i < 2; i++ {
 		got, err := client.BeginRuntimeMaintenanceForJob(context.Background(), job)

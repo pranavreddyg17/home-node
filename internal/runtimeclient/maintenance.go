@@ -19,7 +19,7 @@ var maintenanceID = regexp.MustCompile(`^[A-Za-z0-9_-]{20,64}$`)
 type MaintenanceClient struct{ client *http.Client }
 
 func NewMaintenance(socket string) *MaintenanceClient {
-	return &MaintenanceClient{client: socketClient(socket)}
+	return &MaintenanceClient{client: authenticatedSocketClient(socket, 0)}
 }
 func (c *MaintenanceClient) BeginRuntimeMaintenanceForJob(ctx context.Context, job string) (string, error) {
 	if !maintenanceID.MatchString(job) {

@@ -24,6 +24,11 @@ gateway security workflow. Local race tests pass for runtimeclient and the two
 affected commands; Linux test compilation passes. Native CI and real-guest
 regression remain required before treating the change as qualified.
 
-The separate backup maintenance client still uses its existing protected socket
-transport; this change does not claim to qualify all maintenance boundaries or
-the complete authenticated Files workflow.
+The backup maintenance client also pins its supervisor listener to root before
+sending maintenance ownership and token material. Its unprivileged journal test
+explicitly pins the fixture UID; its portable protocol-only test uses a private
+test client. Neither changes the production root requirement. A foreign
+unprivileged maintenance listener receives no HTTP operation in the Linux peer
+regression. Native backup-workflow regression remains required; these checks do
+not qualify all maintenance boundaries or the complete authenticated Files
+workflow.

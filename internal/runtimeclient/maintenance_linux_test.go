@@ -50,7 +50,9 @@ func TestMaintenanceSocketKernelPeerAndJournalRestart(t *testing.T) {
 		server := &http.Server{Handler: handler, ConnContext: supervisor.PeerContext, ReadHeaderTimeout: time.Second, ReadTimeout: 2 * time.Second, WriteTimeout: 5 * time.Second}
 		done := make(chan struct{})
 		go func() { defer close(done); _ = server.Serve(listener) }()
-		client := NewMaintenance(socket)
+		// This unprivileged journal fixture pins its actual test listener UID.
+		// Installed maintenance always uses NewMaintenance and requires root.
+		client := &MaintenanceClient{client: authenticatedSocketClient(socket, uid)}
 		return client, func() { client.client.CloseIdleConnections(); server.Close(); <-done }
 	}
 	m := manager(store)

@@ -58,5 +58,10 @@ func TestWorkloadClientAuthenticatesListenerBeforeSendingOperation(t *testing.T)
 		if err := call(ctx, invalid.runtime, "/v1/runtime", map[string]string{"operation": "must remain private"}, &result); err == nil || requests.Load() != 1 {
 			t.Fatal("nonroot listener impersonated supervisor", err, requests.Load())
 		}
+		maintenance := NewMaintenance(socket)
+		defer maintenance.client.CloseIdleConnections()
+		if _, err := maintenance.BeginRuntimeMaintenanceForJob(ctx, "012345678901234567890123"); err == nil || requests.Load() != 1 {
+			t.Fatal("nonroot listener received maintenance authority", err, requests.Load())
+		}
 	}
 }
