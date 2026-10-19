@@ -124,11 +124,11 @@ while True:
             run("ip", "netns", "exec", peer_namespace, "ip", "tuntap", "add", "dev", "tailscale0", "mode", "tun")
             run("ip", "-n", peer_namespace, "address", "add", "100.100.1.3/32", "dev", "tailscale0")
             run("ip", "-n", peer_namespace, "link", "set", "tailscale0", "up")
-            run("ip", "-n", namespace, "link", "add", "carrier", "type", "veth", "peer", "name", "carrier", "netns", peer_namespace)
-            for ns, last, destination in ((namespace, "1", "100.100.1.3"), (peer_namespace, "2", "100.100.1.2")):
+            run("ip", "-n", namespace, "link", "add", "name", "wire0", "type", "veth", "peer", "name", "wire1", "netns", peer_namespace)
+            for ns, interface, last, destination in ((namespace, "wire0", "1", "100.100.1.3"), (peer_namespace, "wire1", "2", "100.100.1.2")):
                 run("ip", "-n", ns, "link", "set", "tailscale0", "mtu", "1280")
-                run("ip", "-n", ns, "address", "add", f"10.212.0.{last}/30", "dev", "carrier")
-                run("ip", "-n", ns, "link", "set", "carrier", "up")
+                run("ip", "-n", ns, "address", "add", f"10.212.0.{last}/30", "dev", interface)
+                run("ip", "-n", ns, "link", "set", interface, "up")
                 run("ip", "-n", ns, "route", "add", f"{destination}/32", "dev", "tailscale0")
             # Test transport only: copy IPv4 frames between two kernel TUNs
             # over an isolated veth carrier. No production VPN implementation

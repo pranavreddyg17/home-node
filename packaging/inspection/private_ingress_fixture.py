@@ -18,7 +18,10 @@ import tempfile
 
 
 def run(*args):
-    return subprocess.run(args, check=True, capture_output=True, text=True, timeout=15).stdout
+    try:
+        return subprocess.run(args, check=True, capture_output=True, text=True, timeout=15).stdout
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(f"{args[0]} failed ({error.returncode}): {(error.stderr or error.stdout)[-4096:]}") from None
 
 
 def source_hardening(path):
