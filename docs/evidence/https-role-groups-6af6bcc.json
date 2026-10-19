@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "6af6bcc957d6a2958aa5ea0e121108e8ebe4733c",
+  "workflowRun": 39305863902,
+  "job": 118242656670,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/39305863902",
+  "conclusion": "success",
+  "logSHA256": "2f3a29e47f78c60d6184e07b637bfa8be5326512010d6a8570b656c16a537817",
+  "observedAssertions": [
+    "PASS actual gateway/controller refuse aliased NSS runtime and private TLS-key groups",
+    "PASS actual gateway refuses unsafe protected key before listener startup",
+    "PASS actual gateway refuses foreign controller kernel peer despite expected socket ownership",
+    "PASS actual HTTPS identity: registration, signed approval, limited pairing, reused-TLS revocation and replacement recovery",
+    "PASS built frontend HTML/JS/CSS hashes, CSP, HTTPS and cache policy through actual gateway/controller"
+  ],
+  "limitations": [
+    "Controlled daemon status and namespace TUN transport; no physical Tailscale enrollment or ACL qualification.",
+    "Generated WebAuthn protocol credentials, not physical or browser passkey acceptance.",
+    "Controller has no workload backend; Files listing is metadata-only.",
+    "Does not cover subsequent named Files accounts or workload client peer authentication changes."
+  ]
+}
