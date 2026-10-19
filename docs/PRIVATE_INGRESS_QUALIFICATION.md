@@ -166,7 +166,9 @@ route both before and after the actual gateway's TLS connection is refused.
 Both server processes must remain live. Reverse-path filtering is disabled
 only on these fixture namespace interfaces so it cannot conceal a missing
 socket restriction. This checks the real gateway's ingress path without
-claiming a Tailscale ACL or physical-device result. Native execution is pending.
+claiming a Tailscale ACL or physical-device result. Native execution passed in
+[source 58a8a75's run](evidence/gateway-carrier-58a8a75.json). The later generated
+identity client remains outside that retained source.
 
 The next identity phase obtains a setup code through the actual controller's
 console CLI and sends it to a generated protocol authenticator through stdin.
