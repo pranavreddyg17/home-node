@@ -55,7 +55,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	handler := transfer.New(runtimeclient.New(*runtimeSocket, ""), *channels, uint32(*uid), *generation)
+	handler := transfer.New(runtimeclient.New(*runtimeSocket, "", 0), *channels, uint32(*uid), *generation)
 	handler.SharedGuestUID = uint32(guestUID)
 	server := &http.Server{Handler: handler, ConnContext: supervisor.PeerContext, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 25 * time.Second, IdleTimeout: 10 * time.Second, MaxHeaderBytes: 8192}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

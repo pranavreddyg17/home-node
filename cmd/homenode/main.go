@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"os/user"
 	"runtime"
 	"strconv"
 	"syscall"
@@ -309,7 +310,15 @@ func serve(args []string) {
 		if *dev {
 			fatal(fmt.Errorf("development mode cannot connect to privileged workload services"))
 		}
-		backend = runtimeclient.New(*supervisorSocket, *transferSocket)
+		transferAccount, err := user.Lookup("homenode-transfer")
+		if err != nil {
+			fatal(fmt.Errorf("transfer service identity unavailable"))
+		}
+		transferUID, err := strconv.ParseUint(transferAccount.Uid, 10, 32)
+		if err != nil || transferUID == 0 || transferUID > 1<<31-1 || transferUID == uint64(os.Geteuid()) {
+			fatal(fmt.Errorf("invalid transfer service identity"))
+		}
+		backend = runtimeclient.New(*supervisorSocket, *transferSocket, uint32(transferUID))
 	}
 	backupExecution, err := backupExecutionConfiguration(*backupRepository, *backupRelease, *backupCatalog, *backupCredentialSocket, os.Getgid(), !(*dev) && runtime.GOOS == "linux" && os.Geteuid() != 0 && maintenanceListener != nil && backend != nil, *maintenanceSocket, *supervisorSocket, *transferSocket)
 	if err != nil {

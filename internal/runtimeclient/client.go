@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
@@ -26,8 +27,42 @@ func socketClient(socket string) *http.Client {
 		return (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", socket)
 	}, MaxConnsPerHost: 8, MaxIdleConnsPerHost: 4, ResponseHeaderTimeout: 90 * time.Second}, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("local service redirect denied") }}
 }
-func New(runtimeSocket, transferSocket string) *Client {
-	return &Client{runtime: socketClient(runtimeSocket), transfer: socketClient(transferSocket)}
+
+// Authenticate the listener's kernel identity before sending operation bodies.
+// Filesystem permissions alone cannot authenticate the process behind a socket.
+func authenticatedSocketClient(socket string, listenerUID uint32) *http.Client {
+	client := socketClient(socket)
+	transport := client.Transport.(*http.Transport)
+	transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+		if !filepath.IsAbs(socket) || filepath.Clean(socket) != socket || listenerUID > 1<<31-1 {
+			return nil, errors.New("invalid local workload peer")
+		}
+		connection, err := (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", socket)
+		if err != nil {
+			return nil, err
+		}
+		unix, ok := connection.(*net.UnixConn)
+		if !ok {
+			connection.Close()
+			return nil, errors.New("invalid local workload peer")
+		}
+		peer, err := supervisor.PeerUID(unix)
+		if err != nil || peer != listenerUID {
+			connection.Close()
+			return nil, errors.New("invalid local workload peer")
+		}
+		return connection, nil
+	}
+	return client
+}
+
+func New(runtimeSocket, transferSocket string, transferUID uint32) *Client {
+	// An absent transfer endpoint is used by the transfer service itself. Its
+	// only remote authority is the root supervisor; no guest calls are enabled.
+	if transferSocket != "" && transferUID == 0 {
+		transferUID = ^uint32(0) // Invalid: never accept root as the transfer role.
+	}
+	return &Client{runtime: authenticatedSocketClient(runtimeSocket, 0), transfer: authenticatedSocketClient(transferSocket, transferUID)}
 }
 func call(ctx context.Context, client *http.Client, path string, request, response any) (resultErr error) {
 	// Keep local socket/address errors private while retaining cancellation as
