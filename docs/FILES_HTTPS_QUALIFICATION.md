@@ -216,3 +216,13 @@ regressions and bounded native workflow, not native late-verification revocation
 Fixture-signed development catalogs are distinct from release publisher trust.
 Passing this integration would still leave physical networking, browser/mobile
 acceptance, signed installation and the remaining product release gates open.
+
+The large native case now also stages a separate 128 MiB paired-device upload,
+restarts the guest through signed owner actions, starts finalization and observes
+`verifying` through the public transfer API before owner-approved revocation.
+It requires explicit HTTP 401 and read-only journal inspection showing the full
+retained offset, a revoked device, verifying state and no published file record.
+This observes verification admission, not the exact instant hashing starts;
+already admitted guest work may finish. Native execution of this added case is
+pending. Only bounded selected non-secret size, truncation and owner-integrity
+result lines are emitted from the captured client for future evidence retention.

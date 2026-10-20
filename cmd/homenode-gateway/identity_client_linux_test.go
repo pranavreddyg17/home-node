@@ -254,6 +254,13 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 	if json.Unmarshal(sessionData, &pairedSession) != nil || pairedSession.Device.ID == "" {
 		t.Fatal("paired device session missing")
 	}
+	finalizationID := ""
+	if files != nil && files.Size == 1<<30 {
+		finalizationID = prepareNativeRevocableFinalization(t, request)
+		client = owner
+		files.RestartGuest()
+		client = paired
+	}
 	streamContext, cancelStream := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancelStream()
 	streamRequest, err := http.NewRequestWithContext(streamContext, http.MethodGet, origin+"/api/v1/events", nil)
@@ -301,6 +308,11 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 		dataStream = startNativeRevocableDownload(t, paired, origin, files)
 		defer dataStream.Close()
 	}
+	var finalization *nativeRevocableFinalization
+	if finalizationID != "" {
+		finalization = startNativeRevocableFinalization(t, paired, origin, finalizationID)
+		defer finalization.cancel()
+	}
 	request(http.MethodPost, revokePath, empty, 200)
 	actionApproval = ""
 	remaining, err := io.ReadAll(io.LimitReader(reader, (128<<10)+1))
@@ -318,6 +330,9 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 	client = owner
 	if files != nil {
 		uploadStream.ExpectRevoked(t)
+		if finalization != nil {
+			finalization.ExpectRevoked(t)
+		}
 		if dataStream != nil {
 			dataStream.ExpectRevoked(t)
 			files.VerifyOwner()

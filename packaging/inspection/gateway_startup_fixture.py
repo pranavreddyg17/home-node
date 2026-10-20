@@ -427,6 +427,23 @@ print('FRONTEND-HTTPS-PASS',flush=True)
                     raise RuntimeError("joined Files workload did not verify requested payload size")
                 if args.files_bytes == "1073741824" and ("native HTTPS paired-device revocation truncated active guest download" not in identity_client.stdout or "native HTTPS retained owner file integrity after paired revocation passed" not in identity_client.stdout):
                     raise RuntimeError("large Files workflow did not verify active download revocation and retained owner integrity")
+                if args.files_bytes == "1073741824":
+                    finalizations = re.findall(r"native HTTPS finalization revocation transfer=([A-Za-z0-9_-]{20,64}) denied after verification admission", identity_client.stdout)
+                    if len(finalizations) != 1:
+                        raise RuntimeError("large Files workflow omitted verification-admitted revocation")
+                    database = sqlite3.connect((directory / "state" / "management.db").as_uri() + "?mode=ro", uri=True, timeout=5)
+                    try:
+                        retained = database.execute("SELECT t.offset,t.size,t.state,d.revoked_at,(SELECT count(*) FROM files f WHERE f.transfer_id=t.id) FROM transfers t JOIN devices d ON d.id=t.device_id WHERE t.id=?", (finalizations[0],)).fetchall()
+                        if len(retained) != 1 or retained[0][0:3] != (134217728, 134217728, "verifying") or retained[0][3] is None or retained[0][4] != 0:
+                            raise RuntimeError("revoked finalization published metadata or lost retained upload identity")
+                    finally:
+                        database.close()
+                    print("PASS actual HTTPS verification-admitted revocation: explicit 401, retained full offset and no file publication", flush=True)
+                    # Emit only bounded, explicitly selected non-secret results.
+                    for line in identity_client.stdout.splitlines():
+                        for marker in ("native HTTPS Files payload bytes=", "native HTTPS paired-device revocation truncated active guest download", "native HTTPS retained owner file integrity after paired revocation passed"):
+                            if marker in line:
+                                print(line[line.index(marker):][:512], flush=True)
                 print("PASS actual HTTPS Files through controller, supervisor, transfer and KVM guest: signed lifecycle, upload/download, Range, Trash, ZIP and retained restart", flush=True)
                 # The dedicated ingress job covers destructive NSS/key/peer
                 # refusals. Do not mutate shared workload roles mid-run here.

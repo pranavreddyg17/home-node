@@ -28,9 +28,9 @@ type nativePatternReader struct {
 }
 
 type nativeHTTPSFilesResult struct {
-	ID, SHA256        string
-	Size              int64
-	Stop, VerifyOwner func()
+	ID, SHA256                      string
+	Size                            int64
+	Stop, VerifyOwner, RestartGuest func()
 }
 
 func (r *nativePatternReader) Read(output []byte) (int, error) {
@@ -342,7 +342,8 @@ func nativeHTTPSFilesRoundTrip(t *testing.T, client *http.Client, origin string,
 	// Keep the guest running through paired-device revocation. The caller must
 	// verify retained owner access and approve the final stop before recovery.
 	return &nativeHTTPSFilesResult{ID: transfer.ID, SHA256: hash, Size: size,
-		Stop: func() { appAction("stop") },
+		Stop:         func() { appAction("stop") },
+		RestartGuest: func() { appAction("stop"); appAction("start") },
 		VerifyOwner: func() {
 			previous := client.Timeout
 			client.Timeout = 5 * time.Minute
