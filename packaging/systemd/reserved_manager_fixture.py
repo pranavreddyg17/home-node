@@ -40,7 +40,8 @@ def main():
             verify(path, fd, metadata, installed)
         fcntl.lockf(account_fd, fcntl.LOCK_UN)
         joined = os.environ.get("HOMENODE_FILES_HTTPS_INTEGRATION") == "1"
-        subprocess.run([sys.argv[1], "test", "./internal/supervisor", "-run", "^" + test + "$", "-count=1", "-v", "-timeout=14m" if joined else "-timeout=9m"], check=True, timeout=900 if joined else 600)
+        large = joined and os.environ.get("HOMENODE_FILES_HTTPS_BYTES") == "1073741824"
+        subprocess.run([sys.argv[1], "test", "./internal/supervisor", "-run", "^" + test + "$", "-count=1", "-v", "-timeout=24m" if large else "-timeout=14m" if joined else "-timeout=9m"], check=True, timeout=1500 if large else 900 if joined else 600)
     finally:
         try:
             if any(record["changed"] for record in records):

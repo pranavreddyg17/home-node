@@ -21,6 +21,13 @@ func nativeFilesHTTPSWorkflow(t *testing.T, ctx context.Context, directory, scri
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_FILES_HTTPS_INTEGRATION") != "1" || os.Getenv("HOMENODE_FILES_MANAGER_INTEGRATION") != "1" || os.Getenv("HOMENODE_KVM_DOMAIN_INTEGRATION") != "1" {
 		t.Fatal("explicit disposable HTTPS Files integration required")
 	}
+	payloadBytes := os.Getenv("HOMENODE_FILES_HTTPS_BYTES")
+	if payloadBytes == "" {
+		payloadBytes = "32768"
+	}
+	if payloadBytes != "32768" && payloadBytes != "1073741824" {
+		t.Fatal("unsupported native HTTPS payload size")
+	}
 	journal := filepath.Join(directory, "journal")
 	// This also runs when an HTTP failure leaves allocation/effects uncertain.
 	// Never discard fixture storage without observing every allocated VM exit.
@@ -95,7 +102,7 @@ func nativeFilesHTTPSWorkflow(t *testing.T, ctx context.Context, directory, scri
 		"--identity-client-binary", filepath.Join(binaries, "https-identity.test"), "--web-dist", filepath.Join(root, "web/dist"),
 		"--source-service", filepath.Join(root, "packaging/systemd/homenode-gateway.service"),
 		"--controller-source-service", filepath.Join(root, "packaging/systemd/homenode-control.service"),
-		"--supervisor-socket", socket, "--transfer-socket", transferSocket)
+		"--supervisor-socket", socket, "--transfer-socket", transferSocket, "--files-bytes", payloadBytes)
 	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C", "HOMENODE_GATEWAY_STARTUP_FIXTURE=1", "HOMENODE_FILES_HTTPS_INTEGRATION=1", "HOMENODE_FILES_MANAGER_INTEGRATION=1", "HOMENODE_KVM_DOMAIN_INTEGRATION=1"}
 	command.WaitDelay = 5 * time.Second
 	var output boundedOutput

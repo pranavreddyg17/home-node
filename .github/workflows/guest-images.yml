@@ -30,6 +30,12 @@ on:
       - 'go.sum'
       - '.github/workflows/guest-images.yml'
   workflow_dispatch:
+    inputs:
+      files_https_bytes:
+        description: Native HTTPS Files payload size (large case remains unqualified until its run passes)
+        type: choice
+        default: '32768'
+        options: ['32768', '1073741824']
 permissions:
   contents: read
 concurrency:
@@ -118,6 +124,8 @@ jobs:
         run: npm ci && npm run build
       - name: Exercise authenticated HTTPS Files through actual native services
         if: matrix.profile == 'files'
+        env:
+          HOMENODE_FILES_HTTPS_BYTES: ${{ inputs.files_https_bytes || '32768' }}
         run: |
           if test -c /dev/kvm; then
             go build -o "$RUNNER_TEMP/homenode" ./cmd/homenode
@@ -126,7 +134,7 @@ jobs:
             sudo install -D -m 0755 "$RUNNER_TEMP/homenode-gateway" /usr/lib/homenode-fixtures/homenode-gateway
             go test -c -o "$RUNNER_TEMP/https-identity.test" ./cmd/homenode-gateway
             sudo install -D -m 0755 "$RUNNER_TEMP/https-identity.test" /usr/lib/homenode-fixtures/https-identity.test
-            sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 HOMENODE_FILES_MANAGER_INTEGRATION=1 HOMENODE_FILES_HTTPS_INTEGRATION=1 python3 -B packaging/systemd/reserved_manager_fixture.py "$(command -v go)" "$RUNNER_TEMP/assembly/files/artifacts/homenode-development-files.raw" "$RUNNER_TEMP/assembly/files/artifacts/development-build.json"
+            sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 HOMENODE_FILES_MANAGER_INTEGRATION=1 HOMENODE_FILES_HTTPS_INTEGRATION=1 HOMENODE_FILES_HTTPS_BYTES="$HOMENODE_FILES_HTTPS_BYTES" python3 -B packaging/systemd/reserved_manager_fixture.py "$(command -v go)" "$RUNNER_TEMP/assembly/files/artifacts/homenode-development-files.raw" "$RUNNER_TEMP/assembly/files/artifacts/development-build.json"
           else
             echo 'Authenticated native HTTPS Files NOT VERIFIED: no native KVM device.'
           fi

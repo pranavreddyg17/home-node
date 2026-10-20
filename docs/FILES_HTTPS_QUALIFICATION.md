@@ -80,6 +80,20 @@ still be in flight, even after best-effort VM cleanup. This joined mode has
 compiled but has not yet passed native CI; its gate remains open. The first
 native run is 39362374540 at source `8f8574c`.
 
+The subsequent client revision supports an explicit `files_https_bytes` workflow
+input: 32768 bytes by default or 1073741824 bytes for the required 1 GiB case.
+It generates payload windows of at most 256 KiB from a small randomized pattern,
+hashes downloaded and archived content as streams, and stores the ZIP in a
+private temporary file with a payload-plus-1-MiB disk budget. This avoids holding
+the object or archive in client memory. The fixture has separately bounded
+timeouts for the large case. An upload acknowledgement body is deliberately
+abandoned, the connection is closed, and committed state is recovered through a
+fresh request. A download is interrupted after 16 KiB before resuming with
+Range/If-Range and checking the suffix hash. These are explicit client-side
+interruptions, not physical network-loss qualification. This revision has
+compiled but has not executed natively; neither payload size is newly qualified
+by the earlier source run, and active-device revocation remains open.
+
 Fixture-signed development catalogs are distinct from release publisher trust.
 Passing this integration would still leave physical networking, browser/mobile
 acceptance, signed installation and the remaining product release gates open.

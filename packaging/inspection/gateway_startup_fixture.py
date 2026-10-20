@@ -58,10 +58,13 @@ def main():
     parser.add_argument("--controller-source-service", required=True)
     parser.add_argument("--supervisor-socket")
     parser.add_argument("--transfer-socket")
+    parser.add_argument("--files-bytes", choices=("32768", "1073741824"), default="32768")
     args = parser.parse_args()
     if sys.platform != "linux" or os.geteuid() != 0 or os.environ.get("HOMENODE_GATEWAY_STARTUP_FIXTURE") != "1":
         raise SystemExit("requires explicitly opted-in root on disposable Linux")
     attached = bool(args.supervisor_socket or args.transfer_socket)
+    if not attached and args.files_bytes != "32768":
+        raise RuntimeError("large Files qualification requires native workload sockets")
     if attached:
         if not args.supervisor_socket or not args.transfer_socket or os.environ.get("HOMENODE_FILES_HTTPS_INTEGRATION") != "1" or os.environ.get("HOMENODE_FILES_MANAGER_INTEGRATION") != "1" or os.environ.get("HOMENODE_KVM_DOMAIN_INTEGRATION") != "1":
             raise RuntimeError("explicit disposable Files runtime handoff required")
@@ -333,13 +336,17 @@ print('FRONTEND-HTTPS-PASS',flush=True)
             identity_environment = ["HOMENODE_NATIVE_HTTPS_IDENTITY=1"]
             if attached:
                 identity_environment.append("HOMENODE_NATIVE_HTTPS_FILES=1")
-            identity_client = subprocess.run(["ip", "netns", "exec", peer_namespace, "env", *identity_environment, str(directory / "identity-client.test"), "-test.run=^TestNativeHTTPSIdentityClient$", "-test.timeout=240s" if attached else "-test.timeout=40s", "-test.v"], input=identity_input, capture_output=True, text=True, timeout=245 if attached else 45)
+                identity_environment.append("HOMENODE_NATIVE_HTTPS_FILES_BYTES=" + args.files_bytes)
+            identity_timeout = 1200 if attached and args.files_bytes == "1073741824" else 240 if attached else 40
+            identity_client = subprocess.run(["ip", "netns", "exec", peer_namespace, "env", *identity_environment, str(directory / "identity-client.test"), "-test.run=^TestNativeHTTPSIdentityClient$", f"-test.timeout={identity_timeout}s", "-test.v"], input=identity_input, capture_output=True, text=True, timeout=identity_timeout + 5)
             if identity_client.returncode != 0 or "--- PASS: TestNativeHTTPSIdentityClient" not in identity_client.stdout:
                 raise RuntimeError(f"native HTTPS identity protocol failed: {identity_client.stdout}{identity_client.stderr}")
             print("PASS actual HTTPS identity: registration, signed approval, limited pairing, reused-TLS revocation and replacement recovery", flush=True)
             if attached:
                 if "native HTTPS Files signed lifecycle" not in identity_client.stdout:
                     raise RuntimeError("joined Files workload client did not complete")
+                if "native HTTPS Files payload bytes=" + args.files_bytes not in identity_client.stdout:
+                    raise RuntimeError("joined Files workload did not verify requested payload size")
                 print("PASS actual HTTPS Files through controller, supervisor, transfer and KVM guest: signed lifecycle, upload/download, Range, Trash, ZIP and retained restart", flush=True)
                 # The dedicated ingress job covers destructive NSS/key/peer
                 # refusals. Do not mutate shared workload roles mid-run here.
