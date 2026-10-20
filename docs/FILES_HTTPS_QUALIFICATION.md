@@ -78,7 +78,15 @@ The controller allocates the guest instance; native journal inspection must
 observe it stopped afterward. Failed workflows retain storage when effects may
 still be in flight, even after best-effort VM cleanup. This joined mode has
 compiled but has not yet passed native CI; its gate remains open. The first
-native run is 39362374540 at source `8f8574c`.
+native run is 39362374540 at source `8f8574c`. Its log confirms the complete
+32 KiB Files lifecycle reached its success marker through actual HTTPS and the
+native guest. The enclosing identity test then failed on the replacement
+credential's final login with HTTP 429 after the combined ceremonies exceeded
+the unchanged production 30-authentication-requests-per-minute budget. The job
+therefore failed and is not a qualified joined pass. The client now paces its
+combined authentication sequence, preferably before opening a ceremony, without
+changing the limiter or silently retrying signed mutations. The corrected run
+remains pending.
 
 The subsequent client revision supports an explicit `files_https_bytes` workflow
 input: 32768 bytes by default or 1073741824 bytes for the required 1 GiB case.

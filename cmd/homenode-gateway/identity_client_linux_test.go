@@ -22,6 +22,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptrace"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,8 +60,27 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 	var approvalChallenge, actionApproval string
 	var idempotencyKey string
 	var traceNext, reused bool
+	var authWindow time.Time
+	var authRequests int
 	request := func(method, path string, payload any, status int) []byte {
 		t.Helper()
+		// The joined workflow adds app approval ceremonies to the identity
+		// sequence. Pace this disposable client within the public 30/minute
+		// authentication budget; never disable the production limiter or
+		// silently retry a signed mutation after a refusal.
+		if os.Getenv("HOMENODE_NATIVE_HTTPS_FILES") == "1" && (strings.HasPrefix(path, "/api/v1/auth/") || strings.HasSuffix(path, "/approval")) {
+			if authWindow.IsZero() || time.Since(authWindow) >= time.Minute+time.Second {
+				authWindow, authRequests = time.Now(), 0
+			}
+			ceremonyStart := strings.HasSuffix(path, "/begin") || strings.HasSuffix(path, "/approval") || path == "/api/v1/auth/recover"
+			if authRequests >= 28 || authRequests >= 26 && ceremonyStart {
+				if delay := time.Until(authWindow.Add(time.Minute + time.Second)); delay > 0 {
+					time.Sleep(delay)
+				}
+				authWindow, authRequests = time.Now(), 0
+			}
+			authRequests++
+		}
 		body, err := json.Marshal(payload)
 		if err != nil {
 			t.Fatal("fixture request encoding failed")
