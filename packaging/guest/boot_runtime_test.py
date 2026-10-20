@@ -10,13 +10,13 @@ import manager_runtime
 
 
 class RuntimeFixtureChecks(unittest.TestCase):
-    def run_client(self, action, result, status=200):
+    def run_client(self, action, result, status=200, controller_uid=997):
         response = mock.Mock(status=status)
         response.read.return_value = json.dumps(result).encode()
         connection = mock.MagicMock()
         client = connection.__enter__.return_value
         client.getresponse.return_value = response
-        with mock.patch.object(manager_runtime.sys, "platform", "linux"), mock.patch.object(os, "geteuid", return_value=1), mock.patch.dict(os.environ, {"HOMENODE_FILES_MANAGER_INTEGRATION": "1"}), mock.patch.object(manager_runtime.sys, "argv", ["fixture", "/tmp/supervisor.sock", "a" * 32, action, "65536"]), mock.patch.object(manager_runtime.manager_transfer, "UnixHTTP", return_value=connection), contextlib.redirect_stdout(io.StringIO()) as output:
+        with mock.patch.object(manager_runtime.sys, "platform", "linux"), mock.patch.object(os, "geteuid", return_value=controller_uid), mock.patch.dict(os.environ, {"HOMENODE_FILES_MANAGER_INTEGRATION": "1"}), mock.patch.object(manager_runtime.sys, "argv", ["fixture", "/tmp/supervisor.sock", "a" * 32, action, "65536", str(controller_uid)]), mock.patch.object(manager_runtime.manager_transfer, "UnixHTTP", return_value=connection), contextlib.redirect_stdout(io.StringIO()) as output:
             manager_runtime.main()
         self.assertEqual(client.request.call_count, 1)
         method, path, body, _ = client.request.call_args.args
@@ -42,6 +42,13 @@ class RuntimeFixtureChecks(unittest.TestCase):
     def test_http_refusal_is_not_success(self):
         with self.assertRaisesRegex(RuntimeError, "refused"):
             self.run_client("start", {}, 409)
+
+    def test_controller_policy_identity_must_match_before_connecting(self):
+        for actual, expected in [(997, "1"), (0, "997"), (997, "0"), (997, "2147483648"), (997, "0997")]:
+            with self.subTest(actual=actual, expected=expected), mock.patch.object(manager_runtime.sys, "platform", "linux"), mock.patch.object(os, "geteuid", return_value=actual), mock.patch.dict(os.environ, {"HOMENODE_FILES_MANAGER_INTEGRATION": "1"}), mock.patch.object(manager_runtime.sys, "argv", ["fixture", "/tmp/supervisor.sock", "a" * 32, "start", "65536", expected]), mock.patch.object(manager_runtime.manager_transfer, "UnixHTTP") as connect:
+                with self.assertRaises(ValueError):
+                    manager_runtime.main()
+                connect.assert_not_called()
 
 
 if __name__ == "__main__":
