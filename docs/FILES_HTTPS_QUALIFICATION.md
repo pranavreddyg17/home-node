@@ -102,6 +102,18 @@ interruptions, not physical network-loss qualification. This revision has
 compiled but has not executed natively; neither payload size is newly qualified
 by the earlier source run, and active-device revocation remains open.
 
+The next large-case client revision keeps Files running while it enrolls the
+paired Files device. Immediately before the owner's signed revocation it opens
+that device's verified 1 GiB download, reads a 16 KiB prefix and pauses. After
+revocation it requires an incomplete HTTP body with unexpected EOF before a
+30-second deadline, then re-downloads and hashes the whole retained file using
+the owner's independent session before approving the final guest stop. The
+large-mode harness requires both truncation and owner-integrity success markers
+in addition to the enclosing test pass. The small case does not claim to prove
+active data-path revocation. This extension has compiled but has not executed
+natively; active upload revocation, service restart and the other requirements
+remain open.
+
 Fixture-signed development catalogs are distinct from release publisher trust.
 Passing this integration would still leave physical networking, browser/mobile
 acceptance, signed installation and the remaining product release gates open.

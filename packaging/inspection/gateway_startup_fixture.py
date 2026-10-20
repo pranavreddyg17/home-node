@@ -347,6 +347,8 @@ print('FRONTEND-HTTPS-PASS',flush=True)
                     raise RuntimeError("joined Files workload client did not complete")
                 if "native HTTPS Files payload bytes=" + args.files_bytes not in identity_client.stdout:
                     raise RuntimeError("joined Files workload did not verify requested payload size")
+                if args.files_bytes == "1073741824" and ("native HTTPS paired-device revocation truncated active guest download" not in identity_client.stdout or "native HTTPS retained owner file integrity after paired revocation passed" not in identity_client.stdout):
+                    raise RuntimeError("large Files workflow did not verify active download revocation and retained owner integrity")
                 print("PASS actual HTTPS Files through controller, supervisor, transfer and KVM guest: signed lifecycle, upload/download, Range, Trash, ZIP and retained restart", flush=True)
                 # The dedicated ingress job covers destructive NSS/key/peer
                 # refusals. Do not mutate shared workload roles mid-run here.

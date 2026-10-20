@@ -26,6 +26,12 @@ type nativePatternReader struct {
 	offset  int64
 }
 
+type nativeHTTPSFilesResult struct {
+	ID, SHA256        string
+	Size              int64
+	Stop, VerifyOwner func()
+}
+
 func (r *nativePatternReader) Read(output []byte) (int, error) {
 	total := len(output)
 	for len(output) > 0 {
@@ -39,7 +45,7 @@ func (r *nativePatternReader) Read(output []byte) (int, error) {
 // This optional native client requires an actual configured workload backend.
 // It never seeds app state or falls back to metadata-only success. Until joined
 // to the native VM fixture, compilation alone does not qualify this workflow.
-func nativeHTTPSFilesRoundTrip(t *testing.T, client *http.Client, origin string, request func(string, string, any, int) []byte, approve func(string, any) string, approval, idempotency *string) {
+func nativeHTTPSFilesRoundTrip(t *testing.T, client *http.Client, origin string, request func(string, string, any, int) []byte, approve func(string, any) string, approval, idempotency *string) *nativeHTTPSFilesResult {
 	t.Helper()
 	previousTimeout := client.Timeout
 	client.Timeout = 95 * time.Second
@@ -290,7 +296,17 @@ func nativeHTTPSFilesRoundTrip(t *testing.T, client *http.Client, origin string,
 	appAction("stop")
 	appAction("start")
 	download(false)
-	appAction("stop")
 	t.Log("native HTTPS Files signed lifecycle, transfer creation replay, chunk observation, verified download/range, Trash/restore, ZIP and retained restart passed")
 	t.Logf("native HTTPS Files payload bytes=%d; payload windows <=256 KiB; ZIP disk budget=%d", size, budget)
+	// Keep the guest running through paired-device revocation. The caller must
+	// verify retained owner access and approve the final stop before recovery.
+	return &nativeHTTPSFilesResult{ID: transfer.ID, SHA256: hash, Size: size,
+		Stop: func() { appAction("stop") },
+		VerifyOwner: func() {
+			previous := client.Timeout
+			client.Timeout = 5 * time.Minute
+			defer func() { client.Timeout = previous }()
+			download(false)
+		},
+	}
 }

@@ -227,8 +227,9 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 		}
 		return grant.ApprovalToken
 	}
+	var files *nativeHTTPSFilesResult
 	if os.Getenv("HOMENODE_NATIVE_HTTPS_FILES") == "1" {
-		nativeHTTPSFilesRoundTrip(t, client, origin, request, approve, &actionApproval, &idempotencyKey)
+		files = nativeHTTPSFilesRoundTrip(t, client, origin, request, approve, &actionApproval, &idempotencyKey)
 	}
 	pairBody := map[string]any{"name": "Native Files device", "capabilities": []string{"files"}}
 	request(http.MethodPost, "/api/v1/devices/pair", pairBody, 403)
@@ -289,6 +290,11 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 	request(http.MethodPost, revokePath, empty, 403)
 	actionApproval = approve(revokePath, empty)
 	readHeartbeat() // still active after approval, immediately before revocation
+	var dataStream *nativeRevocableDownload
+	if files != nil && files.Size == 1<<30 {
+		dataStream = startNativeRevocableDownload(t, paired, origin, files)
+		defer dataStream.Close()
+	}
 	request(http.MethodPost, revokePath, empty, 200)
 	actionApproval = ""
 	remaining, err := io.ReadAll(io.LimitReader(reader, (128<<10)+1))
@@ -304,6 +310,14 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 	}
 	traceNext = false
 	client = owner
+	if files != nil {
+		if dataStream != nil {
+			dataStream.ExpectRevoked(t)
+			files.VerifyOwner()
+			t.Log("native HTTPS retained owner file integrity after paired revocation passed")
+		}
+		files.Stop()
+	}
 	oldRecovery, unusedOldRecovery := recoveryCodes[0], recoveryCodes[1]
 	recoveryData := request(http.MethodPost, "/api/v1/auth/recover", map[string]string{"code": oldRecovery}, 200)
 	request(http.MethodPost, "/api/v1/auth/recover", map[string]string{"code": oldRecovery}, 403)
