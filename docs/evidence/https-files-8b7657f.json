@@ -19,5 +19,35 @@
     "Guest stop/start retains bytes but is not a complete controller/supervisor/transfer service restart.",
     "Namespace TUN transport and fixture daemon status do not qualify physical Tailscale enrollment, ACLs or mobile browsers.",
     "Development guest and fixture-signed catalog do not qualify release publisher artifacts or signed installation."
-  ]
+  ],
+  "developmentImage": {
+    "sha256": "14b04bd14e4cf0f5dfebf7f39ab3b8400f55ed2bbbb2dedd9ce020a8abac354d",
+    "bytes": 2686472192,
+    "overlaySHA256": "63ca1c2f1acdbe45cbf54629935da1eb0b750a3470727530f76858b80b161eed",
+    "mkosiRevision": "52448a27f6f869c108352ed82fcfb9be633703fb",
+    "releaseQualified": false
+  },
+  "nativeImageBoot": {
+    "schema": 1,
+    "profile": "files",
+    "imageSHA256": "14b04bd14e4cf0f5dfebf7f39ab3b8400f55ed2bbbb2dedd9ce020a8abac354d",
+    "accelerator": "kvm",
+    "tcgBootAndObjectRoundTrip": false,
+    "kvmBootAndObjectRoundTrip": true,
+    "objectTransfer": {
+      "bytes": 1048579,
+      "chunkBytes": 262144,
+      "acknowledgedChunkReplay": true
+    },
+    "videoPresets": [],
+    "videoCancellation": null,
+    "aiInference": null,
+    "shutdown": {
+      "guestInitiated": true,
+      "reason": "guest-shutdown",
+      "qemuExitCode": 0,
+      "readOnlyFilesystemCheck": true
+    },
+    "releaseQualified": false
+  }
 }
