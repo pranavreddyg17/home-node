@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "8b7657f295ed7d270aafffef44069848f43d4095",
+  "workflowRun": 39363486412,
+  "job": 118434818990,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/39363486412",
+  "conclusion": "success",
+  "payloadBytes": 32768,
+  "logSHA256": "94c459a52635eafc7146dd87627971e616a04c58382d183b2e3461f8e5c867bf",
+  "observedAssertions": [
+    "PASS actual HTTPS identity: registration, signed approval, limited pairing, reused-TLS revocation and replacement recovery",
+    "PASS actual HTTPS Files through controller, supervisor, transfer and KVM guest: signed lifecycle, upload/download, Range, Trash, ZIP and retained restart",
+    "--- PASS: TestNativeReservedFilesManagerLaunch (81.96s)",
+    "native Files named roles controllerUID=997 transferUID=995 runtimeGID=985"
+  ],
+  "limitations": [
+    "This source predates active guest download revocation and partial-body upload revocation tests.",
+    "No 1 GiB public HTTPS result is claimed; separate manager-only 1 GiB evidence is narrower.",
+    "Guest stop/start retains bytes but is not a complete controller/supervisor/transfer service restart.",
+    "Namespace TUN transport and fixture daemon status do not qualify physical Tailscale enrollment, ACLs or mobile browsers.",
+    "Development guest and fixture-signed catalog do not qualify release publisher artifacts or signed installation."
+  ]
+}

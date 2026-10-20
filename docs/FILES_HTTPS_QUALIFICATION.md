@@ -85,8 +85,13 @@ credential's final login with HTTP 429 after the combined ceremonies exceeded
 the unchanged production 30-authentication-requests-per-minute budget. The job
 therefore failed and is not a qualified joined pass. The client now paces its
 combined authentication sequence, preferably before opening a ceremony, without
-changing the limiter or silently retrying signed mutations. The corrected run
-remains pending.
+changing the limiter or silently retrying signed mutations. Corrected run
+39363486412 at `8b7657f` passed, including the actual joined Files workflow and
+the enclosing identity/recovery sequence. This qualifies the bounded 32 KiB
+component demonstration at that source. It does not cover the subsequent
+active-download or partial-upload revocation changes, a complete service restart,
+the 1 GiB mode or signed release installation. See
+`evidence/https-files-8b7657f.json`.
 
 The subsequent client revision supports an explicit `files_https_bytes` workflow
 input: 32768 bytes by default or 1073741824 bytes for the required 1 GiB case.
