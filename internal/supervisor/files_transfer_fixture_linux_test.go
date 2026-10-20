@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -94,12 +95,28 @@ func startNativeFilesTransferAt(t *testing.T, ctx context.Context, base, script,
 		cancel()
 		t.Fatal("native transfer launch", err)
 	}
+	var stopOnce sync.Once
 	stop := func() {
-		cancel()
-		_ = command.Wait() // Cancellation kills/reaps this direct fixture child.
-		if output := diagnostics.String(); output != "" {
-			t.Log("native transfer process diagnostics", output)
-		}
+		stopOnce.Do(func() {
+			_ = command.Process.Signal(syscall.SIGTERM)
+			done := make(chan error, 1)
+			go func() { done <- command.Wait() }()
+			var err error
+			select {
+			case err = <-done:
+			case <-time.After(10 * time.Second):
+				cancel()
+				err = <-done
+				t.Error("native transfer did not stop within its cooperative deadline")
+			}
+			cancel()
+			if err != nil && ctx.Err() == nil {
+				t.Error("native transfer did not stop cleanly", err)
+			}
+			if output := diagnostics.String(); output != "" {
+				t.Log("native transfer process diagnostics", output)
+			}
+		})
 	}
 	defer func() {
 		if !retained {

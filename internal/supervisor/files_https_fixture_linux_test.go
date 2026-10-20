@@ -4,6 +4,10 @@ package supervisor
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,11 +16,12 @@ import (
 
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
 	"github.com/pranavreddyg17/home-node/internal/state"
+	"golang.org/x/sys/unix"
 )
 
 // Join the native workload executables to the actual confined HTTPS services.
 // The controller must allocate its own instance in a fresh supervisor journal.
-func nativeFilesHTTPSWorkflow(t *testing.T, ctx context.Context, directory, script, socket string, policy Policy, gid int, safeCleanup *bool) string {
+func nativeFilesHTTPSWorkflow(t *testing.T, ctx context.Context, directory, script, socket string, policy Policy, gid int, safeCleanup *bool, restartSupervisor func() error) string {
 	t.Helper()
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_FILES_HTTPS_INTEGRATION") != "1" || os.Getenv("HOMENODE_FILES_MANAGER_INTEGRATION") != "1" || os.Getenv("HOMENODE_KVM_DOMAIN_INTEGRATION") != "1" {
 		t.Fatal("explicit disposable HTTPS Files integration required")
@@ -79,7 +84,11 @@ func nativeFilesHTTPSWorkflow(t *testing.T, ctx context.Context, directory, scri
 		}
 	}()
 	_, stop := startNativeFilesTransferAt(t, ctx, directory, script, "", socket, filepath.Join(directory, "channels"), gid, policy.ControllerUID, policy.TransferUID)
-	defer stop()
+	defer func() {
+		if stop != nil {
+			stop()
+		}
+	}()
 	transferSocket := filepath.Join(directory, "transfer-runtime", "transfer.sock")
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -96,20 +105,119 @@ func nativeFilesHTTPSWorkflow(t *testing.T, ctx context.Context, directory, scri
 	if err != nil {
 		t.Fatal(err)
 	}
+	restartSocket := filepath.Join(directory, "restart.sock")
+	listener, err := net.Listen("unix", restartSocket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(restartSocket, 0600); err != nil {
+		listener.Close()
+		t.Fatal(err)
+	}
+	restarts := make(chan chan error)
+	server := &http.Server{ConnContext: PeerContext, ReadHeaderTimeout: time.Second, ReadTimeout: 3 * time.Second, WriteTimeout: 90 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		uid, ok := RequestPeerUID(r)
+		if !ok || uid != 0 || r.Method != "POST" || r.URL.Path != "/restart" {
+			http.Error(w, "denied", 403)
+			return
+		}
+		answer := make(chan error, 1)
+		select {
+		case restarts <- answer:
+		case <-r.Context().Done():
+			return
+		case <-ctx.Done():
+			return
+		}
+		select {
+		case err := <-answer:
+			if err != nil {
+				http.Error(w, "restart failed", 500)
+				return
+			}
+			w.Write([]byte("restarted"))
+		case <-r.Context().Done():
+		case <-ctx.Done():
+		}
+	})}
+	go func() { _ = server.Serve(listener) }()
+	defer server.Close()
 	binaries := "/usr/lib/homenode-fixtures"
-	command := exec.CommandContext(ctx, "/usr/bin/python3", "-B", filepath.Join(root, "packaging/inspection/gateway_startup_fixture.py"),
+	pythonCtx, cancelPython := context.WithCancel(ctx)
+	defer cancelPython()
+	command := exec.CommandContext(pythonCtx, "/usr/bin/python3", "-B", filepath.Join(root, "packaging/inspection/gateway_startup_fixture.py"),
 		"--gateway-binary", filepath.Join(binaries, "homenode-gateway"), "--controller-binary", filepath.Join(binaries, "homenode"),
 		"--identity-client-binary", filepath.Join(binaries, "https-identity.test"), "--web-dist", filepath.Join(root, "web/dist"),
 		"--source-service", filepath.Join(root, "packaging/systemd/homenode-gateway.service"),
 		"--controller-source-service", filepath.Join(root, "packaging/systemd/homenode-control.service"),
-		"--supervisor-socket", socket, "--transfer-socket", transferSocket, "--files-bytes", payloadBytes)
+		"--supervisor-socket", socket, "--transfer-socket", transferSocket, "--files-bytes", payloadBytes, "--restart-socket", restartSocket)
 	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C", "HOMENODE_GATEWAY_STARTUP_FIXTURE=1", "HOMENODE_FILES_HTTPS_INTEGRATION=1", "HOMENODE_FILES_MANAGER_INTEGRATION=1", "HOMENODE_KVM_DOMAIN_INTEGRATION=1"}
 	command.WaitDelay = 5 * time.Second
 	var output boundedOutput
 	command.Stdout, command.Stderr = &output, &output
-	if err := command.Run(); err != nil || output.tooLarge {
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- command.Wait() }()
+	waited := false
+	defer func() {
+		if !waited {
+			cancelPython()
+			<-done
+		}
+	}()
+	restartCount := 0
+	var runErr error
+	running := true
+	for running {
+		select {
+		case runErr = <-done:
+			waited = true
+			running = false
+		case answer := <-restarts:
+			if restartCount != 0 {
+				answer <- errors.New("duplicate restart")
+				continue
+			}
+			restartCount++
+			*safeCleanup = false
+			oldPID, err := nativeFixtureListenerPID(transferSocket, policy.TransferUID)
+			if err == nil {
+				stop()
+				stop = nil
+				err = os.Remove(filepath.Dir(transferSocket)) // Empty owned runtime directory only.
+			}
+			if err == nil {
+				err = restartSupervisor()
+			}
+			if err == nil {
+				_, stop = startNativeFilesTransferAt(t, ctx, directory, script, "", socket, filepath.Join(directory, "channels"), gid, policy.ControllerUID, policy.TransferUID)
+				until := time.Now().Add(10 * time.Second)
+				for time.Now().Before(until) {
+					var pid int
+					pid, err = nativeFixtureListenerPID(transferSocket, policy.TransferUID)
+					if err == nil && pid != oldPID {
+						t.Logf("actual transfer restart pid %d -> %d", oldPID, pid)
+						break
+					}
+					if err == nil {
+						err = errors.New("transfer PID did not change")
+					}
+					time.Sleep(50 * time.Millisecond)
+				}
+			}
+			if err == nil {
+				*safeCleanup = true
+			} else {
+				t.Log("native service restart refused", err)
+			}
+			answer <- err
+		}
+	}
+	if runErr != nil || output.tooLarge || restartCount != 1 {
 		*safeCleanup = false // A controller worker may still have effects in flight.
-		t.Fatal("actual HTTPS Files workflow failed", err, output.String())
+		t.Fatal("actual HTTPS Files workflow failed", runErr, restartCount, output.String())
 	}
 	t.Log(output.String())
 	store, err := state.Open(journal)
@@ -124,4 +232,25 @@ func nativeFilesHTTPSWorkflow(t *testing.T, ctx context.Context, directory, scri
 		t.Fatal("HTTPS controller allocation did not finish stopped", status, err)
 	}
 	return id
+}
+
+func nativeFixtureListenerPID(socket string, uid uint32) (int, error) {
+	connection, err := net.DialTimeout("unix", socket, time.Second)
+	if err != nil {
+		return 0, err
+	}
+	defer connection.Close()
+	control, err := connection.(*net.UnixConn).SyscallConn()
+	if err != nil {
+		return 0, err
+	}
+	var credentials *unix.Ucred
+	var observeErr error
+	err = control.Control(func(fd uintptr) {
+		credentials, observeErr = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
+	})
+	if err != nil || observeErr != nil || credentials == nil || credentials.Uid != uid || credentials.Pid <= 0 {
+		return 0, fmt.Errorf("native listener identity unavailable: %v %v", err, observeErr)
+	}
+	return int(credentials.Pid), nil
 }

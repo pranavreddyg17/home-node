@@ -8,6 +8,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -126,7 +128,7 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images,
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
-	go func() { done <- command.Wait() }()
+	go func(cmd *exec.Cmd, finished chan error) { finished <- cmd.Wait() }(command, done)
 	waited := false
 	defer func() {
 		if !waited {
@@ -182,7 +184,70 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images,
 		}
 	}
 	if os.Getenv("HOMENODE_FILES_HTTPS_INTEGRATION") == "1" {
-		instanceID = nativeFilesHTTPSWorkflow(t, childCtx, directory, script, socket, policy, transferGID, safeCleanup)
+		arguments := append([]string(nil), command.Args[1:]...)
+		restart := func() error {
+			store, err := state.Open(filepath.Join(directory, "journal"))
+			if err != nil {
+				return err
+			}
+			var id, phase string
+			err = store.DB.QueryRowContext(childCtx, "SELECT id,state FROM runtime_instances").Scan(&id, &phase)
+			store.Close()
+			if err != nil || phase != "stopped" {
+				return fmt.Errorf("restart requires stopped journal: %s: %v", phase, err)
+			}
+			backend := LinuxBackend{DataRoot: filepath.Join(directory, "volumes"), TransferGID: transferGID}
+			if running, err := backend.Running(childCtx, id); err != nil || running {
+				return fmt.Errorf("restart guest exit unverified: %t: %v", running, err)
+			}
+			oldPID := command.Process.Pid
+			if err := command.Process.Signal(syscall.SIGTERM); err != nil {
+				return err
+			}
+			select {
+			case err := <-done:
+				waited = true
+				if err != nil {
+					return err
+				}
+			case <-childCtx.Done():
+				return childCtx.Err()
+			case <-time.After(20 * time.Second):
+				return errors.New("supervisor did not stop within restart deadline")
+			}
+			command = exec.CommandContext(childCtx, binary, arguments...)
+			command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C"}
+			command.Stdout, command.Stderr = &diagnostics, &diagnostics
+			command.WaitDelay = 3 * time.Second
+			if err := command.Start(); err != nil {
+				return err
+			}
+			done = make(chan error, 1)
+			waited = false
+			go func(cmd *exec.Cmd, finished chan error) { finished <- cmd.Wait() }(command, done)
+			transport.CloseIdleConnections()
+			until := time.Now().Add(20 * time.Second)
+			for time.Now().Before(until) && childCtx.Err() == nil {
+				select {
+				case err := <-done:
+					waited = true
+					return fmt.Errorf("restarted supervisor exited: %v", err)
+				default:
+				}
+				response, err := client.Get("http://local/v1/runtime")
+				if err == nil {
+					response.Body.Close()
+					if response.StatusCode != 403 {
+						return fmt.Errorf("restarted supervisor did not deny root")
+					}
+					t.Logf("actual supervisor restart pid %d -> %d with retained stopped instance %s", oldPID, command.Process.Pid, id)
+					return nil
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+			return errors.New("restarted supervisor not ready")
+		}
+		instanceID = nativeFilesHTTPSWorkflow(t, childCtx, directory, script, socket, policy, transferGID, safeCleanup, restart)
 		started = true
 	} else {
 		started = true // A failed request may still have committed native effects.

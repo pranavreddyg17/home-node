@@ -154,6 +154,30 @@ extension but predates the partial-upload test; the two runs must not be
 combined into a claim that one source passed every requirement. Both results
 must be inspected before their respective gates can change.
 
+Partial-upload run 39364512000 passed at `acea852`, including the explicit 401
+and read-only journal check for zero committed offset. The initial 1 GiB run
+39365139607 failed at finalization with HTTP 409 after its chunk loop. It does
+not qualify large transfers. Bounded transfer diagnostics now distinguish
+unavailable/timed-out guest responses from guest refusals without logging object
+IDs, names, contents or raw guest error text; the diagnostic rerun remains
+pending. The session activity-write optimization passed local identity/control
+race suites and native gateway run 39365437176 at `e431532`.
+
+The next fixture revision adds all-four-service restart. After a signed guest
+stop, the live protocol client pauses on a pipe, retaining its actual session
+cookie and generated passkey only in memory. The root orchestrator stops the
+controller and gateway, invokes a fixture-only root-peer-protected Unix endpoint
+to replace the supervisor and transfer, then recreates the confined controller
+and gateway with fresh socket mounts. The supervisor requires a stopped journal
+and observed guest exit before restarting; transfer peer PIDs and controller/
+gateway executable identities are observed again. The client resumes, verifies
+the same enrolled device, replays the original transfer creation key/body and
+requires the same ready object, then signs a fresh guest start and checks bytes.
+This code compiles but has not passed native CI. Only controller/gateway use
+source-confined transient units here; canonical installed-unit lifecycle and
+signed release qualification remain separate requirements. Failed or ambiguous
+restarts preserve fixture storage rather than declaring cleanup successful.
+
 Fixture-signed development catalogs are distinct from release publisher trust.
 Passing this integration would still leave physical networking, browser/mobile
 acceptance, signed installation and the remaining product release gates open.

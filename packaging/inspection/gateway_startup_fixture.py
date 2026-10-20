@@ -2,6 +2,7 @@
 """Actual gateway/controller startup in disposable Linux; daemon is a fixture."""
 import argparse
 import hashlib
+import http.client
 import grp
 import json
 import os
@@ -12,6 +13,7 @@ import select
 import shutil
 import stat
 import sqlite3
+import socket
 import subprocess
 import sys
 import tempfile
@@ -21,16 +23,20 @@ from private_ingress_fixture import run, source_hardening
 
 
 def ready(process, marker, timeout=12):
-    deadline, lines = time.monotonic() + timeout, []
+    deadline, output = time.monotonic() + timeout, bytearray()
     while time.monotonic() < deadline:
         if select.select([process.stdout], [], [], min(1, max(0, deadline-time.monotonic())))[0]:
-            line = process.stdout.readline()
-            if not line:
+            # Read the pipe directly: TextIOWrapper.readline can prefetch a
+            # second line, leaving select waiting on an empty kernel pipe.
+            chunk = os.read(process.stdout.fileno(), 4096)
+            if not chunk:
                 break
-            lines.append(line)
-            if marker in line:
+            output.extend(chunk)
+            if len(output) > 65536:
+                raise RuntimeError("fixture readiness diagnostics exceed bound")
+            if marker.encode() in output:
                 return
-    raise RuntimeError(f"process did not reach {marker}: {''.join(lines)}")
+    raise RuntimeError(f"process did not reach {marker}: {output.decode(errors='replace')}")
 
 
 def observe_service(unit, binary, uid, gid):
@@ -48,6 +54,7 @@ def observe_service(unit, binary, uid, gid):
             raise RuntimeError(f"native service retained {name}")
     if fields["NoNewPrivs"].strip() != "1" or fields["Seccomp"].strip() != "2":
         raise RuntimeError("native service lacks kernel no-new-privileges or seccomp filtering")
+    return pid
 
 
 def main():
@@ -61,12 +68,19 @@ def main():
     parser.add_argument("--supervisor-socket")
     parser.add_argument("--transfer-socket")
     parser.add_argument("--files-bytes", choices=("32768", "1073741824"), default="32768")
+    parser.add_argument("--restart-socket")
     args = parser.parse_args()
     if sys.platform != "linux" or os.geteuid() != 0 or os.environ.get("HOMENODE_GATEWAY_STARTUP_FIXTURE") != "1":
         raise SystemExit("requires explicitly opted-in root on disposable Linux")
     attached = bool(args.supervisor_socket or args.transfer_socket)
     if not attached and args.files_bytes != "32768":
         raise RuntimeError("large Files qualification requires native workload sockets")
+    if args.restart_socket:
+        if not attached or not os.path.isabs(args.restart_socket) or os.path.realpath(args.restart_socket) != args.restart_socket:
+            raise RuntimeError("native restart requires a canonical protected fixture endpoint")
+        metadata = os.lstat(args.restart_socket)
+        if not stat.S_ISSOCK(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600 or metadata.st_uid != 0 or metadata.st_nlink != 1:
+            raise RuntimeError("unprotected native restart endpoint")
     if attached:
         if not args.supervisor_socket or not args.transfer_socket or os.environ.get("HOMENODE_FILES_HTTPS_INTEGRATION") != "1" or os.environ.get("HOMENODE_FILES_MANAGER_INTEGRATION") != "1" or os.environ.get("HOMENODE_KVM_DOMAIN_INTEGRATION") != "1":
             raise RuntimeError("explicit disposable Files runtime handoff required")
@@ -195,7 +209,7 @@ while True:
             peer = subprocess.Popen(controller_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             children.append(peer)
             ready(peer, "HomeNode listening")
-            observe_service(controller_unit, directory / "controller", controller_uid, controller_gid)
+            controller_pid = observe_service(controller_unit, directory / "controller", controller_uid, controller_gid)
             os.chown(control / "control.sock", controller_uid, bridge_gid)
             run("ip", "netns", "add", namespace)
             namespace_created = True
@@ -248,7 +262,8 @@ while True:
             gateway = subprocess.Popen(command("valid"), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             children.append(gateway)
             ready(gateway, "HomeNode private gateway listening")
-            observe_service(units[-1], directory / "gateway", pwd.getpwnam("homenode-gateway").pw_uid, gateway_gid)
+            gateway_unit = units[-1]
+            gateway_pid = observe_service(gateway_unit, directory / "gateway", pwd.getpwnam("homenode-gateway").pw_uid, gateway_gid)
             print("PASS actual gateway/controller kernel identities, zero capabilities, no-new-privileges and seccomp observed", flush=True)
             listeners = run("ip", "netns", "exec", namespace, "ss", "-ltn")
             if "100.100.1.2%tailscale0:8787" not in listeners and "100.100.1.2:8787" not in listeners:
@@ -339,12 +354,62 @@ print('FRONTEND-HTTPS-PASS',flush=True)
             if attached:
                 identity_environment.append("HOMENODE_NATIVE_HTTPS_FILES=1")
                 identity_environment.append("HOMENODE_NATIVE_HTTPS_FILES_BYTES=" + args.files_bytes)
+            if args.restart_socket:
+                identity_environment.append("HOMENODE_NATIVE_HTTPS_RESTART=1")
             identity_timeout = 1200 if attached and args.files_bytes == "1073741824" else 240 if attached else 40
-            identity_client = subprocess.run(["ip", "netns", "exec", peer_namespace, "env", *identity_environment, str(directory / "identity-client.test"), "-test.run=^TestNativeHTTPSIdentityClient$", f"-test.timeout={identity_timeout}s", "-test.v"], input=identity_input, capture_output=True, text=True, timeout=identity_timeout + 5)
+            identity_command = ["ip", "netns", "exec", peer_namespace, "env", *identity_environment, str(directory / "identity-client.test"), "-test.run=^TestNativeHTTPSIdentityClient$", f"-test.timeout={identity_timeout}s", "-test.v"]
+            if args.restart_socket:
+                identity_process = subprocess.Popen(identity_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                children.append(identity_process)
+                identity_process.stdin.write(identity_input + "\n")
+                identity_process.stdin.flush()
+                ready(identity_process, "NATIVE-RESTART-READY", timeout=identity_timeout)
+                # The client has signed a guest stop and keeps its actual
+                # cookie/passkey material in memory while every service exits.
+                run("systemctl", "stop", gateway_unit, controller_unit)
+                gateway.communicate(timeout=10)
+                peer.communicate(timeout=10)
+                if gateway.returncode != 0 or peer.returncode != 0:
+                    raise RuntimeError("controller or gateway did not stop cooperatively before restart")
+                with socket.socket(socket.AF_UNIX) as restart_connection:
+                    restart_connection.settimeout(90)
+                    restart_connection.connect(args.restart_socket)
+                    restart_connection.sendall(b"POST /restart HTTP/1.1\r\nHost: local\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                    restarted = http.client.HTTPResponse(restart_connection)
+                    restarted.begin()
+                    if restarted.status != 200 or restarted.read(64) != b"restarted":
+                        raise RuntimeError("native supervisor/transfer restart refused")
+                resumed_unit = f"homenode-controller-resumed-{os.getpid()}.service"
+                units.append(resumed_unit)
+                resumed_command = [f"--unit={resumed_unit}" if argument.startswith("--unit=") else argument for argument in controller_command]
+                peer = subprocess.Popen(resumed_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                children.append(peer)
+                ready(peer, "HomeNode listening")
+                resumed_pid = observe_service(resumed_unit, directory / "controller", controller_uid, controller_gid)
+                if resumed_pid == controller_pid:
+                    raise RuntimeError("controller process did not restart")
+                gateway = subprocess.Popen(command("resumed"), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                children.append(gateway)
+                ready(gateway, "HomeNode private gateway listening")
+                resumed_pid = observe_service(units[-1], directory / "gateway", pwd.getpwnam("homenode-gateway").pw_uid, gateway_gid)
+                if resumed_pid == gateway_pid:
+                    raise RuntimeError("gateway process did not restart")
+                identity_process.stdin.write("continue\n")
+                identity_process.stdin.flush()
+                identity_process.stdin.close()
+                identity_process.stdin = None
+                identity_output, _ = identity_process.communicate(timeout=identity_timeout + 5)
+                identity_client = subprocess.CompletedProcess(identity_command, identity_process.returncode, identity_output, "")
+            else:
+                identity_client = subprocess.run(identity_command, input=identity_input, capture_output=True, text=True, timeout=identity_timeout + 5)
             if identity_client.returncode != 0 or "--- PASS: TestNativeHTTPSIdentityClient" not in identity_client.stdout:
                 raise RuntimeError(f"native HTTPS identity protocol failed: {identity_client.stdout}{identity_client.stderr}")
             print("PASS actual HTTPS identity: registration, signed approval, limited pairing, reused-TLS revocation and replacement recovery", flush=True)
             if attached:
+                if args.restart_socket:
+                    if "native HTTPS all-service restart retained session and original transfer creation identity" not in identity_client.stdout:
+                        raise RuntimeError("service restart lost enrolled authority or request identity")
+                    print("PASS all four actual services restarted with retained enrolled session, original request identity and subsequent guest data verification", flush=True)
                 uploads = re.findall(r"native HTTPS upload revocation transfer=([A-Za-z0-9_-]{20,64}) denied after partial body", identity_client.stdout)
                 if len(uploads) != 1:
                     raise RuntimeError("joined Files did not complete partial-body upload revocation")

@@ -4,6 +4,7 @@ package main
 
 import (
 	"archive/zip"
+	"bufio"
 	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
@@ -117,6 +118,7 @@ func nativeHTTPSFilesRoundTrip(t *testing.T, client *http.Client, origin string,
 	}
 	hash := expectedHash(0, size)
 	*idempotency = key()
+	creationKey := *idempotency
 	body := map[string]any{"name": "native-https-files.bin", "size": size, "sha256": hash}
 	created := request("POST", "/api/v1/transfers", body, 201)
 	replayed := request("POST", "/api/v1/transfers", body, 201)
@@ -294,6 +296,45 @@ func nativeHTTPSFilesRoundTrip(t *testing.T, client *http.Client, origin string,
 		t.Fatal("native Files export omitted uploaded object or verified manifest")
 	}
 	appAction("stop")
+	if os.Getenv("HOMENODE_NATIVE_HTTPS_RESTART") == "1" {
+		before := request("GET", "/api/v1/session", nil, 200)
+		var oldActor, newActor struct{ Device struct{ ID string } }
+		if json.Unmarshal(before, &oldActor) != nil || oldActor.Device.ID == "" {
+			t.Fatal("restart actor missing")
+		}
+		fmt.Fprintln(os.Stdout, "NATIVE-RESTART-READY")
+		reader := bufio.NewReader(io.LimitReader(os.Stdin, 1024))
+		resumed := false
+		for range 3 {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				t.Fatal("native restart handshake ended", err)
+			}
+			line = strings.TrimSpace(line)
+			if line == "continue" {
+				resumed = true
+				break
+			}
+			if line != "" {
+				t.Fatal("unexpected native restart handshake")
+			}
+		}
+		if !resumed {
+			t.Fatal("native restart did not resume")
+		}
+		client.CloseIdleConnections()
+		if json.Unmarshal(request("GET", "/api/v1/session", nil, 200), &newActor) != nil || oldActor.Device.ID != newActor.Device.ID {
+			t.Fatal("enrolled session did not survive service restart")
+		}
+		*idempotency = creationKey
+		resumedTransfer := request("POST", "/api/v1/transfers", body, 201)
+		*idempotency = ""
+		var retained workload.Transfer
+		if json.Unmarshal(resumedTransfer, &retained) != nil || retained.ID != transfer.ID || retained.Offset != size || retained.State != "ready" || retained.SHA256 != hash {
+			t.Fatal("original transfer request did not survive service restart")
+		}
+		t.Log("native HTTPS all-service restart retained session and original transfer creation identity")
+	}
 	appAction("start")
 	download(false)
 	t.Log("native HTTPS Files signed lifecycle, transfer creation replay, chunk observation, verified download/range, Trash/restore, ZIP and retained restart passed")
