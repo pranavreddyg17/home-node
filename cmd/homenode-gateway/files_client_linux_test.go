@@ -9,8 +9,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -103,10 +105,12 @@ func nativeHTTPSFilesRoundTrip(t *testing.T, client *http.Client, origin string,
 		}
 		req.Header.Set("Origin", origin)
 		status, expected := http.StatusOK, data
+		contentRange := ""
 		if partial {
 			req.Header.Set("Range", "bytes=16384-")
 			req.Header.Set("If-Range", `"`+hash+`"`)
 			status, expected = http.StatusPartialContent, data[16<<10:]
+			contentRange = fmt.Sprintf("bytes 16384-%d/%d", len(data)-1, len(data))
 		}
 		response, err := client.Do(req)
 		if err != nil {
@@ -116,6 +120,9 @@ func nativeHTTPSFilesRoundTrip(t *testing.T, client *http.Client, origin string,
 		actual, readErr := io.ReadAll(io.LimitReader(response.Body, int64(len(data)+1)))
 		if readErr != nil || response.StatusCode != status || response.TLS == nil || len(response.TLS.VerifiedChains) == 0 || response.Header.Get("ETag") != `"`+hash+`"` || response.Header.Get("X-Content-SHA256") != hash || !bytes.Equal(actual, expected) {
 			t.Fatal("native Files download bytes, digest, range or verified TLS mismatch", response.StatusCode, readErr)
+		}
+		if response.ContentLength != int64(len(expected)) || response.Header.Get("Content-Range") != contentRange || response.Header.Get("Accept-Ranges") != "bytes" || response.Header.Get("Content-Type") != "application/octet-stream" || response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("Strict-Transport-Security") == "" || !strings.Contains(response.Header.Get("Content-Disposition"), "attachment;") || !strings.Contains(response.Header.Get("Content-Security-Policy"), "sandbox") {
+			t.Fatal("native Files download range or attachment security contract mismatch")
 		}
 	}
 	download(false)
@@ -127,8 +134,36 @@ func nativeHTTPSFilesRoundTrip(t *testing.T, client *http.Client, origin string,
 	if err != nil {
 		t.Fatal("native Files export is not a completed ZIP", err)
 	}
-	found := false
+	if len(reader.File) != 2 {
+		t.Fatal("native Files export must contain one object and its manifest")
+	}
+	found, manifestFound := false, false
 	for _, entry := range reader.File {
+		if entry.Name == "manifest.json" {
+			stream, err := entry.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			encoded, readErr := io.ReadAll(io.LimitReader(stream, 4097))
+			closeErr := stream.Close()
+			var manifest struct {
+				Schema int
+				Scope  string
+				Files  []struct {
+					workload.File
+					ArchivePath string `json:"archivePath"`
+				}
+			}
+			if manifestFound || readErr != nil || closeErr != nil || len(encoded) > 4096 || json.Unmarshal(encoded, &manifest) != nil || manifest.Schema != 1 || manifest.Scope != "saved-files-excluding-trash" || len(manifest.Files) != 1 {
+				t.Fatal("native Files export manifest invalid", readErr, closeErr)
+			}
+			file := manifest.Files[0]
+			if file.ID != transfer.ID || file.Size != int64(len(data)) || file.SHA256 != hash || file.Name != "native-https-files.bin" || file.ArchivePath != "files/00001-native-https-files.bin" || file.TrashUntil != nil {
+				t.Fatal("native Files export manifest identity or hash mismatch")
+			}
+			manifestFound = true
+			continue
+		}
 		if entry.Name != "files/00001-native-https-files.bin" {
 			continue
 		}
@@ -143,8 +178,8 @@ func nativeHTTPSFilesRoundTrip(t *testing.T, client *http.Client, origin string,
 		}
 		found = true
 	}
-	if !found {
-		t.Fatal("native Files export omitted uploaded object")
+	if !found || !manifestFound {
+		t.Fatal("native Files export omitted uploaded object or verified manifest")
 	}
 	appAction("stop")
 	appAction("start")
