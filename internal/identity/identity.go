@@ -413,12 +413,18 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 	session.TokenHash = state.Hash(token)
 	err := s.Store.Transaction(ctx, func(tx *sql.Tx) error {
 		now := time.Now().Unix()
-		err := tx.QueryRow(`SELECT d.id,d.name,d.capabilities,d.created_at,s.verified_at,s.expires_at,s.epoch FROM sessions s JOIN devices d ON d.id=s.device_id JOIN identity i ON i.epoch=s.epoch WHERE s.token_hash=? AND d.revoked_at IS NULL AND s.expires_at>? AND s.last_seen>?`, session.TokenHash, now, now-1800).Scan(&session.Device.ID, &session.Device.Name, &caps, &session.Device.CreatedAt, &session.VerifiedAt, &session.ExpiresAt, &session.Epoch)
+		var lastSeen int64
+		err := tx.QueryRow(`SELECT d.id,d.name,d.capabilities,d.created_at,s.verified_at,s.expires_at,s.epoch,s.last_seen FROM sessions s JOIN devices d ON d.id=s.device_id JOIN identity i ON i.epoch=s.epoch WHERE s.token_hash=? AND d.revoked_at IS NULL AND s.expires_at>? AND s.last_seen>?`, session.TokenHash, now, now-1800).Scan(&session.Device.ID, &session.Device.Name, &caps, &session.Device.CreatedAt, &session.VerifiedAt, &session.ExpiresAt, &session.Epoch, &lastSeen)
 		if err != nil {
 			return ErrDenied
 		}
 		if err = json.Unmarshal([]byte(caps), &session.Device.Capabilities); err != nil {
 			return err
+		}
+		// Streaming paths still query current authority on every check. Avoid
+		// promoting a read transaction to a writer for an identical timestamp.
+		if lastSeen == now {
+			return nil
 		}
 		_, err = tx.Exec("UPDATE sessions SET last_seen=? WHERE token_hash=?", now, session.TokenHash)
 		return err
