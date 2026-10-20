@@ -178,6 +178,11 @@ source-confined transient units here; canonical installed-unit lifecycle and
 signed release qualification remain separate requirements. Failed or ambiguous
 restarts preserve fixture storage rather than declaring cleanup successful.
 
+Manual development-image runs can select `profile=files` for focused Files
+qualification or `profile=video` for video. The default remains both; push runs
+always select both profiles. A focused run qualifies only the selected
+component and cannot substitute for the complete product release matrix.
+
 Fixture-signed development catalogs are distinct from release publisher trust.
 Passing this integration would still leave physical networking, browser/mobile
 acceptance, signed installation and the remaining product release gates open.

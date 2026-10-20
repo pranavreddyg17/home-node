@@ -31,6 +31,11 @@ on:
       - '.github/workflows/guest-images.yml'
   workflow_dispatch:
     inputs:
+      profile:
+        description: Development image profile to qualify in this manual run
+        type: choice
+        default: both
+        options: [both, files, video]
       files_https_bytes:
         description: Native HTTPS Files payload size (large case remains unqualified until its run passes)
         type: choice
@@ -48,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [files, video]
+        profile: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.profile == 'files' && '["files"]' || github.event_name == 'workflow_dispatch' && inputs.profile == 'video' && '["video"]' || '["files","video"]') }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
