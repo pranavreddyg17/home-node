@@ -9,6 +9,7 @@ import pathlib
 import pwd
 import select
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -55,9 +56,27 @@ def main():
     parser.add_argument("--web-dist", required=True)
     parser.add_argument("--source-service", required=True)
     parser.add_argument("--controller-source-service", required=True)
+    parser.add_argument("--supervisor-socket")
+    parser.add_argument("--transfer-socket")
     args = parser.parse_args()
     if sys.platform != "linux" or os.geteuid() != 0 or os.environ.get("HOMENODE_GATEWAY_STARTUP_FIXTURE") != "1":
         raise SystemExit("requires explicitly opted-in root on disposable Linux")
+    attached = bool(args.supervisor_socket or args.transfer_socket)
+    if attached:
+        if not args.supervisor_socket or not args.transfer_socket or os.environ.get("HOMENODE_FILES_HTTPS_INTEGRATION") != "1" or os.environ.get("HOMENODE_FILES_MANAGER_INTEGRATION") != "1" or os.environ.get("HOMENODE_KVM_DOMAIN_INTEGRATION") != "1":
+            raise RuntimeError("explicit disposable Files runtime handoff required")
+        controller_account = pwd.getpwnam("homenode")
+        transfer_account = pwd.getpwnam("homenode-transfer")
+        shared = grp.getgrnam("homenode-runtime").gr_gid
+        if controller_account.pw_uid == 0 or transfer_account.pw_uid == 0 or controller_account.pw_uid == transfer_account.pw_uid or shared == 0:
+            raise RuntimeError("invalid handed-off Files service identities")
+        for path, owner in ((args.supervisor_socket, 0), (args.transfer_socket, transfer_account.pw_uid)):
+            if not os.path.isabs(path) or os.path.normpath(path) != path or os.path.realpath(path) != path:
+                raise RuntimeError("noncanonical workload socket handoff")
+            metadata = os.lstat(path)
+            parent = os.lstat(os.path.dirname(path))
+            if not stat.S_ISSOCK(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o660 or metadata.st_uid != owner or metadata.st_gid != shared or metadata.st_nlink != 1 or not stat.S_ISDIR(parent.st_mode) or parent.st_mode & 0o022 or parent.st_uid not in (0, owner):
+                raise RuntimeError("unqualified workload socket handoff")
     web_dist = pathlib.Path(args.web_dist).resolve(strict=True)
     web_manifest = {}
     for asset in web_dist.rglob("*"):
@@ -71,6 +90,8 @@ def main():
         raise RuntimeError("built frontend index missing")
     names = ("homenode", "homenode-gateway", "homenode-proxy", "homenode-runtime")
     for name in names:
+        if attached and name in ("homenode", "homenode-runtime"):
+            continue
         try:
             grp.getgrnam(name)
         except KeyError:
@@ -78,6 +99,8 @@ def main():
         else:
             raise RuntimeError(f"refusing preexisting group {name}")
     for name in names[:2]:
+        if attached and name == "homenode":
+            continue
         try:
             pwd.getpwnam(name)
         except KeyError:
@@ -96,9 +119,13 @@ def main():
         directory.chmod(0o755)
         try:
             for name in names:
+                if attached and name in ("homenode", "homenode-runtime"):
+                    continue
                 run("groupadd", "--system", name)
                 groups.append(name)
             for name in names[:2]:
+                if attached and name == "homenode":
+                    continue
                 run("useradd", "--system", "--no-create-home", "--shell", "/usr/sbin/nologin", "--gid", name, "--groups", "homenode-proxy", name)
                 users.append(name)
             controller_uid = pwd.getpwnam("homenode").pw_uid
@@ -149,6 +176,17 @@ while True:
             units.append(controller_unit)
             controller_base = "/run/homenode-startup"
             controller_command = ["systemd-run", "--quiet", "--pipe", "--wait", "--collect", f"--unit={controller_unit}", "--property=Type=exec", "--property=User=homenode", "--property=Group=homenode", "--property=SupplementaryGroups=homenode-proxy homenode-runtime", f"--property=BindPaths={directory}:{controller_base}", f"--property=ReadWritePaths={controller_base}/state {controller_base}/data {controller_base}/control", *controller_properties, "/usr/bin/env", f"{controller_base}/controller", "serve", "--controller-socket", f"{controller_base}/control/control.sock", "--gateway-uid", str(pwd.getpwnam("homenode-gateway").pw_uid), "--access-gid", str(bridge_gid), "--bind", "100.100.1.2", "--origin", "https://home.example.ts.net:8787", "--state-dir", f"{controller_base}/state", "--data-root", f"{controller_base}/data", "--web-dir", f"{controller_base}/web"]
+            if attached:
+                # Bind only socket inodes. PrivateTmp keeps the workload image,
+                # volume, channel and supervisor journal trees out of this unit.
+                mounts = []
+                for name, source in (("supervisor.sock", args.supervisor_socket), ("transfer.sock", args.transfer_socket)):
+                    destination = directory / name
+                    destination.touch(mode=0o600)
+                    mounts.append(f"{source}:{controller_base}/{name}")
+                position = controller_command.index("/usr/bin/env")
+                controller_command[position:position] = ["--property=BindReadOnlyPaths=" + " ".join(mounts)]
+                controller_command.extend(["--supervisor-socket", f"{controller_base}/supervisor.sock", "--transfer-socket", f"{controller_base}/transfer.sock"])
             peer = subprocess.Popen(controller_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             children.append(peer)
             ready(peer, "HomeNode listening")
@@ -292,10 +330,20 @@ print('FRONTEND-HTTPS-PASS',flush=True)
             setup_output = run("setpriv", f"--reuid={controller_uid}", f"--regid={controller_gid}", f"--groups={bridge_gid}", str(directory / "controller"), "setup-code", "--state-dir", str(directory / "state"))
             setup_code = setup_output.strip().splitlines()[-1]
             identity_input = json.dumps({"RootPEM": str(directory / "ca.crt"), "SetupCode": setup_code})
-            identity_client = subprocess.run(["ip", "netns", "exec", peer_namespace, "env", "HOMENODE_NATIVE_HTTPS_IDENTITY=1", str(directory / "identity-client.test"), "-test.run=^TestNativeHTTPSIdentityClient$", "-test.timeout=40s", "-test.v"], input=identity_input, capture_output=True, text=True, timeout=45)
+            identity_environment = ["HOMENODE_NATIVE_HTTPS_IDENTITY=1"]
+            if attached:
+                identity_environment.append("HOMENODE_NATIVE_HTTPS_FILES=1")
+            identity_client = subprocess.run(["ip", "netns", "exec", peer_namespace, "env", *identity_environment, str(directory / "identity-client.test"), "-test.run=^TestNativeHTTPSIdentityClient$", "-test.timeout=240s" if attached else "-test.timeout=40s", "-test.v"], input=identity_input, capture_output=True, text=True, timeout=245 if attached else 45)
             if identity_client.returncode != 0 or "--- PASS: TestNativeHTTPSIdentityClient" not in identity_client.stdout:
                 raise RuntimeError(f"native HTTPS identity protocol failed: {identity_client.stdout}{identity_client.stderr}")
             print("PASS actual HTTPS identity: registration, signed approval, limited pairing, reused-TLS revocation and replacement recovery", flush=True)
+            if attached:
+                if "native HTTPS Files signed lifecycle" not in identity_client.stdout:
+                    raise RuntimeError("joined Files workload client did not complete")
+                print("PASS actual HTTPS Files through controller, supervisor, transfer and KVM guest: signed lifecycle, upload/download, Range, Trash, ZIP and retained restart", flush=True)
+                # The dedicated ingress job covers destructive NSS/key/peer
+                # refusals. Do not mutate shared workload roles mid-run here.
+                return
             control_tls_script = """import socket,ssl,sys
 context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 context.minimum_version=ssl.TLSVersion.TLSv1_3

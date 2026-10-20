@@ -62,6 +62,19 @@ has compiled for Linux but has not executed against a guest. Its bounded smoke
 payload does not satisfy the 1 GiB, network-loss, active-transfer revocation,
 quota or complete service-restart requirements above.
 
+The development guest workflow now includes a joined mode after the separate
+manager regression. `HOMENODE_FILES_HTTPS_INTEGRATION=1` starts a fresh supervisor
+journal and transfer executable, passes their protected sockets to the HTTPS
+fixture, and enables the client mode. The controller receives only socket inode
+bind mounts inside its source-confined unit. Its private temporary namespace
+does not expose workload volume, image, channel or journal trees. The fixture
+reuses only the explicitly handed-off controller/runtime identities, creates
+and removes its own gateway/proxy identities, and refuses unqualified sockets.
+The controller allocates the guest instance; native journal inspection must
+observe it stopped afterward. Failed workflows retain storage when effects may
+still be in flight, even after best-effort VM cleanup. This joined mode has
+compiled but has not yet passed native CI; its gate remains open.
+
 Fixture-signed development catalogs are distinct from release publisher trust.
 Passing this integration would still leave physical networking, browser/mobile
 acceptance, signed installation and the remaining product release gates open.

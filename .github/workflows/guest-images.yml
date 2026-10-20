@@ -11,6 +11,17 @@ on:
       - 'internal/catalog/**'
       - 'internal/transfer/**'
       - 'internal/runtimeclient/**'
+      - 'internal/control/**'
+      - 'internal/identity/**'
+      - 'internal/gatewaytransport/**'
+      - 'internal/networkcheck/**'
+      - 'cmd/homenode/**'
+      - 'cmd/homenode-gateway/**'
+      - 'web/**'
+      - 'packaging/inspection/gateway_startup_fixture.py'
+      - 'packaging/inspection/private_ingress_fixture.py'
+      - 'packaging/systemd/homenode-control.service'
+      - 'packaging/systemd/homenode-gateway.service'
       - 'packaging/systemd/reserved_manager_fixture.py'
       - 'cmd/homenode-guest*/**'
       - 'cmd/homenode-transfer/**'
@@ -94,6 +105,30 @@ jobs:
             sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 HOMENODE_FILES_MANAGER_INTEGRATION=1 python3 -B packaging/systemd/reserved_manager_fixture.py "$(command -v go)" "$RUNNER_TEMP/assembly/files/artifacts/homenode-development-files.raw" "$RUNNER_TEMP/assembly/files/artifacts/development-build.json"
           else
             echo 'Development Files manager NOT VERIFIED: no native KVM device.'
+          fi
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        if: matrix.profile == 'files'
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build frontend for authenticated native Files workflow
+        if: matrix.profile == 'files'
+        working-directory: web
+        run: npm ci && npm run build
+      - name: Exercise authenticated HTTPS Files through actual native services
+        if: matrix.profile == 'files'
+        run: |
+          if test -c /dev/kvm; then
+            go build -o "$RUNNER_TEMP/homenode" ./cmd/homenode
+            sudo install -D -m 0755 "$RUNNER_TEMP/homenode" /usr/lib/homenode-fixtures/homenode
+            go build -o "$RUNNER_TEMP/homenode-gateway" ./cmd/homenode-gateway
+            sudo install -D -m 0755 "$RUNNER_TEMP/homenode-gateway" /usr/lib/homenode-fixtures/homenode-gateway
+            go test -c -o "$RUNNER_TEMP/https-identity.test" ./cmd/homenode-gateway
+            sudo install -D -m 0755 "$RUNNER_TEMP/https-identity.test" /usr/lib/homenode-fixtures/https-identity.test
+            sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 HOMENODE_FILES_MANAGER_INTEGRATION=1 HOMENODE_FILES_HTTPS_INTEGRATION=1 python3 -B packaging/systemd/reserved_manager_fixture.py "$(command -v go)" "$RUNNER_TEMP/assembly/files/artifacts/homenode-development-files.raw" "$RUNNER_TEMP/assembly/files/artifacts/development-build.json"
+          else
+            echo 'Authenticated native HTTPS Files NOT VERIFIED: no native KVM device.'
           fi
       - name: Retain bounded boot diagnostics
         if: always()

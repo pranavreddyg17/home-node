@@ -82,7 +82,11 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images,
 		}
 	}
 	socket := filepath.Join(directory, "supervisor.sock")
-	childCtx, cancel := context.WithTimeout(ctx, 4*time.Minute)
+	limit := 4 * time.Minute
+	if os.Getenv("HOMENODE_FILES_HTTPS_INTEGRATION") == "1" {
+		limit = 6 * time.Minute
+	}
+	childCtx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
 	command := exec.CommandContext(childCtx, binary,
 		"--policy", filepath.Join(directory, "policy.json"), "--publisher-key", filepath.Join(directory, "catalog.pub"),
@@ -174,19 +178,24 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images,
 			t.Fatal("idle startup created guest storage", name, err)
 		}
 	}
-	started = true // A failed request may still have committed native effects.
-	nativeFilesRuntimeRequest(t, childCtx, script, socket, instanceID, "start", policy.ControllerUID, policy.GuestIdentity.FirstUID, transferGID)
-	exercise, stopTransfer := startNativeFilesTransferAt(t, childCtx, directory, script, instanceID, socket, filepath.Join(directory, "channels"), transferGID, policy.ControllerUID, policy.TransferUID)
-	transferStopped := false
-	defer func() {
-		if !transferStopped {
-			stopTransfer()
-		}
-	}()
-	exercise()
-	stopTransfer()
-	transferStopped = true
-	nativeFilesRuntimeRequest(t, childCtx, script, socket, instanceID, "shutdown", policy.ControllerUID, policy.GuestIdentity.FirstUID, transferGID)
+	if os.Getenv("HOMENODE_FILES_HTTPS_INTEGRATION") == "1" {
+		instanceID = nativeFilesHTTPSWorkflow(t, childCtx, directory, script, socket, policy, transferGID, safeCleanup)
+		started = true
+	} else {
+		started = true // A failed request may still have committed native effects.
+		nativeFilesRuntimeRequest(t, childCtx, script, socket, instanceID, "start", policy.ControllerUID, policy.GuestIdentity.FirstUID, transferGID)
+		exercise, stopTransfer := startNativeFilesTransferAt(t, childCtx, directory, script, instanceID, socket, filepath.Join(directory, "channels"), transferGID, policy.ControllerUID, policy.TransferUID)
+		transferStopped := false
+		defer func() {
+			if !transferStopped {
+				stopTransfer()
+			}
+		}()
+		exercise()
+		stopTransfer()
+		transferStopped = true
+		nativeFilesRuntimeRequest(t, childCtx, script, socket, instanceID, "shutdown", policy.ControllerUID, policy.GuestIdentity.FirstUID, transferGID)
+	}
 	if err := command.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatal(err)
 	}

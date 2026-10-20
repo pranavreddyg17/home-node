@@ -50,6 +50,9 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool, managerLaunch .
 	duration := 90 * time.Second
 	if len(managerLaunch) > 1 && managerLaunch[1] {
 		duration = 8 * time.Minute
+		if os.Getenv("HOMENODE_FILES_HTTPS_INTEGRATION") == "1" {
+			duration = 12 * time.Minute
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
@@ -566,6 +569,9 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 		Manifest: catalog.Manifest{Schema: 1, Version: 1, Expires: time.Now().Add(time.Hour), Images: []catalog.Image{image}}}
 	if filesImage {
 		nativeFilesSupervisorEntry(t, ctx, base, images, clientScript, image, m.Policy, backend.TransferGID, safeCleanup)
+		if os.Getenv("HOMENODE_FILES_HTTPS_INTEGRATION") == "1" {
+			return // The joined workflow owns its fresh controller-allocated instance.
+		}
 	}
 	if err := m.Initialize(ctx); err != nil {
 		t.Fatal("native manager initialization", err)
