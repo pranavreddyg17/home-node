@@ -10,6 +10,7 @@ import (
 	"errors"
 	"hash/fnv"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -62,6 +63,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
+	started := time.Now()
 	hash := fnv.New32a()
 	_, _ = hash.Write([]byte(request.InstanceID))
 	index := hash.Sum32() % 16
@@ -139,8 +141,14 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var response guestproto.Response
 	if err = guestproto.Read(conn, &response); err != nil || response.Version != 1 || response.RequestID != request.Request.RequestID || len(response.Data) > guestproto.ChunkSize || len(response.Text) > 32<<10 || len(response.Error) > 128 || response.Offset < 0 || response.Size < 0 || response.Size > 512<<30 {
+		var networkError net.Error
+		timedOut := ctx.Err() != nil || errors.As(err, &networkError) && networkError.Timeout()
+		slog.Warn("guest response unavailable", "operation", request.Request.Operation, "readFailed", err != nil, "timedOut", timedOut, "elapsedMs", time.Since(started).Milliseconds())
 		http.Error(w, "invalid guest response", 502)
 		return
+	}
+	if response.Error != "" {
+		slog.Warn("guest operation refused", "operation", request.Request.Operation, "elapsedMs", time.Since(started).Milliseconds())
 	}
 	if len(response.Data) > 0 {
 		sum := sha256.Sum256(response.Data)

@@ -104,13 +104,14 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 			reused = false
 			req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{GotConn: func(info httptrace.GotConnInfo) { reused = info.Reused }}))
 		}
+		started := time.Now()
 		response, err := client.Do(req)
 		if err != nil {
 			t.Fatalf("HTTPS request failed for %s: %v", path, err)
 		}
 		defer response.Body.Close()
 		if response.StatusCode != status || response.TLS == nil || response.TLS.Version != tls.VersionTLS13 || len(response.TLS.VerifiedChains) == 0 {
-			t.Fatalf("unexpected verified HTTPS result for %s: status %d, expected %d", path, response.StatusCode, status)
+			t.Fatalf("unexpected verified HTTPS result for %s: status %d, expected %d, elapsed %s", path, response.StatusCode, status, time.Since(started).Round(time.Millisecond))
 		}
 		if response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("Strict-Transport-Security") == "" {
 			t.Fatalf("private response security headers missing for %s", path)
