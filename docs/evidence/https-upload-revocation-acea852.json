@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "acea852ebc0522fdc727ad79be70acb84c5feeb9",
+  "workflowRun": 39364512000,
+  "job": 118438135613,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/39364512000",
+  "conclusion": "success",
+  "payloadBytes": 32768,
+  "partialUploadBytes": 32768,
+  "logSHA256": "f495f0c4129fff9daa03090e62f46ab8d101f8bdd7e74933b9e354661a257f0e",
+  "developmentImage": {
+    "schema": 1,
+    "profile": "files",
+    "sourceRevision": "acea852ebc0522fdc727ad79be70acb84c5feeb9",
+    "overlaySHA256": "7d740059409eb99d5812efd827815ebf2265d06259c24496c7d19eac779e7249",
+    "mkosiRevision": "52448a27f6f869c108352ed82fcfb9be633703fb",
+    "bytes": 2686472192,
+    "sha256": "03891ff851a99aa69c69cecfbd6413822a60828cf41fe414e80e47acf792490b",
+    "releaseQualified": false,
+    "bootValidated": false
+  },
+  "observedAssertions": [
+    "PASS actual HTTPS partial-body upload revocation: explicit 401, revoked device and zero committed offset",
+    "PASS actual HTTPS Files through controller, supervisor, transfer and KVM guest: signed lifecycle, upload/download, Range, Trash, ZIP and retained restart",
+    "--- PASS: TestNativeReservedFilesManagerLaunch (75.14s)"
+  ],
+  "limitations": [
+    "100 Continue and prefix transmission establish the native gateway body path; the separate body-reader regression establishes controller admission before authority withdrawal.",
+    "Does not prove revocation in the middle of an already admitted guest mutation or roll back committed bytes.",
+    "No large active-download result or complete service restart is claimed at this source.",
+    "Controlled daemon status, namespace transport and development publisher trust do not qualify physical overlay devices, mobile passkeys or signed installation."
+  ]
+}
