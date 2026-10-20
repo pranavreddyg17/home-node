@@ -114,6 +114,17 @@ active data-path revocation. This extension has compiled but has not executed
 natively; active upload revocation, service restart and the other requirements
 remain open.
 
+Files mutations now refresh the cookie's current session and Files capability
+after JSON body reception and before creating transfers, sending chunks,
+cancelling or changing files. Finalization also refreshes authority immediately
+before starting. This closes the slow-body gap where route authentication could
+precede device revocation, logout or a capability change. The refreshed session
+replaces the handler actor. The regression changes authority on the first body
+read, after route admission, and checks refusal with no guest call or transfer
+metadata change. A bounded guest mutation already admitted before revocation
+may finish; this check does not claim rollback of committed bytes or native
+active-upload termination qualification.
+
 Fixture-signed development catalogs are distinct from release publisher trust.
 Passing this integration would still leave physical networking, browser/mobile
 acceptance, signed installation and the remaining product release gates open.

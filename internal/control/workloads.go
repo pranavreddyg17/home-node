@@ -1,6 +1,7 @@
 package control
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -14,6 +15,21 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/state"
 	"github.com/pranavreddyg17/home-node/internal/workload"
 )
+
+// Body reception may outlive the authority admitted by route middleware.
+// Refresh the actor before starting a decoded Files mutation.
+func (s *Server) currentFilesActor(w http.ResponseWriter, r *http.Request) (*http.Request, bool) {
+	session, err := s.Identity.Authenticate(r.Context(), s.readCookie(r, ""))
+	if err != nil {
+		fail(w, 401, "AUTH_REQUIRED", "Sign in again before changing Files.")
+		return r, false
+	}
+	if !session.Allows("files") {
+		fail(w, 403, "POLICY_DENIED", "This device does not have permission to change Files.")
+		return r, false
+	}
+	return r.WithContext(context.WithValue(r.Context(), sessionKey{}, session)), true
+}
 
 func (s *Server) workloadRoutes() {
 	s.mux.Handle("GET /api/v1/ai/conversations", s.require("ai", false, http.HandlerFunc(s.conversations)))
@@ -120,6 +136,10 @@ func (s *Server) createTransfer(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &body) {
 		return
 	}
+	var allowed bool
+	if r, allowed = s.currentFilesActor(w, r); !allowed {
+		return
+	}
 	var item workload.Transfer
 	var err error
 	if key := r.Header.Get("Idempotency-Key"); key != "" {
@@ -158,6 +178,10 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &body) {
 		return
 	}
+	var allowed bool
+	if r, allowed = s.currentFilesActor(w, r); !allowed {
+		return
+	}
 	item, err := s.Workloads.Upload(r.Context(), actor(r).Device.ID, r.PathValue("id"), body.Offset, body.Data, body.SHA256)
 	if err != nil {
 		workloadError(w, err)
@@ -166,6 +190,10 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, item)
 }
 func (s *Server) finalize(w http.ResponseWriter, r *http.Request) {
+	var allowed bool
+	if r, allowed = s.currentFilesActor(w, r); !allowed {
+		return
+	}
 	item, err := s.Workloads.Finalize(r.Context(), actor(r).Device.ID, r.PathValue("id"))
 	if err != nil {
 		workloadError(w, err)
@@ -176,6 +204,10 @@ func (s *Server) finalize(w http.ResponseWriter, r *http.Request) {
 func (s *Server) cancelTransfer(w http.ResponseWriter, r *http.Request) {
 	var body struct{}
 	if !decode(w, r, &body) {
+		return
+	}
+	var allowed bool
+	if r, allowed = s.currentFilesActor(w, r); !allowed {
 		return
 	}
 	item, err := s.Workloads.CancelTransfer(r.Context(), actor(r).Device.ID, r.PathValue("id"))
@@ -207,6 +239,10 @@ func (s *Server) changeFile(w http.ResponseWriter, r *http.Request) {
 		Name   string `json:"name"`
 	}
 	if !decode(w, r, &body) {
+		return
+	}
+	var allowed bool
+	if r, allowed = s.currentFilesActor(w, r); !allowed {
 		return
 	}
 	if err := s.Workloads.ChangeFile(r.Context(), actor(r).Device.ID, r.PathValue("id"), body.Action, body.Name); err != nil {
