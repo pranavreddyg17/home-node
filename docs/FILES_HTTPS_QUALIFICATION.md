@@ -173,7 +173,9 @@ and observed guest exit before restarting; transfer peer PIDs and controller/
 gateway executable identities are observed again. The client resumes, verifies
 the same enrolled device, replays the original transfer creation key/body and
 requires the same ready object, then signs a fresh guest start and checks bytes.
-This code compiles but has not passed native CI. Only controller/gateway use
+Run 39367007350 passed this workflow at `50f8acd`, including observed new
+supervisor/transfer PIDs and the retained session/request/data checks. This is a
+32 KiB component demonstration. Only controller/gateway use
 source-confined transient units here; canonical installed-unit lifecycle and
 signed release qualification remain separate requirements. Failed or ambiguous
 restarts preserve fixture storage rather than declaring cleanup successful.
@@ -182,6 +184,17 @@ Manual development-image runs can select `profile=files` for focused Files
 qualification or `profile=video` for video. The default remains both; push runs
 always select both profiles. A focused run qualifies only the selected
 component and cannot substitute for the complete product release matrix.
+
+Diagnostic run 39366902074 at `f98c5e5` confirmed the large finalization failure:
+the public request returned 409 after 20.003 seconds and the transfer executable
+reported `operation=finalize`, `timedOut=true`, `elapsedMs=20000`. This matches an
+operation budget shorter than a fully cold 1 GiB read at the configured data
+disk ceiling of 50 MiB/s. Whole-object `finalize` and `stat` calls now receive a
+bounded 85-second budget under a 90-second service write deadline. Other calls
+retain a 20-second budget; caller deadlines and cancellation still take
+precedence. The budget includes body decoding, queueing, inspection and guest
+I/O. Local race tests and Linux compilation pass; the corrected large case
+remains unverified until a new native run completes.
 
 Fixture-signed development catalogs are distinct from release publisher trust.
 Passing this integration would still leave physical networking, browser/mobile

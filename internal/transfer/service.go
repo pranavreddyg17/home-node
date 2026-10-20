@@ -53,6 +53,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	started := time.Now()
 	r.Body = http.MaxBytesReader(w, r.Body, guestproto.MaxFrame)
 	var request runtimeclient.GuestRequest
 	decoder := json.NewDecoder(r.Body)
@@ -61,9 +62,8 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request", 400)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	ctx, cancel := context.WithDeadline(r.Context(), started.Add(requestBudget(request.Request.Operation)))
 	defer cancel()
-	started := time.Now()
 	hash := fnv.New32a()
 	_, _ = hash.Write([]byte(request.InstanceID))
 	index := hash.Sum32() % 16
