@@ -21,7 +21,10 @@ Linux compilation passes. Run 39305868215 passed the helper refactor at
 transfer executables, role refusals, direct 1 GiB object transfer, disk-full
 handling and retained restart. The executable transfer exercise is separately
 bounded; the 1 GiB result is not an HTTPS transfer demonstration. Named Files
-roles remain pending; that later change is not covered by this run. See
+roles passed separately at `5d86740` in run 39306090347. Its log records
+controller UID 997, transfer UID 995 and runtime GID 985, actual executable
+startup and the real manager lifecycle. That run predates workload client peer
+pinning and the joined HTTPS workflow. See
 `evidence/files-policy-roles-6af6bcc.json`.
 
 The next integration must join these paths with fresh, distinct named service
@@ -56,9 +59,10 @@ polls the actual operation, creates a 32 KiB transfer with the same request key
 twice, observes committed chunks, verifies downloaded bytes and Range/ETag,
 exercises Trash/restore and completed ZIP contents, then stops/starts Files and
 checks retained bytes before a final stop. It neither seeds state nor supplies a
-memory workload backend. The current gateway fixture does not enable this mode:
-it must first be joined to fresh native supervisor/transfer services. The mode
-has compiled for Linux but has not executed against a guest. Its bounded smoke
+memory workload backend. The standalone gateway fixture does not enable this
+mode. The joined development guest fixture enables it only with fresh native
+supervisor/transfer services. The mode has compiled for Linux but has not yet
+executed against a guest. Its bounded smoke
 payload does not satisfy the 1 GiB, network-loss, active-transfer revocation,
 quota or complete service-restart requirements above.
 
@@ -73,7 +77,8 @@ and removes its own gateway/proxy identities, and refuses unqualified sockets.
 The controller allocates the guest instance; native journal inspection must
 observe it stopped afterward. Failed workflows retain storage when effects may
 still be in flight, even after best-effort VM cleanup. This joined mode has
-compiled but has not yet passed native CI; its gate remains open.
+compiled but has not yet passed native CI; its gate remains open. The first
+native run is 39362374540 at source `8f8574c`.
 
 Fixture-signed development catalogs are distinct from release publisher trust.
 Passing this integration would still leave physical networking, browser/mobile
