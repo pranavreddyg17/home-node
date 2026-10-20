@@ -1,6 +1,9 @@
 # Authenticated Files integration gate
 
-Status: open. The HTTPS identity/frontend fixture currently runs without a
+Status: open. A bounded 32 KiB joined HTTPS-to-KVM workflow has passed, including
+on main at `1b1b4e0` in run 39364118984. The 1 GiB, active data-path revocation,
+complete service restart and installed-product requirements remain unverified.
+The standalone HTTPS identity/frontend fixture still runs without a
 privileged workload backend. Its authenticated Files listing is metadata-only;
 it is not an upload, guest execution or retained-data demonstration.
 
@@ -142,6 +145,14 @@ app or transfer state is seeded or edited for that inspection. The initial
 controller-admission timing is covered separately by the body-reader regression;
 100 Continue and prefix transmission establish the native gateway body path.
 This case has compiled but remains pending native execution.
+
+Native partial-upload run 39364512000 is testing `acea852`. Independently, main's
+32 KiB joined test passed at `1b1b4e0`, with the Files body-authority fix included.
+Run 39365139607 now requests `files_https_bytes=1073741824` against that same
+tested main revision. It covers the large transfer and active-download revocation
+extension but predates the partial-upload test; the two runs must not be
+combined into a claim that one source passed every requirement. Both results
+must be inspected before their respective gates can change.
 
 Fixture-signed development catalogs are distinct from release publisher trust.
 Passing this integration would still leave physical networking, browser/mobile
