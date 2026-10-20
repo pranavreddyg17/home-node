@@ -432,6 +432,27 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 	return session, err
 }
 
+// RequireSessionCapability checks current authority inside another component's
+// metadata transaction. No cached session decision may authorize publication
+// after a long-running guest operation has completed.
+func RequireSessionCapability(tx *sql.Tx, actor Session, capability string) error {
+	if actor.TokenHash == "" || actor.Device.ID == "" || actor.Epoch <= 0 || capability == "" {
+		return ErrDenied
+	}
+	now := time.Now().Unix()
+	var permitted int
+	err := tx.QueryRow(`SELECT count(*) FROM sessions s JOIN devices d ON d.id=s.device_id JOIN identity i ON i.epoch=s.epoch
+WHERE s.token_hash=? AND d.id=? AND s.epoch=? AND d.revoked_at IS NULL AND s.expires_at>? AND s.last_seen>?
+AND EXISTS(SELECT 1 FROM json_each(d.capabilities) WHERE value=?)`, actor.TokenHash, actor.Device.ID, actor.Epoch, now, now-1800, capability).Scan(&permitted)
+	if err != nil {
+		return err
+	}
+	if permitted != 1 {
+		return ErrDenied
+	}
+	return nil
+}
+
 func checkActor(tx *sql.Tx, actor Session) error {
 	var verified, expires, epoch int64
 	var capsJSON string

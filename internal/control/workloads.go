@@ -194,8 +194,16 @@ func (s *Server) finalize(w http.ResponseWriter, r *http.Request) {
 	if r, allowed = s.currentFilesActor(w, r); !allowed {
 		return
 	}
-	item, err := s.Workloads.Finalize(r.Context(), actor(r).Device.ID, r.PathValue("id"))
+	currentActor := actor(r)
+	item, err := s.Workloads.FinalizeWithAuthority(r.Context(), currentActor.Device.ID, r.PathValue("id"), func(tx *sql.Tx) error {
+		return identity.RequireSessionCapability(tx, currentActor, "files")
+	})
 	if err != nil {
+		if errors.Is(err, identity.ErrDenied) {
+			if _, allowed := s.currentFilesActor(w, r); !allowed {
+				return
+			}
+		}
 		workloadError(w, err)
 		return
 	}

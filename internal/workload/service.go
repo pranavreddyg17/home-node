@@ -224,7 +224,23 @@ func (s *Service) Upload(ctx context.Context, device, id string, offset int64, d
 	t.Offset = response.Offset
 	return t, nil
 }
+
+// Finalize is the trusted component entry point. Public controller requests use
+// FinalizeWithAuthority to bind publication to a live session transaction.
 func (s *Service) Finalize(ctx context.Context, device, id string) (File, error) {
+	return s.finalize(ctx, device, id, nil)
+}
+
+// FinalizeWithAuthority binds public publication to current authority in the
+// same transaction that makes verified guest bytes visible as a saved file.
+func (s *Service) FinalizeWithAuthority(ctx context.Context, device, id string, authorize func(*sql.Tx) error) (File, error) {
+	if authorize == nil {
+		return File{}, ErrInvalid
+	}
+	return s.finalize(ctx, device, id, authorize)
+}
+
+func (s *Service) finalize(ctx context.Context, device, id string, authorize func(*sql.Tx) error) (File, error) {
 	unlock := s.lock(id)
 	defer unlock()
 	t, err := s.Transfer(ctx, device, id)
@@ -232,6 +248,11 @@ func (s *Service) Finalize(ctx context.Context, device, id string) (File, error)
 		return File{}, err
 	}
 	if t.State == "ready" {
+		if authorize != nil {
+			if err := s.Store.Transaction(ctx, authorize); err != nil {
+				return File{}, err
+			}
+		}
 		return s.File(ctx, id)
 	}
 	if t.State != "uploading" && t.State != "verifying" || t.Offset != t.Size || t.ExpiresAt <= time.Now().Unix() {
@@ -241,7 +262,16 @@ func (s *Service) Finalize(ctx context.Context, device, id string) (File, error)
 	if err != nil {
 		return File{}, err
 	}
-	if _, err = s.Store.DB.ExecContext(ctx, "UPDATE transfers SET state='verifying' WHERE id=?", id); err != nil {
+	err = s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if authorize != nil {
+			if err := authorize(tx); err != nil {
+				return err
+			}
+		}
+		_, err := tx.Exec("UPDATE transfers SET state='verifying' WHERE id=?", id)
+		return err
+	})
+	if err != nil {
 		return File{}, err
 	}
 	response, err := s.call(ctx, instance, guestproto.Request{Operation: "finalize", ObjectID: id, Size: t.Size, SHA256: t.SHA256})
@@ -252,6 +282,11 @@ func (s *Service) Finalize(ctx context.Context, device, id string) (File, error)
 		return File{}, ErrConflict
 	}
 	err = s.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		if authorize != nil {
+			if err := authorize(tx); err != nil {
+				return err
+			}
+		}
 		if _, err := tx.Exec("INSERT INTO files(id,transfer_id,name,size,sha256,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING", id, id, t.Name, t.Size, t.SHA256, time.Now().Unix()); err != nil {
 			return err
 		}

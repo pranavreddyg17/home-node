@@ -196,6 +196,17 @@ precedence. The budget includes body decoding, queueing, inspection and guest
 I/O. Local race tests and Linux compilation pass; the corrected large case
 remains unverified until a new native run completes.
 
+The public finalization path now checks the live session, device, identity epoch,
+expiry/idle bounds and Files capability inside both its verification-admission
+and publication transactions. A guest may finish an already admitted hash or
+rename, but withdrawn authority cannot publish the result as a ready file.
+Denied publication retains the verified guest object, verifying journal state
+and quota reservation. Local regressions withdraw authority after the real guest
+byte store finishes verification, confirm no file metadata is published, and
+prove that a new session for the same device can reconcile once without another
+upload. These are component regressions; native withdrawal during whole-object
+verification remains a separate execution case.
+
 Fixture-signed development catalogs are distinct from release publisher trust.
 Passing this integration would still leave physical networking, browser/mobile
 acceptance, signed installation and the remaining product release gates open.
