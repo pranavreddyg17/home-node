@@ -1,8 +1,9 @@
 # Authenticated Files integration gate
 
-Status: open. A bounded 32 KiB joined HTTPS-to-KVM workflow has passed, including
-on main at `1b1b4e0` in run 39364118984. The 1 GiB, active data-path revocation,
-complete service restart and installed-product requirements remain unverified.
+Status: open. The 1 GiB joined HTTPS-to-KVM workflow passed at `3faf952` in
+run 39368428314, including active-download revocation, retained owner integrity
+and all four service restarts. See [retained component evidence](evidence/https-files-large-3faf952.json).
+Installed-product, browser/mobile and physical-network requirements remain unverified.
 The standalone HTTPS identity/frontend fixture still runs without a
 privileged workload backend. Its authenticated Files listing is metadata-only;
 it is not an upload, guest execution or retained-data demonstration.
@@ -193,8 +194,10 @@ disk ceiling of 50 MiB/s. Whole-object `finalize` and `stat` calls now receive a
 bounded 85-second budget under a 90-second service write deadline. Other calls
 retain a 20-second budget; caller deadlines and cancellation still take
 precedence. The budget includes body decoding, queueing, inspection and guest
-I/O. Local race tests and Linux compilation pass; the corrected large case
-remains unverified until a new native run completes.
+I/O. The corrected 1 GiB case passed in run 39368428314 at `3faf952`, including
+Range resume, ZIP integrity, all four service restarts and active-download
+revocation with retained owner access. Exact truncation counts and timing are
+not printed by the enclosing fixture; no precise latency claim is made.
 
 The public finalization path now checks the live session, device, identity epoch,
 expiry/idle bounds and Files capability inside both its verification-admission
@@ -205,7 +208,10 @@ and quota reservation. Local regressions withdraw authority after the real guest
 byte store finishes verification, confirm no file metadata is published, and
 prove that a new session for the same device can reconcile once without another
 upload. These are component regressions; native withdrawal during whole-object
-verification remains a separate execution case.
+verification remains a separate execution case. All three main workflows passed
+at `f293054`: HomeNode checks 39370028910, Gateway security boundary 39370028703,
+and Development guest images 39370028924. This includes the publication
+regressions and bounded native workflow, not native late-verification revocation.
 
 Fixture-signed development catalogs are distinct from release publisher trust.
 Passing this integration would still leave physical networking, browser/mobile
