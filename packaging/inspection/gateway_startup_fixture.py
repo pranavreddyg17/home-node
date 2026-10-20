@@ -7,9 +7,11 @@ import json
 import os
 import pathlib
 import pwd
+import re
 import select
 import shutil
 import stat
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -343,6 +345,17 @@ print('FRONTEND-HTTPS-PASS',flush=True)
                 raise RuntimeError(f"native HTTPS identity protocol failed: {identity_client.stdout}{identity_client.stderr}")
             print("PASS actual HTTPS identity: registration, signed approval, limited pairing, reused-TLS revocation and replacement recovery", flush=True)
             if attached:
+                uploads = re.findall(r"native HTTPS upload revocation transfer=([A-Za-z0-9_-]{20,64}) denied after partial body", identity_client.stdout)
+                if len(uploads) != 1:
+                    raise RuntimeError("joined Files did not complete partial-body upload revocation")
+                database = sqlite3.connect((directory / "state" / "management.db").as_uri() + "?mode=ro", uri=True, timeout=5)
+                try:
+                    result = database.execute("SELECT t.offset,t.state,d.revoked_at FROM transfers t JOIN devices d ON d.id=t.device_id WHERE t.id=?", (uploads[0],)).fetchall()
+                    if len(result) != 1 or result[0][0] != 0 or result[0][1] != "uploading" or result[0][2] is None:
+                        raise RuntimeError("revoked upload committed bytes or lost its retained journal identity")
+                finally:
+                    database.close()
+                print("PASS actual HTTPS partial-body upload revocation: explicit 401, revoked device and zero committed offset", flush=True)
                 if "native HTTPS Files signed lifecycle" not in identity_client.stdout:
                     raise RuntimeError("joined Files workload client did not complete")
                 if "native HTTPS Files payload bytes=" + args.files_bytes not in identity_client.stdout:

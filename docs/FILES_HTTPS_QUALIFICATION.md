@@ -125,6 +125,19 @@ metadata change. A bounded guest mutation already admitted before revocation
 may finish; this check does not claim rollback of committed bytes or native
 active-upload termination qualification.
 
+The subsequent native client adds a partial-body upload check in both payload
+modes. A paired device creates a separate 32 KiB transfer through HTTPS, receives
+100 Continue, and sends half of a valid chunk body while withholding the rest.
+The owner revokes the device with its signed approval before the body completes.
+The client then releases the remaining body and requires a certificate-verified
+401 `AUTH_REQUIRED`. After the complete identity flow, the root fixture opens
+the actual controller database read-only and requires the same transfer ID,
+zero committed offset, uploading state and a revoked device record. No session,
+app or transfer state is seeded or edited for that inspection. The initial
+controller-admission timing is covered separately by the body-reader regression;
+100 Continue and prefix transmission establish the native gateway body path.
+This case has compiled but remains pending native execution.
+
 Fixture-signed development catalogs are distinct from release publisher trust.
 Passing this integration would still leave physical networking, browser/mobile
 acceptance, signed installation and the remaining product release gates open.

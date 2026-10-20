@@ -291,6 +291,11 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 	actionApproval = approve(revokePath, empty)
 	readHeartbeat() // still active after approval, immediately before revocation
 	var dataStream *nativeRevocableDownload
+	var uploadStream *nativeRevocableUpload
+	if files != nil {
+		uploadStream = startNativeRevocableUpload(t, paired, origin)
+		defer uploadStream.Close()
+	}
 	if files != nil && files.Size == 1<<30 {
 		dataStream = startNativeRevocableDownload(t, paired, origin, files)
 		defer dataStream.Close()
@@ -311,6 +316,7 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 	traceNext = false
 	client = owner
 	if files != nil {
+		uploadStream.ExpectRevoked(t)
 		if dataStream != nil {
 			dataStream.ExpectRevoked(t)
 			files.VerifyOwner()
