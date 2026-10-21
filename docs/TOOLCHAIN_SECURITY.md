@@ -23,3 +23,16 @@ Native Linux CI, packaged-binary scans and rebuilt guest qualification remain
 required at the updated toolchain revision. Older successful development
 workflows remain component evidence for their exact source and compiler;
 they do not qualify newly rebuilt or release-published artifacts.
+
+## Frontend dependency patch
+
+The next main run, 39546828950 at `c6aeffb`, passed the Go scan but failed
+`npm audit` on Vite 8.3.1's bundled launch-editor advisories. The high-severity
+[upstream advisory](https://github.com/vitejs/launch-editor/security/advisories/GHSA-587h-7wmj-h5pm)
+describes Windows-specific command-injection prerequisites; it is not evidence
+of a Linux production gateway exploit. The development toolchain is still in
+scope for maintenance. Vite is now pinned to 8.3.4 with its resolved bundler
+transitives, rather than suppressing the audit or changing its threshold.
+A clean `npm ci`, audit, all six dependency-evidence tests, frontend build
+and all 15 browser tests pass locally. Native delivery, package inventory and
+CI must qualify the new assets.
