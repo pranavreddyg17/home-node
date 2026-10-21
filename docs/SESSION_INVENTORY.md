@@ -27,7 +27,10 @@ unauthenticated refusals, and stale administrator withdrawal. The browser
 identity workflow checks the view and its refresh after paired-device
 revocation. Native HTTPS protocol qualification passed for administrator access and
 limited-device refusal at `f483863` in [run 39546374712](https://github.com/pranavreddyg17/home-node/actions/runs/39546374712).
-That run uses Go 1.26.9; the patched toolchain requires separate qualification.
+That run used Go 1.26.9. The same native HTTPS session assertions subsequently
+passed on Go 1.26.10 at `c6aeffb` in
+[run 39546828505](https://github.com/pranavreddyg17/home-node/actions/runs/39546828505).
+This qualifies the controlled native fixture, not physical/mobile enrollment.
 Physical mobile passkeys and installed product qualification remain separate.
 
 The implemented inventory contract is recorded in

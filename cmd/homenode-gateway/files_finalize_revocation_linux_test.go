@@ -55,6 +55,7 @@ type nativeRevocableFinalization struct {
 func startNativeRevocableFinalization(t *testing.T, paired *http.Client, origin, id string) *nativeRevocableFinalization {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	t.Cleanup(cancel)
 	f := &nativeRevocableFinalization{id: id, ctx: ctx, cancel: cancel, done: make(chan nativeUploadResult, 1)}
 	req, err := http.NewRequestWithContext(ctx, "POST", origin+"/api/v1/transfers/"+id+"/finalize", bytes.NewBufferString("{}"))
 	if err != nil {
@@ -67,8 +68,9 @@ func startNativeRevocableFinalization(t *testing.T, paired *http.Client, origin,
 	go func() { response, err := client.Do(req); f.done <- nativeUploadResult{response, err} }()
 	// Observe the public journal state before revocation. Merely starting a
 	// request does not establish that verification admission has committed.
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
+	observationContext, cancelObservation := context.WithTimeout(ctx, 3*time.Second)
+	defer cancelObservation()
+	for observationContext.Err() == nil {
 		select {
 		case result := <-f.done:
 			if result.response != nil {
@@ -78,7 +80,7 @@ func startNativeRevocableFinalization(t *testing.T, paired *http.Client, origin,
 			t.Fatal("finalization settled before verification/revocation boundary", result.err)
 		default:
 		}
-		observation, _ := http.NewRequestWithContext(ctx, "GET", origin+"/api/v1/transfers/"+id, nil)
+		observation, _ := http.NewRequestWithContext(observationContext, "GET", origin+"/api/v1/transfers/"+id, nil)
 		observation.Header.Set("Origin", origin)
 		response, err := client.Do(observation)
 		if err != nil {

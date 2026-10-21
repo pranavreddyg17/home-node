@@ -365,3 +365,54 @@ test('a stalled finalization times out and retry reconciles the retained object'
   expect(chunks).toBe(0)
   expect(await page.evaluate(key => localStorage.getItem(key), marker)).toBeNull()
 })
+
+
+for (const invalid of ['identity', 'offset', 'checksum'] as const) {
+  test(`an inconsistent upload ${invalid} acknowledgement preserves the transfer for observed retry`, async ({ page }) => {
+    const bytes = Buffer.from('saved upload'), hash = createHash('sha256').update(bytes).digest('hex'), id = 'f'.repeat(32)
+    const transfer = { id, name: 'saved-upload.txt', size: bytes.length, sha256: hash, offset: 0, state: 'uploading', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
+    const marker = `homenode-transfer:${hash}:${bytes.length}`
+    let creations = 0, chunks = 0, finalizations = 0
+    await page.route('**/api/v1/**', route => {
+      const path = new URL(route.request().url()).pathname
+      if (path === '/api/v1/setup') return route.fulfill({ json: { claimed: true, development: true } })
+      if (path === '/api/v1/session') return route.fulfill({ json: { device: { id: 'fixture-owner', name: 'Fixture owner', capabilities: ['files'], createdAt: 1, revokedAt: null }, verifiedAt: 1, expiresAt: 9999999999 } })
+      if (path === '/api/v1/host/report') return route.fulfill({ json: { generatedAt: new Date().toISOString(), host: { os: 'linux', architecture: 'amd64' }, checks: [], prerequisitesMet: false, executionEnabled: false } })
+      if (path === '/api/v1/apps') return route.fulfill({ json: { apps: [], runtimeConfigured: false } })
+      if (path === '/api/v1/files') return route.fulfill({ json: [] })
+      if (path === '/api/v1/files/storage') return route.fulfill({ json: { quotaBytes: 12 * 2 ** 30, storedBytes: 0, trashBytes: 0, uploadReservedBytes: 0, jobReservedBytes: 0, cleanupReservedBytes: 0, chargedBytes: 0, availableBytes: 12 * 2 ** 30 } })
+      if (path === '/api/v1/transfers') {
+        if (route.request().method() === 'GET') return route.fulfill({ json: [] })
+        creations++
+        return route.fulfill({ status: 201, json: transfer })
+      }
+      // The bytes committed despite a bad acknowledgement. Recovery must read
+      // that offset and finalize the original object, with no duplicate chunk.
+      if (path === `/api/v1/transfers/${id}`) return route.fulfill({ json: { ...transfer, offset: bytes.length } })
+      if (path === `/api/v1/transfers/${id}/chunks`) {
+        chunks++
+        const response = { ...transfer, offset: bytes.length }
+        if (invalid === 'identity') response.id = 'a'.repeat(32)
+        if (invalid === 'offset') response.offset = 0
+        if (invalid === 'checksum') response.sha256 = '0'.repeat(64)
+        return route.fulfill({ json: response })
+      }
+      if (path === `/api/v1/transfers/${id}/finalize`) { finalizations++; return route.fulfill({ json: { id } }) }
+      return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Unused fixture endpoint' } } })
+    })
+    await page.goto('/')
+    await page.locator('nav').getByRole('button', { name: 'Files', exact: false }).click()
+    const file = { name: transfer.name, mimeType: 'text/plain', buffer: bytes }
+    await page.getByLabel('Upload a file').setInputFiles(file)
+    await expect(page.getByRole('alert')).toContainText('The upload acknowledgement does not match this file.')
+    expect(finalizations).toBe(0)
+    expect(chunks).toBe(1)
+    expect(await page.evaluate(key => localStorage.getItem(key), marker)).toBe(id)
+    await page.getByLabel('Upload a file').setInputFiles(file)
+    await expect(page.locator('.transfer-progress')).toContainText('Upload verified')
+    expect(creations).toBe(1)
+    expect(chunks).toBe(1)
+    expect(finalizations).toBe(1)
+    expect(await page.evaluate(key => localStorage.getItem(key), marker)).toBeNull()
+  })
+}

@@ -214,7 +214,13 @@ export function Files() {
         if (pause.current) { setPhase('Paused. Select the same file to resume.'); return }
         let binary = ''
         for (let i = 0; i < chunk.length; i += 8192) binary += String.fromCharCode(...chunk.subarray(i, i + 8192))
-        transfer = await uploadRequest<Transfer>(`/transfers/${transfer.id}/chunks`, { offset: transfer.offset, data: btoa(binary), sha256: bytesToHex(sha256(chunk)) })
+        const acknowledged: Transfer = await uploadRequest<Transfer>(`/transfers/${transfer.id}/chunks`, { offset: transfer.offset, data: btoa(binary), sha256: bytesToHex(sha256(chunk)) })
+        // A lost or inconsistent acknowledgement is not permission to advance
+        // or start another transfer. Keep the bookmark and observe on retry.
+        if (!acknowledged || acknowledged.id !== transfer.id || acknowledged.size !== file.size || acknowledged.sha256 !== hash || !Number.isSafeInteger(acknowledged.offset) || acknowledged.offset < transfer.offset + chunk.length || acknowledged.offset > file.size || acknowledged.state !== 'uploading') {
+          throw new Error('The upload acknowledgement does not match this file. Select the same file to check its committed progress before retrying.')
+        }
+        transfer = acknowledged
         setProgress(transfer.offset / file.size)
       }
       if (pause.current) { setPhase('Paused. Select the same file to resume.'); return }
