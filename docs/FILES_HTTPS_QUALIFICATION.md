@@ -280,7 +280,9 @@ The capacity extension also requires a fresh 32 KiB object to upload, finalize
 and download after acknowledged cleanup, with exact stored/reserved byte and
 file-entry accounting. This distinguishes writable recovery from a guest that
 can only read old content after exhaustion. The case then rechecks the original
-one-GiB object's integrity. This additional assertion is pending native execution.
+one-GiB object's integrity. This assertion passed at `9551327` in run
+39548610036, including a verified new 32 KiB object and exact accounting;
+see [writable-recovery evidence](evidence/https-files-writable-recovery-9551327.json).
 
 A separate bounded [browser qualification path](BROWSER_HTTPS_QUALIFICATION.md)
 now runs the actual UI through private HTTPS and the native Files backend,

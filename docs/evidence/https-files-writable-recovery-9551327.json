@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "9551327e8dc3acaadc358476d4ef5e2df873fb98",
+  "workflowRun": 39548610036,
+  "job": 119058030101,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/39548610036",
+  "conclusion": "success",
+  "logSHA256": "30eb3d6a276fb75a236599bcc422d350be86576885b7e112e3709e6a3095d6be",
+  "payloadBytes": 1073741824,
+  "capacityProbeDeclaredBytes": 1073741824,
+  "capacityProbeCommittedBytesBeforeRefusal": 815529984,
+  "postCapacityVerifiedBytes": 32768,
+  "developmentImage": {
+    "schema": 1,
+    "profile": "files",
+    "sourceRevision": "9551327e8dc3acaadc358476d4ef5e2df873fb98",
+    "overlaySHA256": "485ae7942f352ef77483a5fa0ee420cceea12976e2690041d90690d64e9b6f49",
+    "mkosiRevision": "52448a27f6f869c108352ed82fcfb9be633703fb",
+    "bytes": 2686472192,
+    "sha256": "5e408e7fe6b3a4b88578d44228c668a3717e0e69c1ae1b7099ceac20a00042b0",
+    "releaseQualified": false,
+    "bootValidated": false
+  },
+  "nativeBoot": {
+    "schema": 1,
+    "profile": "files",
+    "imageSHA256": "5e408e7fe6b3a4b88578d44228c668a3717e0e69c1ae1b7099ceac20a00042b0",
+    "accelerator": "kvm",
+    "tcgBootAndObjectRoundTrip": false,
+    "kvmBootAndObjectRoundTrip": true,
+    "objectTransfer": {
+      "bytes": 1048579,
+      "chunkBytes": 262144,
+      "acknowledgedChunkReplay": true
+    },
+    "videoPresets": [],
+    "videoCancellation": null,
+    "aiInference": null,
+    "shutdown": {
+      "guestInitiated": true,
+      "reason": "guest-shutdown",
+      "qemuExitCode": 0,
+      "readOnlyFilesystemCheck": true
+    },
+    "releaseQualified": false
+  },
+  "observedAssertions": [
+    "PASS actual HTTPS guest capacity refusal, cancellation replay, reservation recovery and retained owner integrity",
+    "native HTTPS post-capacity write, finalization and download passed",
+    "native HTTPS retained owner file integrity after capacity cleanup passed",
+    "--- PASS: TestNativeReservedFilesManagerLaunch (544.10s)"
+  ],
+  "limitations": [
+    "The new 32 KiB object proves writable upload/finalization/download recovery and exact logical stored/reserved byte and entry accounting after guest-acknowledged cleanup. This is not a full logical 12 GiB quota-pressure test.",
+    "Failed guest writes can retain an unacknowledged prefix; no byte rollback is claimed. Cancellation removes the partial object through the guest adapter.",
+    "This source predates browser integration and the c7d1e48 browser transfer-ID fix. These are protocol-client results, not browser/mobile acceptance.",
+    "Controlled network transport, fixture publisher trust, transient units and temporary volumes do not prove physical overlay ACLs, signed installation, production service confinement, reference-host reliability or complete retirement."
+  ]
+}
