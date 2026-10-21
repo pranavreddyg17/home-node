@@ -71,8 +71,9 @@ class NativeBrowser:
         command = ["systemd-run", "--quiet", "--pipe", "--wait", "--collect", f"--unit={unit}", "--property=Type=exec", f"--property=User={self.name}", f"--property=Group={self.name}", f"--property=NetworkNamespacePath=/run/netns/{namespace}", "--property=UMask=0077", "--property=KillMode=control-group", "--property=TimeoutStopSec=10s", "--property=RuntimeMaxSec=330s", f"--setenv=HOME={self.home}", f"--setenv=TMPDIR={self.home}/tmp", "--setenv=HOMENODE_NATIVE_HTTPS_BROWSER=1", self.node, str(self.client), self.executable]
         result = subprocess.run(command, input=invitation, capture_output=True, timeout=335)
         marker = b"PASS native browser HTTPS Files: TLS 1.3, virtual passkey, session inventory, signed start/stop, 32768-byte upload/download, Trash/restore and narrow viewport; browser="
-        if result.returncode != 0 or len(result.stdout) + len(result.stderr) > 65536 or marker not in result.stdout:
+        hostname_refusal = b"PASS native browser refuses certificate hostname mismatch"
+        if result.returncode != 0 or len(result.stdout) + len(result.stderr) > 65536 or marker not in result.stdout or hostname_refusal not in result.stdout:
             raise RuntimeError("native browser workflow failed: " + (result.stdout + result.stderr)[-4096:].decode(errors="replace"))
         for line in result.stdout.splitlines():
-            if line.startswith(marker):
+            if line.startswith(marker) or line == hostname_refusal:
                 print(line[:512].decode(), flush=True)

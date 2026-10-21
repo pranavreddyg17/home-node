@@ -72,3 +72,10 @@ successful browser qualification.
 Browser failure diagnostics emit only fixed workflow phases, known network error
 codes and coarse API status categories. Raw Playwright call logs are excluded
 because action failures can contain enrollment input values.
+
+The browser-specific TLS assertion also requires Chrome to reject the same
+server certificate under a wrong hostname before enrollment. Its test DNS
+mapping reaches the same native gateway; a generic DNS or connection failure
+cannot satisfy the check. The parent requires the explicit hostname-refusal
+marker as well as the successful UI workflow. Real and effective browser-driver
+UIDs must match and be nonzero. This extension is pending native execution.

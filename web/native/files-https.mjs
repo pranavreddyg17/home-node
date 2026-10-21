@@ -6,7 +6,7 @@ import { dirname } from 'node:path'
 
 const origin = 'https://home.example.ts.net:8787'
 const browserExecutable = process.argv[2]
-if (process.platform !== 'linux' || process.getuid() === 0 || process.env.HOMENODE_NATIVE_HTTPS_BROWSER !== '1') {
+if (process.platform !== 'linux' || process.getuid() === 0 || process.geteuid() !== process.getuid() || process.env.HOMENODE_NATIVE_HTTPS_BROWSER !== '1') {
   throw new Error('Explicit disposable Linux browser qualification as a non-root account is required')
 }
 if (!browserExecutable?.startsWith('/') || await realpath(browserExecutable) !== browserExecutable) {
@@ -47,7 +47,7 @@ const deadline = setTimeout(() => {
 try {
   browser = await chromium.launch({
     executablePath: browserExecutable, chromiumSandbox: true, headless: true, timeout: 30000,
-    args: ['--host-resolver-rules=MAP home.example.ts.net 100.100.1.2', '--no-proxy-server'],
+    args: ['--host-resolver-rules=MAP home.example.ts.net 100.100.1.2,MAP wrong.example.ts.net 100.100.1.2', '--no-proxy-server'],
   })
   phase = 'launch-policy'
   const session = await browser.newBrowserCDPSession()
@@ -80,6 +80,16 @@ try {
   if (navigation.status() !== 200 || security?.protocol !== 'TLS 1.3' || !await page.evaluate(() => window.isSecureContext)) {
     throw new Error('Native browser did not establish trusted TLS 1.3 and a secure context')
   }
+  phase = 'certificate-hostname-refusal'
+  const wrongHost = await context.newPage()
+  let hostnameRefused = false
+  try {
+    await wrongHost.goto('https://wrong.example.ts.net:8787', { waitUntil: 'domcontentloaded', timeout: 15000 })
+  } catch (error) {
+    hostnameRefused = String(error?.message ?? '').includes('ERR_CERT_COMMON_NAME_INVALID')
+  } finally { await wrongHost.close() }
+  if (!hostnameRefused) throw new Error('Browser did not refuse the mismatched certificate hostname')
+  console.log('PASS native browser refuses certificate hostname mismatch')
   phase = 'enrollment'
   await page.getByRole('button', { name: 'Pair a device', exact: true }).click()
   await page.getByLabel('Device name', { exact: true }).fill('Native browser device')
