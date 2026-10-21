@@ -270,9 +270,11 @@ confirm the cancelled transfer identity and zero published partial files.
 The already-verified ZIP staging file is closed and removed before these cases
 to avoid carrying an unnecessary one-GiB host allocation. No owner data is
 removed, no runtime admission limit is weakened, and no forced guest shutdown
-is introduced. This extension has compiled for Linux but native execution is
-pending; logical quota pressure, physical/network reliability and complete
-release qualification must not be inferred from compilation.
+is introduced. The original extension passed natively at `f300b9a` in run 39548353653,
+with guest refusal after 815529984 committed bytes and an intact original
+owner file after cancellation cleanup. See [retained evidence](evidence/https-files-capacity-f300b9a.json).
+This is guest-capacity component evidence; full logical quota pressure,
+physical/network reliability and release qualification remain separate gates.
 
 The capacity extension also requires a fresh 32 KiB object to upload, finalize
 and download after acknowledged cleanup, with exact stored/reserved byte and

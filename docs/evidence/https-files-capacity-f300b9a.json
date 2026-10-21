@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "f300b9a282b6efb243f11657bc978d665bf6e0c5",
+  "workflowRun": 39548353653,
+  "job": 119051584112,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/39548353653",
+  "conclusion": "success",
+  "logSHA256": "da6e4860b0cf033af02d5e4afddcb89b4f061d6ccee4c197f61c069ee9f3ac54",
+  "payloadBytes": 1073741824,
+  "capacityProbeDeclaredBytes": 1073741824,
+  "capacityProbeCommittedBytesBeforeRefusal": 815529984,
+  "revokedDownloadBytesReceived": 524288,
+  "developmentImage": {
+    "schema": 1,
+    "profile": "files",
+    "sourceRevision": "f300b9a282b6efb243f11657bc978d665bf6e0c5",
+    "overlaySHA256": "800683b88510eea8c2fbe3239972b7823d6419de316eaa5a44215491e9351f05",
+    "mkosiRevision": "52448a27f6f869c108352ed82fcfb9be633703fb",
+    "bytes": 2686472192,
+    "sha256": "d04ab852515773f21d51101232cd0ba0c8e28bdf03097e5e35905f0c7dc2d433",
+    "releaseQualified": false,
+    "bootValidated": false
+  },
+  "nativeBoot": {
+    "schema": 1,
+    "profile": "files",
+    "imageSHA256": "d04ab852515773f21d51101232cd0ba0c8e28bdf03097e5e35905f0c7dc2d433",
+    "accelerator": "kvm",
+    "tcgBootAndObjectRoundTrip": false,
+    "kvmBootAndObjectRoundTrip": true,
+    "objectTransfer": {
+      "bytes": 1048579,
+      "chunkBytes": 262144,
+      "acknowledgedChunkReplay": true
+    },
+    "videoPresets": [],
+    "videoCancellation": null,
+    "aiInference": null,
+    "shutdown": {
+      "guestInitiated": true,
+      "reason": "guest-shutdown",
+      "qemuExitCode": 0,
+      "readOnlyFilesystemCheck": true
+    },
+    "releaseQualified": false
+  },
+  "observedAssertions": [
+    "PASS actual HTTPS guest capacity refusal, cancellation replay, reservation recovery and retained owner integrity",
+    "native HTTPS retained owner file integrity after capacity cleanup passed",
+    "PASS actual HTTPS verification-admitted revocation: explicit 401, retained full offset and no file publication",
+    "PASS all four actual services restarted with retained enrolled session, original request identity and subsequent guest data verification",
+    "--- PASS: TestNativeReservedFilesManagerLaunch (656.72s)"
+  ],
+  "limitations": [
+    "This source proves public 507 refusal, unchanged controller offset, full logical reservation retention, repeated cancellation, acknowledged cleanup, reservation/file-entry restoration and existing-owner file integrity. It predates the fresh-write-after-cleanup assertion at 9551327.",
+    "A failed guest write may leave an unacknowledged verified prefix; this test does not claim byte rollback. Cancellation removes the partial object through the guest adapter.",
+    "Protocol clients and controlled fixture networking do not prove actual browser workflows, physical phones, Tailscale ACLs, network loss or installed-package qualification.",
+    "The source predates the c7d1e48 browser transfer-ID acceptance fix. Static frontend delivery at this source is not a browser upload result.",
+    "Fixture publisher trust, transient service confinement and temporary volumes are not release signing, physical reference-host reliability or complete volume/channel retirement."
+  ]
+}
