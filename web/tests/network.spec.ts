@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { test, expect, type Route } from '@playwright/test'
 
 test('a stalled setup read times out and the owner can reconnect', async ({ page }) => {
@@ -312,3 +313,55 @@ for (const screen of ['Jobs', 'Files', 'Apps'] as const) {
     expect(requests).toEqual(Object.fromEntries(paths.map(path => [path, 2])))
   })
 }
+
+
+test('a stalled finalization times out and retry reconciles the retained object', async ({ page }) => {
+  // Transport/UI evidence only: no guest or file bytes are simulated as native.
+  const id = 'e'.repeat(32), hash = createHash('sha256').update(Buffer.alloc(0)).digest('hex')
+  const marker = `homenode-transfer:${hash}:0`
+  const transfer = { id, name: 'retained-empty.txt', size: 0, sha256: hash, offset: 0, state: 'uploading', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
+  let creations = 0, finalizations = 0, chunks = 0, held: Route | undefined
+  await page.addInitScript(() => {
+    const original = AbortSignal.timeout.bind(AbortSignal)
+    // Accelerate only the mutation deadline; preserve ordinary read budgets.
+    AbortSignal.timeout = milliseconds => original(milliseconds === 120000 ? 1000 : milliseconds)
+  })
+  await page.route('**/api/v1/**', route => {
+    const path = new URL(route.request().url()).pathname
+    if (path === '/api/v1/setup') return route.fulfill({ json: { claimed: true, development: true } })
+    if (path === '/api/v1/session') return route.fulfill({ json: { device: { id: 'fixture-owner', name: 'Fixture owner', capabilities: ['files'], createdAt: 1, revokedAt: null }, verifiedAt: 1, expiresAt: 9999999999 } })
+    if (path === '/api/v1/host/report') return route.fulfill({ json: { generatedAt: new Date().toISOString(), host: { os: 'linux', architecture: 'amd64' }, checks: [], prerequisitesMet: false, executionEnabled: false } })
+    if (path === '/api/v1/apps') return route.fulfill({ json: { apps: [], runtimeConfigured: false } })
+    if (path === '/api/v1/files') return route.fulfill({ json: [] })
+    if (path === '/api/v1/files/storage') return route.fulfill({ json: { quotaBytes: 12 * 2 ** 30, storedBytes: 0, trashBytes: 0, uploadReservedBytes: 0, jobReservedBytes: 0, cleanupReservedBytes: 0, chargedBytes: 0, availableBytes: 12 * 2 ** 30 } })
+    if (path === '/api/v1/transfers') {
+      if (route.request().method() === 'GET') return route.fulfill({ json: [] })
+      creations++
+      return route.fulfill({ status: 201, json: transfer })
+    }
+    if (path === `/api/v1/transfers/${id}`) return route.fulfill({ json: { ...transfer, state: 'ready' } })
+    if (path.endsWith('/chunks')) { chunks++; return route.fulfill({ status: 500, json: {} }) }
+    if (path === `/api/v1/transfers/${id}/finalize`) {
+      finalizations++
+      if (finalizations === 1) { held = route; return }
+      return route.fulfill({ json: { id } })
+    }
+    return route.fulfill({ status: 503, json: { error: { code: 'UNAVAILABLE', message: 'Unused fixture endpoint' } } })
+  })
+  await page.goto('/')
+  await page.locator('nav').getByRole('button', { name: 'Files', exact: false }).click()
+  const file = { name: transfer.name, mimeType: 'text/plain', buffer: Buffer.alloc(0) }
+  await page.getByLabel('Upload a file').setInputFiles(file)
+  await expect(page.getByRole('alert')).toContainText('The server did not respond.')
+  await expect(page.locator('.transfer-progress')).toContainText('Upload stopped.')
+  expect(await page.evaluate(key => localStorage.getItem(key), marker)).toBe(id)
+  await held?.abort().catch(() => {})
+  // A new selection observes ready state and replays finalization, rather than
+  // guessing whether the lost request committed or creating a second object.
+  await page.getByLabel('Upload a file').setInputFiles(file)
+  await expect(page.locator('.transfer-progress')).toContainText('Upload verified')
+  expect(creations).toBe(1)
+  expect(finalizations).toBe(2)
+  expect(chunks).toBe(0)
+  expect(await page.evaluate(key => localStorage.getItem(key), marker)).toBeNull()
+})

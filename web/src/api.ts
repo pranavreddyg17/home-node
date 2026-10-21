@@ -4,8 +4,10 @@ export class APIError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message) }
 }
 export async function api<T>(path: string, body?: unknown, cancellation?: AbortSignal, headers: Record<string, string> = {}): Promise<T> {
-  const deadline = body === undefined ? AbortSignal.timeout(15000) : undefined
-  const signal = deadline && cancellation ? AbortSignal.any([deadline, cancellation]) : deadline ?? cancellation
+  // Whole-object verification may use 85 seconds in the transfer service.
+  // Bound a lost mutation response without cutting that operation short.
+  const deadline = AbortSignal.timeout(body === undefined ? 15000 : 120000)
+  const signal = cancellation ? AbortSignal.any([deadline, cancellation]) : deadline
   try {
     const response = await fetch(`/api/v1${path}`, {
       method: body === undefined ? 'GET' : 'POST',
