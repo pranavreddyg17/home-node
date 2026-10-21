@@ -295,6 +295,14 @@ func nativeHTTPSFilesRoundTrip(t *testing.T, client *http.Client, origin string,
 	if !found || !manifestFound {
 		t.Fatal("native Files export omitted uploaded object or verified manifest")
 	}
+	// ZIP content has been checked. Do not retain a second whole-object copy
+	// on the host while later cases deliberately exhaust the guest volume.
+	if err := archive.Close(); err != nil {
+		t.Fatal("could not close verified native export", err)
+	}
+	if err := os.Remove(archive.Name()); err != nil {
+		t.Fatal("could not release verified native export staging", err)
+	}
 	appAction("stop")
 	if os.Getenv("HOMENODE_NATIVE_HTTPS_RESTART") == "1" {
 		before := request("GET", "/api/v1/session", nil, 200)

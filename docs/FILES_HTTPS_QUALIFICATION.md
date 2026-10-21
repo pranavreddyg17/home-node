@@ -258,3 +258,18 @@ The implemented upload/progress/finalization/cancellation API is documented in
 [the resumable transfer OpenAPI contract](../contracts/transfers.openapi.json).
 Saved-file actions/downloads, app lifecycle and remaining API slices are outside
 that contract, and all full product acceptance gates remain open.
+
+The next large case adds public guest-capacity recovery. It admits a separate
+one-GiB transfer, sends bounded 256 KiB windows until explicit HTTP 507
+`CAPACITY_UNAVAILABLE`, checks that the failed chunk did not advance the
+controller's committed offset and that the full logical reservation remains
+charged, repeats cancellation, and waits for acknowledged guest deletion.
+It then requires exact reservation/file-entry recovery and a fresh full hash
+check of the original owner's saved object. Read-only journal inspection must
+confirm the cancelled transfer identity and zero published partial files.
+The already-verified ZIP staging file is closed and removed before these cases
+to avoid carrying an unnecessary one-GiB host allocation. No owner data is
+removed, no runtime admission limit is weakened, and no forced guest shutdown
+is introduced. This extension has compiled for Linux but native execution is
+pending; logical quota pressure, physical/network reliability and complete
+release qualification must not be inferred from compilation.

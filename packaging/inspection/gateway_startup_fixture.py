@@ -439,9 +439,21 @@ print('FRONTEND-HTTPS-PASS',flush=True)
                     finally:
                         database.close()
                     print("PASS actual HTTPS verification-admitted revocation: explicit 401, retained full offset and no file publication", flush=True)
+                    capacity = re.findall(r"native HTTPS capacity recovery transfer=([A-Za-z0-9_-]{20,64}) refused at offset=([0-9]{1,10}) and cancelled with reservation restored", identity_client.stdout)
+                    if len(capacity) != 1 or not 0 < int(capacity[0][1]) < 1073741824 or "native HTTPS retained owner file integrity after capacity cleanup passed" not in identity_client.stdout:
+                        raise RuntimeError("large Files workflow omitted capacity refusal, cleanup or retained owner integrity")
+                    database = sqlite3.connect((directory / "state" / "management.db").as_uri() + "?mode=ro", uri=True, timeout=5)
+                    try:
+                        result = database.execute("SELECT t.offset,t.size,t.state,(SELECT count(*) FROM files f WHERE f.transfer_id=t.id) FROM transfers t WHERE t.id=?", (capacity[0][0],)).fetchall()
+                        if len(result) != 1 or result[0][0:3] != (int(capacity[0][1]), 1073741824, "cancelled") or result[0][3] != 0:
+                            raise RuntimeError("capacity cleanup lost retained identity or published a partial file")
+                    finally:
+                        database.close()
+                    print("PASS actual HTTPS guest capacity refusal, cancellation replay, reservation recovery and retained owner integrity", flush=True)
+
                     # Emit only bounded, explicitly selected non-secret results.
                     for line in identity_client.stdout.splitlines():
-                        for marker in ("native HTTPS Files payload bytes=", "native HTTPS paired-device revocation truncated active guest download", "native HTTPS retained owner file integrity after paired revocation passed"):
+                        for marker in ("native HTTPS Files payload bytes=", "native HTTPS paired-device revocation truncated active guest download", "native HTTPS retained owner file integrity after paired revocation passed", "native HTTPS capacity recovery transfer=", "native HTTPS retained owner file integrity after capacity cleanup passed"):
                             if marker in line:
                                 print(line[line.index(marker):][:512], flush=True)
                 print("PASS actual HTTPS Files through controller, supervisor, transfer and KVM guest: signed lifecycle, upload/download, Range, Trash, ZIP and retained restart", flush=True)

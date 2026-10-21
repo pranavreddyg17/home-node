@@ -348,6 +348,9 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 			files.VerifyOwner()
 			t.Log("native HTTPS retained owner file integrity after paired revocation passed")
 		}
+		if files.Size == 1<<30 {
+			nativeHTTPSFilesCapacityRecovery(t, owner, origin, request, files)
+		}
 		files.Stop()
 	}
 	oldRecovery, unusedOldRecovery := recoveryCodes[0], recoveryCodes[1]
