@@ -25,6 +25,11 @@ Controller regression coverage includes live/current session identification,
 idle/expired/revoked/old-epoch exclusions, credential redaction, limited and
 unauthenticated refusals, and stale administrator withdrawal. The browser
 identity workflow checks the view and its refresh after paired-device
-revocation. Native HTTPS protocol coverage is added for administrator access
-and limited-device refusal; compilation alone does not establish execution.
+revocation. Native HTTPS protocol qualification passed for administrator access and
+limited-device refusal at `f483863` in [run 39546374712](https://github.com/pranavreddyg17/home-node/actions/runs/39546374712).
+That run uses Go 1.26.9; the patched toolchain requires separate qualification.
 Physical mobile passkeys and installed product qualification remain separate.
+
+The implemented inventory contract is recorded in
+[OpenAPI 3.1](../contracts/sessions.openapi.json). Other session and device
+operations remain outside this contract slice.

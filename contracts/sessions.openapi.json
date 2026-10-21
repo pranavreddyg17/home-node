@@ -1,0 +1,201 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "HomeNode active session inventory API",
+    "version": "0.1.0",
+    "description": "Implemented administrator read slice. Production requires trusted HTTPS and Secure HttpOnly SameSite=Strict __Host-homenode cookies; development uses homenode-dev on localhost. This endpoint adds no mutation. Fresh approved device revocation terminates that device's sessions through the separately documented device approval API. Physical/mobile and installed-product qualification remain separate."
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "security": [
+    {
+      "AdministratorSession": []
+    }
+  ],
+  "paths": {
+    "/sessions": {
+      "get": {
+        "operationId": "listActiveSessions",
+        "description": "Read at most 64 active devices times 20 sessions. Previous epochs, revoked devices, expired and idle sessions are excluded. Results are a snapshot, ordered by creation time and internal stable tie-breakers; order does not identify reusable session handles. Background requests affect activity. No passkey interaction is required for this read.",
+        "responses": {
+          "200": {
+            "description": "Snapshot of active current-epoch sessions for unrevoked devices, with absolute expiry in the future and activity within 30 minutes. No tokens, hashes, credential IDs or reusable session handles are included.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "maxItems": 1280,
+                  "items": {
+                    "$ref": "#/components/schemas/SessionSummary"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No current authenticated session.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current administrator capability is required; authority is revalidated in the inventory transaction.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "State unavailable or inventory exceeds enrollment bounds. Never represented as an empty successful list.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Controller request capacity is unavailable.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "AdministratorSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-homenode",
+        "description": "Requires current admin capability; possession of a Files-only session is insufficient."
+      }
+    },
+    "schemas": {
+      "SessionSummary": {
+        "type": "object",
+        "required": [
+          "deviceId",
+          "createdAt",
+          "verifiedAt",
+          "lastSeen",
+          "expiresAt",
+          "current"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "deviceId": {
+            "type": "string",
+            "description": "Registered application device identity; not proof of physical hardware."
+          },
+          "current": {
+            "type": "boolean",
+            "description": "True only for the session making this request."
+          },
+          "createdAt": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Session creation time. Unix seconds."
+          },
+          "verifiedAt": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Last passkey verification time. Unix seconds."
+          },
+          "lastSeen": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Last authenticated request activity, including background polling. Unix seconds."
+          },
+          "expiresAt": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Absolute expiry; idle expiry also applies. Unix seconds."
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}
