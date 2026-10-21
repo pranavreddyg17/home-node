@@ -92,3 +92,10 @@ Browser preparation and its read-only program hierarchy preflight now run
 before guest image construction and VM execution. Admission failures therefore
 stop before the expensive workload stages; the full native UI and workload
 checks remain required afterward.
+
+The UI scenario now includes rename, literal rendering of an executable-looking
+filename, preservation of the download object identity across renames, and the
+renamed suggested download filename. A marker-bearing HTML-like name must not
+create a DOM element; file bytes must still match the original upload. This
+extension is pending native execution and is required alongside the TLS refusal
+and successful workflow markers before the parent can report a browser pass.

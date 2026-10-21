@@ -115,10 +115,29 @@ try {
   phase = 'upload'
   await page.getByLabel('Upload a file', { exact: true }).setInputFiles({ name, mimeType: 'application/octet-stream', buffer: bytes })
   await expect(page.locator('.transfer-progress')).toContainText('Upload verified', { timeout: 60000 })
-  const row = page.locator('.file-row').filter({ hasText: name })
+  let row = page.locator('.file-row').filter({ hasText: name })
   await expect(row).toHaveCount(1)
   await row.getByText('Integrity', { exact: true }).click()
   await expect(row.locator('.checksum')).toContainText(checksum)
+  phase = 'rename-and-filename-safety'
+  const downloadIdentity = await row.getByRole('link', { name: 'Download', exact: true }).getAttribute('href')
+  const rename = async nextName => {
+    const previous = row
+    const prompt = page.waitForEvent('dialog').then(async dialog => {
+      if (dialog.type() !== 'prompt' || dialog.message() !== 'New filename') throw new Error('Unexpected rename prompt')
+      await dialog.accept(nextName)
+    })
+    await Promise.all([row.getByRole('button', { name: 'Rename', exact: true }).click(), prompt])
+    await expect(previous).toHaveCount(0)
+    row = page.locator('.file-row').filter({ hasText: nextName })
+    await expect(row).toHaveCount(1)
+    await expect(row.getByRole('link', { name: 'Download', exact: true })).toHaveAttribute('href', downloadIdentity)
+  }
+  await rename('<img data-native-executable src=x onerror=alert(1)>.bin')
+  await expect(page.locator('[data-native-executable]')).toHaveCount(0)
+  const renamedName = 'native-browser-renamed.bin'
+  await rename(renamedName)
+  console.log('PASS native browser filename text rendering and rename identity')
   phase = 'narrow-viewport'
   await page.setViewportSize({ width: 390, height: 844 })
   if (!await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)) {
@@ -129,6 +148,7 @@ try {
   await row.getByRole('link', { name: 'Download', exact: true }).click()
   const download = await downloaded
   if (await download.failure()) throw new Error('Native browser download failed')
+  if (download.suggestedFilename() !== renamedName) throw new Error('Native download did not preserve the renamed filename')
   const path = await download.path()
   const downloadedInfo = await stat(path)
   if (!downloadedInfo.isFile() || downloadedInfo.size !== bytes.length) throw new Error('Native browser download has an unexpected size')

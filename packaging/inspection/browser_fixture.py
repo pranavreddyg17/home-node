@@ -72,8 +72,9 @@ class NativeBrowser:
         result = subprocess.run(command, input=invitation, capture_output=True, timeout=335)
         marker = b"PASS native browser HTTPS Files: TLS 1.3, virtual passkey, session inventory, signed start/stop, 32768-byte upload/download, Trash/restore and narrow viewport; browser="
         hostname_refusal = b"PASS native browser refuses certificate hostname mismatch"
-        if result.returncode != 0 or len(result.stdout) + len(result.stderr) > 65536 or marker not in result.stdout or hostname_refusal not in result.stdout:
+        filename_safety = b"PASS native browser filename text rendering and rename identity"
+        if result.returncode != 0 or len(result.stdout) + len(result.stderr) > 65536 or marker not in result.stdout or hostname_refusal not in result.stdout or filename_safety not in result.stdout:
             raise RuntimeError("native browser workflow failed: " + (result.stdout + result.stderr)[-4096:].decode(errors="replace"))
         for line in result.stdout.splitlines():
-            if line.startswith(marker) or line == hostname_refusal:
+            if line.startswith(marker) or line in (hostname_refusal, filename_safety):
                 print(line[:512].decode(), flush=True)
