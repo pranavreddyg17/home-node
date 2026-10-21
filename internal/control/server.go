@@ -120,6 +120,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/auth/login/begin", s.loginBegin)
 	s.mux.HandleFunc("POST /api/v1/auth/login/finish", s.loginFinish)
 	s.mux.HandleFunc("POST /api/v1/auth/recover", s.recover)
+	s.mux.Handle("GET /api/v1/sessions", s.require("admin", false, http.HandlerFunc(s.sessions)))
 	s.mux.Handle("GET /api/v1/session", s.require("", false, http.HandlerFunc(s.session)))
 	s.mux.Handle("POST /api/v1/logout", s.require("", false, http.HandlerFunc(s.logout)))
 	s.mux.Handle("GET /api/v1/devices", s.require("admin", false, http.HandlerFunc(s.devices)))
@@ -363,6 +364,18 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	}
 	s.setCookie(w, "", "", -1)
 	writeJSON(w, 200, map[string]bool{"authenticated": false})
+}
+func (s *Server) sessions(w http.ResponseWriter, r *http.Request) {
+	sessions, err := s.Identity.Sessions(r.Context(), actor(r))
+	if errors.Is(err, identity.ErrDenied) {
+		fail(w, 403, "FORBIDDEN", "Session administration requires current administrator access.")
+		return
+	}
+	if err != nil {
+		fail(w, 500, "STATE_UNAVAILABLE", "Could not read active sessions.")
+		return
+	}
+	writeJSON(w, 200, sessions)
 }
 func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 	devices, err := s.Identity.Devices(r.Context())

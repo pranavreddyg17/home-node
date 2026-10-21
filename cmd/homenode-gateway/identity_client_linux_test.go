@@ -206,6 +206,15 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 		request(http.MethodPost, "/api/v1/auth/login/finish", assertion, check.status)
 	}
 	request(http.MethodGet, "/api/v1/devices", nil, 200)
+	var activeSessions []struct {
+		DeviceID  string `json:"deviceId"`
+		Current   bool   `json:"current"`
+		ExpiresAt int64  `json:"expiresAt"`
+	}
+	inventory := request(http.MethodGet, "/api/v1/sessions", nil, 200)
+	if json.Unmarshal(inventory, &activeSessions) != nil || len(activeSessions) != 1 || !activeSessions[0].Current || activeSessions[0].DeviceID == "" || activeSessions[0].ExpiresAt <= time.Now().Unix() || bytes.Contains(bytes.ToLower(inventory), []byte("token")) {
+		t.Fatal("native administrator session inventory invalid or exposed credentials")
+	}
 	owner := client
 	counter := uint32(3)
 	approve := func(path string, payload any) string {
@@ -249,6 +258,7 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 	enroll(invitation.Code, "Native Files device", 0)
 	request(http.MethodGet, "/api/v1/files", nil, 200)
 	request(http.MethodGet, "/api/v1/devices", nil, 403)
+	request(http.MethodGet, "/api/v1/sessions", nil, 403)
 	sessionData := request(http.MethodGet, "/api/v1/session", nil, 200)
 	var pairedSession struct{ Device struct{ ID string } }
 	if json.Unmarshal(sessionData, &pairedSession) != nil || pairedSession.Device.ID == "" {

@@ -1,3 +1,4 @@
+export type SessionSummary = { deviceId: string; createdAt: number; verifiedAt: number; lastSeen: number; expiresAt: number; current: boolean }
 export type Device = { id: string; name: string; capabilities: string[]; createdAt: number; revokedAt: number | null }
 export type Session = { device: Device; verifiedAt: number; expiresAt: number }
 export class APIError extends Error {

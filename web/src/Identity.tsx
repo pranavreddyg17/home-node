@@ -2,7 +2,7 @@ import { approvedAction } from './approvals'
 import { useEffect, useState, type ReactNode } from 'react'
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import type { PublicKeyCredentialCreationOptionsJSON, PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser'
-import { api, APIError, message, type Device, type Session } from './api'
+import { api, APIError, message, type Device, type Session, type SessionSummary } from './api'
 
 async function signIn() {
   const options = await api<{ publicKey: PublicKeyCredentialRequestOptionsJSON }>('/auth/login/begin', {})
@@ -70,16 +70,18 @@ export function IdentityBoundary({ children }: { children: (session: Session, lo
 
 export function Devices({ session, verify }: { session: Session; verify: () => Promise<void> }) {
   const [devices, setDevices] = useState<Device[]>([])
+  const [sessions, setSessions] = useState<SessionSummary[] | null>(null)
   const [name, setName] = useState('My phone')
   const [caps, setCaps] = useState(['files', 'jobs', 'ai'])
   const [invitation, setInvitation] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const refresh = () => api<Device[]>('/devices').then(setDevices)
+  const refresh = () => Promise.all([api<Device[]>('/devices'), api<SessionSummary[]>('/sessions')]).then(([devices, sessions]) => { setDevices(devices); setSessions(sessions) })
   useEffect(() => { void refresh().catch(e => setError(message(e))) }, [])
-  const run = async (work: () => Promise<void>) => { setBusy(true); setError(''); try { await work(); await refresh() } catch (e) { setError(message(e)) } finally { setBusy(false) } }
+  const run = async (work: () => Promise<void> = async () => {}) => { setBusy(true); setError(''); try { await work(); await refresh() } catch (e) { setError(message(e)) } finally { setBusy(false) } }
   if (!session.device.capabilities.includes('admin')) return <section className="panel"><h2>Device administration</h2><p>This device does not have administrative access.</p></section>
-  return <div className="stack">{error && <p role="alert" className="form-error">{error}</p>}<section className="panel"><div className="section-heading"><h2>Your devices</h2><button disabled={busy} onClick={() => void run(verify)}>Verify passkey again</button></div><p>Passkeys may sync through your password manager. A listed device represents its registered passkey and sessions, rather than verified physical hardware.</p>{devices.map(d => <div className="device-row" key={d.id}><div><strong>{d.name} {d.id === session.device.id && '(this session)'}</strong><p>{d.capabilities.join(' · ')} · {d.revokedAt ? 'Revoked' : 'Authorized'}</p></div>{!d.revokedAt && <button className="danger" disabled={busy} onClick={() => { if (window.confirm(`Revoke ${d.name}? Its passkey and sessions will lose access.`)) void run(async () => { await approvedAction(`/devices/${d.id}/revoke`, {}) }) }}>Revoke</button>}</div>)}</section>
+  return <div className="stack">{error && <p role="alert" className="form-error">{error}</p>}<section className="panel" aria-label="Registered devices"><div className="section-heading"><h2>Your devices</h2><button disabled={busy} onClick={() => void run(verify)}>Verify passkey again</button></div><p>Passkeys may sync through your password manager. A listed device represents its registered passkey and sessions, rather than verified physical hardware.</p>{devices.map(d => <div className="device-row" key={d.id}><div><strong>{d.name} {d.id === session.device.id && '(this session)'}</strong><p>{d.capabilities.join(' · ')} · {d.revokedAt ? 'Revoked' : 'Authorized'}</p></div>{!d.revokedAt && <button className="danger" disabled={busy} onClick={() => { if (window.confirm(`Revoke ${d.name}? Its passkey and sessions will lose access.`)) void run(async () => { await approvedAction(`/devices/${d.id}/revoke`, {}) }) }}>Revoke</button>}</div>)}</section>
+    <section className="panel" aria-label="Active sessions"><div className="section-heading"><h2>Active sessions</h2><button disabled={busy} onClick={() => void run()}>Refresh sessions</button></div><p>Sessions expire after 30 minutes without requests or 12 hours after sign-in. Last activity includes background requests. Revoking a device ends all its sessions.</p>{sessions === null ? <p role="status">Reading active sessions…</p> : sessions.length === 0 ? <p>No active sessions were reported.</p> : sessions.map((active, index) => <article className="device-row" key={`${active.deviceId}:${active.createdAt}:${index}`}><div><strong>{devices.find(device => device.id === active.deviceId)?.name ?? 'Registered device'}{active.current && ' · This browser session'}</strong><p>Signed in {new Date(active.createdAt * 1000).toLocaleString()} · Last verified {new Date(active.verifiedAt * 1000).toLocaleString()}</p><p>Last activity {new Date(active.lastSeen * 1000).toLocaleString()} · Expires {new Date(active.expiresAt * 1000).toLocaleString()}</p></div></article>)}</section>
     <section className="panel"><h2>Pair another device</h2><form onSubmit={e => { e.preventDefault(); void run(async () => { const result = await approvedAction<{ code: string }>('/devices/pair', { name, capabilities: caps }); setInvitation(result.code) }) }}><label>Device name<input required maxLength={80} value={name} onChange={e => setName(e.target.value)} /></label><fieldset><legend>Access granted</legend>{['files', 'jobs', 'ai', 'admin'].map(cap => <label className="check-field" key={cap}><input type="checkbox" checked={caps.includes(cap)} onChange={e => setCaps(e.target.checked ? [...caps, cap] : caps.filter(c => c !== cap))} />{cap === 'admin' ? 'Administration (pair and revoke devices)' : cap.toUpperCase()}</label>)}</fieldset><button className="primary" disabled={busy || !caps.length}>Create invitation</button></form>{invitation && <div className="invitation"><p>Open this server on your other device, choose “Pair a device”, and enter this code within five minutes.</p><code>{invitation}</code><button onClick={() => setInvitation('')}>Hide code</button></div>}</section>
   </div>
 }
