@@ -61,3 +61,7 @@ package in the disposable runner and records its version and file metadata.
 The ownership check, certificate validation and sandbox requirement remain
 unchanged. Neither this earlier failure nor the upload-ID regression is a
 successful browser qualification.
+
+Browser failure diagnostics emit only fixed workflow phases, known network error
+codes and coarse API status categories. Raw Playwright call logs are excluded
+because action failures can contain enrollment input values.
