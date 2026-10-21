@@ -87,3 +87,8 @@ ancestor chain. Preparation now protects that directory entry as well and runs
 both complete program-admission checks before starting the HTTPS fixture.
 Ancestor refusals include only the path and ownership/mode metadata. The guard
 continues to reject writable program hierarchies.
+
+Browser preparation and its read-only program hierarchy preflight now run
+before guest image construction and VM execution. Admission failures therefore
+stop before the expensive workload stages; the full native UI and workload
+checks remain required afterward.

@@ -65,6 +65,42 @@ jobs:
         with:
           go-version: '1.26.10'
           cache: true
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        if: matrix.profile == 'files'
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build frontend for authenticated native Files workflow
+        if: matrix.profile == 'files'
+        working-directory: web
+        run: npm ci && npm run build
+      - name: Prepare sandboxed native browser qualification
+        if: matrix.profile == 'files' && inputs.files_browser
+        run: |
+          test "${{ inputs.files_https_bytes || '32768' }}" = 32768
+          go test -race ./cmd/homenode-gateway -run '^TestNativeBrowserInvitationPipeBoundary$' -count=1
+          sudo apt-get update && sudo apt-get install -y libnss3-tools
+          test -x /opt/google/chrome/chrome
+          test "$(readlink -f /opt/google/chrome/chrome)" = /opt/google/chrome/chrome
+          test -f /opt/google/chrome/chrome-sandbox
+          test ! -L /opt/google/chrome/chrome-sandbox
+          browser_fixture_digest=$(sha256sum /opt/google/chrome/chrome | cut -d ' ' -f1)
+          stat -c 'Browser ancestor %n uid=%u gid=%g mode=%a' /opt /opt/google /opt/google/chrome
+          sudo chown root:root /opt
+          sudo chmod go-w /opt
+          sudo chown --no-dereference -R root:root /opt/google/chrome
+          sudo chmod -R go-w /opt/google/chrome
+          sudo chown root:root /opt/google
+          sudo chmod go-w /opt/google
+          sudo chmod 4755 /opt/google/chrome/chrome-sandbox
+          test "$(sha256sum /opt/google/chrome/chrome | cut -d ' ' -f1)" = "$browser_fixture_digest"
+          sha256sum /opt/google/chrome/chrome
+          stat -c 'Browser runtime uid=%u gid=%g mode=%a' /opt/google/chrome/chrome
+          stat -c 'Browser sandbox helper uid=%u gid=%g mode=%a' /opt/google/chrome/chrome-sandbox
+          /opt/google/chrome/chrome --version
+          sudo install -D -m 0755 "$(command -v node)" /usr/lib/homenode-fixtures/node
+          PYTHONPATH=packaging/inspection /usr/bin/python3 -B -c 'from browser_fixture import protected_program; protected_program("/usr/lib/homenode-fixtures/node"); protected_program("/opt/google/chrome/chrome"); print("PASS protected Node and Chrome runtime hierarchy")'
       - name: Install disposable image build dependencies
         run: sudo apt-get update && sudo apt-get install -y systemd-container dosfstools mtools grub-pc-bin e2fsprogs python3-pefile squashfs-tools qemu-system-x86 ffmpeg libvirt-clients libvirt-daemon-system
       - name: Stage and authenticate local development adapter overlay
@@ -122,42 +158,6 @@ jobs:
           else
             echo 'Development Files manager NOT VERIFIED: no native KVM device.'
           fi
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
-        if: matrix.profile == 'files'
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - name: Build frontend for authenticated native Files workflow
-        if: matrix.profile == 'files'
-        working-directory: web
-        run: npm ci && npm run build
-      - name: Prepare sandboxed native browser qualification
-        if: matrix.profile == 'files' && inputs.files_browser
-        run: |
-          test "${{ inputs.files_https_bytes || '32768' }}" = 32768
-          go test -race ./cmd/homenode-gateway -run '^TestNativeBrowserInvitationPipeBoundary$' -count=1
-          sudo apt-get update && sudo apt-get install -y libnss3-tools
-          test -x /opt/google/chrome/chrome
-          test "$(readlink -f /opt/google/chrome/chrome)" = /opt/google/chrome/chrome
-          test -f /opt/google/chrome/chrome-sandbox
-          test ! -L /opt/google/chrome/chrome-sandbox
-          browser_fixture_digest=$(sha256sum /opt/google/chrome/chrome | cut -d ' ' -f1)
-          stat -c 'Browser ancestor %n uid=%u gid=%g mode=%a' /opt /opt/google /opt/google/chrome
-          sudo chown root:root /opt
-          sudo chmod go-w /opt
-          sudo chown --no-dereference -R root:root /opt/google/chrome
-          sudo chmod -R go-w /opt/google/chrome
-          sudo chown root:root /opt/google
-          sudo chmod go-w /opt/google
-          sudo chmod 4755 /opt/google/chrome/chrome-sandbox
-          test "$(sha256sum /opt/google/chrome/chrome | cut -d ' ' -f1)" = "$browser_fixture_digest"
-          sha256sum /opt/google/chrome/chrome
-          stat -c 'Browser runtime uid=%u gid=%g mode=%a' /opt/google/chrome/chrome
-          stat -c 'Browser sandbox helper uid=%u gid=%g mode=%a' /opt/google/chrome/chrome-sandbox
-          /opt/google/chrome/chrome --version
-          sudo install -D -m 0755 "$(command -v node)" /usr/lib/homenode-fixtures/node
-          PYTHONPATH=packaging/inspection /usr/bin/python3 -B -c 'from browser_fixture import protected_program; protected_program("/usr/lib/homenode-fixtures/node"); protected_program("/opt/google/chrome/chrome"); print("PASS protected Node and Chrome runtime hierarchy")'
       - name: Exercise authenticated HTTPS Files through actual native services
         if: matrix.profile == 'files'
         env:
