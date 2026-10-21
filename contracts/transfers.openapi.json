@@ -449,7 +449,9 @@
         ],
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{20,64}$",
+            "description": "Opaque resource identifier. Do not assume hexadecimal or UUID formatting."
           },
           "name": {
             "type": "string",
@@ -506,7 +508,9 @@
         ],
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{20,64}$",
+            "description": "Opaque resource identifier. Do not assume hexadecimal or UUID formatting."
           },
           "name": {
             "type": "string",

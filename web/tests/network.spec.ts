@@ -367,9 +367,9 @@ test('a stalled finalization times out and retry reconciles the retained object'
 })
 
 
-for (const invalid of ['identity', 'offset', 'checksum'] as const) {
-  test(`an inconsistent upload ${invalid} acknowledgement preserves the transfer for observed retry`, async ({ page }) => {
-    const bytes = Buffer.from('saved upload'), hash = createHash('sha256').update(bytes).digest('hex'), id = 'f'.repeat(32)
+for (const invalid of ['identity', 'offset', 'checksum', 'valid'] as const) {
+  test(invalid === 'valid' ? 'a native-format transfer ID completes a verified upload' : `an inconsistent upload ${invalid} acknowledgement preserves the transfer for observed retry`, async ({ page }) => {
+    const bytes = Buffer.from('saved upload'), hash = createHash('sha256').update(bytes).digest('hex'), id = 'SZ74BSO3RX4LFT5SFEP4H53W3T'
     const transfer = { id, name: 'saved-upload.txt', size: bytes.length, sha256: hash, offset: 0, state: 'uploading', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
     const marker = `homenode-transfer:${hash}:${bytes.length}`
     let creations = 0, chunks = 0, finalizations = 0
@@ -404,6 +404,14 @@ for (const invalid of ['identity', 'offset', 'checksum'] as const) {
     await page.locator('nav').getByRole('button', { name: 'Files', exact: false }).click()
     const file = { name: transfer.name, mimeType: 'text/plain', buffer: bytes }
     await page.getByLabel('Upload a file').setInputFiles(file)
+    if (invalid === 'valid') {
+      await expect(page.locator('.transfer-progress')).toContainText('Upload verified')
+      expect(creations).toBe(1)
+      expect(chunks).toBe(1)
+      expect(finalizations).toBe(1)
+      expect(await page.evaluate(key => localStorage.getItem(key), marker)).toBeNull()
+      return
+    }
     await expect(page.getByRole('alert')).toContainText('The upload acknowledgement does not match this file.')
     expect(finalizations).toBe(0)
     expect(chunks).toBe(1)

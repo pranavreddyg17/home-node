@@ -44,3 +44,11 @@ checks and Linux compilation alone do not qualify browser execution. Actual
 Tailscale enrollment/ACLs, public certificate renewal, physical/mobile passkeys,
 one-GiB browser transfers, all application workflows and release gates remain
 unverified until their own demonstrations pass.
+
+Review of the native capacity log exposed an integration defect before browser
+execution: `state.Random()` uses `crypto/rand.Text()`, while the upload UI's
+creation guard accepted only 32 lowercase hex characters. The guard now matches
+the guest protocol's bounded resource alphabet instead of assuming UUID/hex
+encoding. Browser transport regressions cover a native-format ID completing a
+verified upload, plus inconsistent acknowledgement recovery with that format.
+The native browser run remains necessary to establish the complete joined path.

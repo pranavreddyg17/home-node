@@ -196,7 +196,7 @@ export function Files() {
         }
         localStorage.setItem(intentKey, JSON.stringify(intent))
         transfer = await uploadRequest<Transfer>('/transfers', { name: intent.name, size: file.size, sha256: hash }, { 'Idempotency-Key': intent.key })
-        if (!transfer || !/^[a-f0-9]{32}$/.test(transfer.id) || transfer.size !== file.size || transfer.sha256 !== hash || !Number.isSafeInteger(transfer.offset) || transfer.offset < 0 || transfer.offset > file.size) {
+        if (!transfer || !/^[A-Za-z0-9_-]{20,64}$/.test(transfer.id) || transfer.size !== file.size || transfer.sha256 !== hash || !Number.isSafeInteger(transfer.offset) || transfer.offset < 0 || transfer.offset > file.size) {
           throw new Error('The upload response does not match this file. Refresh Files before retrying.')
         }
         localStorage.setItem(storageKey, transfer.id)
