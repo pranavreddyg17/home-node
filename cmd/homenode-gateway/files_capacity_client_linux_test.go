@@ -124,6 +124,42 @@ func nativeHTTPSFilesCapacityRecovery(t *testing.T, owner *http.Client, origin s
 	if after.StoredBytes != before.StoredBytes || after.ChargedBytes != before.ChargedBytes || after.UploadReservedBytes != before.UploadReservedBytes || after.ReservedFileEntries != before.ReservedFileEntries {
 		t.Fatal("capacity cleanup did not restore the exact logical reservation")
 	}
+	// Logical accounting and reads alone do not prove that the guest remains
+	// writable after exhaustion. Exercise a fresh object through every phase.
+	small := pattern[:32<<10]
+	smallHash := sha256.Sum256(small)
+	smallDigest := hex.EncodeToString(smallHash[:])
+	var fresh workload.Transfer
+	if json.Unmarshal(request("POST", "/api/v1/transfers", map[string]any{"name": "post-capacity-write.bin", "size": len(small), "sha256": smallDigest}, 201), &fresh) != nil || fresh.ID == "" || fresh.ID == id || fresh.Offset != 0 {
+		t.Fatal("post-capacity upload admission failed")
+	}
+	freshID := fresh.ID
+	if json.Unmarshal(request("POST", "/api/v1/transfers/"+freshID+"/chunks", map[string]any{"offset": 0, "data": small, "sha256": smallDigest}, 200), &fresh) != nil || fresh.ID != freshID || fresh.Size != int64(len(small)) || fresh.SHA256 != smallDigest || fresh.Offset != int64(len(small)) || fresh.State != "uploading" {
+		t.Fatal("post-capacity write failed acknowledgement")
+	}
+	var saved workload.File
+	if json.Unmarshal(request("POST", "/api/v1/transfers/"+freshID+"/finalize", map[string]any{}, 200), &saved) != nil || saved.ID != freshID || saved.Size != int64(len(small)) || saved.SHA256 != smallDigest || saved.TrashUntil != nil {
+		t.Fatal("post-capacity finalization failed")
+	}
+	download, err := http.NewRequest("GET", origin+"/api/v1/files/"+freshID+"/download", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	download.Header.Set("Origin", origin)
+	response, err := client.Do(download)
+	if err != nil {
+		t.Fatal("post-capacity download unavailable", err)
+	}
+	actual, readErr := io.ReadAll(io.LimitReader(response.Body, int64(len(small))+1))
+	response.Body.Close()
+	if readErr != nil || response.StatusCode != 200 || response.TLS == nil || len(response.TLS.VerifiedChains) == 0 || response.ContentLength != int64(len(small)) || response.Header.Get("Cache-Control") != "no-store" || !bytes.Equal(actual, small) {
+		t.Fatal("post-capacity saved object failed verified download", response.StatusCode, readErr)
+	}
+	writable := storage()
+	if writable.StoredBytes != before.StoredBytes+int64(len(small)) || writable.ChargedBytes != before.ChargedBytes+int64(len(small)) || writable.UploadReservedBytes != before.UploadReservedBytes || writable.ReservedFileEntries != before.ReservedFileEntries || writable.StoredFileEntries != before.StoredFileEntries+1 {
+		t.Fatal("post-capacity publication charged inconsistent bytes or entries")
+	}
+	t.Log("native HTTPS post-capacity write, finalization and download passed")
 	t.Logf("native HTTPS capacity recovery transfer=%s refused at offset=%d and cancelled with reservation restored; retained owner integrity follows", id, transfer.Offset)
 	files.VerifyOwner()
 	t.Log("native HTTPS retained owner file integrity after capacity cleanup passed")

@@ -273,3 +273,9 @@ removed, no runtime admission limit is weakened, and no forced guest shutdown
 is introduced. This extension has compiled for Linux but native execution is
 pending; logical quota pressure, physical/network reliability and complete
 release qualification must not be inferred from compilation.
+
+The capacity extension also requires a fresh 32 KiB object to upload, finalize
+and download after acknowledged cleanup, with exact stored/reserved byte and
+file-entry accounting. This distinguishes writable recovery from a guest that
+can only read old content after exhaustion. The case then rechecks the original
+one-GiB object's integrity. This additional assertion is pending native execution.
