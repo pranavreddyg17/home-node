@@ -3,6 +3,8 @@ package supervisor
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -141,18 +143,30 @@ func (m *Manager) shutdown(ctx context.Context, r Request) (Instance, error) {
 	}
 	shutdownCtx, cancel := context.WithDeadline(ctx, time.Unix(deadline, 0))
 	defer cancel()
+	started := time.Now()
+	// Root diagnostics never include IDs, paths or arbitrary backend errors.
+	unavailable := func(phase string, cause error) {
+		slog.Warn("cooperative shutdown unavailable", "phase", phase,
+			"deadlineExceeded", errors.Is(cause, context.DeadlineExceeded) || errors.Is(shutdownCtx.Err(), context.DeadlineExceeded),
+			"cancelled", errors.Is(cause, context.Canceled) || errors.Is(shutdownCtx.Err(), context.Canceled),
+			"elapsedMs", time.Since(started).Milliseconds())
+	}
 	if err = backend.Shutdown(shutdownCtx, r.InstanceID); err != nil {
+		unavailable("backend", err)
 		return Instance{}, err
 	}
 	running, err := m.Backend.Running(shutdownCtx, r.InstanceID)
 	if err != nil {
+		unavailable("exit-observation", err)
 		return Instance{}, err
 	}
 	if running {
+		unavailable("still-running", ErrPolicy)
 		return Instance{}, ErrPolicy
 	}
 	err = m.completeShutdown(shutdownCtx, r.InstanceID, r.OperationID, r.Revision, deadline)
 	if err != nil {
+		unavailable("completion", err)
 		return Instance{}, err
 	}
 	return m.Inspect(ctx, r.InstanceID)

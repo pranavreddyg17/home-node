@@ -226,3 +226,12 @@ This observes verification admission, not the exact instant hashing starts;
 already admitted guest work may finish. Native execution of this added case is
 pending. Only bounded selected non-secret size, truncation and owner-integrity
 result lines are emitted from the captured client for future evidence retention.
+
+Large run 39459032258 at `2283f16` failed before the new verification-admission
+revocation case: the initial cooperative stop returned `requires-action` before
+`NATIVE-RESTART-READY`. Storage and the uncertain ownership fence were retained.
+This is not evidence for or against the later publication assertion. Main's
+bounded workflow passed at the same revision. Root shutdown failure logs now
+report only elapsed time and deadline/cancellation classification, without raw
+backend errors, object IDs, paths or payloads; the next large run must diagnose
+or pass this earlier stop before qualifying the added case.
