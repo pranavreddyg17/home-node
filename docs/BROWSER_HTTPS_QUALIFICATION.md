@@ -56,8 +56,15 @@ The native browser run remains necessary to establish the complete joined path.
 The first native run, 39550613386 at `936e96c`, failed before enrollment because
 the cached Chrome executable did not meet the root-owned/non-writable program
 admission check. The Node fixture binary passed; the Chrome check refused.
-The browser preparation step now reinstalls the configured signed Chrome
-package in the disposable runner and records its version and file metadata.
+The first repair attempted to reinstall Chrome from the configured package
+repository. Run 39551737347 at `f5d74b9` showed that apt could not download
+that cached version and left its root-owned executable at mode 777.
+The preparation step now locks down the cached program bundle in the disposable
+runner, requires a canonical main executable and ordinary sandbox-helper file,
+restores the helper's root-owned 4755 mode, and verifies unchanged executable
+bytes across the permission changes. It records SHA-256, version and metadata.
+The cached image browser is a qualification input, not a newly verified release
+package or a claim about the newest maintained browser version.
 The ownership check, certificate validation and sandbox requirement remain
 unchanged. Neither this earlier failure nor the upload-ID regression is a
 successful browser qualification.

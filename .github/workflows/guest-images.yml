@@ -137,10 +137,21 @@ jobs:
         run: |
           test "${{ inputs.files_https_bytes || '32768' }}" = 32768
           go test -race ./cmd/homenode-gateway -run '^TestNativeBrowserInvitationPipeBoundary$' -count=1
-          sudo apt-get update
-          sudo apt-get install --reinstall -y google-chrome-stable libnss3-tools
+          sudo apt-get update && sudo apt-get install -y libnss3-tools
           test -x /opt/google/chrome/chrome
+          test "$(readlink -f /opt/google/chrome/chrome)" = /opt/google/chrome/chrome
+          test -f /opt/google/chrome/chrome-sandbox
+          test ! -L /opt/google/chrome/chrome-sandbox
+          browser_fixture_digest=$(sha256sum /opt/google/chrome/chrome | cut -d ' ' -f1)
+          sudo chown --no-dereference -R root:root /opt/google/chrome
+          sudo chmod -R go-w /opt/google/chrome
+          sudo chown root:root /opt/google
+          sudo chmod go-w /opt/google
+          sudo chmod 4755 /opt/google/chrome/chrome-sandbox
+          test "$(sha256sum /opt/google/chrome/chrome | cut -d ' ' -f1)" = "$browser_fixture_digest"
+          sha256sum /opt/google/chrome/chrome
           stat -c 'Browser runtime uid=%u gid=%g mode=%a' /opt/google/chrome/chrome
+          stat -c 'Browser sandbox helper uid=%u gid=%g mode=%a' /opt/google/chrome/chrome-sandbox
           /opt/google/chrome/chrome --version
           sudo install -D -m 0755 "$(command -v node)" /usr/lib/homenode-fixtures/node
       - name: Exercise authenticated HTTPS Files through actual native services

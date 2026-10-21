@@ -15,7 +15,7 @@ def protected_program(value):
         raise RuntimeError("browser runtime program must be canonical")
     metadata = path.lstat()
     if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != 0 or metadata.st_mode & 0o022:
-        raise RuntimeError("browser runtime program is unprotected")
+        raise RuntimeError(f"browser runtime program is unprotected: uid={metadata.st_uid} gid={metadata.st_gid} mode={stat.S_IMODE(metadata.st_mode):o} regular={stat.S_ISREG(metadata.st_mode)}")
     for parent in path.parents:
         metadata = parent.lstat()
         if not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != 0 or metadata.st_mode & 0o022:
