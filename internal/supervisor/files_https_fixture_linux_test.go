@@ -152,6 +152,13 @@ func nativeFilesHTTPSWorkflow(t *testing.T, ctx context.Context, directory, scri
 		"--controller-source-service", filepath.Join(root, "packaging/systemd/homenode-control.service"),
 		"--supervisor-socket", socket, "--transfer-socket", transferSocket, "--files-bytes", payloadBytes, "--restart-socket", restartSocket)
 	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C", "HOMENODE_GATEWAY_STARTUP_FIXTURE=1", "HOMENODE_FILES_HTTPS_INTEGRATION=1", "HOMENODE_FILES_MANAGER_INTEGRATION=1", "HOMENODE_KVM_DOMAIN_INTEGRATION=1"}
+	if os.Getenv("HOMENODE_FILES_BROWSER_INTEGRATION") == "1" {
+		if payloadBytes != "32768" {
+			t.Fatal("initial native browser qualification requires the bounded Files profile")
+		}
+		command.Args = append(command.Args, "--browser-node", filepath.Join(binaries, "node"), "--browser-executable", "/opt/google/chrome/chrome", "--browser-client", filepath.Join(root, "web/native/files-https.mjs"), "--browser-modules", filepath.Join(root, "web/node_modules"))
+		command.Env = append(command.Env, "HOMENODE_FILES_BROWSER_INTEGRATION=1")
+	}
 	command.WaitDelay = 5 * time.Second
 	var output boundedOutput
 	command.Stdout, command.Stderr = &output, &output

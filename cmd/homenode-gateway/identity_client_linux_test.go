@@ -388,4 +388,21 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 	}
 	request(http.MethodPost, "/api/v1/auth/login/finish", sign(replacementOptions.PublicKey.Challenge, origin, 5, 1), 200)
 	request(http.MethodGet, "/api/v1/devices", nil, 200)
+	if descriptor := os.Getenv("HOMENODE_NATIVE_HTTPS_BROWSER_FD"); descriptor != "" {
+		if files == nil {
+			t.Fatal("native browser handoff requires the actual Files backend")
+		}
+		body := map[string]any{"name": "Native browser device", "capabilities": []string{"files", "admin"}}
+		actionApproval = approve("/api/v1/devices/pair", body)
+		encoded := request(http.MethodPost, "/api/v1/devices/pair", body, 201)
+		actionApproval = ""
+		var browserInvitation struct{ Code string }
+		if json.Unmarshal(encoded, &browserInvitation) != nil || browserInvitation.Code == "" {
+			t.Fatal("browser pairing did not return an invitation")
+		}
+		if err := writeNativeBrowserInvitation(descriptor, browserInvitation.Code); err != nil {
+			t.Fatal("private browser invitation handoff failed", err)
+		}
+		t.Log("native HTTPS browser invitation handed to private pipe")
+	}
 }

@@ -69,10 +69,17 @@ def main():
     parser.add_argument("--transfer-socket")
     parser.add_argument("--files-bytes", choices=("32768", "1073741824"), default="32768")
     parser.add_argument("--restart-socket")
+    parser.add_argument("--browser-node")
+    parser.add_argument("--browser-executable")
+    parser.add_argument("--browser-client")
+    parser.add_argument("--browser-modules")
     args = parser.parse_args()
     if sys.platform != "linux" or os.geteuid() != 0 or os.environ.get("HOMENODE_GATEWAY_STARTUP_FIXTURE") != "1":
         raise SystemExit("requires explicitly opted-in root on disposable Linux")
     attached = bool(args.supervisor_socket or args.transfer_socket)
+    browser_enabled = any((args.browser_node, args.browser_executable, args.browser_client, args.browser_modules))
+    if browser_enabled and (not attached or args.files_bytes != "32768" or not all((args.browser_node, args.browser_executable, args.browser_client, args.browser_modules)) or os.environ.get("HOMENODE_FILES_BROWSER_INTEGRATION") != "1"):
+        raise RuntimeError("browser qualification requires explicit attached Files opt-in and complete runtime paths")
     if not attached and args.files_bytes != "32768":
         raise RuntimeError("large Files qualification requires native workload sockets")
     if args.restart_socket:
@@ -136,6 +143,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="homenode-gateway-startup-") as temporary:
         directory = pathlib.Path(temporary)
         directory.chmod(0o755)
+        browser_descriptors = []
         try:
             for name in names:
                 if attached and name in ("homenode", "homenode-runtime"):
@@ -350,16 +358,29 @@ print('FRONTEND-HTTPS-PASS',flush=True)
             setup_output = run("setpriv", f"--reuid={controller_uid}", f"--regid={controller_gid}", f"--groups={bridge_gid}", str(directory / "controller"), "setup-code", "--state-dir", str(directory / "state"))
             setup_code = setup_output.strip().splitlines()[-1]
             identity_input = json.dumps({"RootPEM": str(directory / "ca.crt"), "SetupCode": setup_code})
+            browser_fixture = None
+            browser_descriptors = []
+            browser_write = None
+            if browser_enabled:
+                from browser_fixture import NativeBrowser
+                browser_fixture = NativeBrowser(directory, args.browser_node, args.browser_executable, args.browser_client, args.browser_modules, users, groups)
+                browser_read, browser_write = os.pipe()
+                browser_descriptors.extend((browser_read, browser_write))
             identity_environment = ["HOMENODE_NATIVE_HTTPS_IDENTITY=1"]
             if attached:
                 identity_environment.append("HOMENODE_NATIVE_HTTPS_FILES=1")
                 identity_environment.append("HOMENODE_NATIVE_HTTPS_FILES_BYTES=" + args.files_bytes)
             if args.restart_socket:
                 identity_environment.append("HOMENODE_NATIVE_HTTPS_RESTART=1")
+            if browser_fixture is not None:
+                identity_environment.append("HOMENODE_NATIVE_HTTPS_BROWSER_FD=" + str(browser_write))
             identity_timeout = 1200 if attached and args.files_bytes == "1073741824" else 240 if attached else 40
             identity_command = ["ip", "netns", "exec", peer_namespace, "env", *identity_environment, str(directory / "identity-client.test"), "-test.run=^TestNativeHTTPSIdentityClient$", f"-test.timeout={identity_timeout}s", "-test.v"]
             if args.restart_socket:
-                identity_process = subprocess.Popen(identity_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                identity_process = subprocess.Popen(identity_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, pass_fds=(browser_write,) if browser_fixture is not None else ())
+                if browser_fixture is not None:
+                    os.close(browser_write)
+                    browser_descriptors.remove(browser_write)
                 children.append(identity_process)
                 identity_process.stdin.write(identity_input + "\n")
                 identity_process.stdin.flush()
@@ -401,10 +422,21 @@ print('FRONTEND-HTTPS-PASS',flush=True)
                 identity_output, _ = identity_process.communicate(timeout=identity_timeout + 5)
                 identity_client = subprocess.CompletedProcess(identity_command, identity_process.returncode, identity_output, "")
             else:
-                identity_client = subprocess.run(identity_command, input=identity_input, capture_output=True, text=True, timeout=identity_timeout + 5)
+                identity_client = subprocess.run(identity_command, input=identity_input, capture_output=True, text=True, timeout=identity_timeout + 5, pass_fds=(browser_write,) if browser_fixture is not None else ())
+                if browser_fixture is not None:
+                    os.close(browser_write)
+                    browser_descriptors.remove(browser_write)
             if identity_client.returncode != 0 or "--- PASS: TestNativeHTTPSIdentityClient" not in identity_client.stdout:
                 raise RuntimeError(f"native HTTPS identity protocol failed: {identity_client.stdout}{identity_client.stderr}")
             print("PASS actual HTTPS identity: registration, signed approval, limited pairing, reused-TLS revocation and replacement recovery", flush=True)
+            if browser_fixture is not None:
+                if "native HTTPS browser invitation handed to private pipe" not in identity_client.stdout:
+                    raise RuntimeError("identity client omitted private browser enrollment handoff")
+                invitation = os.read(browser_read, 4097)
+                os.close(browser_read)
+                browser_descriptors.remove(browser_read)
+                browser_fixture.run(invitation, peer_namespace, units)
+
             if attached:
                 if args.restart_socket:
                     if "native HTTPS all-service restart retained session and original transfer creation identity" not in identity_client.stdout:
@@ -557,6 +589,8 @@ print('CARRIER-REFUSED-WITH-CONTROLS',flush=True)
                 raise RuntimeError(f"foreign kernel peer refusal was not reached: {denied.stdout}{denied.stderr}")
             print("PASS actual gateway refuses foreign controller kernel peer despite expected socket ownership", flush=True)
         finally:
+            for descriptor in browser_descriptors:
+                os.close(descriptor)
             for unit in units:
                 subprocess.run(["systemctl", "stop", unit], capture_output=True, timeout=15)
             for child in children:

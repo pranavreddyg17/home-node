@@ -19,6 +19,7 @@ on:
       - 'cmd/homenode-gateway/**'
       - 'web/**'
       - 'packaging/inspection/gateway_startup_fixture.py'
+      - 'packaging/inspection/browser_fixture.py'
       - 'packaging/inspection/private_ingress_fixture.py'
       - 'packaging/systemd/homenode-control.service'
       - 'packaging/systemd/homenode-gateway.service'
@@ -41,6 +42,10 @@ on:
         type: choice
         default: '32768'
         options: ['32768', '1073741824']
+      files_browser:
+        description: Qualify the actual browser UI with the bounded Files payload
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -127,10 +132,19 @@ jobs:
         if: matrix.profile == 'files'
         working-directory: web
         run: npm ci && npm run build
+      - name: Prepare sandboxed native browser qualification
+        if: matrix.profile == 'files' && inputs.files_browser
+        run: |
+          test "${{ inputs.files_https_bytes || '32768' }}" = 32768
+          go test -race ./cmd/homenode-gateway -run '^TestNativeBrowserInvitationPipeBoundary$' -count=1
+          test -x /opt/google/chrome/chrome
+          sudo apt-get update && sudo apt-get install -y libnss3-tools
+          sudo install -D -m 0755 "$(command -v node)" /usr/lib/homenode-fixtures/node
       - name: Exercise authenticated HTTPS Files through actual native services
         if: matrix.profile == 'files'
         env:
           HOMENODE_FILES_HTTPS_BYTES: ${{ inputs.files_https_bytes || '32768' }}
+          HOMENODE_FILES_BROWSER_INTEGRATION: ${{ inputs.files_browser && '1' || '0' }}
         run: |
           if test -c /dev/kvm; then
             go build -o "$RUNNER_TEMP/homenode" ./cmd/homenode
@@ -139,7 +153,7 @@ jobs:
             sudo install -D -m 0755 "$RUNNER_TEMP/homenode-gateway" /usr/lib/homenode-fixtures/homenode-gateway
             go test -c -o "$RUNNER_TEMP/https-identity.test" ./cmd/homenode-gateway
             sudo install -D -m 0755 "$RUNNER_TEMP/https-identity.test" /usr/lib/homenode-fixtures/https-identity.test
-            sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 HOMENODE_FILES_MANAGER_INTEGRATION=1 HOMENODE_FILES_HTTPS_INTEGRATION=1 HOMENODE_FILES_HTTPS_BYTES="$HOMENODE_FILES_HTTPS_BYTES" python3 -B packaging/systemd/reserved_manager_fixture.py "$(command -v go)" "$RUNNER_TEMP/assembly/files/artifacts/homenode-development-files.raw" "$RUNNER_TEMP/assembly/files/artifacts/development-build.json"
+            sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 HOMENODE_FILES_MANAGER_INTEGRATION=1 HOMENODE_FILES_HTTPS_INTEGRATION=1 HOMENODE_FILES_HTTPS_BYTES="$HOMENODE_FILES_HTTPS_BYTES" HOMENODE_FILES_BROWSER_INTEGRATION="$HOMENODE_FILES_BROWSER_INTEGRATION" python3 -B packaging/systemd/reserved_manager_fixture.py "$(command -v go)" "$RUNNER_TEMP/assembly/files/artifacts/homenode-development-files.raw" "$RUNNER_TEMP/assembly/files/artifacts/development-build.json"
           else
             echo 'Authenticated native HTTPS Files NOT VERIFIED: no native KVM device.'
           fi

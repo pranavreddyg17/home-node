@@ -279,3 +279,9 @@ and download after acknowledged cleanup, with exact stored/reserved byte and
 file-entry accounting. This distinguishes writable recovery from a guest that
 can only read old content after exhaustion. The case then rechecks the original
 one-GiB object's integrity. This additional assertion is pending native execution.
+
+A separate bounded [browser qualification path](BROWSER_HTTPS_QUALIFICATION.md)
+now runs the actual UI through private HTTPS and the native Files backend,
+using an isolated account, real certificate validation and a virtual passkey.
+Its implementation is pending native execution and does not close browser,
+mobile, one-GiB UI or physical-network gates from compilation alone.
