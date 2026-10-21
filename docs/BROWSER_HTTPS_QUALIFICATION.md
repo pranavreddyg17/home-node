@@ -52,3 +52,12 @@ the guest protocol's bounded resource alphabet instead of assuming UUID/hex
 encoding. Browser transport regressions cover a native-format ID completing a
 verified upload, plus inconsistent acknowledgement recovery with that format.
 The native browser run remains necessary to establish the complete joined path.
+
+The first native run, 39550613386 at `936e96c`, failed before enrollment because
+the cached Chrome executable did not meet the root-owned/non-writable program
+admission check. The Node fixture binary passed; the Chrome check refused.
+The browser preparation step now reinstalls the configured signed Chrome
+package in the disposable runner and records its version and file metadata.
+The ownership check, certificate validation and sandbox requirement remain
+unchanged. Neither this earlier failure nor the upload-ID regression is a
+successful browser qualification.

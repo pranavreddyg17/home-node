@@ -137,8 +137,11 @@ jobs:
         run: |
           test "${{ inputs.files_https_bytes || '32768' }}" = 32768
           go test -race ./cmd/homenode-gateway -run '^TestNativeBrowserInvitationPipeBoundary$' -count=1
+          sudo apt-get update
+          sudo apt-get install --reinstall -y google-chrome-stable libnss3-tools
           test -x /opt/google/chrome/chrome
-          sudo apt-get update && sudo apt-get install -y libnss3-tools
+          stat -c 'Browser runtime uid=%u gid=%g mode=%a' /opt/google/chrome/chrome
+          /opt/google/chrome/chrome --version
           sudo install -D -m 0755 "$(command -v node)" /usr/lib/homenode-fixtures/node
       - name: Exercise authenticated HTTPS Files through actual native services
         if: matrix.profile == 'files'
