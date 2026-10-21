@@ -1,0 +1,762 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "HomeNode resumable transfer API",
+    "version": "0.1.0",
+    "description": "Implemented upload/progress/publication/cancellation slice only. Saved-file browsing/actions/download/ZIP, app lifecycle and other APIs remain outside this document. Production requires trusted HTTPS and Secure HttpOnly SameSite=Strict __Host-homenode cookies with files capability; development uses homenode-dev on localhost. All responses are no-store. GET requests need no Origin header when absent; supplied Origin and browser fetch metadata remain subject to same-origin policy. Routes that decode JSON require one UTF-8 object, reject unknown and recursive duplicate/case-equivalent members, and bound depth to 32 and members to 128 per object. Their ordinary wire body limit is 64 KiB, except chunks at 512 KiB. Session/device authority and transfer ownership remain separate checks. This contract does not qualify physical networks, installed services or release publisher trust."
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "security": [
+    {
+      "FilesSession": []
+    }
+  ],
+  "paths": {
+    "/transfers": {
+      "post": {
+        "operationId": "createTransfer",
+        "description": "Reserve upload intent for this device. The Files app must be running for new admission. A 24-hour expiry, 1 GiB object bound, 12 GiB logical quota and charged file-entry limit apply. At most 16 unfinished transfers are admitted globally. Optional idempotency keys bind decoded name, size and whole-file SHA-256; replay returns the same transfer and its current state before new admission, including terminal states. Changed intent under the same key conflicts. A lost response must be reconciled with the same key, never a fresh automatic request.",
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match the configured trusted HTTPS origin."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            },
+            "description": "Device-scoped durable creation identity. First-party clients retain it before sending the creation request."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transfer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/PolicyDenied"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/OperationConflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "507": {
+            "$ref": "#/components/responses/CapacityUnavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTransfer"
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listPendingTransfers",
+        "description": "Return this device's uploading, verifying and cancelling transfers, oldest first, limited to 16. Terminal records are omitted, not treated as deleted data.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "maxItems": 16,
+                  "items": {
+                    "$ref": "#/components/schemas/Transfer"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/PolicyDenied"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/OperationConflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "507": {
+            "$ref": "#/components/responses/CapacityUnavailable"
+          }
+        }
+      }
+    },
+    "/transfers/{id}": {
+      "get": {
+        "operationId": "getTransfer",
+        "description": "Read the durable offset and lifecycle of this device's transfer. Use after an unacknowledged chunk or finalization; terminal identity is retained for reconciliation.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Transfer identity from creation or a device-scoped progress read."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transfer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/PolicyDenied"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/OperationConflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "507": {
+            "$ref": "#/components/responses/CapacityUnavailable"
+          }
+        }
+      }
+    },
+    "/transfers/{id}/chunks": {
+      "post": {
+        "operationId": "uploadTransferChunk",
+        "description": "Send 1 through 262144 decoded bytes at a nonnegative offset no greater than the recorded offset, with this chunk's SHA-256. Exact acknowledged/unacknowledged replay is verified by the guest; conflicting bytes, gaps, excess length or non-uploading state fail. Live Files authority is rechecked after body decoding. A 200 response retains transfer ID, whole-object size/hash and uploading state; its acknowledged offset is at least the end of this chunk and at most the object size. Concurrent valid progress can move it farther. A missing or inconsistent reply must trigger a progress read before retry, without replacing the creation identity. Decoded JSON is bounded to 512 KiB on the wire.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Transfer identity from creation or a device-scoped progress read."
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match the configured trusted HTTPS origin."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transfer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/PolicyDenied"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/OperationConflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "507": {
+            "$ref": "#/components/responses/CapacityUnavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Chunk"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/transfers/{id}/finalize": {
+      "post": {
+        "operationId": "finalizeTransfer",
+        "description": "Verify the whole object and atomically publish file metadata. Requires the complete acknowledged offset and an unexpired uploading/verifying transfer; ready replay returns the existing file. This endpoint does not decode a request body; first-party clients conventionally send {}. Origin is still required. Current session, device, epoch, expiry/idle bounds and Files capability are checked within verification-admission and publication transactions. Withdrawn authority can deny publication even if admitted guest work finishes; verified bytes, verifying journal state and reservation remain available for authorized reconciliation. Whole-object transfer calls have an 85-second budget within the public request path; this is not a latency guarantee. Do not automatically retry an unobserved mutation.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Transfer identity from creation or a device-scoped progress read."
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match the configured trusted HTTPS origin."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/File"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/PolicyDenied"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/OperationConflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "507": {
+            "$ref": "#/components/responses/CapacityUnavailable"
+          }
+        }
+      }
+    },
+    "/transfers/{id}/cancel": {
+      "post": {
+        "operationId": "cancelTransfer",
+        "description": "Persist cancellation for this device's unfinished upload and return its journal record. HTTP 202 acknowledges intent, not guest erasure. The transfer remains charged while cancelling; poll progress until cleanup establishes cancelled/expired state. Ready files cannot be cancelled through this endpoint. Repeated cancellation preserves identity. Live Files authority is rechecked after decoding the empty object.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Transfer identity from creation or a device-scoped progress read."
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match the configured trusted HTTPS origin."
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transfer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/PolicyDenied"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/OperationConflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "507": {
+            "$ref": "#/components/responses/CapacityUnavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "FilesSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-homenode",
+        "description": "Current authenticated session with files capability; knowing a transfer ID does not authorize another device."
+      }
+    },
+    "schemas": {
+      "Transfer": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "size",
+          "sha256",
+          "offset",
+          "state",
+          "expiresAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Non-whitespace name, at most 200 UTF-8 bytes, with no NUL, CR, LF, slash or backslash. Character count alone does not establish the byte bound.",
+            "x-max-utf8-bytes": 200
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 1073741824
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "Lowercase hexadecimal SHA-256."
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 1073741824
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "uploading",
+              "verifying",
+              "ready",
+              "cancelling",
+              "cancelled",
+              "expired"
+            ]
+          },
+          "expiresAt": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Absolute upload expiry in Unix seconds; terminal metadata can remain after expiry."
+          }
+        }
+      },
+      "File": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "size",
+          "sha256",
+          "createdAt",
+          "trashUntil"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Non-whitespace name, at most 200 UTF-8 bytes, with no NUL, CR, LF, slash or backslash. Character count alone does not establish the byte bound.",
+            "x-max-utf8-bytes": 200
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 1073741824
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "Lowercase hexadecimal SHA-256."
+          },
+          "createdAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "trashUntil": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Unix seconds, or null when not in Trash."
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "CreateTransfer": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "sha256"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Non-whitespace name, at most 200 UTF-8 bytes, with no NUL, CR, LF, slash or backslash. Character count alone does not establish the byte bound.",
+            "x-max-utf8-bytes": 200
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 1073741824,
+            "default": 0
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "Lowercase hexadecimal SHA-256."
+          }
+        },
+        "description": "Send all three fields explicitly. Missing size decodes to zero in the implemented controller."
+      },
+      "Chunk": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data",
+          "sha256"
+        ],
+        "properties": {
+          "offset": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 1073741824,
+            "default": 0
+          },
+          "data": {
+            "type": "string",
+            "contentEncoding": "base64",
+            "description": "Standard base64 encoding of 1 through 262144 bytes.",
+            "x-decoded-min-bytes": 1,
+            "x-decoded-max-bytes": 262144
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "Lowercase hexadecimal SHA-256."
+          }
+        },
+        "description": "Send offset explicitly; an omitted offset decodes to zero. This SHA-256 covers only the decoded chunk; Transfer.sha256 covers the whole object."
+      },
+      "Empty": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Malformed or ambiguous decoded JSON, invalid metadata, offset or checksum.",
+        "headers": {
+          "Cache-Control": {
+            "schema": {
+              "type": "string",
+              "const": "no-store"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "AuthenticationRequired": {
+        "description": "No current authenticated session.",
+        "headers": {
+          "Cache-Control": {
+            "schema": {
+              "type": "string",
+              "const": "no-store"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "PolicyDenied": {
+        "description": "Origin/metadata policy refusal or Files capability absent.",
+        "headers": {
+          "Cache-Control": {
+            "schema": {
+              "type": "string",
+              "const": "no-store"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Transfer unavailable to this device.",
+        "headers": {
+          "Cache-Control": {
+            "schema": {
+              "type": "string",
+              "const": "no-store"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "OperationConflict": {
+        "description": "State conflict, host maintenance, changed creation intent, guest verification failure or uncertain runtime effect. Observe status before retrying.",
+        "headers": {
+          "Cache-Control": {
+            "schema": {
+              "type": "string",
+              "const": "no-store"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "Required workload or controller request capacity is unavailable.",
+        "headers": {
+          "Cache-Control": {
+            "schema": {
+              "type": "string",
+              "const": "no-store"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "CapacityUnavailable": {
+        "description": "Storage quota, file-entry capacity or guest storage is exhausted.",
+        "headers": {
+          "Cache-Control": {
+            "schema": {
+              "type": "string",
+              "const": "no-store"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}

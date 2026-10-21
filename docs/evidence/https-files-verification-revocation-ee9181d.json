@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "ee9181d5970d99a27850ffbc8665d79d18619888",
+  "workflowRun": 39545959951,
+  "job": 119044070448,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/39545959951",
+  "conclusion": "success",
+  "logSHA256": "f0b079f7ed5b116727076bc53042afcb4e191a3b4a596be99c46b032439ecf55",
+  "payloadBytes": 1073741824,
+  "verificationAdmittedRevocationBytes": 134217728,
+  "revokedDownloadBytesReceived": 262144,
+  "developmentImage": {
+    "schema": 1,
+    "profile": "files",
+    "sourceRevision": "ee9181d5970d99a27850ffbc8665d79d18619888",
+    "overlaySHA256": "904e1e0178173b2c8d57a36910b2da854e90eeee7a2b5d45d0164a2734adce0d",
+    "mkosiRevision": "52448a27f6f869c108352ed82fcfb9be633703fb",
+    "bytes": 2686472192,
+    "sha256": "f404d0df9478e23c1f05d8963147a207000da3c414adb8dbbfeae6d0ac26027c",
+    "releaseQualified": false,
+    "bootValidated": false
+  },
+  "nativeBoot": {
+    "schema": 1,
+    "profile": "files",
+    "imageSHA256": "f404d0df9478e23c1f05d8963147a207000da3c414adb8dbbfeae6d0ac26027c",
+    "accelerator": "kvm",
+    "tcgBootAndObjectRoundTrip": false,
+    "kvmBootAndObjectRoundTrip": true,
+    "objectTransfer": {
+      "bytes": 1048579,
+      "chunkBytes": 262144,
+      "acknowledgedChunkReplay": true
+    },
+    "videoPresets": [],
+    "videoCancellation": null,
+    "aiInference": null,
+    "shutdown": {
+      "guestInitiated": true,
+      "reason": "guest-shutdown",
+      "qemuExitCode": 0,
+      "readOnlyFilesystemCheck": true
+    },
+    "releaseQualified": false
+  },
+  "observedAssertions": [
+    "PASS actual HTTPS verification-admitted revocation: explicit 401, retained full offset and no file publication",
+    "native HTTPS Files payload bytes=1073741824; payload windows <=256 KiB; ZIP disk budget=1074790400",
+    "native HTTPS paired-device revocation truncated active guest download after 262144 of 1073741824 bytes; owner integrity verification follows",
+    "native HTTPS retained owner file integrity after paired revocation passed",
+    "PASS all four actual services restarted with retained enrolled session, original request identity and subsequent guest data verification",
+    "--- PASS: TestNativeReservedFilesManagerLaunch (452.93s)"
+  ],
+  "limitations": [
+    "The journal read proves retained full offset/verifying state, revoked device and zero published files for the second upload. It does not independently download that unpublished guest object or directly measure its quota charge.",
+    "The observable synchronization point is committed verification admission, not the exact instant guest hashing starts. Already admitted guest work may finish; no byte rollback is claimed.",
+    "Download truncation completed within its test context; no exact propagation latency or physical-device performance claim is made.",
+    "This source uses Go 1.26.9 and Vite 8.3.1, preceding their security patch updates and the shorter observation-request context. New compiler/frontend artifacts require separate qualification.",
+    "Fixture-signed images, controlled daemon status, transient units and protocol clients do not qualify signed installation, actual Tailscale/mobile devices, browser-to-native workloads, physical network loss, canonical service confinement or full volume retirement."
+  ]
+}

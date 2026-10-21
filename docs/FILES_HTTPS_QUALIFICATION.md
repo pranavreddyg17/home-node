@@ -6,7 +6,10 @@ and all four service restarts. See [retained component evidence](evidence/https-
 Installed-product, browser/mobile and physical-network requirements remain unverified.
 The same large workflow passed with the transactional publication guard included
 at `0af3c86` in run 39458701846; see [retained evidence](evidence/https-files-large-0af3c86.json).
-This precedes the added native verification-admission withdrawal case.
+The later verification-admission withdrawal case also passed at `ee9181d` in
+run 39545959951, with [separate retained evidence](evidence/https-files-verification-revocation-ee9181d.json).
+These sources precede the compiler/frontend security patches and do not
+qualify rebuilt release artifacts.
 The standalone HTTPS identity/frontend fixture still runs without a
 privileged workload backend. Its authenticated Files listing is metadata-only;
 it is not an upload, guest execution or retained-data demonstration.
@@ -148,23 +151,23 @@ zero committed offset, uploading state and a revoked device record. No session,
 app or transfer state is seeded or edited for that inspection. The initial
 controller-admission timing is covered separately by the body-reader regression;
 100 Continue and prefix transmission establish the native gateway body path.
-This case has compiled but remains pending native execution.
+This case subsequently passed natively at `acea852`, as recorded below.
 
-Native partial-upload run 39364512000 is testing `acea852`. Independently, main's
+Native partial-upload run 39364512000 tested `acea852`. Independently, main's
 32 KiB joined test passed at `1b1b4e0`, with the Files body-authority fix included.
 Run 39365139607 now requests `files_https_bytes=1073741824` against that same
 tested main revision. It covers the large transfer and active-download revocation
 extension but predates the partial-upload test; the two runs must not be
-combined into a claim that one source passed every requirement. Both results
-must be inspected before their respective gates can change.
+combined into a claim that one source passed every requirement. Their separate results are recorded below; neither original run combines
+every later assertion at one source.
 
 Partial-upload run 39364512000 passed at `acea852`, including the explicit 401
 and read-only journal check for zero committed offset. The initial 1 GiB run
 39365139607 failed at finalization with HTTP 409 after its chunk loop. It does
 not qualify large transfers. Bounded transfer diagnostics now distinguish
 unavailable/timed-out guest responses from guest refusals without logging object
-IDs, names, contents or raw guest error text; the diagnostic rerun remains
-pending. The session activity-write optimization passed local identity/control
+IDs, names, contents or raw guest error text. The diagnostic rerun failed
+at the 20-second deadline, as recorded below. The session activity-write optimization passed local identity/control
 race suites and native gateway run 39365437176 at `e431532`.
 
 The next fixture revision adds all-four-service restart. After a signed guest
@@ -210,8 +213,9 @@ Denied publication retains the verified guest object, verifying journal state
 and quota reservation. Local regressions withdraw authority after the real guest
 byte store finishes verification, confirm no file metadata is published, and
 prove that a new session for the same device can reconcile once without another
-upload. These are component regressions; native withdrawal during whole-object
-verification remains a separate execution case. All three main workflows passed
+upload. These are component regressions. The later native verification-admission
+case passed at `ee9181d`; it observes admission rather than the exact instant
+guest hashing starts. All three main workflows passed
 at `f293054`: HomeNode checks 39370028910, Gateway security boundary 39370028703,
 and Development guest images 39370028924. This includes the publication
 regressions and bounded native workflow, not native late-verification revocation.
@@ -226,8 +230,9 @@ restarts the guest through signed owner actions, starts finalization and observe
 It requires explicit HTTP 401 and read-only journal inspection showing the full
 retained offset, a revoked device, verifying state and no published file record.
 This observes verification admission, not the exact instant hashing starts;
-already admitted guest work may finish. Native execution of this added case is
-pending. Only bounded selected non-secret size, truncation and owner-integrity
+already admitted guest work may finish. Native execution of this case passed at `ee9181d` in run 39545959951;
+see [retained evidence](evidence/https-files-verification-revocation-ee9181d.json).
+It requires new qualification after subsequent toolchain/frontend patches. Only bounded selected non-secret size, truncation and owner-integrity
 result lines are emitted from the captured client for future evidence retention.
 
 Large run 39459032258 at `2283f16` failed before the new verification-admission
@@ -238,3 +243,18 @@ bounded workflow passed at the same revision. Root shutdown failure logs now
 report only elapsed time and deadline/cancellation classification, without raw
 backend errors, object IDs, paths or payloads; the next large run must diagnose
 or pass this earlier stop before qualifying the added case.
+
+Run 39545959951 completed the large workflow at `ee9181d`: the added
+verification-admission revocation received explicit 401, while a read-only
+journal query confirmed the full 128 MiB offset, verifying state, revoked device
+and zero published file records. The separate 1 GiB active download truncated
+after 262144 bytes, and the original owner's full hash check passed. This run
+also passed all four service restarts. The successful second run does not erase
+the earlier uncertain-stop failure or establish physical-host reliability.
+The committed request-context refinement makes the admission observation itself
+obey its three-second budget; it is separate from this source's native result.
+
+The implemented upload/progress/finalization/cancellation API is documented in
+[the resumable transfer OpenAPI contract](../contracts/transfers.openapi.json).
+Saved-file actions/downloads, app lifecycle and remaining API slices are outside
+that contract, and all full product acceptance gates remain open.
