@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "0af3c86ad25e887a2deb470147221a644853cf82",
+  "workflowRun": 39458701846,
+  "job": 118752214163,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/39458701846",
+  "conclusion": "success",
+  "payloadBytes": 1073741824,
+  "logSHA256": "83b04cadc336bc34da28aca9725c423351aff588ca9f920fe6bd8c0c7cbb3a06",
+  "developmentImage": {
+    "schema": 1,
+    "profile": "files",
+    "sourceRevision": "0af3c86ad25e887a2deb470147221a644853cf82",
+    "overlaySHA256": "5c0d2c44a6a413e5163c275ee1280894e4f5f179b1d4d94e18630a8693ffdeaa",
+    "mkosiRevision": "52448a27f6f869c108352ed82fcfb9be633703fb",
+    "bytes": 2686472192,
+    "sha256": "dd4bcf0d57f5135b54d0758e5dcdac34e2c02b38ada15d27c5d5a7dec0b5b30c",
+    "releaseQualified": false,
+    "bootValidated": false
+  },
+  "nativeBoot": {
+    "schema": 1,
+    "profile": "files",
+    "imageSHA256": "dd4bcf0d57f5135b54d0758e5dcdac34e2c02b38ada15d27c5d5a7dec0b5b30c",
+    "accelerator": "kvm",
+    "tcgBootAndObjectRoundTrip": false,
+    "kvmBootAndObjectRoundTrip": true,
+    "objectTransfer": {
+      "bytes": 1048579,
+      "chunkBytes": 262144,
+      "acknowledgedChunkReplay": true
+    },
+    "videoPresets": [],
+    "videoCancellation": null,
+    "aiInference": null,
+    "shutdown": {
+      "guestInitiated": true,
+      "reason": "guest-shutdown",
+      "qemuExitCode": 0,
+      "readOnlyFilesystemCheck": true
+    },
+    "releaseQualified": false
+  },
+  "observedAssertions": [
+    "PASS all four actual services restarted with retained enrolled session, original request identity and subsequent guest data verification",
+    "PASS actual HTTPS partial-body upload revocation: explicit 401, revoked device and zero committed offset",
+    "PASS actual HTTPS Files through controller, supervisor, transfer and KVM guest: signed lifecycle, upload/download, Range, Trash, ZIP and retained restart",
+    "--- PASS: TestNativeReservedFilesManagerLaunch (448.39s)"
+  ],
+  "requiredChildAssertions": [
+    "native HTTPS Files payload bytes=1073741824",
+    "native HTTPS paired-device revocation truncated active guest download",
+    "native HTTPS retained owner file integrity after paired revocation passed"
+  ],
+  "limitations": [
+    "The Python fixture requires the child assertions before printing its enclosing PASS; individual child lines and exact truncation byte counts/timing are not printed in the retained workflow log.",
+    "Protocol clients and fixture namespace transport do not establish browser/mobile behavior, physical overlay propagation or physical network loss.",
+    "Only controller and gateway run source-confined transient units; canonical installed services, signed publisher trust and release qualification remain unverified.",
+    "This source includes f293054 transactional publication guards but predates the added native verification-admission revocation case. This pass does not prove withdrawal during verification."
+  ]
+}

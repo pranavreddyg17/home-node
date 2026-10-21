@@ -4,6 +4,9 @@ Status: open. The 1 GiB joined HTTPS-to-KVM workflow passed at `3faf952` in
 run 39368428314, including active-download revocation, retained owner integrity
 and all four service restarts. See [retained component evidence](evidence/https-files-large-3faf952.json).
 Installed-product, browser/mobile and physical-network requirements remain unverified.
+The same large workflow passed with the transactional publication guard included
+at `0af3c86` in run 39458701846; see [retained evidence](evidence/https-files-large-0af3c86.json).
+This precedes the added native verification-admission withdrawal case.
 The standalone HTTPS identity/frontend fixture still runs without a
 privileged workload backend. Its authenticated Files listing is metadata-only;
 it is not an upload, guest execution or retained-data demonstration.
