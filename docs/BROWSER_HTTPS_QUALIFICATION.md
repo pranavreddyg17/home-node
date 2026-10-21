@@ -79,3 +79,11 @@ mapping reaches the same native gateway; a generic DNS or connection failure
 cannot satisfy the check. The parent requires the explicit hostname-refusal
 marker as well as the successful UI workflow. Real and effective browser-driver
 UIDs must match and be nonzero. This extension is pending native execution.
+
+Run 39554140444 at `5e5abe6` passed executable admission but refused a writable
+ancestor of Chrome. The Node hierarchy passed; the browser bundle and
+`/opt/google` had already been protected, leaving `/opt` on Chrome's remaining
+ancestor chain. Preparation now protects that directory entry as well and runs
+both complete program-admission checks before starting the HTTPS fixture.
+Ancestor refusals include only the path and ownership/mode metadata. The guard
+continues to reject writable program hierarchies.

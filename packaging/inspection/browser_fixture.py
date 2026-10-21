@@ -19,7 +19,7 @@ def protected_program(value):
     for parent in path.parents:
         metadata = parent.lstat()
         if not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != 0 or metadata.st_mode & 0o022:
-            raise RuntimeError("browser runtime program has an unprotected ancestor")
+            raise RuntimeError(f"browser runtime ancestor is unprotected: path={parent} uid={metadata.st_uid} gid={metadata.st_gid} mode={stat.S_IMODE(metadata.st_mode):o}")
     return str(path)
 
 

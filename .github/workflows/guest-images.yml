@@ -143,6 +143,9 @@ jobs:
           test -f /opt/google/chrome/chrome-sandbox
           test ! -L /opt/google/chrome/chrome-sandbox
           browser_fixture_digest=$(sha256sum /opt/google/chrome/chrome | cut -d ' ' -f1)
+          stat -c 'Browser ancestor %n uid=%u gid=%g mode=%a' /opt /opt/google /opt/google/chrome
+          sudo chown root:root /opt
+          sudo chmod go-w /opt
           sudo chown --no-dereference -R root:root /opt/google/chrome
           sudo chmod -R go-w /opt/google/chrome
           sudo chown root:root /opt/google
@@ -154,6 +157,7 @@ jobs:
           stat -c 'Browser sandbox helper uid=%u gid=%g mode=%a' /opt/google/chrome/chrome-sandbox
           /opt/google/chrome/chrome --version
           sudo install -D -m 0755 "$(command -v node)" /usr/lib/homenode-fixtures/node
+          PYTHONPATH=packaging/inspection /usr/bin/python3 -B -c 'from browser_fixture import protected_program; protected_program("/usr/lib/homenode-fixtures/node"); protected_program("/opt/google/chrome/chrome"); print("PASS protected Node and Chrome runtime hierarchy")'
       - name: Exercise authenticated HTTPS Files through actual native services
         if: matrix.profile == 'files'
         env:
