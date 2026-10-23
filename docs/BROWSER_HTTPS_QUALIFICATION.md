@@ -136,3 +136,20 @@ checks. [Retained evidence](evidence/browser-https-files-3d246c0.json) records
 source, image, browser, log identity and exact markers. This is the bounded
 native browser scenario, not physical-device, 1 GiB browser, signed installed
 release or all-workload acceptance.
+
+An explicit large-browser mode is implemented but not yet qualified. Dispatch
+with `profile=files`, `files_https_bytes=32768`, `files_browser=true` and
+`files_browser_bytes=1073741824`. The protocol setup remains bounded so its
+separate capacity-pressure case does not consume the guest space required by
+the browser transfer. Selecting the large protocol profile with browser mode
+continues to fail explicitly; neither case is silently reduced.
+
+The unprivileged driver writes its generated input into a new private temporary
+directory in 256 KiB pieces, hashes incrementally, and supplies a file path to
+the actual browser upload control. Download verification also streams in bounded
+pieces and checks both metadata length and actual bytes against the expected
+SHA-256. Only generated input is removed during cleanup. The parent requires a
+marker containing the selected byte count. The large fixture has a ten-minute
+browser deadline and corresponding outer process budgets; production deadlines,
+health checks, sandbox, TLS and authority checks are unchanged. A completed
+transfer alone will not prove interruption/resume or physical-network loss.

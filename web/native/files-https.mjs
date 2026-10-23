@@ -1,9 +1,10 @@
 // Disposable Linux qualification client. No dev server or intercepted API.
 import { chromium, expect } from '@playwright/test'
 import { randomBytes, createHash } from 'node:crypto'
-import { realpath, stat } from 'node:fs/promises'
+import { realpath, stat, mkdtemp, open, rm } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
+import { tmpdir } from 'node:os'
 
 const origin = 'https://home.example.ts.net:8787'
 const browserExecutable = process.argv[2]
@@ -22,6 +23,8 @@ for (let parent = dirname(browserExecutable); ; parent = dirname(parent)) {
   if (!directory.isDirectory() || directory.uid !== 0 || (directory.mode & 0o022) !== 0) throw new Error('Browser executable has an unprotected ancestor')
   if (parent === '/') break
 }
+const payloadBytes = Number(process.env.HOMENODE_NATIVE_BROWSER_BYTES ?? '32768')
+if (![32768, 1073741824].includes(payloadBytes)) throw new Error('Unsupported browser payload size')
 // Enrollment material arrives only on an inherited private pipe, never argv,
 // URLs, logs, screenshots, traces or persistent browser storage exports.
 let input = Buffer.alloc(0)
@@ -39,12 +42,13 @@ if (!invitation || typeof invitation !== 'object' || Array.isArray(invitation) |
   throw new Error('Invalid browser enrollment handoff')
 }
 let browser
+let uploadDirectory
 let phase = 'launch'
 const responses = []
 const deadline = setTimeout(() => {
   console.error('Native browser workflow exceeded its whole-run deadline')
   void browser?.close().finally(() => process.exit(1))
-}, 300000)
+}, payloadBytes === 1073741824 ? 600000 : 300000)
 try {
   browser = await chromium.launch({
     executablePath: browserExecutable, chromiumSandbox: true, headless: true, timeout: 30000,
@@ -116,11 +120,23 @@ try {
   await app.getByRole('button', { name: 'Start Files', exact: true }).click()
   await expect(app.getByText('running', { exact: true })).toBeVisible({ timeout: 120000 })
   await page.locator('nav').getByRole('button', { name: 'Files', exact: false }).click()
-  const bytes = randomBytes(32768), name = 'native-browser-upload.bin'
-  const checksum = createHash('sha256').update(bytes).digest('hex')
+  phase = 'prepare-upload'
+  const name = 'native-browser-upload.bin'
+  uploadDirectory = await mkdtemp(join(tmpdir(), 'homenode-browser-upload-'))
+  const uploadPath = join(uploadDirectory, name)
+  const source = await open(uploadPath, 'wx', 0o600)
+  const sourceHash = createHash('sha256'), pattern = randomBytes(256 * 1024)
+  try {
+    for (let offset = 0; offset < payloadBytes; offset += pattern.length) {
+      const chunk = pattern.subarray(0, Math.min(pattern.length, payloadBytes - offset))
+      await source.writeFile(chunk)
+      sourceHash.update(chunk)
+    }
+  } finally { await source.close() }
+  const checksum = sourceHash.digest('hex')
   phase = 'upload'
-  await page.getByLabel('Upload a file', { exact: true }).setInputFiles({ name, mimeType: 'application/octet-stream', buffer: bytes })
-  await expect(page.locator('.transfer-progress')).toContainText('Upload verified', { timeout: 60000 })
+  await page.getByLabel('Upload a file', { exact: true }).setInputFiles(uploadPath)
+  await expect(page.locator('.transfer-progress')).toContainText('Upload verified', { timeout: payloadBytes === 1073741824 ? 360000 : 60000 })
   let row = page.locator('.file-row').filter({ hasText: name })
   await expect(row).toHaveCount(1)
   await row.getByText('Integrity', { exact: true }).click()
@@ -157,7 +173,7 @@ try {
   if (download.suggestedFilename() !== renamedName) throw new Error('Native download did not preserve the renamed filename')
   const path = await download.path()
   const downloadedInfo = await stat(path)
-  if (!downloadedInfo.isFile() || downloadedInfo.size !== bytes.length) throw new Error('Native browser download has an unexpected size')
+  if (!downloadedInfo.isFile() || downloadedInfo.size !== payloadBytes) throw new Error('Native browser download has an unexpected size')
   // Keep verifier memory bounded independently of the selected object size.
   // Check both metadata and the bytes actually read: neither a growing file nor
   // a truncated stream may satisfy the download integrity assertion.
@@ -165,10 +181,10 @@ try {
   let receivedBytes = 0
   for await (const chunk of createReadStream(path, { highWaterMark: 256 * 1024 })) {
     receivedBytes += chunk.length
-    if (receivedBytes > bytes.length) throw new Error('Native browser download exceeded its expected size')
+    if (receivedBytes > payloadBytes) throw new Error('Native browser download exceeded its expected size')
     receivedHash.update(chunk)
   }
-  if (receivedBytes !== bytes.length || receivedHash.digest('hex') !== checksum) {
+  if (receivedBytes !== payloadBytes || receivedHash.digest('hex') !== checksum) {
     throw new Error('Native browser download failed integrity verification')
   }
   await download.delete()
@@ -187,7 +203,7 @@ try {
   await app.getByRole('button', { name: 'Stop app', exact: true }).click()
   await expect(app.getByText('stopped', { exact: true })).toBeVisible({ timeout: 120000 })
   expect(errors).toEqual([])
-  console.log(`PASS native browser HTTPS Files: TLS 1.3, virtual passkey, session inventory, signed start/stop, 32768-byte upload/download, Trash/restore and narrow viewport; browser=${browser.version()}`)
+  console.log(`PASS native browser HTTPS Files: TLS 1.3, virtual passkey, session inventory, signed start/stop, ${payloadBytes}-byte upload/download, Trash/restore and narrow viewport; browser=${browser.version()}`)
   await context.close()
 } catch (error) {
   // Playwright action errors can include input values. Report only fixed phase,
@@ -198,5 +214,6 @@ try {
   process.exitCode = 1
 } finally {
   clearTimeout(deadline)
+  if (uploadDirectory) { try { await rm(uploadDirectory, { recursive: true }) } catch { console.error('Native upload fixture cleanup failed'); process.exitCode = 1 } }
   try { await browser?.close() } catch { console.error('Native browser cleanup failed'); process.exitCode = 1 }
 }

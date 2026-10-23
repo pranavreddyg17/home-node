@@ -24,9 +24,13 @@ def protected_program(value):
 
 
 class NativeBrowser:
-    def __init__(self, directory, node, executable, client, modules, users, groups):
+    def __init__(self, directory, node, executable, client, modules, users, groups, payload_bytes="32768"):
         if sys.platform != "linux" or os.geteuid() != 0 or os.environ.get("HOMENODE_FILES_BROWSER_INTEGRATION") != "1":
             raise RuntimeError("explicit disposable Linux browser staging required")
+        if payload_bytes not in ("32768", "1073741824"):
+            raise RuntimeError("unsupported native browser payload size")
+        self.payload_bytes = payload_bytes
+        self.runtime_seconds = 630 if payload_bytes == "1073741824" else 330
         self.node, self.executable = protected_program(node), protected_program(executable)
         self.name = "homenode-browser-fixture"
         for lookup in (pwd.getpwnam, grp.getgrnam):
@@ -68,9 +72,9 @@ class NativeBrowser:
             raise RuntimeError("private browser invitation handoff missing or oversized")
         unit = f"homenode-browser-fixture-{os.getpid()}.service"
         units.append(unit)
-        command = ["systemd-run", "--quiet", "--pipe", "--wait", "--collect", f"--unit={unit}", "--property=Type=exec", f"--property=User={self.name}", f"--property=Group={self.name}", f"--property=NetworkNamespacePath=/run/netns/{namespace}", "--property=UMask=0077", "--property=KillMode=control-group", "--property=TimeoutStopSec=10s", "--property=RuntimeMaxSec=330s", f"--setenv=HOME={self.home}", f"--setenv=TMPDIR={self.home}/tmp", "--setenv=HOMENODE_NATIVE_HTTPS_BROWSER=1", self.node, str(self.client), self.executable]
-        result = subprocess.run(command, input=invitation, capture_output=True, timeout=335)
-        marker = b"PASS native browser HTTPS Files: TLS 1.3, virtual passkey, session inventory, signed start/stop, 32768-byte upload/download, Trash/restore and narrow viewport; browser="
+        command = ["systemd-run", "--quiet", "--pipe", "--wait", "--collect", f"--unit={unit}", "--property=Type=exec", f"--property=User={self.name}", f"--property=Group={self.name}", f"--property=NetworkNamespacePath=/run/netns/{namespace}", "--property=UMask=0077", "--property=KillMode=control-group", "--property=TimeoutStopSec=10s", f"--property=RuntimeMaxSec={self.runtime_seconds}s", f"--setenv=HOME={self.home}", f"--setenv=TMPDIR={self.home}/tmp", "--setenv=HOMENODE_NATIVE_HTTPS_BROWSER=1", f"--setenv=HOMENODE_NATIVE_BROWSER_BYTES={self.payload_bytes}", self.node, str(self.client), self.executable]
+        result = subprocess.run(command, input=invitation, capture_output=True, timeout=self.runtime_seconds + 5)
+        marker = f"PASS native browser HTTPS Files: TLS 1.3, virtual passkey, session inventory, signed start/stop, {self.payload_bytes}-byte upload/download, Trash/restore and narrow viewport; browser=".encode()
         hostname_refusal = b"PASS native browser refuses certificate hostname mismatch"
         filename_safety = b"PASS native browser filename text rendering and rename identity"
         if result.returncode != 0 or len(result.stdout) + len(result.stderr) > 65536 or marker not in result.stdout or hostname_refusal not in result.stdout or filename_safety not in result.stdout:

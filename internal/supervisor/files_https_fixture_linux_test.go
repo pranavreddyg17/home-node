@@ -162,8 +162,16 @@ func nativeFilesHTTPSWorkflow(t *testing.T, ctx context.Context, directory, scri
 	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C", "HOMENODE_GATEWAY_STARTUP_FIXTURE=1", "HOMENODE_FILES_HTTPS_INTEGRATION=1", "HOMENODE_FILES_MANAGER_INTEGRATION=1", "HOMENODE_KVM_DOMAIN_INTEGRATION=1"}
 	if os.Getenv("HOMENODE_FILES_BROWSER_INTEGRATION") == "1" {
 		if payloadBytes != "32768" {
-			t.Fatal("initial native browser qualification requires the bounded Files profile")
+			t.Fatal("native browser qualification requires the bounded protocol profile")
 		}
+		browserBytes := os.Getenv("HOMENODE_FILES_BROWSER_BYTES")
+		if browserBytes == "" {
+			browserBytes = "32768"
+		}
+		if browserBytes != "32768" && browserBytes != "1073741824" {
+			t.Fatal("unsupported native browser payload size")
+		}
+		command.Args = append(command.Args, "--browser-bytes", browserBytes)
 		command.Args = append(command.Args, "--browser-node", filepath.Join(binaries, "node"), "--browser-executable", "/opt/google/chrome/chrome", "--browser-client", filepath.Join(root, "web/native/files-https.mjs"), "--browser-modules", filepath.Join(root, "web/node_modules"))
 		command.Env = append(command.Env, "HOMENODE_FILES_BROWSER_INTEGRATION=1")
 	}

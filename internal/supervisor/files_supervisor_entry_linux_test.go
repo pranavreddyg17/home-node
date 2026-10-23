@@ -87,12 +87,15 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images,
 	limit := 4 * time.Minute
 	if os.Getenv("HOMENODE_FILES_HTTPS_INTEGRATION") == "1" {
 		limit = 6 * time.Minute
-		if os.Getenv("HOMENODE_FILES_HTTPS_BYTES") == "1073741824" {
+		if os.Getenv("HOMENODE_FILES_HTTPS_BYTES") == "1073741824" || (os.Getenv("HOMENODE_FILES_BROWSER_INTEGRATION") == "1" && os.Getenv("HOMENODE_FILES_BROWSER_BYTES") == "1073741824") {
 			limit = 18 * time.Minute
 		}
 	}
 	if os.Getenv("HOMENODE_FILES_BROWSER_INTEGRATION") == "1" {
 		limit = 10 * time.Minute
+		if os.Getenv("HOMENODE_FILES_BROWSER_BYTES") == "1073741824" {
+			limit = 18 * time.Minute
+		}
 	}
 	childCtx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()

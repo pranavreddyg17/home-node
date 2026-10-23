@@ -52,7 +52,7 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool, managerLaunch .
 		duration = 8 * time.Minute
 		if os.Getenv("HOMENODE_FILES_HTTPS_INTEGRATION") == "1" {
 			duration = 12 * time.Minute
-			if os.Getenv("HOMENODE_FILES_HTTPS_BYTES") == "1073741824" {
+			if os.Getenv("HOMENODE_FILES_HTTPS_BYTES") == "1073741824" || (os.Getenv("HOMENODE_FILES_BROWSER_INTEGRATION") == "1" && os.Getenv("HOMENODE_FILES_BROWSER_BYTES") == "1073741824") {
 				duration = 22 * time.Minute
 			}
 		}

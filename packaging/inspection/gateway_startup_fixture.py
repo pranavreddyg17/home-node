@@ -69,6 +69,7 @@ def main():
     parser.add_argument("--transfer-socket")
     parser.add_argument("--files-bytes", choices=("32768", "1073741824"), default="32768")
     parser.add_argument("--restart-socket")
+    parser.add_argument("--browser-bytes", choices=("32768", "1073741824"), default="32768")
     parser.add_argument("--browser-node")
     parser.add_argument("--browser-executable")
     parser.add_argument("--browser-client")
@@ -363,7 +364,7 @@ print('FRONTEND-HTTPS-PASS',flush=True)
             browser_write = None
             if browser_enabled:
                 from browser_fixture import NativeBrowser
-                browser_fixture = NativeBrowser(directory, args.browser_node, args.browser_executable, args.browser_client, args.browser_modules, users, groups)
+                browser_fixture = NativeBrowser(directory, args.browser_node, args.browser_executable, args.browser_client, args.browser_modules, users, groups, args.browser_bytes)
                 browser_read, browser_write = os.pipe()
                 browser_descriptors.extend((browser_read, browser_write))
             identity_environment = ["HOMENODE_NATIVE_HTTPS_IDENTITY=1"]
