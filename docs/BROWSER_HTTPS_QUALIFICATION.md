@@ -163,3 +163,10 @@ browser transfer-creation request. No API interception or state seeding is used.
 The parent requires a separate resume marker for large mode. This coverage is
 implemented but still awaits native execution; a pause/reload does not prove
 physical network-loss behavior.
+
+Large source generation now refreshes the bounded buffer with random bytes for
+each piece and embeds its byte offset in the first eight bytes. Distinct chunk
+content makes reordered or misaddressed writes visible to the whole-file hash.
+Earlier large runs at `1f36089`/`721f97c` use a repeated random block; any passing
+result at those sources must retain that test-data limitation rather than claim
+arbitrary chunk-order fault detection.

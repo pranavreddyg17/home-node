@@ -1,6 +1,6 @@
 // Disposable Linux qualification client. No dev server or intercepted API.
 import { chromium, expect } from '@playwright/test'
-import { randomBytes, createHash } from 'node:crypto'
+import { randomFillSync, createHash } from 'node:crypto'
 import { realpath, stat, mkdtemp, open, rm } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -125,10 +125,14 @@ try {
   uploadDirectory = await mkdtemp(join(tmpdir(), 'homenode-browser-upload-'))
   const uploadPath = join(uploadDirectory, name)
   const source = await open(uploadPath, 'wx', 0o600)
-  const sourceHash = createHash('sha256'), pattern = randomBytes(256 * 1024)
+  const sourceHash = createHash('sha256'), pattern = Buffer.alloc(256 * 1024)
   try {
     for (let offset = 0; offset < payloadBytes; offset += pattern.length) {
       const chunk = pattern.subarray(0, Math.min(pattern.length, payloadBytes - offset))
+      // Fresh bytes plus an explicit offset distinguish chunks so reordering
+      // cannot hide behind an identical repeated-block test payload.
+      randomFillSync(chunk)
+      chunk.writeBigUInt64LE(BigInt(offset), 0)
       await source.writeFile(chunk)
       sourceHash.update(chunk)
     }
