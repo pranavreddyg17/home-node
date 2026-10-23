@@ -170,3 +170,15 @@ content makes reordered or misaddressed writes visible to the whole-file hash.
 Earlier large runs at `1f36089`/`721f97c` use a repeated random block; any passing
 result at those sources must retain that test-data limitation rather than claim
 arbitrary chunk-order fault detection.
+
+Run [40032297512](https://github.com/pranavreddyg17/home-node/actions/runs/40032297512)
+at `721f97c` passed the one-GiB browser pause/reload/resume and complete Files
+scenario. The joined test took 441.42 seconds; its protocol setup used 32 KiB,
+while the actual browser uploaded and downloaded 1,073,741,824 bytes. All four
+browser markers passed, including same transfer identity/acknowledged progress
+following reload and complete download integrity. [Retained evidence](evidence/browser-large-resume-721f97c.json)
+records exact source/image/log identity, markers and limitations. Its repeated
+block input does not qualify arbitrary chunk-order fault detection. The
+`b595da4` distinct-chunk follow-up is still running. Physical network loss,
+physical/mobile authenticators, signed installation and the remaining complete
+application release gates are unchanged.
