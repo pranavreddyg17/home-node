@@ -153,3 +153,13 @@ marker containing the selected byte count. The large fixture has a ten-minute
 browser deadline and corresponding outer process budgets; production deadlines,
 health checks, sandbox, TLS and authority checks are unchanged. A completed
 transfer alone will not prove interruption/resume or physical-network loss.
+
+The large scenario additionally pauses through the ordinary UI after its first
+successful chunk response, reloads the page, selects the unfinished upload and
+reselects the original file. It observes the real resumed GET response and
+requires unchanged transfer identity/size/hash, a safe retained offset at least
+as large as the acknowledged prefix and below the full size, and exactly one
+browser transfer-creation request. No API interception or state seeding is used.
+The parent requires a separate resume marker for large mode. This coverage is
+implemented but still awaits native execution; a pause/reload does not prove
+physical network-loss behavior.

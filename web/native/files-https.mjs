@@ -135,8 +135,39 @@ try {
   } finally { await source.close() }
   const checksum = sourceHash.digest('hex')
   phase = 'upload'
+  let creationRequests = 0
+  page.on('request', request => {
+    if (request.method() === 'POST' && request.url() === `${origin}/api/v1/transfers`) creationRequests++
+  })
+  const firstChunk = payloadBytes === 1073741824 ? page.waitForResponse(response => {
+    const url = new URL(response.url())
+    return response.request().method() === 'POST' && response.status() === 200 && url.origin === origin &&
+      /^\/api\/v1\/transfers\/[A-Za-z0-9_-]{20,64}\/chunks$/.test(url.pathname)
+  }, { timeout: 120000 }) : null
   await page.getByLabel('Upload a file', { exact: true }).setInputFiles(uploadPath)
+  if (firstChunk) {
+    const acknowledged = await (await firstChunk).json()
+    if (!/^[A-Za-z0-9_-]{20,64}$/.test(acknowledged.id) || acknowledged.size !== payloadBytes || acknowledged.sha256 !== checksum || !Number.isSafeInteger(acknowledged.offset) || acknowledged.offset <= 0 || acknowledged.offset >= payloadBytes) {
+      throw new Error('Initial large upload acknowledgement is inconsistent')
+    }
+    phase = 'pause-upload'
+    await page.getByRole('button', { name: 'Pause upload', exact: true }).click()
+    await expect(page.locator('.transfer-progress')).toContainText('Paused. Select the same file to resume.')
+    phase = 'reload-and-resume-upload'
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.locator('nav').getByRole('button', { name: 'Files', exact: false }).click()
+    const unfinished = page.getByRole('region', { name: 'Unfinished uploads', exact: true })
+    await unfinished.getByRole('button', { name: `Resume ${name}`, exact: true }).click()
+    const resumed = page.waitForResponse(response => response.request().method() === 'GET' && response.status() === 200 && response.url() === `${origin}/api/v1/transfers/${acknowledged.id}`, { timeout: 120000 })
+    await page.getByLabel('Upload a file', { exact: true }).setInputFiles(uploadPath)
+    const retained = await (await resumed).json()
+    if (retained.id !== acknowledged.id || retained.size !== payloadBytes || retained.sha256 !== checksum || !Number.isSafeInteger(retained.offset) || retained.offset < acknowledged.offset || retained.offset >= payloadBytes || retained.state !== 'uploading') {
+      throw new Error('Reload did not retain acknowledged upload identity and offset')
+    }
+  }
   await expect(page.locator('.transfer-progress')).toContainText('Upload verified', { timeout: payloadBytes === 1073741824 ? 360000 : 60000 })
+  if (creationRequests !== 1) throw new Error('Browser upload created more than one transfer')
+  if (firstChunk) console.log('PASS native browser one GiB pause, reload and resume retains transfer identity and acknowledged offset')
   let row = page.locator('.file-row').filter({ hasText: name })
   await expect(row).toHaveCount(1)
   await row.getByText('Integrity', { exact: true }).click()

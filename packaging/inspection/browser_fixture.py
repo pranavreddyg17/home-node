@@ -77,8 +77,11 @@ class NativeBrowser:
         marker = f"PASS native browser HTTPS Files: TLS 1.3, virtual passkey, session inventory, signed start/stop, {self.payload_bytes}-byte upload/download, Trash/restore and narrow viewport; browser=".encode()
         hostname_refusal = b"PASS native browser refuses certificate hostname mismatch"
         filename_safety = b"PASS native browser filename text rendering and rename identity"
+        resume = b"PASS native browser one GiB pause, reload and resume retains transfer identity and acknowledged offset"
+        if self.payload_bytes == "1073741824" and resume not in result.stdout:
+            raise RuntimeError("native large browser workflow omitted acknowledged resume evidence: " + (result.stdout + result.stderr)[-4096:].decode(errors="replace"))
         if result.returncode != 0 or len(result.stdout) + len(result.stderr) > 65536 or marker not in result.stdout or hostname_refusal not in result.stdout or filename_safety not in result.stdout:
             raise RuntimeError("native browser workflow failed: " + (result.stdout + result.stderr)[-4096:].decode(errors="replace"))
         for line in result.stdout.splitlines():
-            if line.startswith(marker) or line in (hostname_refusal, filename_safety):
+            if line.startswith(marker) or line in (hostname_refusal, filename_safety, resume):
                 print(line[:512].decode(), flush=True)
