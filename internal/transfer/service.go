@@ -34,6 +34,7 @@ type Service struct {
 	locks            [16]chan struct{}
 	connections      [16]net.Conn
 	instanceIDs      [16]string
+	abandoned        [16][]string
 }
 
 func New(runtime Inspector, channels string, uid uint32, generation int64) *Service {
@@ -87,8 +88,11 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	channel := filepath.Join(s.Channels, request.InstanceID, "adapter.sock")
 	conn := s.connections[index]
-	if conn != nil && s.instanceIDs[index] != request.InstanceID {
-		_ = conn.Close()
+	if s.instanceIDs[index] != request.InstanceID {
+		if conn != nil {
+			_ = conn.Close()
+		}
+		s.abandoned[index] = nil
 		s.connections[index] = nil
 		conn = nil
 	}
@@ -111,11 +115,23 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "guest identity denied", 503)
 		return
 	}
-	healthy := false
+	healthy, sent := false, false
 	defer func() {
 		if !healthy {
 			_ = conn.Close()
 			s.connections[index] = nil
+			if sent {
+				pending, known := s.abandoned[index], false
+				for _, id := range pending {
+					known = known || id == request.Request.RequestID
+				}
+				if !known {
+					if len(pending) == maxAbandonedResponses {
+						pending = pending[1:]
+					}
+					s.abandoned[index] = append(pending, request.Request.RequestID)
+				}
+			}
 		}
 	}()
 	aborted := make(chan struct{})
@@ -135,12 +151,17 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "transfer cancelled", 503)
 		return
 	}
+	sent = true
 	if err = guestproto.Write(conn, request.Request); err != nil {
 		http.Error(w, "guest write failed", 502)
 		return
 	}
-	var response guestproto.Response
-	if err = guestproto.Read(conn, &response); err != nil || response.Version != 1 || response.RequestID != request.Request.RequestID || len(response.Data) > guestproto.ChunkSize || len(response.Text) > 32<<10 || len(response.Error) > 128 || response.Offset < 0 || response.Size < 0 || response.Size > 512<<30 {
+	response, remaining, discarded, err := readGuestResponse(conn, request.Request.RequestID, s.abandoned[index])
+	s.abandoned[index] = remaining
+	if discarded != 0 {
+		slog.Info("late guest response discarded", "operation", request.Request.Operation, "count", discarded)
+	}
+	if err != nil {
 		var networkError net.Error
 		timedOut := ctx.Err() != nil || errors.As(err, &networkError) && networkError.Timeout()
 		slog.Warn("guest response unavailable", "operation", request.Request.Operation, "readFailed", err != nil, "timedOut", timedOut, "elapsedMs", time.Since(started).Milliseconds())

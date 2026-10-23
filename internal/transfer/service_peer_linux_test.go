@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -315,6 +316,35 @@ func TestTransferCancellationInterruptsGuestRead(t *testing.T) {
 			done <- fmt.Errorf("cancelled guest connection retained: %d %v", n, err)
 			return
 		}
+		_ = peer.Close()
+		next, err := listener.AcceptUnix()
+		if err != nil {
+			done <- err
+			return
+		}
+		defer next.Close()
+		if err := next.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+			done <- err
+			return
+		}
+		var current guestproto.Request
+		if err := guestproto.Read(next, &current); err != nil {
+			done <- err
+			return
+		}
+		if current.RequestID == frame.RequestID {
+			done <- errors.New("cancelled request replayed")
+			return
+		}
+		// Model virtio delivering the cancelled request's queued reply first.
+		if err := guestproto.Write(next, guestproto.Response{Version: 1, RequestID: frame.RequestID, State: "stale"}); err != nil {
+			done <- err
+			return
+		}
+		if err := guestproto.Write(next, guestproto.Response{Version: 1, RequestID: current.RequestID, State: "ready"}); err != nil {
+			done <- err
+			return
+		}
 		done <- nil
 	}()
 	service := New(peerFixtureInspector{supervisor.Instance{ID: id, State: "running", GuestUID: uid}}, root, uid, 1)
@@ -335,6 +365,27 @@ func TestTransferCancellationInterruptsGuestRead(t *testing.T) {
 			connection.Close()
 			t.Fatal("cancelled connection cached")
 		}
+	}
+	defer func() {
+		for _, connection := range service.connections {
+			if connection != nil {
+				_ = connection.Close()
+			}
+		}
+	}()
+	frame.Request.RequestID = state.Random()
+	body, err = json.Marshal(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextCtx, nextCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer nextCancel()
+	request = httptest.NewRequest("POST", "/v1/guest", bytes.NewReader(body)).WithContext(supervisor.PeerContext(nextCtx, controllerPeer))
+	response = httptest.NewRecorder()
+	service.ServeHTTP(response, request)
+	var admitted guestproto.Response
+	if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &admitted) != nil || admitted.RequestID != frame.Request.RequestID || admitted.State != "ready" {
+		t.Fatal("known delayed reply prevented current response", response.Code, admitted)
 	}
 	select {
 	case err := <-done:

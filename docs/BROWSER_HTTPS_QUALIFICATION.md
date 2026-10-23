@@ -182,3 +182,25 @@ block input does not qualify arbitrary chunk-order fault detection. The
 `b595da4` distinct-chunk follow-up is still running. Physical network loss,
 physical/mobile authenticators, signed installation and the remaining complete
 application release gates are unchanged.
+
+The distinct-chunk run 40032408623 at `b595da4` failed after reload/resume. The
+browser did not reach upload completion; transfer diagnostics recorded one
+cancelled upload read followed by a decoded but rejected upload response. That
+log is consistent with a queued late virtio reply, but does not alone prove
+which response field mismatched. It is not successful distinct-chunk evidence.
+
+The transfer service now remembers at most two unacknowledged request IDs per
+instance slot. On a later connection it may discard a complete, structurally
+bounded response only when its ID is one of those remembered IDs. Unknown IDs,
+duplicate stale replies, excessive replies, malformed frames and bounds failures
+still close the connection. A successful response must match the current ID
+exactly. The service does not replay a guest operation; the original deadline,
+peer checks, data checksum and authorization boundary remain in force. Changing
+the instance clears the stale-ID set. Logs contain only operation/count metadata.
+
+Unit tests cover nonce/bounds refusal and missing-current-response behavior. A
+Linux peer test models cancellation, reconnect, one known late reply and a
+current reply through the actual transfer HTTP handler, without replaying the
+cancelled request. The manual native workflow now runs these transfer race tests
+before image building. Actual distinct-chunk browser rerun remains required to
+validate this fix against virtio behavior.

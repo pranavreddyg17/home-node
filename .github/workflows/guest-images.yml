@@ -76,6 +76,9 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - name: Verify transfer response and peer boundaries
+        if: matrix.profile == 'files'
+        run: go test -race ./internal/transfer
       - name: Build frontend for authenticated native Files workflow
         if: matrix.profile == 'files'
         working-directory: web
