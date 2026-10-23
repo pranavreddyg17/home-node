@@ -1,7 +1,8 @@
 // Disposable Linux qualification client. No dev server or intercepted API.
 import { chromium, expect } from '@playwright/test'
 import { randomBytes, createHash } from 'node:crypto'
-import { readFile, realpath, stat } from 'node:fs/promises'
+import { realpath, stat } from 'node:fs/promises'
+import { createReadStream } from 'node:fs'
 import { dirname } from 'node:path'
 
 const origin = 'https://home.example.ts.net:8787'
@@ -157,8 +158,17 @@ try {
   const path = await download.path()
   const downloadedInfo = await stat(path)
   if (!downloadedInfo.isFile() || downloadedInfo.size !== bytes.length) throw new Error('Native browser download has an unexpected size')
-  const received = await readFile(path)
-  if (received.length !== bytes.length || createHash('sha256').update(received).digest('hex') !== checksum) {
+  // Keep verifier memory bounded independently of the selected object size.
+  // Check both metadata and the bytes actually read: neither a growing file nor
+  // a truncated stream may satisfy the download integrity assertion.
+  const receivedHash = createHash('sha256')
+  let receivedBytes = 0
+  for await (const chunk of createReadStream(path, { highWaterMark: 256 * 1024 })) {
+    receivedBytes += chunk.length
+    if (receivedBytes > bytes.length) throw new Error('Native browser download exceeded its expected size')
+    receivedHash.update(chunk)
+  }
+  if (receivedBytes !== bytes.length || receivedHash.digest('hex') !== checksum) {
     throw new Error('Native browser download failed integrity verification')
   }
   await download.delete()
