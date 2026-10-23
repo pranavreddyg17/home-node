@@ -47,7 +47,8 @@ const deadline = setTimeout(() => {
 try {
   browser = await chromium.launch({
     executablePath: browserExecutable, chromiumSandbox: true, headless: true, timeout: 30000,
-    args: ['--host-resolver-rules=MAP home.example.ts.net 100.100.1.2,MAP wrong.example.ts.net 100.100.1.2', '--no-proxy-server'],
+    // CDP command-line inspection requires this explicit automation switch.
+    args: ['--enable-automation', '--host-resolver-rules=MAP home.example.ts.net 100.100.1.2,MAP wrong.example.ts.net 100.100.1.2', '--no-proxy-server'],
   })
   phase = 'launch-policy'
   phase = 'launch-command-inspection'

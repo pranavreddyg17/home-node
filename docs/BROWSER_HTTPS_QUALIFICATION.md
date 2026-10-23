@@ -114,3 +114,13 @@ resource counters before stopping the domain. They do not add a guest protocol
 connection, change health deadlines, retry the failed workflow, or weaken
 sandbox or certificate checks. Counters describe the disposable VM scope and
 HomeNode slice; they do not contain uploaded data or enrollment material.
+
+Run 40028388180 at `cd229bf` passed the direct reserved-manager lifecycle and
+HTTPS identity/restart workflow, then failed at browser command inspection
+before navigation. The bundled Playwright default switches omit
+`--enable-automation`, while Chromium's
+[CDP contract](https://github.com/ChromeDevTools/devtools-protocol/blob/master/pdl/domains/Browser.pdl)
+requires it for `Browser.getBrowserCommandLine`. The fixture now supplies that
+switch explicitly, retaining command-line security inspection and every
+sandbox/TLS refusal. This addresses a confirmed missing prerequisite; native
+execution must still establish whether the workflow completes.
