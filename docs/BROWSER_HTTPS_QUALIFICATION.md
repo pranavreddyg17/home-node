@@ -99,3 +99,18 @@ renamed suggested download filename. A marker-bearing HTML-like name must not
 create a DOM element; file bytes must still match the original upload. This
 extension is pending native execution and is required alongside the TLS refusal
 and successful workflow markers before the parent can report a browser pass.
+
+Run 39555866689 at `91acf78` reached the browser but failed within launch-policy
+inspection/context/authenticator setup, before navigation or enrollment. The
+failure phase is now split into fixed nonsecret subphases to identify the next
+failed operation. Run 39556180426 at `92478b4` instead failed before browser
+launch: the protocol client retained its session and original transfer identity
+across all four service restarts, then Files start failed after three guest
+health response timeouts. Neither result qualifies the browser workflow.
+
+Failed joined workflows now collect the allocated fixture domain's state and
+reason, process credentials, channel metadata, bounded QEMU log and cgroup
+resource counters before stopping the domain. They do not add a guest protocol
+connection, change health deadlines, retry the failed workflow, or weaken
+sandbox or certificate checks. Counters describe the disposable VM scope and
+HomeNode slice; they do not contain uploaded data or enrollment material.

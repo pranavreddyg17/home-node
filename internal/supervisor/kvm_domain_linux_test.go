@@ -689,6 +689,9 @@ func nativeDomainDiagnostics(t *testing.T, domain Domain) {
 			}
 			for depth := 0; depth < 16 && strings.HasPrefix(relative, "/homenode.slice"); depth++ {
 				t.Log("memory bound", relative, strings.TrimSpace(string(read(filepath.Join("/sys/fs/cgroup", relative, "memory.max"), 128))))
+				for _, counter := range []string{"memory.current", "memory.events", "pids.current", "pids.events", "cpu.stat"} {
+					t.Log("runtime counter", relative, counter, strings.TrimSpace(string(read(filepath.Join("/sys/fs/cgroup", relative, counter), 4096))))
+				}
 				if relative == "/homenode.slice" {
 					break
 				}
