@@ -65,7 +65,7 @@ func nativeFilesHTTPSWorkflow(t *testing.T, ctx context.Context, directory, scri
 		}
 		readErr := rows.Err()
 		rows.Close()
-		if readErr != nil || len(ids) > 1 {
+		if readErr != nil || len(ids) > policy.MaxInstances {
 			*safeCleanup = false
 			t.Error("unexpected joined workflow allocations", len(ids), readErr)
 			return

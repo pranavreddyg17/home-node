@@ -27,7 +27,7 @@ import (
 // Qualify the actual executable's signed catalog and reserved-policy startup.
 // The ephemeral fixture signing key is not a release publisher. This does not
 // qualify installed systemd, the controller/gateway or private HTTPS access.
-func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images, script string, image catalog.Image, policy Policy, transferGID int, safeCleanup *bool) {
+func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images, script string, image catalog.Image, policy Policy, transferGID int, safeCleanup *bool, extraImages ...catalog.Image) {
 	t.Helper()
 	binary := "/usr/lib/homenode-fixtures/homenode-supervisor"
 	info, err := os.Lstat(binary)
@@ -55,7 +55,12 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images,
 		}
 	}
 	storage := make(map[string]os.FileInfo)
-	for _, path := range []string{images, filepath.Join(images, image.SHA256+".raw"), filepath.Join(directory, "volumes"), filepath.Join(directory, "channels")} {
+	imageSet := append([]catalog.Image{image}, extraImages...)
+	protectedPaths := []string{images, filepath.Join(directory, "volumes"), filepath.Join(directory, "channels")}
+	for _, entry := range imageSet {
+		protectedPaths = append(protectedPaths, filepath.Join(images, entry.SHA256+".raw"))
+	}
+	for _, path := range protectedPaths {
 		info, err := os.Lstat(path)
 		if err != nil {
 			t.Fatal(err)
@@ -66,7 +71,7 @@ func nativeFilesSupervisorEntry(t *testing.T, ctx context.Context, base, images,
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload, err := json.Marshal(catalog.Manifest{Schema: 1, Version: 1, Expires: time.Now().Add(time.Hour), Images: []catalog.Image{image}})
+	payload, err := json.Marshal(catalog.Manifest{Schema: 1, Version: 1, Expires: time.Now().Add(time.Hour), Images: imageSet})
 	if err != nil {
 		t.Fatal(err)
 	}

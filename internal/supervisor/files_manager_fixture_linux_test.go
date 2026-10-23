@@ -22,12 +22,23 @@ import (
 // Copy through a retained source descriptor into an exclusive fixture-owned file.
 func stageNativeFilesImage(t *testing.T, ctx context.Context, directory string, group uint32) catalog.Image {
 	t.Helper()
-	path := os.Getenv("HOMENODE_FILES_IMAGE")
-	digest := os.Getenv("HOMENODE_FILES_IMAGE_SHA256")
-	size, err := strconv.ParseInt(os.Getenv("HOMENODE_FILES_IMAGE_BYTES"), 10, 64)
+	return stageNativeDevelopmentImage(t, ctx, directory, group, "files")
+}
+
+func stageNativeDevelopmentImage(t *testing.T, ctx context.Context, directory string, group uint32, profile string) catalog.Image {
+	t.Helper()
+	prefix := "HOMENODE_FILES_IMAGE"
+	if profile == "video" && os.Getenv("HOMENODE_VIDEO_HTTPS_INTEGRATION") == "1" {
+		prefix = "HOMENODE_VIDEO_IMAGE"
+	} else if profile != "files" {
+		t.Fatal("explicit supported development image profile required")
+	}
+	path := os.Getenv(prefix)
+	digest := os.Getenv(prefix + "_SHA256")
+	size, err := strconv.ParseInt(os.Getenv(prefix+"_BYTES"), 10, 64)
 	decoded, decodeErr := hex.DecodeString(digest)
 	if ctx.Err() != nil || !filepath.IsAbs(path) || filepath.Clean(path) != path || err != nil || size <= 0 || size > 8<<30 || decodeErr != nil || len(decoded) != sha256.Size || hex.EncodeToString(decoded) != digest {
-		t.Fatal("unqualified development Files input")
+		t.Fatal("unqualified development workload input")
 	}
 	source, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
@@ -36,7 +47,7 @@ func stageNativeFilesImage(t *testing.T, ctx context.Context, directory string, 
 	defer source.Close()
 	before, err := source.Stat()
 	if err != nil || !before.Mode().IsRegular() || before.Size() != size || before.Mode().Perm()&0022 != 0 {
-		t.Fatal("unqualified development Files source", err)
+		t.Fatal("unqualified development workload source", err)
 	}
 	destination, err := os.OpenFile(filepath.Join(directory, digest+".raw"), os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0600)
 	if err != nil {
@@ -45,11 +56,11 @@ func stageNativeFilesImage(t *testing.T, ctx context.Context, directory string, 
 	defer destination.Close()
 	hash := sha256.New()
 	if n, err := io.CopyN(io.MultiWriter(destination, hash), source, size); err != nil || n != size || hex.EncodeToString(hash.Sum(nil)) != digest {
-		t.Fatal("development Files image copy or digest mismatch", err)
+		t.Fatal("development workload image copy or digest mismatch", err)
 	}
 	after, err := source.Stat()
 	if err != nil || !os.SameFile(before, after) || after.Size() != size || after.Mode() != before.Mode() || !after.ModTime().Equal(before.ModTime()) || ctx.Err() != nil {
-		t.Fatal("development Files source changed", err)
+		t.Fatal("development workload source changed", err)
 	}
 	if err := destination.Chown(0, int(group)); err != nil {
 		t.Fatal(err)
@@ -71,7 +82,7 @@ func stageNativeFilesImage(t *testing.T, ctx context.Context, directory string, 
 	if err := parent.Close(); err != nil {
 		t.Fatal(err)
 	}
-	return catalog.Image{ID: "files", SHA256: digest, Bytes: size, Protocol: 1, MemoryMiB: 512, VCPUs: 1, DataBytes: 2 * catalog.GiB, Version: "development", License: "Development fixture; release license inventory unqualified"}
+	return catalog.Image{ID: profile, SHA256: digest, Bytes: size, Protocol: 1, MemoryMiB: 512, VCPUs: 1, DataBytes: 2 * catalog.GiB, Version: "development", License: "Development fixture; release license inventory unqualified"}
 }
 
 func stageNativeFilesClient(t *testing.T, base string) string {
@@ -129,7 +140,7 @@ func roundTripNativeFilesChannel(t *testing.T, ctx context.Context, script, chan
 	// No supplementary KVM group or root privilege is passed to the client.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: transferUID, Gid: uint32(transferGID), Groups: []uint32{}}}
 	output, err := cmd.CombinedOutput()
-	if err != nil || string(output) != "development Files channel round trip passed\n" {
+	if err != nil || string(output) != "development workload channel round trip passed\n" {
 		t.Fatal("native Files client round trip", err, string(output))
 	}
 }

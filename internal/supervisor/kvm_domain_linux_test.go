@@ -562,6 +562,15 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 	}
 	defer store.Close()
 	identity := ReservedGuestPolicy{Version: 1, FirstUID: previous.GuestUID, LastUID: previous.GuestUID, GuestGID: previous.GuestGID}
+	var extraImages []catalog.Image
+	videoWorkflow := os.Getenv("HOMENODE_VIDEO_HTTPS_INTEGRATION") == "1"
+	if videoWorkflow {
+		if !filesImage || os.Getenv("HOMENODE_FILES_HTTPS_INTEGRATION") != "1" || os.Getenv("HOMENODE_FILES_BROWSER_INTEGRATION") != "1" || os.Getenv("HOMENODE_FILES_HTTPS_BYTES") != "32768" {
+			t.Fatal("video workflow requires explicit joined browser and bounded protocol setup")
+		}
+		extraImages = append(extraImages, stageNativeDevelopmentImage(t, ctx, images, previous.GuestGID, "video"))
+		identity.LastUID++
+	}
 	pool, err := QualifyReservedGuestPolicy(ctx, identity, []uint32{controllerUID, transferUID}, []uint32{uint32(backend.TransferGID), uint32(backend.TransferGID)})
 	if err != nil {
 		t.Fatal("native published policy qualification", err)
@@ -570,8 +579,11 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 		GuestUIDPool: &pool, GuestGID: previous.GuestGID,
 		Policy:   Policy{GuestIdentity: &identity, Generation: 1, MemoryMiB: 1024, VCPUs: 1, MaxInstances: 1, DiskReserveBytes: 4 * catalog.GiB, ControllerUID: controllerUID, TransferUID: transferUID},
 		Manifest: catalog.Manifest{Schema: 1, Version: 1, Expires: time.Now().Add(time.Hour), Images: []catalog.Image{image}}}
+	if videoWorkflow {
+		m.Policy.VCPUs, m.Policy.MaxInstances, m.Policy.MemoryMiB = 2, 2, 1536
+	}
 	if filesImage {
-		nativeFilesSupervisorEntry(t, ctx, base, images, clientScript, image, m.Policy, backend.TransferGID, safeCleanup)
+		nativeFilesSupervisorEntry(t, ctx, base, images, clientScript, image, m.Policy, backend.TransferGID, safeCleanup, extraImages...)
 		if os.Getenv("HOMENODE_FILES_HTTPS_INTEGRATION") == "1" {
 			return // The joined workflow owns its fresh controller-allocated instance.
 		}

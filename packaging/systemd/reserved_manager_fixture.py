@@ -10,10 +10,18 @@ import sys
 def main():
     if sys.platform != "linux" or os.geteuid() != 0 or os.environ.get("HOMENODE_KVM_DOMAIN_INTEGRATION") != "1":
         raise RuntimeError("explicit disposable Linux root fixture required")
-    if len(sys.argv) not in (2, 4) or not os.path.isabs(sys.argv[1]):
+    if len(sys.argv) not in (2, 4, 6) or not os.path.isabs(sys.argv[1]):
         raise RuntimeError("absolute Go executable required")
     test = "TestNativeReservedDACManagerLaunch"
-    if len(sys.argv) == 4:
+    video = os.environ.get("HOMENODE_VIDEO_HTTPS_INTEGRATION") == "1"
+    if video != (len(sys.argv) == 6):
+        raise RuntimeError("paired video workflow requires explicit opt-in and both image manifests")
+    if video:
+        if os.environ.get("HOMENODE_FILES_BROWSER_INTEGRATION") != "1" or os.environ.get("HOMENODE_FILES_HTTPS_BYTES") != "32768" or os.environ.get("HOMENODE_FILES_BROWSER_BYTES", "32768") != "32768":
+            raise RuntimeError("video workflow requires bounded protocol and browser setup")
+        prepare_workflow_inputs(*sys.argv[2:])
+        test = "TestNativeReservedFilesManagerLaunch"
+    elif len(sys.argv) == 4:
         prepare_files_input(sys.argv[2], sys.argv[3])
         test = "TestNativeReservedFilesManagerLaunch"
     account_fd = os.open("/etc/.pwd.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
