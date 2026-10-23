@@ -48,3 +48,16 @@ The two-guest fixture budget includes the supervisor's required 512 MiB emulator
 reserve for each guest: two 512 MiB image profiles therefore require 2048 MiB,
 not 1536 MiB. The admission formula is unchanged; the explicit fixture policy
 now supplies the full required budget instead of bypassing capacity checks.
+
+Reserved video retirement now has a read-only provenance snapshot. It joins the
+stopped video record, immutable lease/pool/group identity, volume inode and size,
+channel directory and bounded socket history in one transaction. It rejects
+foreign workloads, active/desired-running state, stale request revisions,
+maintenance, missing records, mismatched identities/inodes and more than 256
+socket records. Errors return no partial receipt. Tests assert that reading a
+snapshot creates no runtime operation and changes no instance state.
+
+This snapshot grants no unlink, ownership-change, restart or UID-release
+authority. The live stopped/process barrier, descriptor-qualified deletion,
+interruption journal and final lease retirement are still required before the
+legacy reserved-resource purge refusal can be replaced.
