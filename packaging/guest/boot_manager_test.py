@@ -52,6 +52,32 @@ class ManagerInputs(unittest.TestCase):
                         fixture.prepare_files_input(str(Path(directory) / "disk.raw"), str(manifest))
                     self.assertNotIn("HOMENODE_FILES_IMAGE", os.environ)
 
+    def test_paired_workload_inputs_publish_only_matching_distinct_images(self):
+        environment = {"HOMENODE_FILES_MANAGER_INTEGRATION": "1", "HOMENODE_FILES_HTTPS_INTEGRATION": "1", "HOMENODE_VIDEO_HTTPS_INTEGRATION": "1"}
+        with tempfile.TemporaryDirectory() as directory:
+            files_manifest, video_manifest = Path(directory) / "files.json", Path(directory) / "video.json"
+            files_manifest.write_text(json.dumps(self.record()))
+            video = self.record() | {"profile": "video", "sha256": "e" * 64, "overlaySHA256": "f" * 64}
+            for change in ({}, {"profile": "files"}, {"sourceRevision": "f" * 40}, {"overlaySHA256": "F" * 64}, {"mkosiRevision": "f" * 40}, {"sha256": "d" * 64}, {"sourceRevision": None}):
+                with self.subTest(change=change), mock.patch.dict(os.environ, environment, clear=True):
+                    video_manifest.write_text(json.dumps(video | change))
+                    arguments = (str(Path(directory) / "files.raw"), str(files_manifest), str(Path(directory) / "video.raw"), str(video_manifest))
+                    if change:
+                        with self.assertRaises(RuntimeError):
+                            fixture.prepare_workflow_inputs(*arguments)
+                        self.assertNotIn("HOMENODE_FILES_IMAGE", os.environ)
+                        self.assertNotIn("HOMENODE_VIDEO_IMAGE", os.environ)
+                    else:
+                        fixture.prepare_workflow_inputs(*arguments)
+                        self.assertEqual(os.environ["HOMENODE_FILES_IMAGE_SHA256"], "d" * 64)
+                        self.assertEqual(os.environ["HOMENODE_VIDEO_IMAGE_SHA256"], "e" * 64)
+            with mock.patch.dict(os.environ, environment, clear=True):
+                del os.environ["HOMENODE_VIDEO_HTTPS_INTEGRATION"]
+                video_manifest.write_text(json.dumps(video))
+                with self.assertRaises(RuntimeError):
+                    fixture.prepare_workflow_inputs(*arguments)
+                self.assertNotIn("HOMENODE_FILES_IMAGE", os.environ)
+
     def test_client_requires_ready_state_before_object_work(self):
         result = {"bytes": 1048579, "chunkBytes": 262144, "acknowledgedChunkReplay": True}
         with mock.patch.object(manager_channel.sys, "platform", "linux"), mock.patch.object(os, "geteuid", return_value=2), mock.patch.dict(os.environ, {"HOMENODE_FILES_MANAGER_INTEGRATION": "1"}), mock.patch.object(manager_channel.sys, "argv", ["fixture", "/tmp/admitted.sock", "Generated_Token_12345678901", "0"]), mock.patch.object(manager_channel.socket, "socket"), mock.patch.object(manager_channel.boot_image, "request", return_value={"state": "foreign"}) as request, mock.patch.object(manager_channel.boot_image, "object_roundtrip", return_value=result) as transfer:

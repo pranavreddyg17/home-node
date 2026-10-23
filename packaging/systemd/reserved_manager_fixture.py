@@ -62,7 +62,12 @@ def main():
 
 
 def prepare_files_input(image, manifest):
-    if os.environ.get("HOMENODE_FILES_MANAGER_INTEGRATION") != "1" or not os.path.isabs(image) or not os.path.isabs(manifest):
+    record = read_development_input(image, manifest, "files")
+    publish_development_input(image, record)
+
+
+def read_development_input(image, manifest, profile):
+    if profile not in ("files", "video") or os.environ.get("HOMENODE_FILES_MANAGER_INTEGRATION") != "1" or (profile == "video" and os.environ.get("HOMENODE_VIDEO_HTTPS_INTEGRATION") != "1") or not os.path.isabs(image) or not os.path.isabs(manifest):
         raise RuntimeError("explicit absolute development Files inputs required")
     fd = os.open(manifest, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     with os.fdopen(fd, "rb") as file:
@@ -81,12 +86,37 @@ def prepare_files_input(image, manifest):
         return result
     record = json.loads(data, object_pairs_hook=unique)
     expected = {"schema", "profile", "sourceRevision", "overlaySHA256", "mkosiRevision", "bytes", "sha256", "releaseQualified", "bootValidated"}
-    if not isinstance(record, dict) or set(record) != expected or type(record["schema"]) is not int or record["schema"] != 1 or record["profile"] != "files" or record["releaseQualified"] is not False or record["bootValidated"] is not False:
+    if not isinstance(record, dict) or set(record) != expected or type(record["schema"]) is not int or record["schema"] != 1 or record["profile"] != profile or record["releaseQualified"] is not False or record["bootValidated"] is not False:
         raise RuntimeError("expected unqualified development Files manifest")
     digest, size = record["sha256"], record["bytes"]
     if not isinstance(digest, str) or len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest) or type(size) is not int or not 0 < size <= 8 << 30:
         raise RuntimeError("invalid development image identity")
-    os.environ.update(HOMENODE_FILES_IMAGE=image, HOMENODE_FILES_IMAGE_SHA256=digest, HOMENODE_FILES_IMAGE_BYTES=str(size))
+    for field, length in (("sourceRevision", 40), ("overlaySHA256", 64), ("mkosiRevision", 40)):
+        value = record[field]
+        if not isinstance(value, str) or len(value) != length or any(char not in "0123456789abcdef" for char in value):
+            raise RuntimeError("invalid development source identity")
+    return record
+
+
+def publish_development_input(image, record):
+    prefix = "HOMENODE_" + record["profile"].upper() + "_IMAGE"
+    os.environ.update({prefix: image, prefix + "_SHA256": record["sha256"], prefix + "_BYTES": str(record["bytes"])})
+
+
+def prepare_workflow_inputs(files_image, files_manifest, video_image, video_manifest):
+    # Validate the complete pair before publishing any identity, and before the
+    # root entry point touches NSS or starts native processes. The supervisor
+    # must independently hash each disk through retained descriptors.
+    if os.environ.get("HOMENODE_FILES_HTTPS_INTEGRATION") != "1":
+        raise RuntimeError("paired workload inputs require explicit HTTPS integration")
+    files = read_development_input(files_image, files_manifest, "files")
+    video = read_development_input(video_image, video_manifest, "video")
+    if files["sourceRevision"] != video["sourceRevision"] or files["mkosiRevision"] != video["mkosiRevision"]:
+        raise RuntimeError("paired workload source identities differ")
+    if files["sha256"] == video["sha256"]:
+        raise RuntimeError("paired workloads require distinct images")
+    publish_development_input(files_image, files)
+    publish_development_input(video_image, video)
 
 
 def qualify_nss(original):
