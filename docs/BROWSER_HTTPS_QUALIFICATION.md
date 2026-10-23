@@ -1,6 +1,6 @@
 # Browser to native Files qualification
 
-Status: implemented fixture, native execution pending. The existing development
+Status: bounded native Files browser workflow passed; full release acceptance remains open. The existing development
 browser tests intercept workload responses and cannot qualify this path.
 
 The manual guest-image workflow can select `profile=files`,
@@ -124,3 +124,15 @@ requires it for `Browser.getBrowserCommandLine`. The fixture now supplies that
 switch explicitly, retaining command-line security inspection and every
 sandbox/TLS refusal. This addresses a confirmed missing prerequisite; native
 execution must still establish whether the workflow completes.
+
+Run [40029663221](https://github.com/pranavreddyg17/home-node/actions/runs/40029663221)
+at `3d246c0` completed successfully. The joined test took 104.78 seconds and
+retained all required browser markers: trusted TLS 1.3, wrong-hostname refusal,
+virtual passkey enrollment, session inventory, signed Files start/stop, verified
+32 KiB upload/download, literal filename rendering, rename identity, Trash/restore
+and narrow viewport. The same run passed actual service identity/confinement,
+protocol identity/recovery, all-four-service restart and partial-body revocation
+checks. [Retained evidence](evidence/browser-https-files-3d246c0.json) records
+source, image, browser, log identity and exact markers. This is the bounded
+native browser scenario, not physical-device, 1 GiB browser, signed installed
+release or all-workload acceptance.

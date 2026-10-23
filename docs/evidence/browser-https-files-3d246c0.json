@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "3d246c0e335c65a5cbe644d83a6232731f4beb31",
+  "workflowRun": 40029663221,
+  "job": 120674486516,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40029663221",
+  "conclusion": "success",
+  "logSHA256": "238851934d2e11ad32d9af58802c4bcd1793d87d1fd98ff01530a6932e2ae8a5",
+  "payloadBytes": 32768,
+  "toolchain": "go1.26.10",
+  "browser": {
+    "version": "155.0.8059.39",
+    "executableSHA256": "9bfb381296dffe75f3419d07b6cc64525105ed117d1453a4ef3b291cb97d2b58",
+    "executableMode": "0755",
+    "sandboxHelperMode": "4755",
+    "rootOwnedProtectedHierarchy": true,
+    "chromiumSandboxRequested": true,
+    "forbiddenSandboxAndCertificateFlagsAbsent": true
+  },
+  "developmentImage": {
+    "schema": 1,
+    "profile": "files",
+    "sourceRevision": "3d246c0e335c65a5cbe644d83a6232731f4beb31",
+    "overlaySHA256": "4b5d24c17599a44eb1306fdd6bfb892d0b155d8e56a2a4bf45e64010d3491102",
+    "mkosiRevision": "52448a27f6f869c108352ed82fcfb9be633703fb",
+    "bytes": 2686472192,
+    "sha256": "6a826713b0d2a421902d268157096e78ec7fe758e93719f453019cd27065ab34",
+    "releaseQualified": false,
+    "bootValidated": false
+  },
+  "nativeBoot": {
+    "schema": 1,
+    "profile": "files",
+    "imageSHA256": "6a826713b0d2a421902d268157096e78ec7fe758e93719f453019cd27065ab34",
+    "accelerator": "kvm",
+    "tcgBootAndObjectRoundTrip": false,
+    "kvmBootAndObjectRoundTrip": true,
+    "objectTransfer": {
+      "bytes": 1048579,
+      "chunkBytes": 262144,
+      "acknowledgedChunkReplay": true
+    },
+    "videoPresets": [],
+    "videoCancellation": null,
+    "aiInference": null,
+    "shutdown": {
+      "guestInitiated": true,
+      "reason": "guest-shutdown",
+      "qemuExitCode": 0,
+      "readOnlyFilesystemCheck": true
+    },
+    "releaseQualified": false
+  },
+  "joinedTestSeconds": 104.78,
+  "observedMarkers": [
+    "PASS actual gateway/controller kernel identities, zero capabilities, no-new-privileges and seccomp observed",
+    "PASS actual TLS 1.3 over kernel TUN through gateway/controller executables: health, unauthenticated Files refusal and foreign Host refusal",
+    "PASS actual TLS refuses untrusted root, wrong certificate hostname and TLS 1.2 over kernel TUN",
+    "PASS built frontend HTML/JS/CSS hashes, CSP, HTTPS and cache policy through actual gateway/controller",
+    "PASS actual HTTPS identity: registration, signed approval, limited pairing, reused-TLS revocation and replacement recovery",
+    "PASS native browser refuses certificate hostname mismatch",
+    "PASS native browser filename text rendering and rename identity",
+    "PASS native browser HTTPS Files: TLS 1.3, virtual passkey, session inventory, signed start/stop, 32768-byte upload/download, Trash/restore and narrow viewport; browser=155.0.8059.39",
+    "PASS all four actual services restarted with retained enrolled session, original request identity and subsequent guest data verification",
+    "PASS actual HTTPS partial-body upload revocation: explicit 401, revoked device and zero committed offset",
+    "PASS actual HTTPS Files through controller, supervisor, transfer and KVM guest: signed lifecycle, upload/download, Range, Trash, ZIP and retained restart"
+  ],
+  "limits": [
+    "Unsigned development image and fixture-signed catalog in disposable transient services, not a signed installed release.",
+    "Controlled kernel TUN and packet relay, not real Tailscale devices or ACL/certificate renewal.",
+    "Virtual passkey authenticator, not physical or mobile user verification.",
+    "Browser upload/download is 32768 bytes, not the separate 1 GiB protocol qualification.",
+    "No AI/video browser, complete backup/restore, update or retirement qualification.",
+    "Absent forbidden launch flags and requested sandbox do not constitute an independent sandbox security audit."
+  ],
+  "releaseQualified": false
+}
