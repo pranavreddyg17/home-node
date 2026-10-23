@@ -72,6 +72,14 @@ func nativeFilesHTTPSWorkflow(t *testing.T, ctx context.Context, directory, scri
 		}
 		backend := LinuxBackend{DataRoot: filepath.Join(directory, "volumes"), TransferGID: gid}
 		for _, id := range ids {
+			if t.Failed() {
+				// Observe the failed guest before cleanup removes its process and
+				// channel. These are disposable fixture domains, never owner VMs.
+				name := "homenode-" + id
+				output, err := nativeFixtureCommand(cleanup, "/usr/bin/virsh", "--connect", "qemu:///system", "domstate", name, "--reason")
+				t.Log("joined failed guest state", output, err)
+				nativeDomainDiagnostics(t, Domain{ID: id, ChannelPath: filepath.Join(directory, "channels", id, "adapter.sock")})
+			}
 			if err := backend.Stop(cleanup, id); err != nil {
 				*safeCleanup = false
 				t.Error("joined workflow guest cleanup", err)

@@ -50,11 +50,14 @@ try {
     args: ['--host-resolver-rules=MAP home.example.ts.net 100.100.1.2,MAP wrong.example.ts.net 100.100.1.2', '--no-proxy-server'],
   })
   phase = 'launch-policy'
+  phase = 'launch-command-inspection'
   const session = await browser.newBrowserCDPSession()
   const { arguments: arguments_ } = await session.send('Browser.getBrowserCommandLine')
   if (arguments_.some(argument => /^(--no-sandbox|--disable-setuid-sandbox|--ignore-certificate-errors(?:-spki-list)?|--allow-insecure-localhost)(=|$)/.test(argument))) {
+    phase = 'launch-forbidden-security-flag'
     throw new Error('Browser qualification cannot disable sandbox or certificate checks')
   }
+  phase = 'browser-context'
   const context = await browser.newContext({ ignoreHTTPSErrors: false, acceptDownloads: true, viewport: { width: 1280, height: 900 } })
   const page = await context.newPage()
   page.setDefaultTimeout(15000)
@@ -68,6 +71,7 @@ try {
     responses.push(`${category}:${response.status()}`)
     if (responses.length > 8) responses.shift()
   })
+  phase = 'virtual-authenticator'
   const authenticator = await context.newCDPSession(page)
   await authenticator.send('WebAuthn.enable')
   await authenticator.send('WebAuthn.addVirtualAuthenticator', { options: {
