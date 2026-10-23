@@ -1,7 +1,7 @@
 # Native HTTPS video workflow qualification
 
-Status: image admission and two-guest catalog/policy staging implemented; public
-job and browser orchestration remain unfinished. No complete native video
+Status: image admission, two-guest catalog/policy staging and initial browser
+job orchestration implemented; combined build/workflow execution is unfinished. No complete native video
 workflow has passed. Existing guest codec tests and controller component tests
 do not qualify the combined path.
 
@@ -20,10 +20,26 @@ catalog and protected-storage inventory. Files-only cases retain their existing
 single-instance policy. Cleanup must inspect every admitted allocation and
 observe exit before discarding storage; a third unexpected allocation fails.
 
-Remaining implementation: consume paired build artifacts in a reproducible
-workflow; enroll a browser device with jobs capability; upload a generated valid
-video through Files; queue approved presets through the UI; observe durable job
-completion; download and verify output; exercise cancellation/retry/reconnect;
+Remaining implementation/qualification: consume paired build artifacts in a
+reproducible workflow; demonstrate enrollment, upload, approved conversion and
+verified output through the new scenario; exercise cancellation/retry/reconnect;
 require explicit job/cleanup markers and read-only journal assertions. Exercise
 failure and foreign-guest/host access paths with both guests present. Physical
 networking, signed installation and full release gates remain separate.
+
+The initial browser scenario now requests jobs capability only for explicit video
+mode. It generates two seconds of bounded test media as the unprivileged browser
+account through a fixed, parent-admitted FFmpeg binary, uploads via Files, selects
+an approved 720p preset in Jobs, waits for success, downloads and decodes the
+output and checks its published checksum. The parent requires an additional
+video completion marker. This is implemented syntax/compilation coverage, not
+native execution evidence.
+
+Review found an expected lifecycle blocker: `Manager.purge` rejects reserved
+UID/volume/channel ownership evidence, while job cleanup still calls that legacy
+operation. The scenario requires the cleanup-pending UI state to clear before
+emitting its completion marker. It cannot pass solely because conversion and
+download succeed. The fix must add inode-qualified, journaled reserved-video
+retirement and safe UID release; removing the existing refusal is unacceptable.
+The complete video workflow remains unqualified until this and the other gates
+are implemented and demonstrated.

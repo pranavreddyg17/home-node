@@ -69,6 +69,7 @@ def main():
     parser.add_argument("--transfer-socket")
     parser.add_argument("--files-bytes", choices=("32768", "1073741824"), default="32768")
     parser.add_argument("--restart-socket")
+    parser.add_argument("--video", action="store_true")
     parser.add_argument("--browser-bytes", choices=("32768", "1073741824"), default="32768")
     parser.add_argument("--browser-node")
     parser.add_argument("--browser-executable")
@@ -81,6 +82,8 @@ def main():
     browser_enabled = any((args.browser_node, args.browser_executable, args.browser_client, args.browser_modules))
     if browser_enabled and (not attached or args.files_bytes != "32768" or not all((args.browser_node, args.browser_executable, args.browser_client, args.browser_modules)) or os.environ.get("HOMENODE_FILES_BROWSER_INTEGRATION") != "1"):
         raise RuntimeError("browser qualification requires explicit attached Files opt-in and complete runtime paths")
+    if args.video != (os.environ.get("HOMENODE_VIDEO_HTTPS_INTEGRATION") == "1") or (args.video and (not browser_enabled or args.files_bytes != "32768" or args.browser_bytes != "32768")):
+        raise RuntimeError("video workflow requires explicit bounded native browser integration")
     if not attached and args.files_bytes != "32768":
         raise RuntimeError("large Files qualification requires native workload sockets")
     if args.restart_socket:
@@ -364,7 +367,7 @@ print('FRONTEND-HTTPS-PASS',flush=True)
             browser_write = None
             if browser_enabled:
                 from browser_fixture import NativeBrowser
-                browser_fixture = NativeBrowser(directory, args.browser_node, args.browser_executable, args.browser_client, args.browser_modules, users, groups, args.browser_bytes)
+                browser_fixture = NativeBrowser(directory, args.browser_node, args.browser_executable, args.browser_client, args.browser_modules, users, groups, args.browser_bytes, args.video)
                 browser_read, browser_write = os.pipe()
                 browser_descriptors.extend((browser_read, browser_write))
             identity_environment = ["HOMENODE_NATIVE_HTTPS_IDENTITY=1"]
@@ -375,6 +378,8 @@ print('FRONTEND-HTTPS-PASS',flush=True)
                 identity_environment.append("HOMENODE_NATIVE_HTTPS_RESTART=1")
             if browser_fixture is not None:
                 identity_environment.append("HOMENODE_NATIVE_HTTPS_BROWSER_FD=" + str(browser_write))
+            if args.video:
+                identity_environment.append("HOMENODE_NATIVE_HTTPS_VIDEO=1")
             identity_timeout = 1200 if attached and args.files_bytes == "1073741824" else 240 if attached else 40
             identity_command = ["ip", "netns", "exec", peer_namespace, "env", *identity_environment, str(directory / "identity-client.test"), "-test.run=^TestNativeHTTPSIdentityClient$", f"-test.timeout={identity_timeout}s", "-test.v"]
             if args.restart_socket:

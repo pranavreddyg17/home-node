@@ -4,6 +4,7 @@ import { randomFillSync, createHash } from 'node:crypto'
 import { realpath, stat, mkdtemp, open, rm } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
 
 const origin = 'https://home.example.ts.net:8787'
@@ -25,6 +26,20 @@ for (let parent = dirname(browserExecutable); ; parent = dirname(parent)) {
 }
 const payloadBytes = Number(process.env.HOMENODE_NATIVE_BROWSER_BYTES ?? '32768')
 if (![32768, 1073741824].includes(payloadBytes)) throw new Error('Unsupported browser payload size')
+const videoWorkflow = process.env.HOMENODE_NATIVE_BROWSER_VIDEO === '1'
+if (videoWorkflow && payloadBytes !== 32768) throw new Error('Video workflow requires bounded Files setup')
+// The parent admits this fixed root-protected program. No shell or user command
+// is involved; generated test media and downloaded output stay in fixture paths.
+async function fixtureFFmpeg(arguments_) {
+  await new Promise((resolve, reject) => {
+    const child = spawn('/usr/bin/ffmpeg', ['-nostdin', '-hide_banner', '-loglevel', 'error', ...arguments_], { env: { PATH: '/usr/bin:/bin', LANG: 'C' }, stdio: ['ignore', 'ignore', 'pipe'] })
+    let bytes = 0, failed = false
+    const timer = setTimeout(() => { failed = true; child.kill('SIGKILL') }, 30000)
+    child.stderr.on('data', chunk => { bytes += chunk.length; if (bytes > 65536) { failed = true; child.kill('SIGKILL') } })
+    child.once('error', () => { clearTimeout(timer); reject(new Error('Fixture media executable unavailable')) })
+    child.once('close', code => { clearTimeout(timer); if (code !== 0 || failed) reject(new Error('Fixture media operation failed')); else resolve() })
+  })
+}
 // Enrollment material arrives only on an inherited private pipe, never argv,
 // URLs, logs, screenshots, traces or persistent browser storage exports.
 let input = Buffer.alloc(0)
@@ -232,6 +247,63 @@ try {
   await expect(row).toHaveCount(0)
   await page.getByRole('main').getByRole('button', { name: 'Files', exact: true }).click()
   await expect(row).toHaveCount(1)
+  if (videoWorkflow) {
+    phase = 'video-input'
+    const videoName = 'native-browser-video.mp4', videoPath = join(uploadDirectory, videoName)
+    await fixtureFFmpeg(['-f', 'lavfi', '-i', 'testsrc2=duration=2:size=160x90:rate=10', '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-f', 'mp4', videoPath])
+    const sourceInfo = await stat(videoPath)
+    if (!sourceInfo.isFile() || sourceInfo.size < 32 || sourceInfo.size > 8 * 1024 * 1024) throw new Error('Generated video is outside fixture bounds')
+    await page.getByLabel('Upload a file', { exact: true }).setInputFiles(videoPath)
+    await expect(page.locator('.transfer-progress')).toContainText('Upload verified', { timeout: 60000 })
+    // A previous completed upload can leave that status visible briefly; the
+    // new file row must exist before navigation may unmount the upload form.
+    await expect(page.locator('.file-row').filter({ hasText: videoName })).toHaveCount(1)
+    await page.locator('nav').getByRole('button', { name: 'Jobs', exact: false }).click()
+    const input = page.getByLabel('Input file', { exact: true })
+    const option = input.locator('option').filter({ hasText: videoName })
+    await expect(option).toHaveCount(1)
+    const inputID = await option.getAttribute('value')
+    if (!/^[A-Za-z0-9_-]{20,64}$/.test(inputID)) throw new Error('Uploaded video input identity is unavailable')
+    await input.selectOption(inputID)
+    await page.getByLabel('Conversion preset', { exact: true }).selectOption('mp4-720p')
+    phase = 'video-job'
+    await page.getByRole('button', { name: 'Queue conversion', exact: true }).click()
+    const job = page.locator('.file-row').filter({ hasText: videoName })
+    await expect(job).toHaveCount(1)
+    await expect(job.getByText('succeeded', { exact: true })).toBeVisible({ timeout: 120000 })
+    const resultLink = job.getByRole('link', { name: 'Download result', exact: true })
+    const resultHref = await resultLink.getAttribute('href')
+    if (!/^\/api\/v1\/files\/[A-Za-z0-9_-]{20,64}\/download$/.test(resultHref)) throw new Error('Video output identity is unavailable')
+    phase = 'video-output'
+    const pendingDownload = page.waitForEvent('download', { timeout: 30000 })
+    await resultLink.click()
+    const resultDownload = await pendingDownload
+    if (await resultDownload.failure()) throw new Error('Video output download failed')
+    const resultPath = await resultDownload.path(), resultInfo = await stat(resultPath)
+    if (!resultInfo.isFile() || resultInfo.size < 32 || resultInfo.size > 8 * 1024 * 1024) throw new Error('Video output is outside fixture bounds')
+    const hash = createHash('sha256'); let length = 0
+    for await (const chunk of createReadStream(resultPath, { highWaterMark: 256 * 1024 })) {
+      length += chunk.length
+      if (length > 8 * 1024 * 1024) throw new Error('Video output exceeded fixture bounds')
+      hash.update(chunk)
+    }
+    if (length !== resultInfo.size) throw new Error('Video output changed during verification')
+    await fixtureFFmpeg(['-i', resultPath, '-f', 'null', '-'])
+    const outputHash = hash.digest('hex')
+    await page.locator('nav').getByRole('button', { name: 'Files', exact: false }).click()
+    const output = page.locator(`.file-row:has(a[href="${resultHref}"])`)
+    await expect(output).toHaveCount(1)
+    await output.getByText('Integrity', { exact: true }).click()
+    await expect(output.locator('.checksum')).toContainText(outputHash)
+    await resultDownload.delete()
+    console.log('PASS native browser video output decode and published checksum')
+    phase = 'video-cleanup'
+    await page.locator('nav').getByRole('button', { name: 'Jobs', exact: false }).click()
+    await expect(job).toHaveCount(1)
+    await expect(job.getByText('succeeded', { exact: true })).toBeVisible()
+    await expect(job).not.toContainText('Temporary workload cleanup is pending', { timeout: 30000 })
+    console.log('PASS native browser video conversion, decoded output integrity and acknowledged cleanup')
+  }
   await page.locator('nav').getByRole('button', { name: 'Apps', exact: false }).click()
   phase = 'guest-stop'
   page.once('dialog', dialog => dialog.accept())

@@ -392,7 +392,11 @@ func TestNativeHTTPSIdentityClient(t *testing.T) {
 		if files == nil {
 			t.Fatal("native browser handoff requires the actual Files backend")
 		}
-		body := map[string]any{"name": "Native browser device", "capabilities": []string{"files", "admin"}}
+		capabilities := []string{"files", "admin"}
+		if os.Getenv("HOMENODE_NATIVE_HTTPS_VIDEO") == "1" {
+			capabilities = append(capabilities, "jobs")
+		}
+		body := map[string]any{"name": "Native browser device", "capabilities": capabilities}
 		actionApproval = approve("/api/v1/devices/pair", body)
 		encoded := request(http.MethodPost, "/api/v1/devices/pair", body, 201)
 		actionApproval = ""

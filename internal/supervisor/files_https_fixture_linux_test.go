@@ -175,6 +175,10 @@ func nativeFilesHTTPSWorkflow(t *testing.T, ctx context.Context, directory, scri
 		command.Args = append(command.Args, "--browser-node", filepath.Join(binaries, "node"), "--browser-executable", "/opt/google/chrome/chrome", "--browser-client", filepath.Join(root, "web/native/files-https.mjs"), "--browser-modules", filepath.Join(root, "web/node_modules"))
 		command.Env = append(command.Env, "HOMENODE_FILES_BROWSER_INTEGRATION=1")
 	}
+	if os.Getenv("HOMENODE_VIDEO_HTTPS_INTEGRATION") == "1" {
+		command.Args = append(command.Args, "--video")
+		command.Env = append(command.Env, "HOMENODE_VIDEO_HTTPS_INTEGRATION=1")
+	}
 	command.WaitDelay = 5 * time.Second
 	var output boundedOutput
 	command.Stdout, command.Stderr = &output, &output
@@ -250,7 +254,7 @@ func nativeFilesHTTPSWorkflow(t *testing.T, ctx context.Context, directory, scri
 	}
 	defer store.Close()
 	var id, status string
-	if err := store.DB.QueryRowContext(ctx, "SELECT id,state FROM runtime_instances").Scan(&id, &status); err != nil || !guestproto.ValidID(id) || status != "stopped" {
+	if err := store.DB.QueryRowContext(ctx, "SELECT id,state FROM runtime_instances WHERE workload='files'").Scan(&id, &status); err != nil || !guestproto.ValidID(id) || status != "stopped" {
 		*safeCleanup = false
 		t.Fatal("HTTPS controller allocation did not finish stopped", status, err)
 	}
