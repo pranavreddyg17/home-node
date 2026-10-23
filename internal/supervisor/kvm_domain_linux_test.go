@@ -580,7 +580,7 @@ func runNativeReservedManagerLifecycle(t *testing.T, ctx context.Context, base s
 		Policy:   Policy{GuestIdentity: &identity, Generation: 1, MemoryMiB: 1024, VCPUs: 1, MaxInstances: 1, DiskReserveBytes: 4 * catalog.GiB, ControllerUID: controllerUID, TransferUID: transferUID},
 		Manifest: catalog.Manifest{Schema: 1, Version: 1, Expires: time.Now().Add(time.Hour), Images: []catalog.Image{image}}}
 	if videoWorkflow {
-		m.Policy.VCPUs, m.Policy.MaxInstances, m.Policy.MemoryMiB = 2, 2, 1536
+		m.Policy.VCPUs, m.Policy.MaxInstances, m.Policy.MemoryMiB = 2, 2, 2048
 	}
 	if filesImage {
 		nativeFilesSupervisorEntry(t, ctx, base, images, clientScript, image, m.Policy, backend.TransferGID, safeCleanup, extraImages...)

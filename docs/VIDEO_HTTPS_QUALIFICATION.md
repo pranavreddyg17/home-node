@@ -14,7 +14,7 @@ through a retained source descriptor, SHA-256 checked, protected and synced by
 the supervisor fixture. These unsigned images and ephemeral catalog signatures
 are development inputs, not publisher release artifacts.
 
-The video-specific fixture policy admits two instances, two vCPUs and 1536 MiB
+The video-specific fixture policy admits two instances, two vCPUs and 2048 MiB
 with two distinct reserved guest UID slots. Both images enter the fixture-signed
 catalog and protected-storage inventory. Files-only cases retain their existing
 single-instance policy. Cleanup must inspect every admitted allocation and
@@ -43,3 +43,8 @@ download succeed. The fix must add inode-qualified, journaled reserved-video
 retirement and safe UID release; removing the existing refusal is unacceptable.
 The complete video workflow remains unqualified until this and the other gates
 are implemented and demonstrated.
+
+The two-guest fixture budget includes the supervisor's required 512 MiB emulator
+reserve for each guest: two 512 MiB image profiles therefore require 2048 MiB,
+not 1536 MiB. The admission formula is unchanged; the explicit fixture policy
+now supplies the full required budget instead of bypassing capacity checks.
