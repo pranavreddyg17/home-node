@@ -258,3 +258,15 @@ at `cce3415` passed all six reopen-and-resume cases plus the existing retirement
 scopes. [Retained evidence](evidence/video-reopen-cce3415.json) records source,
 cases and log hash. This is orderly database close/reopen, not process-kill,
 reboot, power-loss, live KVM or safe-UID-reuse qualification.
+
+The disposable SIGKILL recovery harness now starts a separate root test child
+with bounded generated configuration through stdin and a one-byte readiness
+pipe. It requires an acknowledged target and actual SIGKILL termination, rejecting
+timeout or unrelated child failures. Twelve targets cover all six durable phase
+boundaries and the socket/volume/directory rename and unlink boundaries. The
+child is killed with SQLite and resource descriptors open; parent recovery opens
+the existing journal in a fresh manager, authenticates the original request and
+requires physical completion with the UID lease retained. No fixture credentials
+or workload data are passed in arguments or logs. Linux cross-compilation passed;
+execution is pending. Generated resources and injected stopped guards do not
+qualify power-loss, reboot, live VM exit, safe UID reuse or full video cleanup.
