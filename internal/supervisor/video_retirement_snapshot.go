@@ -29,19 +29,37 @@ type videoRetirementSocket struct {
 }
 
 func (m *Manager) loadVideoRetirementSnapshot(ctx context.Context, r Request) (snapshot videoRetirementSnapshot, result error) {
+	if m == nil || m.Store == nil {
+		return snapshot, ErrPolicy
+	}
+	result = m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+		current, err := m.loadVideoRetirementSnapshotTx(ctx, tx, r)
+		if err != nil {
+			return err
+		}
+		snapshot = current
+		return nil
+	})
+	if result != nil {
+		snapshot = videoRetirementSnapshot{}
+	}
+	return snapshot, result
+}
+
+func (m *Manager) loadVideoRetirementSnapshotTx(ctx context.Context, tx *sql.Tx, r Request) (snapshot videoRetirementSnapshot, result error) {
 	defer func() {
 		if result != nil {
 			snapshot = videoRetirementSnapshot{}
 		}
 	}()
-	if m == nil || m.Store == nil || m.GuestUIDPool == nil || r.Version != 1 || r.Action != "purge" || r.Workload != "" || !guestproto.ValidID(r.InstanceID) || !guestproto.ValidID(r.OperationID) || r.PolicyGeneration != m.Policy.Generation || r.Revision < 1 || r.Revision > 1<<53 || m.validateGuestUIDServiceSeparation(*m.GuestUIDPool) != nil {
+	if tx == nil || m == nil || m.Store == nil || m.GuestUIDPool == nil || r.Version != 1 || r.Action != "purge" || r.Workload != "" || !guestproto.ValidID(r.InstanceID) || !guestproto.ValidID(r.OperationID) || r.PolicyGeneration != m.Policy.Generation || r.Revision < 1 || r.Revision > 1<<53 || m.validateGuestUIDServiceSeparation(*m.GuestUIDPool) != nil {
 		return snapshot, ErrPolicy
 	}
 	accessGID, err := m.channelAccessGID()
 	if err != nil {
 		return snapshot, err
 	}
-	result = m.Store.Transaction(ctx, func(tx *sql.Tx) error {
+	result = func() error {
 		if err := requireRuntimeAdmission(tx); err != nil {
 			return err
 		}
@@ -105,6 +123,6 @@ func (m *Manager) loadVideoRetirementSnapshot(ctx context.Context, r Request) (s
 			return ErrPolicy
 		}
 		return ctx.Err()
-	})
+	}()
 	return snapshot, result
 }

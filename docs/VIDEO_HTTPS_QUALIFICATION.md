@@ -61,3 +61,17 @@ This snapshot grants no unlink, ownership-change, restart or UID-release
 authority. The live stopped/process barrier, descriptor-qualified deletion,
 interruption journal and final lease retirement are still required before the
 legacy reserved-resource purge refusal can be replaced.
+
+Retirement preparation now atomically records a bounded canonical intent and its
+pending operation identity before any physical effect. Exact replay must match
+the original request, ownership snapshot and a recognized pending stage; a
+changed request/inode, orphan operation or missing/unknown stage refuses.
+Preparation rechecks a caller-supplied live stopped guard and rereads provenance
+before returning. Losing that guard retains only the pending journal and returns
+no receipt. Tests inject a stage-write failure and require rollback of both the
+intent and operation. Preparation preserves the runtime state and UID lease.
+
+This journal is not yet routed from reserved purge and grants no filesystem
+mutation authority. Descriptor-qualified socket/volume/directory retirement,
+resumption after each physical interruption and final checked UID release remain
+unfinished. The legacy refusal remains in place until those steps are proved.
