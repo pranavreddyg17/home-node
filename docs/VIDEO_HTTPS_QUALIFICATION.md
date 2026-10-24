@@ -244,3 +244,14 @@ resource names; they do not establish absence of arbitrary UID-owned files
 outside managed roots. The updated run at `b2f6bf1` passed both final preparation
 refusal cases and all ten preflight cases, including refusal before any socket
 effect when a channel preparation path exists.
+
+Orderly journal reopen qualification is now explicit. At each of the six physical
+removal phases, the native sequence test closes SQLite, discards its in-memory
+intent, opens the existing journal again and constructs a fresh manager. The
+exact request must reconstruct the pending canonical intent and phase before
+physical retirement resumes. The completed-request recovery test also closes and
+reopens the database after simulated UID reassignment, then invokes public purge
+through a manager with no backend or pool and checks the replacement lease.
+Local recovery race tests and Linux cross-compilation passed; native
+execution is pending. This is orderly database close/reopen, not process-kill,
+reboot, power-loss, live KVM or safe-UID-reuse qualification.

@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/pranavreddyg17/home-node/internal/state"
 )
 
 func TestNativeVideoRetirementResources(t *testing.T) {
@@ -45,7 +47,7 @@ func TestNativeVideoRetirementResources(t *testing.T) {
 		}
 	})
 	for _, phase := range []string{"socket-removing", "socket-removed", "volume-removing", "volume-removed", "directory-removing", "directory-removed"} {
-		t.Run("resume-from-"+phase, func(t *testing.T) {
+		t.Run("reopen-and-resume-from-"+phase, func(t *testing.T) {
 			m, record, _, _ := nativeVideoPreparedVolumeFixture(t)
 			lost := errors.New("fixture sequence interruption")
 			fired := false
@@ -63,6 +65,23 @@ func TestNativeVideoRetirementResources(t *testing.T) {
 			got, err := m.retireVideoResources(context.Background(), record, interrupted)
 			if !fired || !errors.Is(err, lost) || got.Stage != "" {
 				t.Fatal("interruption lost", fired, got.Stage, err)
+			}
+			// Close the actual journal and discard the in-memory intent. A fresh manager
+			// must authenticate the request and reconstruct the pending durable phase.
+			request := record.Intent.Request
+			record = videoRetirementRecord{}
+			if err := m.Store.Close(); err != nil {
+				t.Fatal(err)
+			}
+			reopened, err := state.Open(filepath.Join(m.Images, "journal"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = reopened.Close() })
+			m = &Manager{Store: reopened, Policy: m.Policy, Backend: m.Backend, GuestUIDPool: m.GuestUIDPool, GuestGID: m.GuestGID, Images: m.Images, Volumes: m.Volumes, Channels: m.Channels}
+			record, err = m.prepareVideoRetirement(context.Background(), request, guard)
+			if err != nil || record.Stage != phase {
+				t.Fatal("reopened journal phase", record.Stage, err)
 			}
 			next, err := m.retireVideoResources(context.Background(), record, guard)
 			if err != nil || next.Stage != "directory-removed" {

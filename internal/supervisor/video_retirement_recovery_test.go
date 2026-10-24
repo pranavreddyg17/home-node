@@ -3,6 +3,7 @@ package supervisor
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -20,7 +21,16 @@ func TestVideoRetirementRecoveryFromPersistedReceiptAfterUIDReuse(t *testing.T) 
 	}
 	// A fresh manager has no in-memory intent, backend or pool. Only the durable
 	// request/receipt is needed, never filesystem/process authority for the UID.
-	fresh := &Manager{Store: m.Store, Policy: m.Policy}
+	if err := m.Store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := state.Open(filepath.Join(m.Images, "journal"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	m.Store = reopened
+	fresh := &Manager{Store: reopened, Policy: m.Policy}
 	for i := 0; i < 3; i++ {
 		ok, err := fresh.completedVideoRetirement(context.Background(), record.Intent.Request)
 		if err != nil || !ok {
