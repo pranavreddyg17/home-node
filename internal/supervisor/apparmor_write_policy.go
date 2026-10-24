@@ -1,6 +1,7 @@
 package supervisor
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -9,7 +10,15 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
 )
 
-func (d Domain) AppArmorName() string { return "libvirt-homenode-" + d.ID }
+// UUIDv8 binds libvirt's profile naming to the case-sensitive protected ID.
+// Exclusive source publication must still refuse any existing profile collision.
+func (d Domain) RuntimeUUID() string {
+	sum := sha256.Sum256([]byte("homenode.domain.uuid.v1:" + d.ID))
+	sum[6] = (sum[6] & 0x0f) | 0x80
+	sum[8] = (sum[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", sum[0:4], sum[4:6], sum[6:8], sum[8:10], sum[10:16])
+}
+func (d Domain) AppArmorName() string { return "libvirt-" + d.RuntimeUUID() }
 
 // AppArmorWritePolicy adds deny rules for the complement of a finite write
 // allowlist. Denies override writable paths inherited from distro abstractions.

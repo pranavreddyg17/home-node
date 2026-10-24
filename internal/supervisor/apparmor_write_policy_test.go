@@ -52,7 +52,7 @@ func TestDomainAppArmorStaticSelectorBindsProtectedInstanceName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !guestproto.ValidID(d.ID) || !strings.Contains(xml, "<label>"+d.AppArmorName()+"</label>") || strings.Contains(xml, "type='dynamic' model='apparmor'") {
+	if !guestproto.ValidID(d.ID) || !strings.Contains(xml, "<uuid>"+d.RuntimeUUID()+"</uuid>") || !strings.Contains(xml, "<label>"+d.AppArmorName()+"</label>") || strings.Contains(xml, "type='dynamic' model='apparmor'") {
 		t.Fatal("static label not bound")
 	}
 	policy, err := d.AppArmorWritePolicy()

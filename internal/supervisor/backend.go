@@ -196,6 +196,9 @@ func (b LinuxBackend) Verify(ctx context.Context, d Domain) error {
 	if err != nil {
 		return err
 	}
+	if d.ConfinedWrites && strings.TrimSpace(string(label)) != d.AppArmorName()+" (enforce)" {
+		return errors.New("QEMU write-boundary profile differs from admitted domain")
+	}
 	if !strings.HasPrefix(string(label), "libvirt-") || !strings.HasSuffix(strings.TrimSpace(string(label)), "(enforce)") {
 		return errors.New("QEMU process is not confined by enforcing libvirt AppArmor")
 	}

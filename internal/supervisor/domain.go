@@ -85,6 +85,7 @@ func (d Domain) XML() (string, error) {
 // console, QEMU argument extensions or user-provided XML fragments.
 const domainXML = `<domain type='kvm'>
  <name>{{.Name}}</name>
+ {{if .ConfinedWrites}}<uuid>{{.RuntimeUUID}}</uuid>{{end}}
  <memory unit='MiB'>{{.Image.MemoryMiB}}</memory>
  <currentMemory unit='MiB'>{{.Image.MemoryMiB}}</currentMemory>
  <vcpu placement='static'>{{.Image.VCPUs}}</vcpu>
