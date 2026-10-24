@@ -140,7 +140,7 @@ func roundTripNativeFilesChannel(t *testing.T, ctx context.Context, script, chan
 	// No supplementary KVM group or root privilege is passed to the client.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: transferUID, Gid: uint32(transferGID), Groups: []uint32{}}}
 	output, err := cmd.CombinedOutput()
-	if err != nil || string(output) != "development workload channel round trip passed\n" {
+	if err != nil || string(output) != "development Files channel round trip passed\n" {
 		t.Fatal("native Files client round trip", err, string(output))
 	}
 }

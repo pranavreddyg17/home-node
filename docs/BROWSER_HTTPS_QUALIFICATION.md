@@ -204,3 +204,11 @@ current reply through the actual transfer HTTP handler, without replaying the
 cancelled request. The manual native workflow now runs these transfer race tests
 before image building. Actual distinct-chunk browser rerun remains required to
 validate this fix against virtio behavior.
+
+Run 40040866995 at `2b1f01b` passed the Linux transfer race/peer tests but stopped
+before HTTPS/browser execution. The direct manager client exited successfully
+and emitted its original Files marker. A fixture refactor had unintentionally
+changed the Go assertion to expect "development workload"; that assertion now
+matches the unchanged Python marker again. This was a fixture regression, not a
+successful virtio/browser verification of the late-reply change. A fresh native
+run is required with the exact marker restored.
