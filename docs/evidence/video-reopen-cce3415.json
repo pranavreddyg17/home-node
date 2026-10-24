@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "cce3415b29712f5ef54be88b6f04e28054db297b",
+  "workflowRun": 40107953990,
+  "job": 120913460304,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40107953990",
+  "conclusion": "success",
+  "logSHA256": "c228af7e4588dc9de9e5f762e737af36f104cbdaf28e0eaecc2d99c67795fdb6",
+  "reopenPassedCases": [
+    "reopen-and-resume-from-socket-removing",
+    "reopen-and-resume-from-socket-removed",
+    "reopen-and-resume-from-volume-removing",
+    "reopen-and-resume-from-volume-removed",
+    "reopen-and-resume-from-directory-removing",
+    "reopen-and-resume-from-directory-removed"
+  ],
+  "localChecks": [
+    "Completed-request recovery race suite passed after database reopen (4.279s).",
+    "Linux amd64 supervisor tests cross-compiled."
+  ],
+  "uidReleasedInNativeSequence": false,
+  "limits": [
+    "Actual SQLite close/reopen and fresh Manager reconstruction, not process-kill, host reboot or power-loss.",
+    "Filesystem fixtures use synthetic volume bytes and injected stopped guards; no live VM is started.",
+    "Completed receipt UID reassignment remains a SQL-only scenario.",
+    "Production reserved cleanup, verified process exit, safe UID reuse and complete video workflow remain unqualified."
+  ],
+  "releaseQualified": false
+}

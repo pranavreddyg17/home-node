@@ -252,6 +252,9 @@ exact request must reconstruct the pending canonical intent and phase before
 physical retirement resumes. The completed-request recovery test also closes and
 reopens the database after simulated UID reassignment, then invokes public purge
 through a manager with no backend or pool and checks the replacement lease.
-Local recovery race tests and Linux cross-compilation passed; native
-execution is pending. This is orderly database close/reopen, not process-kill,
+Local recovery race tests and Linux cross-compilation passed. The
+[disposable native run](https://github.com/pranavreddyg17/home-node/actions/runs/40107953990)
+at `cce3415` passed all six reopen-and-resume cases plus the existing retirement
+scopes. [Retained evidence](evidence/video-reopen-cce3415.json) records source,
+cases and log hash. This is orderly database close/reopen, not process-kill,
 reboot, power-loss, live KVM or safe-UID-reuse qualification.
