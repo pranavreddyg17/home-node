@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "f45e729769e9f37441459d80eb058cd9820f81ed",
+  "workflowRun": 40077650562,
+  "job": 120824393609,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40077650562",
+  "conclusion": "success",
+  "logSHA256": "200c097ee29aa1a6659394c1b1cf06ef6ed4cb42c89cefe2dd59b9448f6692e4",
+  "environment": {
+    "runner": "ubuntu-24.04",
+    "go": "go1.26.10 linux/amd64",
+    "kernel": "6.17.0-1022-azure"
+  },
+  "directoryComponentSeconds": 0.52,
+  "directoryPassedCases": [
+    "retire-replay-and-close-descriptors",
+    "interruption-checkpoint",
+    "interruption-rename",
+    "interruption-rmdir",
+    "refuse-replacement",
+    "refuse-collision",
+    "refuse-symlink",
+    "refuse-mode",
+    "refuse-foreign-entry",
+    "refuse-recreated-volume",
+    "refuse-parent-symlink",
+    "refuse-unrecorded-absence"
+  ],
+  "socketRegressionCasesPassed": 10,
+  "volumeRegressionCasesPassed": 12,
+  "uidReleased": false,
+  "limits": [
+    "Generated private socket, synthetic raw file and recorded directory; not a live application VM.",
+    "Injected stopped guard does not prove process exclusion, start serialization or power-loss behavior.",
+    "All ownership metadata and UID lease remain retained; safe UID release is unfinished.",
+    "Reserved purge remains refused; complete video lifecycle and installed release are unqualified."
+  ],
+  "releaseQualified": false
+}

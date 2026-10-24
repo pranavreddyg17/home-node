@@ -146,6 +146,9 @@ retained-descriptor checks. Replay accepts absence only under the recorded
 removal checkpoint. It retains all provenance and the UID lease. Native tests
 cover descriptor closure, each interruption boundary and refusal of replacement,
 collision, symlink, changed mode, foreign entry, recreated volume, substituted
-parent and unrecorded absence. Disposable Linux execution is pending. This does
+parent and unrecorded absence. [Disposable Linux execution](https://github.com/pranavreddyg17/home-node/actions/runs/40077650562)
+at `f45e729` passed twelve directory cases plus all twenty-two socket/volume
+regression cases. [Retained evidence](evidence/video-directory-retirement-f45e729.json)
+records source, environment, cases and log hash. This does
 not establish live process exclusion or safe UID reuse; reserved purge remains
 disabled.
