@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "19b735acc3b0e018f15c2d5adf9d7ce8d7245b10",
+  "workflowRun": 40074693919,
+  "job": 120815444421,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40074693919",
+  "conclusion": "success",
+  "logSHA256": "c90fe40c1a30a76f58c25b8adcee1b50820c68a47f404c88919afc2bc6f01abe",
+  "environment": {
+    "runner": "ubuntu-24.04",
+    "go": "go1.26.10 linux/amd64",
+    "kernel": "6.17.0-1022-azure"
+  },
+  "componentSeconds": 0.23,
+  "passedCases": [
+    "retire-replay-and-close-descriptors",
+    "interruption-checkpoint",
+    "interruption-rename",
+    "interruption-unlink",
+    "refuse-replacement",
+    "refuse-collision",
+    "refuse-foreign-entry",
+    "refuse-symlink",
+    "refuse-hardlink",
+    "hardlink-policy-refusal-and-restoration"
+  ],
+  "hardlinkPolicyRefusalAndRestorationMarker": true,
+  "uidReleased": false,
+  "limits": [
+    "Filesystem component uses generated root-private paths and an injected stopped guard, not live KVM or process-exit qualification.",
+    "Only socket retirement is exercised; directory and volume retirement and final UID release are unfinished.",
+    "The explicitly opted-in negative case temporarily changes the disposable runner hardlink sysctl and verifies restoration.",
+    "Reserved purge is not routed to this component; no full video workflow or signed installed release qualification."
+  ],
+  "releaseQualified": false
+}

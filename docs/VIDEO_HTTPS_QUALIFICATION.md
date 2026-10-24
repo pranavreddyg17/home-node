@@ -110,4 +110,11 @@ temporarily disables the hardlink control, requires refusal without effects and
 restores/verifies the original value. This never runs on the owner Mac. The
 component injects its stopped guard and does not qualify actual KVM/process
 exclusion, volume/directory retirement, UID release or the full video workflow.
-The scope is not yet wired into reserved purge. Native execution is pending.
+The scope is not yet wired into reserved purge. Native component execution passed at `19b735a`; live KVM/process exclusion remains unqualified.
+
+The [disposable Linux component run](https://github.com/pranavreddyg17/home-node/actions/runs/40074693919)
+at `19b735a` passed all ten filesystem cases, including interruption at the
+checkpoint, rename and unlink boundaries, descriptor closure, foreign-resource
+refusal and disabled-hardlink-policy refusal/restoration. [Retained evidence](evidence/video-socket-retirement-19b735a.json)
+records exact source, kernel, compiler, log hash and cases. Its injected stopped
+guard and retained UID lease make this socket component evidence only.

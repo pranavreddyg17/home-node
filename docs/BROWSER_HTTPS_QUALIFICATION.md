@@ -212,3 +212,13 @@ changed the Go assertion to expect "development workload"; that assertion now
 matches the unchanged Python marker again. This was a fixture regression, not a
 successful virtio/browser verification of the late-reply change. A fresh native
 run is required with the exact marker restored.
+
+Run [40072166109](https://github.com/pranavreddyg17/home-node/actions/runs/40072166109)
+at `2cbc7b2` passed the distinct-chunk one-GiB browser pause/reload/resume and
+complete Files scenario in a 429.18-second joined test. Input chunks contain
+fresh random content and their byte offsets; the browser verifies full download
+size and SHA-256. [Retained evidence](evidence/browser-distinct-resume-2cbc7b2.json)
+records image/log/source identity and all required browser markers. No late-reply
+discard marker was emitted, so the native result does not prove execution of
+that recovery branch; controlled delayed-reply tests remain separate evidence.
+Physical-device, network-loss and full release gates remain open.

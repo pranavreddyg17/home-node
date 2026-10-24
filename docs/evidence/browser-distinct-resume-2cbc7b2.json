@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "2cbc7b258e866dd41a364c9e6d99d25057ea7365",
+  "workflowRun": 40072166109,
+  "job": 120807765168,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40072166109",
+  "conclusion": "success",
+  "logSHA256": "c3e4eeeb8246ed675f8b591fa1ae805555364939e6111b17b4f8cde3b95b95e0",
+  "browserPayloadBytes": 1073741824,
+  "protocolSetupPayloadBytes": 32768,
+  "toolchain": "go1.26.10",
+  "browserVersion": "155.0.8059.39",
+  "sourcePattern": "Fresh random bytes per 256 KiB chunk with an explicit 64-bit byte offset prefix.",
+  "developmentImage": {
+    "schema": 1,
+    "profile": "files",
+    "sourceRevision": "2cbc7b258e866dd41a364c9e6d99d25057ea7365",
+    "overlaySHA256": "2f493c3b8b161c4f22dbea595799d88108c9b2a0d3565c7028b94ad179ac4abd",
+    "mkosiRevision": "52448a27f6f869c108352ed82fcfb9be633703fb",
+    "bytes": 2686472192,
+    "sha256": "cd0444a53191e497f802b7dcf0c82acba5553bdf7ac2c2bf03ec40bae5ed86ef",
+    "releaseQualified": false,
+    "bootValidated": false
+  },
+  "nativeBoot": {
+    "schema": 1,
+    "profile": "files",
+    "imageSHA256": "cd0444a53191e497f802b7dcf0c82acba5553bdf7ac2c2bf03ec40bae5ed86ef",
+    "accelerator": "kvm",
+    "tcgBootAndObjectRoundTrip": false,
+    "kvmBootAndObjectRoundTrip": true,
+    "objectTransfer": {
+      "bytes": 1048579,
+      "chunkBytes": 262144,
+      "acknowledgedChunkReplay": true
+    },
+    "videoPresets": [],
+    "videoCancellation": null,
+    "aiInference": null,
+    "shutdown": {
+      "guestInitiated": true,
+      "reason": "guest-shutdown",
+      "qemuExitCode": 0,
+      "readOnlyFilesystemCheck": true
+    },
+    "releaseQualified": false
+  },
+  "joinedTestSeconds": 429.18,
+  "observedMarkers": [
+    "PASS actual gateway/controller kernel identities, zero capabilities, no-new-privileges and seccomp observed",
+    "PASS actual TLS 1.3 over kernel TUN through gateway/controller executables: health, unauthenticated Files refusal and foreign Host refusal",
+    "PASS actual TLS refuses untrusted root, wrong certificate hostname and TLS 1.2 over kernel TUN",
+    "PASS built frontend HTML/JS/CSS hashes, CSP, HTTPS and cache policy through actual gateway/controller",
+    "PASS actual HTTPS identity: registration, signed approval, limited pairing, reused-TLS revocation and replacement recovery",
+    "PASS native browser refuses certificate hostname mismatch",
+    "PASS native browser one GiB pause, reload and resume retains transfer identity and acknowledged offset",
+    "PASS native browser filename text rendering and rename identity",
+    "PASS native browser HTTPS Files: TLS 1.3, virtual passkey, session inventory, signed start/stop, 1073741824-byte upload/download, Trash/restore and narrow viewport; browser=155.0.8059.39",
+    "PASS all four actual services restarted with retained enrolled session, original request identity and subsequent guest data verification",
+    "PASS actual HTTPS partial-body upload revocation: explicit 401, revoked device and zero committed offset",
+    "PASS actual HTTPS Files through controller, supervisor, transfer and KVM guest: signed lifecycle, upload/download, Range, Trash, ZIP and retained restart"
+  ],
+  "lateReplyDiscardMarkerEmitted": false,
+  "limits": [
+    "The log emits no late-reply-discard marker, so this success does not prove that branch was exercised against virtio. Controlled delayed-reply tests are separate evidence.",
+    "Virtual passkey, controlled TUN/relay and unsigned development images; no physical/mobile or installed signed release qualification.",
+    "Pause/reload does not establish physical network-loss behavior.",
+    "Does not qualify video/AI UI, complete maintenance/restore, resource retirement or endurance."
+  ],
+  "releaseQualified": false
+}
