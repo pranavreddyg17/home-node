@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "b2f6bf1ec9eb3011c5e8440c554423b9666e795a",
+  "workflowRun": 40107735685,
+  "job": 120912814896,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40107735685",
+  "conclusion": "success",
+  "logSHA256": "46e30792a7e409e3a63f39e0504962a637465f9f15258606013ea7c6613ea838",
+  "physicalSequencePassedCases": [
+    "complete-physical-sequence-and-replay",
+    "resume-from-socket-removing",
+    "resume-from-socket-removed",
+    "resume-from-volume-removing",
+    "resume-from-volume-removed",
+    "resume-from-directory-removing",
+    "resume-from-directory-removed",
+    "completed-physical-replay-refuses-recreated-volume",
+    "final-replay-refuses-channel-preparation",
+    "final-replay-refuses-volume-preparation"
+  ],
+  "preflightPassedCases": [
+    "refuse-volume-before-socket-effects-replacement",
+    "refuse-volume-before-socket-effects-symlink",
+    "refuse-volume-before-socket-effects-hardlink",
+    "refuse-volume-before-socket-effects-mode",
+    "refuse-volume-before-socket-effects-size",
+    "refuse-volume-before-socket-effects-missing",
+    "refuse-volume-before-socket-effects-quarantine-collision",
+    "refuse-volume-before-socket-effects-preparation-collision",
+    "refuse-volume-before-socket-effects-channel-preparation-collision",
+    "retains-volume-guard-at-socket-checkpoint"
+  ],
+  "priorSequenceRun": {
+    "sourceRevision": "e0d2e0595a2a909aab125460476060d285ae4577",
+    "workflowRun": 40107620122,
+    "conclusion": "success"
+  },
+  "uidReleased": false,
+  "limits": [
+    "Generated root-private filesystem resources and injected stopped guard; no actual VM is started.",
+    "Success retires known socket, raw volume and channel directory but retains UID lease and ownership metadata.",
+    "Known preparation names are refused; absence of arbitrary UID-owned files outside managed roots is not proven.",
+    "Public physical cleanup, verified process exit, safe UID reuse and full video workflow remain unqualified."
+  ],
+  "releaseQualified": false
+}

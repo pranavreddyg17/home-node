@@ -230,8 +230,9 @@ metadata and the UID lease; it neither calls the completion transaction nor
 changes the public reserved-purge refusal. Native tests cover the full generated
 resource sequence, stale-record replay, descriptor closure, interruption at all
 six durable removal phases and refusal/preservation of a recreated volume after
-physical completion. Linux cross-compilation passed; disposable execution is
-pending. Injected stopped guards and synthetic disk bytes do not qualify actual
+physical completion. Linux cross-compilation and the [disposable run](https://github.com/pranavreddyg17/home-node/actions/runs/40107735685)
+at `b2f6bf1` passed; [retained evidence](evidence/video-sequence-b2f6bf1.json)
+records all ten sequence cases and the source/log hash. Injected stopped guards and synthetic disk bytes do not qualify actual
 process exit, safe UID reuse or the complete application workflow.
 
 Review of the composed sequence found that leftover per-instance preparation
@@ -240,4 +241,6 @@ preparation path or premature directory quarantine; volume and final directory
 guards reject volume preparation paths too. Final physical replay refuses and
 preserves either recreated preparation path. These checks cover known managed
 resource names; they do not establish absence of arbitrary UID-owned files
-outside managed roots. The updated native cases are pending execution.
+outside managed roots. The updated run at `b2f6bf1` passed both final preparation
+refusal cases and all ten preflight cases, including refusal before any socket
+effect when a channel preparation path exists.
