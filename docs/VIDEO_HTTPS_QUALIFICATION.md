@@ -152,3 +152,14 @@ regression cases. [Retained evidence](evidence/video-directory-retirement-f45e72
 records source, environment, cases and log hash. This does
 not establish live process exclusion or safe UID reuse; reserved purge remains
 disabled.
+
+The start-exclusion wrapper now retains the manager start lock through a trusted
+retirement callback and its descriptor closure, with repeated backend absence,
+real procfs reserved-UID conflict and immutable ownership checks. Its caller must
+already hold shared runtime admission. It refuses active stops and shutdown.
+This is not wired to purge yet. The disposable component test injects backend
+absence but uses real procfs, a short-lived reserved-UID sleep process and the
+actual start mutex to test process refusal, lock retention and error release.
+Native execution is pending. A procfs scan is an observation, not a proof against
+an escaped process racing fork; safe UID reuse still requires separate verified
+exit and effective filesystem confinement. No UID-release authority is added.
