@@ -187,3 +187,18 @@ passed. [Retained status evidence](evidence/video-completion-1f5a003.json) inclu
 the authoritative job/step result; detailed log download failed twice with
 connection resets, so no log hash is recorded. Release qualification remains
 incomplete.
+
+Completed-request recovery now reads a bounded receipt from the durable journal
+and authenticates the exact purge request, canonical JSON, succeeded operation,
+removed runtime revision and absence of old-instance ownership records in one
+transaction. It needs no backend, UID pool, process observation or filesystem
+access. The public Manager purge path uses this read-only replay before legacy
+cleanup; pending or absent receipts do not claim completion. Physical reserved
+cleanup and its completion transaction are still not connected to public purge.
+
+SQL-only recovery tests use a fresh manager after simulated UID reassignment,
+including the actual Apply/purge replay path, and verify the replacement lease
+remains intact. They refuse request drift, unknown/duplicate JSON fields,
+trailing JSON, oversized records/phases, orphan/missing receipt data, unknown
+phases and altered runtime/operation records. These tests do not qualify actual
+crash/power-loss or safe UID reuse. Linux regression execution is pending.

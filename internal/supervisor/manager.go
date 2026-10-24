@@ -668,6 +668,15 @@ func (m *Manager) Audit(ctx context.Context) error {
 }
 
 func (m *Manager) purge(ctx context.Context, r Request) (Instance, error) {
+	// Completed reserved cleanup replays solely from its authenticated receipt.
+	// Never enter path deletion or observe the formerly assigned UID on replay.
+	completed, err := m.completedVideoRetirement(ctx, r)
+	if err != nil {
+		return Instance{}, err
+	}
+	if completed {
+		return m.Inspect(ctx, r.InstanceID)
+	}
 	instance, err := m.Inspect(ctx, r.InstanceID)
 	if err != nil {
 		return Instance{}, err
