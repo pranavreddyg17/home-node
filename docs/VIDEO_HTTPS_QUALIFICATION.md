@@ -86,3 +86,28 @@ Tests cover forward/replay, skipped/backward transitions, changed ownership,
 missing operation, corrupted intent/stage, update failure and interruption after
 commit. Checkpoints cannot publish completion or release the reserved UID.
 Physical mutation and final retirement are still not wired to the purge path.
+
+An inode-qualified Linux socket-retirement scope is now implemented. It pins the
+root-owned channel parent, recorded guest-owned directory and exact socket with
+no-follow descriptors, verifies ownership/modes/mount identity and rejects extra
+entries, hardlinks, replacements and quarantine collisions. It checkpoints
+before a no-replace quarantine rename, syncs, unlinks only the recorded name,
+syncs again and checks retained-inode link count and absence before advancing.
+Interrupted checkpoint/rename/unlink cases retain the UID and journal; a socket
+already absent is reconciled only under its pending removal checkpoint.
+
+The scope requires `fs.protected_hardlinks=1` throughout its checks, in addition
+to a live stopped/UID-process exclusion supplied by the caller. The
+[kernel hardlink policy documentation](https://docs.kernel.org/admin-guide/sysctl/fs.html#protected-hardlinks)
+and [kernel link admission implementation](https://github.com/torvalds/linux/blob/master/fs/namei.c)
+describe the non-owner restrictions for special-file hardlinks. Host root and
+configuration remain trusted; no claim is made against malicious root changes.
+
+A separate disposable Ubuntu component workflow exercises real socket inodes,
+interruption replay, descriptor closure, foreign entries/replacements/symlinks,
+hardlinks and collision preservation. Its explicitly opted-in negative case
+temporarily disables the hardlink control, requires refusal without effects and
+restores/verifies the original value. This never runs on the owner Mac. The
+component injects its stopped guard and does not qualify actual KVM/process
+exclusion, volume/directory retirement, UID release or the full video workflow.
+The scope is not yet wired into reserved purge. Native execution is pending.
