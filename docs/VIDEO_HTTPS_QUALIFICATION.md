@@ -75,3 +75,14 @@ This journal is not yet routed from reserved purge and grants no filesystem
 mutation authority. Descriptor-qualified socket/volume/directory retirement,
 resumption after each physical interruption and final checked UID release remain
 unfinished. The legacy refusal remains in place until those steps are proved.
+
+Pending checkpoint advancement now authenticates the original canonical intent,
+current stopped provenance, pending operation hash and exact prior stage in one
+transaction. Only the next forward edge is allowed; an exact retry can observe
+its already-committed target. Neither advancing nor reading repairs missing
+records. The live guard is rechecked after the update, followed by fresh journal
+validation; a lost guard returns no receipt while preserving the resumable phase.
+Tests cover forward/replay, skipped/backward transitions, changed ownership,
+missing operation, corrupted intent/stage, update failure and interruption after
+commit. Checkpoints cannot publish completion or release the reserved UID.
+Physical mutation and final retirement are still not wired to the purge path.
