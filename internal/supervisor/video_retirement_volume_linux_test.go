@@ -37,7 +37,7 @@ func nativeRetirementVolume(t *testing.T, path string, owner VolumeOwnershipInte
 	}
 }
 
-func nativeVideoVolumeFixture(t *testing.T) (*Manager, videoRetirementRecord, string, string) {
+func nativeVideoPreparedVolumeFixture(t *testing.T) (*Manager, videoRetirementRecord, string, string) {
 	t.Helper()
 	m, r, _, _ := nativeVideoSocketResources(t)
 	if err := os.Chown(m.Volumes, 0, int(m.GuestGID)); err != nil {
@@ -59,11 +59,17 @@ func nativeVideoVolumeFixture(t *testing.T) (*Manager, videoRetirementRecord, st
 	if err != nil {
 		t.Fatal(err)
 	}
-	record, err = m.retireVideoSocket(context.Background(), record, func(context.Context) error { return nil })
+	return m, record, path, filepath.Join(m.Volumes, "."+r.InstanceID+".video-volume-retire-"+strconv.FormatInt(r.Revision, 10))
+}
+
+func nativeVideoVolumeFixture(t *testing.T) (*Manager, videoRetirementRecord, string, string) {
+	t.Helper()
+	m, record, path, stage := nativeVideoPreparedVolumeFixture(t)
+	record, err := m.retireVideoSocketWithVolume(context.Background(), record, func(context.Context) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
-	return m, record, path, filepath.Join(m.Volumes, "."+r.InstanceID+".video-volume-retire-"+strconv.FormatInt(r.Revision, 10))
+	return m, record, path, stage
 }
 
 func TestNativeVideoRetirementVolumeScope(t *testing.T) {

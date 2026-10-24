@@ -206,3 +206,15 @@ at `eed5ad5` passed its retirement race and native component steps.
 [Retained evidence](evidence/video-recovery-eed5ad5.json) records the source and
 log hash. The fresh manager shares an existing Store; actual database reopen and
 crash/power-loss recovery remain separate unqualified cases.
+
+Volume preflight now composes with socket retirement: it authenticates the
+pending intent and pins the recorded raw volume using `O_PATH` before any socket
+effect. Every socket guard also checks volume inode/owner/mode/size/single-link,
+parent/name/mount identity and absence of preparation/quarantine collisions.
+The scope closes all retained descriptors before returning and keeps the UID
+lease and provenance. Volume/directory component fixtures now use this composed
+socket scope. Native preflight cases additionally require volume refusal before
+socket mutation and loss-of-volume-authority refusal at the socket checkpoint,
+followed by an authenticated retry. Linux cross-compilation passed; disposable
+execution is pending. This remains internal, uses injected stopped guards in its
+fixture and does not qualify process exit, safe UID reuse or full video cleanup.
