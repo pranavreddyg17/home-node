@@ -295,7 +295,12 @@ artifacts for seven days. [Ubuntu's parser documentation](https://manpages.ubunt
 classifies preprocessing as an unprivileged profile command that flattens
 includes; this fixture does not load or replace profiles.
 
-Linux cross-compilation passed; native execution is pending. This inventory is
+Linux cross-compilation and the [native run](https://github.com/pranavreddyg17/home-node/actions/runs/40108717734)
+at `1c09326` passed. [Retained evidence](evidence/confinement-source-1c09326.json)
+records package versions, both verified expanded-source hashes, selected rules
+and the initial working-directory fixture failure. Both expanded profiles contain
+owner-writable PulseAudio temporary paths outside HomeNode managed roots. This
+inventory is
 not proof that source and currently loaded kernel policy are equivalent. It
 also does not measure write permission, mount-namespace restrictions or positive
 and negative access under QEMU credentials. Those observations are still needed

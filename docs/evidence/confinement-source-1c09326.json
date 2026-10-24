@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "1c0932623899167c99b2475c5876920901c4ebb1",
+  "workflowRun": 40108717734,
+  "job": 120915732804,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40108717734",
+  "conclusion": "success",
+  "logSHA256": "793fd0e371df92cefadc9df18d44b89d4c339375fac5f75279f125090d186b74",
+  "packages": {
+    "apparmor": "4.0.1really4.0.1-0ubuntu0.24.04.9",
+    "libvirt-daemon-system": "10.0.0-2ubuntu8.19",
+    "qemu-system-x86": "1:8.2.2+ds-0ubuntu1.18"
+  },
+  "profiles": [
+    {
+      "label": "libvirt-eb7b43fc-35ad-466b-8c3c-b46f6dcc0a1d",
+      "sourceSHA256": "1eebe901780bcb6285d9531ced9916329fa80811b0165a0d902766975e0a77dd",
+      "expandedSHA256": "e13b01c60257b2df2f05178b50c91466b8ebaa0dd6f7bd06c1562cbfa5c52268",
+      "bytes": 73384,
+      "selectedSourceRules": [
+        "owner /{dev,run}/shm/spice.* rw,",
+        "owner /tmp/pulse-*/ rw,",
+        "owner /tmp/pulse-*/* rw,"
+      ]
+    },
+    {
+      "label": "libvirt-2c55e11e-081b-4a50-bf3f-dea066d47538",
+      "sourceSHA256": "0d96cdbe92242fea2b65615877b207d00df8b286e062dd6029a5fb1c538f42d6",
+      "expandedSHA256": "663c253adc9e9f90b00bb0b602f27c36ca7477c1e584e42eb110c92249ac65b6",
+      "bytes": 73384,
+      "selectedSourceRules": [
+        "owner /{dev,run}/shm/spice.* rw,",
+        "owner /tmp/pulse-*/ rw,",
+        "owner /tmp/pulse-*/* rw,"
+      ]
+    }
+  ],
+  "priorFailure": {
+    "workflowRun": 40108602818,
+    "sourceRevision": "27f654a8b95b7f4d7f27003be683a9b62f9e1bf8",
+    "cause": "Standalone test ran from repository root; existing helper expected the Go package working directory. Failure preceded inventory capture."
+  },
+  "retirementRegressionRun": 40108602694,
+  "limits": [
+    "Expanded source captured beside live enforcing synthetic QEMU processes; not loaded-kernel-policy equivalence proof.",
+    "Selected temporary/shared-memory source permissions are outside managed HomeNode roots; effective access still depends on DAC and mount namespace.",
+    "No actual application guest, confined write probe, safe UID reuse or complete video cleanup is qualified."
+  ],
+  "releaseQualified": false
+}
