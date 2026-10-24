@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "3e1d58e770407d8d191eee180060ba2c916fe461",
+  "workflowRun": 40077917375,
+  "job": 120825196701,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40077917375",
+  "conclusion": "success",
+  "logSHA256": "63b88cd35f5ba6353236e7d4a834a49937220b1fc980cb2196e3dbb5ba4dd327",
+  "environment": {
+    "runner": "ubuntu-24.04",
+    "go": "go1.26.10 linux/amd64",
+    "kernel": "6.17.0-1022-azure"
+  },
+  "componentSeconds": 0.16,
+  "passedCases": [
+    "retains-start-lock-and-releases-on-error",
+    "observes-new-reserved-uid-process",
+    "refuses-running-backend",
+    "rechecks-ownership-after-callback"
+  ],
+  "filesystemRegressionCasesPassed": 34,
+  "uidReleased": false,
+  "limits": [
+    "Backend running-state observations are injected; no live KVM guest is started.",
+    "Actual procfs and a short-lived sleep process using the recorded UID qualify conflict refusal only.",
+    "The start mutex is retained; caller shared runtime admission is a precondition, not exercised by this component.",
+    "Procfs enumeration does not prove absence against escaped processes racing fork; safe UID reuse and effective write confinement remain unqualified.",
+    "Reserved purge remains refused and all ownership metadata and UID leases remain retained."
+  ],
+  "releaseQualified": false
+}

@@ -160,6 +160,9 @@ already hold shared runtime admission. It refuses active stops and shutdown.
 This is not wired to purge yet. The disposable component test injects backend
 absence but uses real procfs, a short-lived reserved-UID sleep process and the
 actual start mutex to test process refusal, lock retention and error release.
-Native execution is pending. A procfs scan is an observation, not a proof against
+[Native execution](https://github.com/pranavreddyg17/home-node/actions/runs/40077917375)
+at `3e1d58e` passed all four exclusion cases plus thirty-four filesystem
+regression cases; [retained evidence](evidence/video-start-exclusion-3e1d58e.json)
+records source and log hash. A procfs scan is an observation, not a proof against
 an escaped process racing fork; safe UID reuse still requires separate verified
 exit and effective filesystem confinement. No UID-release authority is added.
