@@ -27,7 +27,7 @@ int main(int argc,char **argv) {
     if(argc!=7 || geteuid()!=0 || !opt || strcmp(opt,"1")) fail("opt-in");
     uid_t uid=(uid_t)number(argv[2]); gid_t gid=(gid_t)number(argv[3]);
     if(uid<65536) fail("reserved UID");
-    if(strncmp(argv[1],"libvirt-",8) || strlen(argv[1])!=44 || strncmp(argv[6],"/tmp/pulse-homenode-",20) || strchr(argv[6]+20,'/')) fail("generated targets");
+    if(strncmp(argv[1],"libvirt-",8) || (strlen(argv[1])!=44 && strlen(argv[1])!=43) || strncmp(argv[6],"/tmp/pulse-homenode-",20) || strchr(argv[6]+20,'/')) fail("generated targets");
     struct stat expected,joined;
     if(fstat(3,&expected) || setns(3,CLONE_NEWNS) || stat("/proc/self/ns/mnt",&joined) || expected.st_ino!=joined.st_ino || expected.st_dev!=joined.st_dev || close(3)) fail("mount namespace");
     if(aa_change_profile(argv[1])) fail("AppArmor transition");

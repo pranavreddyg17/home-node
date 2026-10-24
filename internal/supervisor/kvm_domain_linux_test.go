@@ -324,6 +324,7 @@ for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.arg
 	if err := prepareGuestChannelDirectory(ctx, filepath.Dir(domain.ChannelPath), int(uid), int(transferGID)); err != nil {
 		t.Fatal(err)
 	}
+	nativeInstallWriteBoundary(t, ctx, &domain)
 	backend := LinuxBackend{DataRoot: base, TransferGID: int(transferGID)}
 	// Register teardown before launch so uncertain create outcomes are stopped.
 	defer func() {

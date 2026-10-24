@@ -65,7 +65,7 @@ func nativeConfinementInventory(t *testing.T, ctx context.Context, d Domain) {
 		t.Fatal("inventory process")
 	}
 	label := strings.TrimSpace(string(read(filepath.Join("/proc", strconv.Itoa(pid), "attr/current"), 4096)))
-	valid, _ := regexp.MatchString(`^libvirt-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} \(enforce\)$`, label)
+	valid, _ := regexp.MatchString(`^libvirt-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|homenode-[a-z2-7]{26}) \(enforce\)$`, label)
 	if !valid {
 		t.Fatal("unqualified live AppArmor label")
 	}
@@ -249,6 +249,10 @@ func nativeConfinementWriteProbe(t *testing.T, ctx context.Context, d Domain, pi
 		t.Fatal("probe result", err)
 	}
 	shared := result.DirectoryDevice == uint64(host.Dev) && result.DirectoryInode == host.Ino
+	if d.ConfinedWrites && result.TemporaryWrite {
+		t.Fatal("per-domain write boundary allowed temporary writes")
+	}
+
 	t.Log("native confined task write probe", "managedWriteOpen", true, "readonlyWriteDenied", true, "temporaryWrite", result.TemporaryWrite, "temporaryDirectoryMatchesHost", shared)
 	t.Log("native confined task write probe completed; host task does not qualify guest escape containment or safe UID reuse")
 }

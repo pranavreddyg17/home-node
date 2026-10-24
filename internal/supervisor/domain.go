@@ -12,6 +12,7 @@ import (
 )
 
 type Domain struct {
+	ConfinedWrites                    bool // Internal root policy; not a request-controlled selector.
 	GuestUID, GuestGID                uint32
 	ID                                string
 	Image                             catalog.Image
@@ -30,6 +31,11 @@ func (d Domain) XML() (string, error) {
 	if d.GuestUID != 0 || d.GuestGID != 0 {
 		if d.GuestUID < 65536 || d.GuestUID > 1<<31-1 || d.GuestGID == 0 || d.GuestGID > 1<<31-1 {
 			return "", errors.New("invalid guest DAC identity")
+		}
+	}
+	if d.ConfinedWrites {
+		if _, err := d.AppArmorWritePolicy(); err != nil {
+			return "", err
 		}
 	}
 	for _, path := range []string{d.SystemPath, d.DataPath, d.ChannelPath} {
@@ -101,6 +107,6 @@ const domainXML = `<domain type='kvm'>
   <memballoon model='none'/>
   <rng model='virtio'><rate bytes='1024' period='1000'/><backend model='random'>/dev/urandom</backend></rng>
  </devices>
- <seclabel type='dynamic' model='apparmor' relabel='yes'/>
+ {{if .ConfinedWrites}}<seclabel type='static' model='apparmor' relabel='no'><label>{{.AppArmorName}}</label></seclabel>{{else}}<seclabel type='dynamic' model='apparmor' relabel='yes'/>{{end}}
  {{if .GuestUID}}<seclabel type='static' model='dac' relabel='no'><label>+{{.GuestUID}}:+{{.GuestGID}}</label></seclabel>{{end}}
 </domain>`

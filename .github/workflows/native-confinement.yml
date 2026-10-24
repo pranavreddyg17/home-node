@@ -6,6 +6,9 @@ on:
       - 'internal/supervisor/confinement_inventory_linux_test.go'
       - 'internal/supervisor/kvm_domain_linux_test.go'
       - 'packaging/systemd/confinement_probe.c'
+      - 'internal/supervisor/confinement_boundary_linux_test.go'
+      - 'internal/supervisor/apparmor_write_policy.go'
+      - 'internal/supervisor/domain.go'
   workflow_dispatch:
 permissions:
   contents: read
@@ -35,7 +38,7 @@ jobs:
           cc -std=c11 -O2 -Wall -Wextra -Werror ../../packaging/systemd/confinement_probe.c -lapparmor -o "$RUNNER_TEMP/confinement-probe"
           sudo install -m 0755 "$RUNNER_TEMP/confinement-probe" /usr/lib/homenode-fixtures/confinement-probe
           sudo systemctl start libvirtd
-          sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 HOMENODE_CONFINEMENT_INVENTORY=1 HOMENODE_CONFINEMENT_WRITE_PROBE=1 /usr/lib/homenode-fixtures/supervisor.test -test.run='^TestNativeReservedDACLibvirtLaunch$' -test.v -test.timeout=3m | tee "$RUNNER_TEMP/confinement-inventory.log"
+          sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 HOMENODE_CONFINEMENT_INVENTORY=1 HOMENODE_CONFINEMENT_WRITE_PROBE=1 HOMENODE_CONFINEMENT_WRITE_BOUNDARY=1 /usr/lib/homenode-fixtures/supervisor.test -test.run='^TestNativeReservedDACLibvirtLaunch$' -test.v -test.timeout=3m | tee "$RUNNER_TEMP/confinement-inventory.log"
           python3 -B - "$RUNNER_TEMP/confinement-inventory.log" <<'PY'
           import pathlib, sys
           with pathlib.Path(sys.argv[1]).open('rb') as stream:

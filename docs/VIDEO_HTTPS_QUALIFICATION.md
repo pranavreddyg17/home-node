@@ -339,3 +339,21 @@ shared-memory, foreign-guest and management-path tests under the actual profile,
 namespace, credentials and syscall policy. Avoid changing global libvirt policy
 for unrelated VMs. Keep UID leases retained and public physical purge refused
 until confinement and verified exit jointly support safe reuse.
+
+The initial per-domain remediation renders a bounded static AppArmor profile
+whose deny rules cover the complement of a finite write allowlist: the admitted
+data file, adapter socket and fixed KVM/null/zero devices. A path-prefix trie
+emits wrong-next-character, wrong-slash and truncated-path denials; deny rules
+override writable permissions inherited from the distro abstraction. Literal
+paths are bounded and reject policy metacharacters, readonly/write aliases and
+missing reserved identity. The internal Domain selector binds the profile name
+to the protected instance ID. Normal production domains do not enable it yet.
+
+The disposable fixture loads only its separate profile, never changes the global
+TEMPLATE or abstraction, launches the synthetic VM with that static label and
+requires temporary writes to fail while managed write-open and readonly refusal
+controls pass. It retains policy on uncertain VM/UID exit and removes it only
+after observed exit. Focused Domain race tests and Linux cross-compilation passed;
+native profile compilation and launch are pending. Complete write-boundary,
+network, inherited-descriptor, syscall and application-workflow qualification
+remain required before production adoption or safe UID reuse.
