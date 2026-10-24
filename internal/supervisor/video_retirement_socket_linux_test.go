@@ -34,7 +34,7 @@ func nativeRetirementSocket(t *testing.T, path string, uid, gid uint32) {
 	}
 }
 
-func nativeVideoSocketFixture(t *testing.T) (*Manager, videoRetirementRecord, string, string) {
+func nativeVideoSocketResources(t *testing.T) (*Manager, Request, string, string) {
 	t.Helper()
 	m, r := retirementSnapshotFixture(t)
 	// Keep Unix names short and all fixture objects beneath a root-private parent.
@@ -79,11 +79,17 @@ func nativeVideoSocketFixture(t *testing.T) (*Manager, videoRetirementRecord, st
 	if _, err := m.Store.DB.Exec(`UPDATE runtime_channel_sockets SET device=?,inode=?,parent_device=?,parent_inode=? WHERE instance_id=?`, uint64(child.Dev), child.Ino, uint64(parent.Dev), parent.Ino, r.InstanceID); err != nil {
 		t.Fatal(err)
 	}
+	return m, r, path, filepath.Join(directory, ".adapter-video-retire-"+strconv.FormatInt(r.Revision, 10))
+}
+
+func nativeVideoSocketFixture(t *testing.T) (*Manager, videoRetirementRecord, string, string) {
+	t.Helper()
+	m, r, path, stage := nativeVideoSocketResources(t)
 	record, err := m.prepareVideoRetirement(context.Background(), r, func(context.Context) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
-	return m, record, path, filepath.Join(directory, ".adapter-video-retire-"+strconv.FormatInt(r.Revision, 10))
+	return m, record, path, stage
 }
 
 func TestNativeVideoRetirementSocketScope(t *testing.T) {

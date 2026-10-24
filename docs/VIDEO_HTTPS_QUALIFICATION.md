@@ -118,3 +118,19 @@ checkpoint, rename and unlink boundaries, descriptor closure, foreign-resource
 refusal and disabled-hardlink-policy refusal/restoration. [Retained evidence](evidence/video-socket-retirement-19b735a.json)
 records exact source, kernel, compiler, log hash and cases. Its injected stopped
 guard and retained UID lease make this socket component evidence only.
+
+A separate volume-retirement scope now retains the recorded empty channel and
+pins the raw volume with an `O_PATH` descriptor. It authenticates the immutable
+intent, inode, size, owner, mode, single link and mount identity before a durable
+`volume-removing` checkpoint, no-replace quarantine rename and unlink. Each
+boundary rechecks the empty channel, stopped guard and provenance. Interrupted
+removal can resume only from its recorded checkpoint; successful replay retains
+the channel directory, ownership metadata and UID lease. No guest data is read.
+
+The Linux component fixture uses an opaque synthetic raw file and an injected
+stopped guard. It exercises replay, descriptor closure, interruption boundaries,
+replacement/collision/symlink/hardlink refusal, changed mode/size, recreated
+socket and substituted parent. Local Linux cross-compilation passed; disposable
+Linux execution of this new volume scope is pending. This is not a formatted
+guest disk, live process-exclusion, directory-retirement or UID-release proof,
+and the reserved purge path continues to refuse destructive cleanup.
