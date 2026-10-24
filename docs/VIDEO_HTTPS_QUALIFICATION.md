@@ -201,4 +201,8 @@ including the actual Apply/purge replay path, and verify the replacement lease
 remains intact. They refuse request drift, unknown/duplicate JSON fields,
 trailing JSON, oversized records/phases, orphan/missing receipt data, unknown
 phases and altered runtime/operation records. These tests do not qualify actual
-crash/power-loss or safe UID reuse. Linux regression execution is pending.
+crash/power-loss or safe UID reuse. The [Linux regression run](https://github.com/pranavreddyg17/home-node/actions/runs/40107127003)
+at `eed5ad5` passed its retirement race and native component steps.
+[Retained evidence](evidence/video-recovery-eed5ad5.json) records the source and
+log hash. The fresh manager shares an existing Store; actual database reopen and
+crash/power-loss recovery remain separate unqualified cases.

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "eed5ad5316ae3477cee7a7b648299917c2243485",
+  "workflowRun": 40107127003,
+  "job": 120911022236,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40107127003",
+  "conclusion": "success",
+  "logSHA256": "5b68639414eb9bd08c689dcff51c362be02065d4e995e778437ca024196d702a",
+  "passedNativeScopes": [
+    "TestNativeVideoRetirementDirectoryScope",
+    "TestNativeVideoRetirementStartExclusion",
+    "TestNativeVideoRetirementSocketScope",
+    "TestNativeVideoRetirementVolumeScope"
+  ],
+  "localChecks": [
+    "Recovery request/receipt refusal tests passed.",
+    "Full supervisor race suite passed (23.359s).",
+    "Linux amd64 supervisor tests cross-compiled."
+  ],
+  "limits": [
+    "Recovery uses synthetic SQL completion and UID reassignment; a fresh manager shares the existing Store. This is not a process-crash, database-reopen or power-loss qualification.",
+    "Public purge now authenticates completed read-only replay, but does not perform reserved physical cleanup or invoke completion.",
+    "Native filesystem and process-conflict components retain their injected stopped/backend guards; safe UID reuse and full video lifecycle remain unqualified."
+  ],
+  "releaseQualified": false
+}
