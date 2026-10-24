@@ -1,0 +1,51 @@
+name: Native confinement source inventory
+on:
+  push:
+    paths:
+      - '.github/workflows/native-confinement.yml'
+      - 'internal/supervisor/confinement_inventory_linux_test.go'
+      - 'internal/supervisor/kvm_domain_linux_test.go'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.26.10'
+          cache: true
+      - name: Install native runtime and read-only policy tools
+        run: sudo apt-get update && sudo apt-get install -y libvirt-clients libvirt-daemon-system qemu-system-x86 apparmor e2fsprogs
+      - name: Capture expanded sources beside a live confined synthetic domain
+        run: |
+          set -euo pipefail
+          test -c /dev/kvm
+          go version
+          git rev-parse HEAD
+          uname -r
+          dpkg-query -W apparmor libvirt-daemon-system qemu-system-x86
+          go test -c -o "$RUNNER_TEMP/confinement.test" ./internal/supervisor
+          sudo install -D -m 0755 "$RUNNER_TEMP/confinement.test" /usr/lib/homenode-fixtures/supervisor.test
+          sudo systemctl start libvirtd
+          sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 HOMENODE_CONFINEMENT_INVENTORY=1 /usr/lib/homenode-fixtures/supervisor.test -test.run='^TestNativeReservedDACLibvirtLaunch$' -test.v -test.timeout=3m | tee "$RUNNER_TEMP/confinement-inventory.log"
+          python3 -B - "$RUNNER_TEMP/confinement-inventory.log" <<'PY'
+          import pathlib, sys
+          with pathlib.Path(sys.argv[1]).open('rb') as stream:
+              output = stream.read((1 << 20) + 1)
+          if len(output) > 1 << 20 or b'native AppArmor source inventory retained;' not in output:
+              raise SystemExit('bounded source inventory evidence missing')
+          PY
+      - name: Retain generated expanded policy sources
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: confinement-source-inventory
+          path: |
+            /usr/lib/homenode-fixtures/confinement/*.apparmor
+            ${{ runner.temp }}/confinement-inventory.log
+          if-no-files-found: error
+          retention-days: 7

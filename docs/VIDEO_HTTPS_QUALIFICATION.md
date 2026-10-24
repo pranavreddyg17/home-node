@@ -284,3 +284,19 @@ objects are among the retired HomeNode paths. Before enabling reuse, inspect the
 exact shipped/generated profile, included abstractions, mount namespace and DAC
 constraints; test positive allowed operations and negative writes outside the
 retired resource set. Current cleanup remains fail-closed at this gate.
+
+A dedicated disposable native confinement workflow now captures the generated
+AppArmor profile source beside a live enforcing synthetic QEMU domain. The
+fixture pins a protected source descriptor, runs the fixed protected parser's
+`--preprocess` command with bounded output, checks the source and process label
+again and retains expanded sources by SHA-256. The workflow requires KVM rather
+than skipping absence, records runtime package versions and retains the source
+artifacts for seven days. [Ubuntu's parser documentation](https://manpages.ubuntu.com/manpages/noble/man8/apparmor_parser.8.html)
+classifies preprocessing as an unprivileged profile command that flattens
+includes; this fixture does not load or replace profiles.
+
+Linux cross-compilation passed; native execution is pending. This inventory is
+not proof that source and currently loaded kernel policy are equivalent. It
+also does not measure write permission, mount-namespace restrictions or positive
+and negative access under QEMU credentials. Those observations are still needed
+before safe UID reuse or reserved public cleanup can be qualified.

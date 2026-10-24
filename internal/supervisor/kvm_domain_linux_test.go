@@ -474,6 +474,7 @@ for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.arg
 			nativeDomainDiagnostics(t, domain)
 			t.Fatal("native launch isolation verification refused", err)
 		}
+		nativeConfinementInventory(t, ctx, domain)
 		peer, err := (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", domain.ChannelPath)
 		if err != nil {
 			t.Fatal("native adapter listener unavailable", err)
