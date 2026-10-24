@@ -180,5 +180,10 @@ This transaction requires a trusted qualified-absence callback after descriptor
 closure and under retained runtime/start exclusion. SQL-only tests inject that
 callback and synthetic checkpoints; they prove atomicity and replay binding,
 not actual process exit, disk absence or safe UID reuse. No production purge path
-calls the transaction yet. Full Linux/component regression qualification for
-this addition is pending; release qualification remains incomplete.
+calls the transaction yet. The [Linux regression job](https://github.com/pranavreddyg17/home-node/actions/runs/40078186274)
+at `1f5a003` passed both its retirement race step and native component step.
+Local focused and full supervisor race suites and Linux cross-compilation also
+passed. [Retained status evidence](evidence/video-completion-1f5a003.json) includes
+the authoritative job/step result; detailed log download failed twice with
+connection resets, so no log hash is recorded. Release qualification remains
+incomplete.

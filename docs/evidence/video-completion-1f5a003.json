@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "1f5a0037f5d27a8a24d158d6bf044fc55dcf8fa6",
+  "workflowRun": 40078186274,
+  "job": 120825991773,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40078186274",
+  "conclusion": "success",
+  "authoritativeStatus": {
+    "conclusion": "success",
+    "databaseId": 40078186274,
+    "headSha": "1f5a0037f5d27a8a24d158d6bf044fc55dcf8fa6",
+    "jobs": [
+      {
+        "completedAt": "2026-10-24T08:29:21Z",
+        "conclusion": "success",
+        "databaseId": 120825991773,
+        "name": "socket",
+        "startedAt": "2026-10-24T08:28:43Z",
+        "status": "completed",
+        "steps": [
+          {
+            "completedAt": "2026-10-24T08:28:44Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "number": 1,
+            "startedAt": "2026-10-24T08:28:43Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-24T08:28:46Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+            "number": 2,
+            "startedAt": "2026-10-24T08:28:44Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-24T08:28:57Z",
+            "conclusion": "success",
+            "name": "Run actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16",
+            "number": 3,
+            "startedAt": "2026-10-24T08:28:46Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-24T08:29:14Z",
+            "conclusion": "success",
+            "name": "Verify retirement provenance and journal races",
+            "number": 4,
+            "startedAt": "2026-10-24T08:28:57Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-24T08:29:17Z",
+            "conclusion": "success",
+            "name": "Verify inode-qualified socket, volume and directory retirement on disposable Linux",
+            "number": 5,
+            "startedAt": "2026-10-24T08:29:14Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-24T08:29:18Z",
+            "conclusion": "success",
+            "name": "Retain bounded component diagnostics",
+            "number": 6,
+            "startedAt": "2026-10-24T08:29:17Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-24T08:29:18Z",
+            "conclusion": "success",
+            "name": "Post Run actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16",
+            "number": 11,
+            "startedAt": "2026-10-24T08:29:18Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-24T08:29:18Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+            "number": 12,
+            "startedAt": "2026-10-24T08:29:18Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-24T08:29:18Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "number": 13,
+            "startedAt": "2026-10-24T08:29:18Z",
+            "status": "completed"
+          }
+        ],
+        "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40078186274/job/120825991773"
+      }
+    ],
+    "status": "completed",
+    "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40078186274"
+  },
+  "localChecks": [
+    "Focused retirement race suite passed (6.904s).",
+    "Full supervisor race suite passed (20.333s).",
+    "Linux amd64 supervisor tests cross-compiled successfully."
+  ],
+  "limits": [
+    "Detailed GitHub log download failed twice with connection reset by peer; no log hash or log-derived per-case claim is provided.",
+    "Completion tests use synthetic checkpoints and injected qualified-absence callbacks; they prove transaction rollback, receipt tamper refusal and replay after simulated UID reassignment only.",
+    "No production purge calls the completion transaction; live exit, physical absence, effective write confinement and safe UID reuse remain unqualified."
+  ],
+  "releaseQualified": false
+}
