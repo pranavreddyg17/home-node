@@ -44,18 +44,22 @@ func (d Domain) AppArmorWritePolicy() (string, error) {
 		terminal bool
 		children map[byte]*node
 	}
-	root := &node{children: map[byte]*node{}}
-	for _, path := range writable {
-		current := root
-		for i := 1; i < len(path); i++ {
-			ch := path[i]
-			if current.children[ch] == nil {
-				current.children[ch] = &node{children: map[byte]*node{}}
+	buildTree := func(paths []string) *node {
+		root := &node{children: map[byte]*node{}}
+		for _, path := range paths {
+			current := root
+			for i := 1; i < len(path); i++ {
+				ch := path[i]
+				if current.children[ch] == nil {
+					current.children[ch] = &node{children: map[byte]*node{}}
+				}
+				current = current.children[ch]
 			}
-			current = current.children[ch]
+			current.terminal = true
 		}
-		current.terminal = true
+		return root
 	}
+	root := buildTree(writable)
 	var out strings.Builder
 	fmt.Fprintf(&out, "#include <tunables/global>\nprofile %s flags=(attach_disconnected) {\n #include <abstractions/libvirt-qemu>\n", d.AppArmorName())
 	fmt.Fprintf(&out, " \"%s\" rk,\n \"%s\" rwk,\n \"%s\" rw,\n", d.SystemPath, d.DataPath, d.ChannelPath)
@@ -67,13 +71,13 @@ func (d Domain) AppArmorWritePolicy() (string, error) {
 		shortName = shortName[:20]
 	}
 	fmt.Fprintf(&out, " \"/var/lib/libvirt/qemu/domain-[0-9]*-%s/master-key.aes\" r,\n", shortName)
-	var emit func(string, *node)
-	emit = func(prefix string, current *node) {
+	var emit func(string, *node, string)
+	emit = func(prefix string, current *node, permissions string) {
 		if !current.terminal {
-			fmt.Fprintf(&out, " deny \"%s\" wkl,\n", prefix)
+			fmt.Fprintf(&out, " deny \"%s\" %s,\n", prefix, permissions)
 		}
 		if current.children['/'] == nil && !strings.HasSuffix(prefix, "/") {
-			fmt.Fprintf(&out, " deny \"%s/**\" wkl,\n", prefix)
+			fmt.Fprintf(&out, " deny \"%s/**\" %s,\n", prefix, permissions)
 		}
 		keys := make([]int, 0, len(current.children))
 		var excluded strings.Builder
@@ -90,12 +94,13 @@ func (d Domain) AppArmorWritePolicy() (string, error) {
 				excluded.WriteByte(byte(k))
 			}
 		}
-		fmt.Fprintf(&out, " deny \"%s[^%s]**\" wkl,\n", prefix, excluded.String())
+		fmt.Fprintf(&out, " deny \"%s[^%s]**\" %s,\n", prefix, excluded.String(), permissions)
 		for _, k := range keys {
-			emit(prefix+string(byte(k)), current.children[byte(k)])
+			emit(prefix+string(byte(k)), current.children[byte(k)], permissions)
 		}
 	}
-	emit("/", root)
+	emit("/", root, "wl")
+	emit("/", buildTree(append(writable, d.SystemPath)), "k")
 	out.WriteString("}\n")
 	if out.Len() > 256<<10 {
 		return "", ErrPolicy
