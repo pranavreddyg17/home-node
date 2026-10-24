@@ -65,7 +65,7 @@ func nativeConfinementInventory(t *testing.T, ctx context.Context, d Domain) {
 		t.Fatal("inventory process")
 	}
 	label := strings.TrimSpace(string(read(filepath.Join("/proc", strconv.Itoa(pid), "attr/current"), 4096)))
-	valid, _ := regexp.MatchString(`^libvirt-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|homenode-[a-z2-7]{26}) \(enforce\)$`, label)
+	valid, _ := regexp.MatchString(`^libvirt-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|homenode-[A-Z2-7]{26}) \(enforce\)$`, label)
 	if !valid {
 		t.Fatal("unqualified live AppArmor label")
 	}

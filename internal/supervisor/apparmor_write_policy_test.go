@@ -60,3 +60,11 @@ func TestDomainAppArmorStaticSelectorBindsProtectedInstanceName(t *testing.T) {
 		t.Fatal("profile not bound", err)
 	}
 }
+
+func TestDomainAppArmorNamePreservesCaseSensitiveIdentity(t *testing.T) {
+	first := Domain{ID: "AAAAAAAAAAAAAAAAAAAAAAAAAA"}
+	second := Domain{ID: "aaaaaaaaaaaaaaaaaaaaaaaaaa"}
+	if first.AppArmorName() == second.AppArmorName() {
+		t.Fatal("case-sensitive IDs alias policy names")
+	}
+}

@@ -9,7 +9,7 @@ import (
 	"github.com/pranavreddyg17/home-node/internal/guestproto"
 )
 
-func (d Domain) AppArmorName() string { return "libvirt-homenode-" + strings.ToLower(d.ID) }
+func (d Domain) AppArmorName() string { return "libvirt-homenode-" + d.ID }
 
 // AppArmorWritePolicy adds deny rules for the complement of a finite write
 // allowlist. Denies override writable paths inherited from distro abstractions.
@@ -71,7 +71,7 @@ func (d Domain) AppArmorWritePolicy() (string, error) {
 			}
 		}
 		if current.children['-'] != nil {
-			excluded.WriteByte('-')
+			excluded.WriteString(`\-`)
 		}
 		fmt.Fprintf(&out, " deny \"%s[^%s]**\" wkl,\n", prefix, excluded.String())
 		for _, k := range keys {
