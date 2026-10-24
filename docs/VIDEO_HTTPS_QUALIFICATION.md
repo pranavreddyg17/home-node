@@ -221,3 +221,15 @@ at `0bd4688` passed all nine preflight cases and all existing native retirement
 scopes. [Retained evidence](evidence/video-preflight-0bd4688.json) records source,
 cases and log hash. This remains internal, uses injected stopped guards in its
 fixture and does not qualify process exit, safe UID reuse or full video cleanup.
+
+A physical retirement sequencer now authenticates the durable phase and resumes
+only its corresponding socket-with-volume-preflight, volume or directory scope.
+It requalifies final resource absence on replay and returns only after component
+descriptors close. Successful physical retirement still retains all ownership
+metadata and the UID lease; it neither calls the completion transaction nor
+changes the public reserved-purge refusal. Native tests cover the full generated
+resource sequence, stale-record replay, descriptor closure, interruption at all
+six durable removal phases and refusal/preservation of a recreated volume after
+physical completion. Linux cross-compilation passed; disposable execution is
+pending. Injected stopped guards and synthetic disk bytes do not qualify actual
+process exit, safe UID reuse or the complete application workflow.
