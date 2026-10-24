@@ -200,13 +200,46 @@ func nativeConfinementWriteProbe(t *testing.T, ctx context.Context, d Domain, pi
 	scope, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(scope, helper, label, strconv.FormatUint(uint64(d.GuestUID), 10), strconv.FormatUint(uint64(d.GuestGID), 10), d.DataPath, d.SystemPath, temp)
+	readyRead, readyWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readyRead.Close()
+	defer readyWrite.Close()
+	acknowledgeRead, acknowledgeWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer acknowledgeRead.Close()
+	defer acknowledgeWrite.Close()
 	cmd.Env = []string{"LANG=C", "HOMENODE_CONFINEMENT_WRITE_PROBE=1"}
-	cmd.ExtraFiles = []*os.File{namespace}
+	cmd.ExtraFiles = []*os.File{namespace, readyWrite, acknowledgeRead}
 	var output, diagnostic boundedOutput
 	cmd.Stdout = &output
 	cmd.Stderr = &diagnostic
-	if err := cmd.Run(); err != nil || output.tooLarge || diagnostic.tooLarge {
-		t.Fatal("confined task write probe failed", err, diagnostic.String())
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	_ = readyWrite.Close()
+	_ = acknowledgeRead.Close()
+	var ready [1]byte
+	_, observationErr := io.ReadFull(readyRead, ready[:])
+	if observationErr == nil && ready[0] != 'R' {
+		observationErr = errors.New("unqualified probe readiness")
+	}
+	if observationErr == nil {
+		current, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(cmd.Process.Pid), "attr/current"))
+		if err != nil || strings.TrimSpace(string(current)) != label+" (enforce)" {
+			observationErr = errors.Join(errors.New("probe task label mismatch"), err)
+		}
+	}
+	if observationErr == nil {
+		_, observationErr = acknowledgeWrite.Write([]byte{'A'})
+	}
+	_ = acknowledgeWrite.Close()
+	waitErr := cmd.Wait()
+	if observationErr != nil || waitErr != nil || output.tooLarge || diagnostic.tooLarge {
+		t.Fatal("confined task write probe failed", observationErr, waitErr, diagnostic.String())
 	}
 	var result struct {
 		TemporaryWrite                  bool

@@ -36,13 +36,10 @@ int main(int argc,char **argv) {
     struct __user_cap_header_struct header={.version=_LINUX_CAPABILITY_VERSION_3,.pid=0};
     struct __user_cap_data_struct caps[2];
     if(getresuid(&ru,&eu,&su) || getresgid(&rg,&eg,&sg) || ru!=uid || eu!=uid || su!=uid || rg!=gid || eg!=gid || sg!=gid || getgroups(0,NULL)!=0 || syscall(SYS_capget,&header,caps) || caps[0].effective || caps[1].effective || caps[0].permitted || caps[1].permitted) fail("credential verification");
-    char *label=NULL,*mode=NULL;
-    int label_result=aa_getcon(&label,&mode);
-    if(label_result<0 || !label || strcmp(label,argv[1]) || !mode || strcmp(mode,"enforce")) {
-        fprintf(stderr,"probe label observation result=%d errno=%d label=%s mode=%s\n",label_result,errno,label?label:"(missing)",mode?mode:"(missing)");
-        fail("live task label");
-    }
-    free(label);
+    /* This profile denies fresh proc-attribute reads. The root parent observes
+       our live label after credential drop, then explicitly admits the probes. */
+    char acknowledged=0;
+    if(write(4,"R",1)!=1 || close(4) || read(5,&acknowledged,1)!=1 || acknowledged!='A' || close(5)) fail("parent label acknowledgement");
     int fd=open(argv[4],O_RDWR|O_NOFOLLOW|O_CLOEXEC);
     if(fd<0 || close(fd)) fail("managed write-open positive control");
     fd=open(argv[5],O_WRONLY|O_NOFOLLOW|O_CLOEXEC);
