@@ -283,6 +283,22 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool, managerLaunch .
 uid, gid = int(sys.argv[4]), int(sys.argv[5])
 if os.getresuid() != (uid,uid,uid) or os.getresgid() != (gid,gid,gid) or os.getgroups() != []:
     raise RuntimeError("guest storage probe credentials differ")
+# Positive control: exact UID/GID and DAC permit linking the owned data inode.
+if os.environ.get("HOMENODE_CONFINEMENT_WRITE_BOUNDARY") == "1":
+    with open("/proc/self/attr/current") as source:
+        if source.read().strip() != "unconfined":
+            raise RuntimeError("hardlink positive control unexpectedly confined")
+    with open("/proc/self/status") as source:
+        status=dict(line.split(":",1) for line in source if ":" in line)
+    if int(status["CapEff"].strip(),16) or int(status["CapPrm"].strip(),16):
+        raise RuntimeError("hardlink positive control has capabilities")
+    alias=os.path.join(os.path.dirname(sys.argv[6]),"generated-link-control")
+    os.link(sys.argv[2],alias,follow_symlinks=False)
+    try:
+        if not os.path.samestat(os.stat(sys.argv[2]),os.stat(alias)):
+            raise RuntimeError("hardlink positive control inode differs")
+    finally:
+        os.unlink(alias)
 for path, flags in ((sys.argv[1],os.O_RDONLY),(sys.argv[2],os.O_RDWR)):
     os.close(os.open(path,flags|os.O_NOFOLLOW))
 for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.argv[3],os.O_WRONLY)):
@@ -293,13 +309,20 @@ for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.arg
     else:
         os.close(fd)
         raise RuntimeError("forbidden storage access admitted")
-`, domain.SystemPath, domain.DataPath, otherDisk, strconv.FormatUint(uint64(uid), 10), strconv.FormatUint(uint64(deviceStat.Gid), 10))
+`, domain.SystemPath, domain.DataPath, otherDisk, strconv.FormatUint(uint64(uid), 10), strconv.FormatUint(uint64(deviceStat.Gid), 10), domain.ChannelPath)
 		probe.Env = []string{"PATH=/usr/bin:/bin", "LANG=C"}
+		if os.Getenv("HOMENODE_CONFINEMENT_WRITE_BOUNDARY") == "1" {
+			probe.Env = append(probe.Env, "HOMENODE_CONFINEMENT_WRITE_BOUNDARY=1")
+		}
 		probe.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: deviceStat.Gid, Groups: []uint32{}}, Pdeathsig: syscall.SIGKILL}
 		probe.WaitDelay = 3 * time.Second
 		if output, err := probe.CombinedOutput(); err != nil {
 			t.Fatalf("native guest DAC storage probe: %v %s", err, output)
 		}
+		if os.Getenv("HOMENODE_CONFINEMENT_WRITE_BOUNDARY") == "1" {
+			t.Log("native unconfined owned-volume hardlink positive control passed")
+		}
+
 	}
 	storage := map[string]unix.Stat_t{}
 	for _, path := range []string{filepath.Dir(domain.SystemPath), filepath.Dir(domain.DataPath), domain.SystemPath, domain.DataPath, otherDisk} {

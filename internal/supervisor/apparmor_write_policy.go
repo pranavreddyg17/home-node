@@ -99,7 +99,8 @@ func (d Domain) AppArmorWritePolicy() (string, error) {
 			emit(prefix+string(byte(k)), current.children[byte(k)], permissions)
 		}
 	}
-	emit("/", root, "wl")
+	out.WriteString(" deny /** l,\n")
+	emit("/", root, "w")
 	emit("/", buildTree(append(writable, d.SystemPath)), "k")
 	out.WriteString("}\n")
 	if out.Len() > 256<<10 {

@@ -47,11 +47,15 @@ int main(int argc,char **argv) {
     if(errno!=EACCES && errno!=EPERM) fail("readonly refusal classification");
     if(mkdir(argv[6],0700) && errno!=EEXIST) {
         if(errno!=EACCES && errno!=EPERM) fail("temporary directory classification");
-        puts("{\"temporaryWrite\":false,\"directoryDevice\":0,\"directoryInode\":0}");return 0;
+        puts("{\"hardlinkDenied\":false,\"temporaryWrite\":false,\"directoryDevice\":0,\"directoryInode\":0}");return 0;
     }
     int dir=open(argv[6],O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
     struct stat metadata;
     if(dir<0 || fstat(dir,&metadata) || metadata.st_uid!=uid || (metadata.st_mode&07777)!=0700) fail("temporary directory admission");
+    if(linkat(AT_FDCWD,argv[4],dir,"generated-link",0)==0){
+        unlinkat(dir,"generated-link",0);fail("managed hardlink admitted");
+    }
+    if(errno!=EACCES && errno!=EPERM) fail("hardlink refusal classification");
     fd=openat(dir,"generated-probe",O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC,0600);
     int allowed=fd>=0;
     if(!allowed && errno!=EACCES && errno!=EPERM) fail("temporary write classification");
@@ -62,6 +66,6 @@ int main(int argc,char **argv) {
     if(close(dir)) fail("directory close");
     /* The parent removes its host directory. Remove any namespace-private copy. */
     if(rmdir(argv[6]) && errno!=EACCES && errno!=EPERM) fail("temporary directory cleanup");
-    printf("{\"temporaryWrite\":%s,\"directoryDevice\":%llu,\"directoryInode\":%llu}\n",allowed?"true":"false",(unsigned long long)metadata.st_dev,(unsigned long long)metadata.st_ino);
+    printf("{\"hardlinkDenied\":true,\"temporaryWrite\":%s,\"directoryDevice\":%llu,\"directoryInode\":%llu}\n",allowed?"true":"false",(unsigned long long)metadata.st_dev,(unsigned long long)metadata.st_ino);
     return 0;
 }

@@ -371,3 +371,15 @@ admits the per-domain runtime master-key filename for reading and the readonly
 system image for locking; neither admission grants file writing. The compiler
 checks require the native-accepted hyphen-first character-class form. Global
 libvirt templates and abstractions remain unchanged.
+
+Hardlink mediation is now explicit: the per-domain profile denies all hardlinks
+rather than relying on link permission being absent from inherited rules for
+admitted files. Write complement rules separately deny writing outside the
+allowlist; readonly-image lock admission remains unchanged. The native helper
+attempts to link the guest-owned data inode into its same-filesystem temporary
+directory and requires EACCES/EPERM. An unconfined positive control uses the same
+UID/GID, empty groups and zero capabilities to create, verify and remove a link
+to that inode, demonstrating that ownership and protected_hardlinks alone do not
+explain the negative result. Linux cross-compilation passed; native execution is
+pending. This does not qualify arbitrary inherited descriptors, alternate filesystems,
+application guests or safe UID reuse.

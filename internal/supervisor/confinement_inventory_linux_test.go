@@ -245,6 +245,7 @@ func nativeConfinementWriteProbe(t *testing.T, ctx context.Context, d Domain, pi
 		t.Fatal("confined task write probe failed", observationErr, waitErr, diagnostic.String())
 	}
 	var result struct {
+		HardlinkDenied                  bool
 		TemporaryWrite                  bool
 		DirectoryDevice, DirectoryInode uint64
 	}
@@ -252,10 +253,13 @@ func nativeConfinementWriteProbe(t *testing.T, ctx context.Context, d Domain, pi
 		t.Fatal("probe result", err)
 	}
 	shared := result.DirectoryDevice == uint64(host.Dev) && result.DirectoryInode == host.Ino
+	if d.ConfinedWrites && !result.HardlinkDenied {
+		t.Fatal("hardlink refusal was not observed")
+	}
 	if d.ConfinedWrites && result.TemporaryWrite {
 		t.Fatal("per-domain write boundary allowed temporary writes")
 	}
 
-	t.Log("native confined task write probe", "managedWriteOpen", true, "readonlyWriteDenied", true, "temporaryWrite", result.TemporaryWrite, "temporaryDirectoryMatchesHost", shared)
+	t.Log("native confined task write probe", "managedWriteOpen", true, "readonlyWriteDenied", true, "temporaryWrite", result.TemporaryWrite, "temporaryDirectoryMatchesHost", shared, "managedHardlinkDenied", result.HardlinkDenied)
 	t.Log("native confined task write probe completed; host task does not qualify guest escape containment or safe UID reuse")
 }
