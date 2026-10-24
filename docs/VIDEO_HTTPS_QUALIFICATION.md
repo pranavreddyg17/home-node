@@ -166,3 +166,19 @@ regression cases; [retained evidence](evidence/video-start-exclusion-3e1d58e.jso
 records source and log hash. A procfs scan is an observation, not a proof against
 an escaped process racing fork; safe UID reuse still requires separate verified
 exit and effective filesystem confinement. No UID-release authority is added.
+
+An internal completion transaction now authenticates the exact canonical intent,
+`directory-removed` checkpoint and pending operation before atomically retiring
+socket/channel/volume/group provenance, releasing the UID lease, updating the
+runtime revision and recording completion. Any failure rolls back the entire
+transaction. Completed replay verifies the immutable receipt and removed runtime
+without invoking physical checks against a UID that may now belong to a new
+instance. It rejects altered operation hashes, runtime revisions and receipts.
+The receipt remains retained; historical metadata collection is a separate gate.
+
+This transaction requires a trusted qualified-absence callback after descriptor
+closure and under retained runtime/start exclusion. SQL-only tests inject that
+callback and synthetic checkpoints; they prove atomicity and replay binding,
+not actual process exit, disk absence or safe UID reuse. No production purge path
+calls the transaction yet. Full Linux/component regression qualification for
+this addition is pending; release qualification remains incomplete.
