@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "ec0102164e3a46d1410a880b247f55a48e922d98",
+  "workflowRun": 40111880543,
+  "job": 120925124660,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40111880543",
+  "conclusion": "success",
+  "logSHA256": "9efcf3f1e7223d2f08417548dbd51f6521b19ae1937c3d94c5313ab9563baea9",
+  "profiles": [
+    {
+      "label": "libvirt-b101820e-b7e7-8061-aa00-8c06af434c04",
+      "sourceSHA256": "4e7bdbd11b4b466a24e1ec9b2024f53835a87096b12507df80775e005a972096",
+      "expandedSHA256": "ca1e239c8570a7cfb48d82fec4d400d83cc020eec7ea00f6eaa0fc6bbaa4cb1a",
+      "bytes": 106633
+    },
+    {
+      "label": "libvirt-b101820e-b7e7-8061-aa00-8c06af434c04",
+      "sourceSHA256": "4e7bdbd11b4b466a24e1ec9b2024f53835a87096b12507df80775e005a972096",
+      "expandedSHA256": "ca1e239c8570a7cfb48d82fec4d400d83cc020eec7ea00f6eaa0fc6bbaa4cb1a",
+      "bytes": 106633
+    }
+  ],
+  "launchAttempts": 2,
+  "observations": [
+    {
+      "managedWriteOpen": true,
+      "readonlyWriteDenied": true,
+      "temporaryWriteAllowed": false,
+      "temporaryDirectoryMatchesHost": true
+    },
+    {
+      "managedWriteOpen": true,
+      "readonlyWriteDenied": true,
+      "temporaryWriteAllowed": false,
+      "temporaryDirectoryMatchesHost": true
+    }
+  ],
+  "localChecks": [
+    "Full supervisor race suite passed (22.698s).",
+    "Focused Domain safety tests passed."
+  ],
+  "developmentFailures": [
+    {
+      "run": 40110357068,
+      "reason": "Initial character-class regex compilation failure."
+    },
+    {
+      "run": 40110569289,
+      "reason": "Confirmed regex processing failure with bounded diagnostics."
+    },
+    {
+      "run": 40110834283,
+      "reason": "Compile-only cases isolated unsupported trailing/escaped hyphen forms; hyphen-first accepted."
+    },
+    {
+      "run": 40111043813,
+      "reason": "Policy compiled; libvirt selected its UUID-based profile instead of arbitrary static label."
+    },
+    {
+      "run": 40111389033,
+      "reason": "UUID binding worked; runtime master-key read needed narrow readonly admission."
+    },
+    {
+      "run": 40111627038,
+      "reason": "Startup required readonly system-image locking; separated lock and write allowlists."
+    }
+  ],
+  "limits": [
+    "Per-domain profile renderer and loader are enabled only for the disposable native experiment; production launch defaults are unchanged.",
+    "Synthetic firmware VM and host task probe, not application guests, a guest exploit or copied QEMU seccomp.",
+    "Only the previously observed temporary-write path and managed/readonly controls are probed; complete write-boundary and foreign-guest/network tests remain required.",
+    "Inherited descriptors, runtime read/DAC isolation, installed profile lifecycle, verified exit and safe UID reuse remain unqualified."
+  ],
+  "releaseQualified": false,
+  "retirementRegressionRun": {
+    "workflowRun": 40111880517,
+    "sourceRevision": "ec0102164e3a46d1410a880b247f55a48e922d98",
+    "conclusion": "success"
+  }
+}

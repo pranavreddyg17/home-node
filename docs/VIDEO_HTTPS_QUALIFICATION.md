@@ -354,6 +354,20 @@ TEMPLATE or abstraction, launches the synthetic VM with that static label and
 requires temporary writes to fail while managed write-open and readonly refusal
 controls pass. It retains policy on uncertain VM/UID exit and removes it only
 after observed exit. Focused Domain race tests and Linux cross-compilation passed;
-native profile compilation and launch are pending. Complete write-boundary,
+the [native experiment](https://github.com/pranavreddyg17/home-node/actions/runs/40111880543)
+at `ec01021` passed two launches under the same exact profile. Managed write-open
+and readonly refusal passed, while host temporary writes were denied on both
+attempts. [Retained evidence](evidence/confinement-boundary-ec01021.json) records
+source/profile/log hashes and the development failures. Complete write-boundary,
 network, inherited-descriptor, syscall and application-workflow qualification
 remain required before production adoption or safe UID reuse.
+
+Native iteration established two compatibility requirements. The shipped
+[libvirt 10 AppArmor driver](https://raw.githubusercontent.com/libvirt/libvirt/v10.0.0/src/security/security_apparmor.c)
+selects its UUID-based profile; the confined Domain therefore supplies a stable
+UUIDv8 derived from its case-sensitive protected ID and requires that exact live
+label. Exclusive profile publication refuses collisions. The profile separately
+admits the per-domain runtime master-key filename for reading and the readonly
+system image for locking; neither admission grants file writing. The compiler
+checks require the native-accepted hyphen-first character-class form. Global
+libvirt templates and abstractions remain unchanged.
