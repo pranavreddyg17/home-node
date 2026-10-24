@@ -130,7 +130,10 @@ the channel directory, ownership metadata and UID lease. No guest data is read.
 The Linux component fixture uses an opaque synthetic raw file and an injected
 stopped guard. It exercises replay, descriptor closure, interruption boundaries,
 replacement/collision/symlink/hardlink refusal, changed mode/size, recreated
-socket and substituted parent. Local Linux cross-compilation passed; disposable
-Linux execution of this new volume scope is pending. This is not a formatted
+socket and substituted parent. Local Linux cross-compilation and the full supervisor race suite passed.
+[Disposable Linux execution](https://github.com/pranavreddyg17/home-node/actions/runs/40077382129)
+at `4747795` passed all twelve volume cases and ten socket regression cases;
+[retained evidence](evidence/video-volume-retirement-4747795.json) records source,
+environment, cases and log hash. This is not a formatted
 guest disk, live process-exclusion, directory-retirement or UID-release proof,
 and the reserved purge path continues to refuse destructive cleanup.

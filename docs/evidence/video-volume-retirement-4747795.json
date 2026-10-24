@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "47477958704e3e1141caca91f849ce9205b95af4",
+  "workflowRun": 40077382129,
+  "job": 120823572888,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40077382129",
+  "conclusion": "success",
+  "logSHA256": "6f9ccd55ceb8bc4af7cdf55dec698022a377519cf8fcfba7fec737004e6d6e9a",
+  "environment": {
+    "runner": "ubuntu-24.04",
+    "go": "go1.26.10 linux/amd64",
+    "kernel": "6.17.0-1022-azure"
+  },
+  "volumeComponentSeconds": 0.37,
+  "volumePassedCases": [
+    "retire-replay-and-close-descriptors",
+    "interruption-checkpoint",
+    "interruption-rename",
+    "interruption-unlink",
+    "refuse-replacement",
+    "refuse-collision",
+    "refuse-symlink",
+    "refuse-hardlink",
+    "refuse-mode",
+    "refuse-size",
+    "refuse-recreated-socket",
+    "refuse-parent-symlink"
+  ],
+  "socketRegressionCasesPassed": 10,
+  "uidReleased": false,
+  "limits": [
+    "Opaque synthetic raw file; not a formatted guest disk or a live video VM.",
+    "Stopped guard is injected; actual process exclusion and start serialization are not qualified.",
+    "Channel directory, ownership metadata and UID lease remain retained. Directory retirement and safe UID release are unfinished.",
+    "Reserved purge remains refused; this does not qualify the full video workflow or installed release."
+  ],
+  "releaseQualified": false
+}
