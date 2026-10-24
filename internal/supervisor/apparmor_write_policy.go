@@ -60,6 +60,9 @@ func (d Domain) AppArmorWritePolicy() (string, error) {
 		}
 		keys := make([]int, 0, len(current.children))
 		var excluded strings.Builder
+		if current.children['-'] != nil {
+			excluded.WriteByte('-')
+		}
 		excluded.WriteByte('/')
 		for ch := range current.children {
 			keys = append(keys, int(ch))
@@ -69,9 +72,6 @@ func (d Domain) AppArmorWritePolicy() (string, error) {
 			if byte(k) != '/' && byte(k) != '-' {
 				excluded.WriteByte(byte(k))
 			}
-		}
-		if current.children['-'] != nil {
-			excluded.WriteString(`\-`)
 		}
 		fmt.Fprintf(&out, " deny \"%s[^%s]**\" wkl,\n", prefix, excluded.String())
 		for _, k := range keys {
