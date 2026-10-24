@@ -40,6 +40,12 @@ int main(int argc,char **argv) {
        our live label after credential drop, then explicitly admits the probes. */
     char acknowledged=0;
     if(write(4,"R",1)!=1 || close(4) || read(5,&acknowledged,1)!=1 || acknowledged!='A' || close(5)) fail("parent label acknowledgement");
+    struct stat delegated;
+    if(fstat(6,&delegated) || !S_ISREG(delegated.st_mode) || delegated.st_uid!=0 || (delegated.st_mode&07777)!=0600 || delegated.st_size!=1 || delegated.st_nlink!=1) fail("delegated descriptor admission");
+    ssize_t delegated_result=pwrite(6,"D",1,0);
+    int inherited_allowed=delegated_result==1;
+    if(!inherited_allowed && (delegated_result!=-1 || (errno!=EACCES && errno!=EPERM))) fail("delegated descriptor classification");
+    if(close(6)) fail("delegated descriptor close");
     int fd=open(argv[4],O_RDWR|O_NOFOLLOW|O_CLOEXEC);
     if(fd<0 || close(fd)) fail("managed write-open positive control");
     fd=open(argv[5],O_WRONLY|O_NOFOLLOW|O_CLOEXEC);
@@ -47,7 +53,7 @@ int main(int argc,char **argv) {
     if(errno!=EACCES && errno!=EPERM) fail("readonly refusal classification");
     if(mkdir(argv[6],0700) && errno!=EEXIST) {
         if(errno!=EACCES && errno!=EPERM) fail("temporary directory classification");
-        puts("{\"hardlinkDenied\":false,\"temporaryWrite\":false,\"directoryDevice\":0,\"directoryInode\":0}");return 0;
+        printf("{\"inheritedDescriptorWrite\":%s,\"hardlinkDenied\":false,\"temporaryWrite\":false,\"directoryDevice\":0,\"directoryInode\":0}\n",inherited_allowed?"true":"false");return 0;
     }
     int dir=open(argv[6],O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
     struct stat metadata;
@@ -66,6 +72,6 @@ int main(int argc,char **argv) {
     if(close(dir)) fail("directory close");
     /* The parent removes its host directory. Remove any namespace-private copy. */
     if(rmdir(argv[6]) && errno!=EACCES && errno!=EPERM) fail("temporary directory cleanup");
-    printf("{\"hardlinkDenied\":true,\"temporaryWrite\":%s,\"directoryDevice\":%llu,\"directoryInode\":%llu}\n",allowed?"true":"false",(unsigned long long)metadata.st_dev,(unsigned long long)metadata.st_ino);
+    printf("{\"inheritedDescriptorWrite\":%s,\"hardlinkDenied\":true,\"temporaryWrite\":%s,\"directoryDevice\":%llu,\"directoryInode\":%llu}\n",inherited_allowed?"true":"false",allowed?"true":"false",(unsigned long long)metadata.st_dev,(unsigned long long)metadata.st_ino);
     return 0;
 }

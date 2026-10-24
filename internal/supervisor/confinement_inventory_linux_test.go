@@ -215,8 +215,19 @@ func nativeConfinementWriteProbe(t *testing.T, ctx context.Context, d Domain, pi
 	}
 	defer acknowledgeRead.Close()
 	defer acknowledgeWrite.Close()
+	// Deliberately delegate a generated root-only regular file to measure the
+	// authority retained by descriptors opened before profile/credential changes.
+	delegatedPath := filepath.Join(t.TempDir(), "generated-descriptor")
+	delegated, err := os.OpenFile(delegatedPath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer delegated.Close()
+	if _, err := delegated.Write([]byte{'R'}); err != nil {
+		t.Fatal(err)
+	}
 	cmd.Env = []string{"LANG=C", "HOMENODE_CONFINEMENT_WRITE_PROBE=1"}
-	cmd.ExtraFiles = []*os.File{namespace, readyWrite, acknowledgeRead}
+	cmd.ExtraFiles = []*os.File{namespace, readyWrite, acknowledgeRead, delegated}
 	var output, diagnostic boundedOutput
 	cmd.Stdout = &output
 	cmd.Stderr = &diagnostic
@@ -246,12 +257,25 @@ func nativeConfinementWriteProbe(t *testing.T, ctx context.Context, d Domain, pi
 	}
 	var result struct {
 		HardlinkDenied                  bool
+		InheritedDescriptorWrite        bool
 		TemporaryWrite                  bool
 		DirectoryDevice, DirectoryInode uint64
 	}
 	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
 		t.Fatal("probe result", err)
 	}
+	var observed [1]byte
+	if n, err := delegated.ReadAt(observed[:], 0); err != nil || n != 1 {
+		t.Fatal("delegated descriptor observation", err)
+	}
+	expected := byte('R')
+	if result.InheritedDescriptorWrite {
+		expected = 'D'
+	}
+	if observed[0] != expected {
+		t.Fatal("delegated descriptor result differs from bytes")
+	}
+	t.Log("native inherited descriptor write observation", "allowed", result.InheritedDescriptorWrite, "generatedRootOnlyFile", true)
 	shared := result.DirectoryDevice == uint64(host.Dev) && result.DirectoryInode == host.Ino
 	if d.ConfinedWrites && !result.HardlinkDenied {
 		t.Fatal("hardlink refusal was not observed")

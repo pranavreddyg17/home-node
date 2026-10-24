@@ -387,3 +387,14 @@ negative observations. [Retained evidence](evidence/confinement-hardlinks-a403cd
 records profile/log hashes and controls. The negative tests exercise combined
 write/link denials, without attributing refusal to only one rule. This does not qualify arbitrary inherited descriptors, alternate filesystems,
 application guests or safe UID reuse.
+
+Inherited-descriptor qualification now deliberately delegates a generated
+root-owned 0600 regular file, opened read/write by the unconfined parent, to the
+probe child. After mount/profile transition, complete credential drop and
+parent-confirmed enforcing label, the child verifies the descriptor's metadata
+and attempts a one-byte pwrite. It accepts only a successful write or explicit
+EACCES/EPERM refusal. The parent checks actual bytes against the reported result.
+The workflow requires two observations alongside existing confinement controls.
+No user or workload files are used. Linux cross-compilation passed; native
+execution is pending. This measures this particular delegated regular descriptor,
+not libvirt's actual inherited descriptors or all file/socket/device classes.
