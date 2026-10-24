@@ -59,6 +59,14 @@ func (d Domain) AppArmorWritePolicy() (string, error) {
 	var out strings.Builder
 	fmt.Fprintf(&out, "#include <tunables/global>\nprofile %s flags=(attach_disconnected) {\n #include <abstractions/libvirt-qemu>\n", d.AppArmorName())
 	fmt.Fprintf(&out, " \"%s\" rk,\n \"%s\" rwk,\n \"%s\" rw,\n", d.SystemPath, d.DataPath, d.ChannelPath)
+	// Libvirt opens its per-domain key by pathname after applying the profile.
+	// The numeric runtime directory is assigned at launch. Only this filename is
+	// readable; write denials remain in force, with DAC separating reserved UIDs.
+	shortName := d.Name()
+	if len(shortName) > 20 {
+		shortName = shortName[:20]
+	}
+	fmt.Fprintf(&out, " \"/var/lib/libvirt/qemu/domain-[0-9]*-%s/master-key.aes\" r,\n", shortName)
 	var emit func(string, *node)
 	emit = func(prefix string, current *node) {
 		if !current.terminal {
