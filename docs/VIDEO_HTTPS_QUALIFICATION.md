@@ -137,3 +137,15 @@ at `4747795` passed all twelve volume cases and ten socket regression cases;
 environment, cases and log hash. This is not a formatted
 guest disk, live process-exclusion, directory-retirement or UID-release proof,
 and the reserved purge path continues to refuse destructive cleanup.
+
+The directory-retirement scope now pins the channel parent and recorded empty
+directory, checks exact ownership/mode/inode/mount identity and requires both
+volume names to remain absent. A durable `directory-removing` checkpoint precedes
+a no-replace quarantine rename and `rmdir`, each followed by parent sync and
+retained-descriptor checks. Replay accepts absence only under the recorded
+removal checkpoint. It retains all provenance and the UID lease. Native tests
+cover descriptor closure, each interruption boundary and refusal of replacement,
+collision, symlink, changed mode, foreign entry, recreated volume, substituted
+parent and unrecorded absence. Disposable Linux execution is pending. This does
+not establish live process exclusion or safe UID reuse; reserved purge remains
+disabled.

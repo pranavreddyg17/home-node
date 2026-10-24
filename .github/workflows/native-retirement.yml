@@ -23,7 +23,7 @@ jobs:
           cache: true
       - name: Verify retirement provenance and journal races
         run: go test -race ./internal/supervisor -run '^TestVideoRetirement' -count=1
-      - name: Verify inode-qualified socket and volume retirement on disposable Linux
+      - name: Verify inode-qualified socket, volume and directory retirement on disposable Linux
         run: |
           set -euo pipefail
           go version
@@ -31,12 +31,12 @@ jobs:
           uname -r
           go test -c -o "$RUNNER_TEMP/supervisor-retirement.test" ./internal/supervisor
           sudo install -D -m 0755 "$RUNNER_TEMP/supervisor-retirement.test" /usr/lib/homenode-fixtures/supervisor-retirement.test
-          sudo env HOMENODE_VIDEO_RETIREMENT_FS_INTEGRATION=1 HOMENODE_VIDEO_RETIREMENT_HARDLINK_NEGATIVE=1 /usr/lib/homenode-fixtures/supervisor-retirement.test -test.run='^TestNativeVideoRetirement(Socket|Volume)Scope$' -test.v -test.timeout=2m | tee "$RUNNER_TEMP/video-retirement-socket.log"
+          sudo env HOMENODE_VIDEO_RETIREMENT_FS_INTEGRATION=1 HOMENODE_VIDEO_RETIREMENT_HARDLINK_NEGATIVE=1 /usr/lib/homenode-fixtures/supervisor-retirement.test -test.run='^TestNativeVideoRetirement(Socket|Volume|Directory)Scope$' -test.v -test.timeout=2m | tee "$RUNNER_TEMP/video-retirement-socket.log"
           python3 -B - "$RUNNER_TEMP/video-retirement-socket.log" <<'PY'
           import pathlib, sys
           with pathlib.Path(sys.argv[1]).open('rb') as stream:
               output = stream.read((1 << 20) + 1)
-          if len(output) > 1 << 20 or b'reserved video socket filesystem component passed;' not in output or b'hardlink-disabled refusal and restoration passed' not in output or b'reserved video volume filesystem component passed;' not in output:
+          if len(output) > 1 << 20 or b'reserved video socket filesystem component passed;' not in output or b'hardlink-disabled refusal and restoration passed' not in output or b'reserved video volume filesystem component passed;' not in output or b'reserved video directory filesystem component passed;' not in output:
               raise SystemExit('native retirement component evidence missing or oversized')
           PY
       - name: Retain bounded component diagnostics
