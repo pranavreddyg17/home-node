@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "0bd46886f16458d04a0d889671146c360ebbfb74",
+  "workflowRun": 40107402249,
+  "job": 120911833687,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40107402249",
+  "conclusion": "success",
+  "logSHA256": "e626625777efebfe25876b2fd5590e98b38fa3b2d698b06ec1e688b6e47fecbb",
+  "preflightPassedCases": [
+    "refuse-volume-before-socket-effects-replacement",
+    "refuse-volume-before-socket-effects-symlink",
+    "refuse-volume-before-socket-effects-hardlink",
+    "refuse-volume-before-socket-effects-mode",
+    "refuse-volume-before-socket-effects-size",
+    "refuse-volume-before-socket-effects-missing",
+    "refuse-volume-before-socket-effects-quarantine-collision",
+    "refuse-volume-before-socket-effects-preparation-collision",
+    "retains-volume-guard-at-socket-checkpoint"
+  ],
+  "regressionScopes": [
+    "SocketScope",
+    "VolumeScope",
+    "DirectoryScope",
+    "StartExclusion"
+  ],
+  "localChecks": [
+    "Focused retirement race suite passed (9.286s).",
+    "Linux amd64 supervisor tests cross-compiled."
+  ],
+  "limits": [
+    "Generated root-private socket, synthetic raw file and injected stopped guard; not a live application VM.",
+    "Volume and directory fixture preparation now composes volume preflight with socket removal, but public reserved physical purge is still refused.",
+    "This does not establish actual VM/process exit, escaped-process containment, safe UID reuse or the complete video workflow."
+  ],
+  "releaseQualified": false
+}

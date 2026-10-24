@@ -216,5 +216,8 @@ lease and provenance. Volume/directory component fixtures now use this composed
 socket scope. Native preflight cases additionally require volume refusal before
 socket mutation and loss-of-volume-authority refusal at the socket checkpoint,
 followed by an authenticated retry. Linux cross-compilation passed; disposable
-execution is pending. This remains internal, uses injected stopped guards in its
+[execution](https://github.com/pranavreddyg17/home-node/actions/runs/40107402249)
+at `0bd4688` passed all nine preflight cases and all existing native retirement
+scopes. [Retained evidence](evidence/video-preflight-0bd4688.json) records source,
+cases and log hash. This remains internal, uses injected stopped guards in its
 fixture and does not qualify process exit, safe UID reuse or full video cleanup.
