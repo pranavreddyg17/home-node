@@ -37,7 +37,11 @@ int main(int argc,char **argv) {
     struct __user_cap_data_struct caps[2];
     if(getresuid(&ru,&eu,&su) || getresgid(&rg,&eg,&sg) || ru!=uid || eu!=uid || su!=uid || rg!=gid || eg!=gid || sg!=gid || getgroups(0,NULL)!=0 || syscall(SYS_capget,&header,caps) || caps[0].effective || caps[1].effective || caps[0].permitted || caps[1].permitted) fail("credential verification");
     char *label=NULL,*mode=NULL;
-    if(aa_getcon(&label,&mode)<0 || !label || strcmp(label,argv[1]) || !mode || strcmp(mode,"enforce")) fail("live task label");
+    int label_result=aa_getcon(&label,&mode);
+    if(label_result<0 || !label || strcmp(label,argv[1]) || !mode || strcmp(mode,"enforce")) {
+        fprintf(stderr,"probe label observation result=%d errno=%d label=%s mode=%s\n",label_result,errno,label?label:"(missing)",mode?mode:"(missing)");
+        fail("live task label");
+    }
     free(label);
     int fd=open(argv[4],O_RDWR|O_NOFOLLOW|O_CLOEXEC);
     if(fd<0 || close(fd)) fail("managed write-open positive control");
