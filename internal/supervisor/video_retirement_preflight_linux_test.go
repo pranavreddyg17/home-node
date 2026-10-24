@@ -16,7 +16,7 @@ func TestNativeVideoRetirementPreflight(t *testing.T) {
 	if os.Geteuid() != 0 || os.Getenv("HOMENODE_VIDEO_RETIREMENT_FS_INTEGRATION") != "1" || os.Getenv("HOMENODE_VIDEO_RETIREMENT_HARDLINK_NEGATIVE") != "1" {
 		t.Skip("explicit disposable Linux root fixture required")
 	}
-	for _, kind := range []string{"replacement", "symlink", "hardlink", "mode", "size", "missing", "quarantine-collision", "preparation-collision"} {
+	for _, kind := range []string{"replacement", "symlink", "hardlink", "mode", "size", "missing", "quarantine-collision", "preparation-collision", "channel-preparation-collision"} {
 		t.Run("refuse-volume-before-socket-effects-"+kind, func(t *testing.T) {
 			m, record, path, stage := nativeVideoPreparedVolumeFixture(t)
 			switch kind {
@@ -55,6 +55,10 @@ func TestNativeVideoRetirementPreflight(t *testing.T) {
 				}
 			case "quarantine-collision":
 				if err := os.WriteFile(stage, []byte("preserve"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			case "channel-preparation-collision":
+				if err := os.WriteFile(filepath.Join(m.Channels, "."+record.Intent.Request.InstanceID+".channel-prepare"), []byte("preserve"), 0600); err != nil {
 					t.Fatal(err)
 				}
 			case "preparation-collision":

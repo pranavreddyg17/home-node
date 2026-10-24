@@ -91,6 +91,30 @@ func TestNativeVideoRetirementResources(t *testing.T) {
 			t.Fatal("replacement changed", err)
 		}
 	})
+	for _, kind := range []string{"channel", "volume"} {
+		t.Run("final-replay-refuses-"+kind+"-preparation", func(t *testing.T) {
+			m, record, _, _ := nativeVideoPreparedVolumeFixture(t)
+			if _, err := m.retireVideoResources(context.Background(), record, guard); err != nil {
+				t.Fatal(err)
+			}
+			parent, suffix := m.Volumes, ".volume-prepare"
+			if kind == "channel" {
+				parent, suffix = m.Channels, ".channel-prepare"
+			}
+			path := filepath.Join(parent, "."+record.Intent.Request.InstanceID+suffix)
+			if err := os.WriteFile(path, []byte("preserve preparation"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			got, err := m.retireVideoResources(context.Background(), record, guard)
+			if !errors.Is(err, ErrPolicy) || got.Stage != "" {
+				t.Fatal("preparation admitted", got.Stage, err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil || string(data) != "preserve preparation" {
+				t.Fatal("preparation changed", err)
+			}
+		})
+	}
 	if !t.Failed() {
 		t.Log("reserved video physical sequence component passed; injected stopped guard and retained UID do not qualify complete video cleanup")
 	}

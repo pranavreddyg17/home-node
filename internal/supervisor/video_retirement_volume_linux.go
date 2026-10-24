@@ -53,6 +53,11 @@ func (m *Manager) withVideoVolumeChannel(ctx context.Context, intent videoRetire
 		if oe != nil || pe != nil || !os.SameFile(opened, path) || unix.Fstat(int(parent.Fd()), &current) != nil || current.Dev != original.Dev || current.Ino != original.Ino || current.Mode != original.Mode || current.Uid != original.Uid || current.Gid != original.Gid || !m.reservedChannelParentAdmitted(current) {
 			return ErrPolicy
 		}
+		for _, entry := range []string{"." + owner.InstanceID + ".channel-prepare", "." + owner.InstanceID + ".video-directory-retire-" + strconv.FormatInt(intent.Request.Revision, 10)} {
+			if err := unix.Fstatat(int(parent.Fd()), entry, &named, unix.AT_SYMLINK_NOFOLLOW); !errors.Is(err, unix.ENOENT) {
+				return errors.Join(ErrPolicy, err)
+			}
+		}
 		if unix.Fstat(int(directory.Fd()), &dir) != nil || uint64(dir.Dev) != owner.Device || dir.Ino != owner.Inode || dir.Uid != owner.UID || dir.Gid != owner.AccessGID || dir.Mode != unix.S_IFDIR|0710 || unix.Fstatat(int(parent.Fd()), owner.InstanceID, &named, unix.AT_SYMLINK_NOFOLLOW) != nil || named.Dev != dir.Dev || named.Ino != dir.Ino || named.Mode != dir.Mode || named.Uid != dir.Uid || named.Gid != dir.Gid || named.Nlink != dir.Nlink {
 			return ErrPolicy
 		}
@@ -184,6 +189,9 @@ func (m *Manager) retireVideoVolume(ctx context.Context, supplied videoRetiremen
 			path, pe := os.Lstat(m.Volumes)
 			if oe != nil || pe != nil || !os.SameFile(opened, path) || unix.Fstat(int(parent.Fd()), &current) != nil || current.Dev != original.Dev || current.Ino != original.Ino || current.Mode != original.Mode || current.Uid != original.Uid || current.Gid != original.Gid || current.Uid != 0 || current.Gid != owner.GID || current.Mode != unix.S_IFDIR|0710 || !samePathMount(int(parent.Fd()), unix.AT_FDCWD, m.Volumes) {
 				return ErrPolicy
+			}
+			if err := unix.Fstatat(int(parent.Fd()), "."+owner.InstanceID+".volume-prepare", &named, unix.AT_SYMLINK_NOFOLLOW); !errors.Is(err, unix.ENOENT) {
+				return errors.Join(ErrPolicy, err)
 			}
 			var pm unix.Statx_t
 			if unix.Statx(int(parent.Fd()), "", unix.AT_EMPTY_PATH, unix.STATX_MNT_ID, &pm) != nil || pm.Mask&unix.STATX_MNT_ID == 0 || pm.Mnt_id == 0 {

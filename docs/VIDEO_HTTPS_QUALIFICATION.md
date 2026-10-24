@@ -233,3 +233,11 @@ six durable removal phases and refusal/preservation of a recreated volume after
 physical completion. Linux cross-compilation passed; disposable execution is
 pending. Injected stopped guards and synthetic disk bytes do not qualify actual
 process exit, safe UID reuse or the complete application workflow.
+
+Review of the composed sequence found that leftover per-instance preparation
+paths also need refusal. Socket and volume guards now reject a channel
+preparation path or premature directory quarantine; volume and final directory
+guards reject volume preparation paths too. Final physical replay refuses and
+preserves either recreated preparation path. These checks cover known managed
+resource names; they do not establish absence of arbitrary UID-owned files
+outside managed roots. The updated native cases are pending execution.

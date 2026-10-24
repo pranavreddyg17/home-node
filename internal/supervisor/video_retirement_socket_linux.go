@@ -157,6 +157,11 @@ func (m *Manager) retireVideoSocket(ctx context.Context, supplied videoRetiremen
 		if pe != nil || pne != nil || !os.SameFile(p, pn) || unix.Fstat(int(parent.Fd()), &currentParent) != nil || currentParent.Dev != original.Dev || currentParent.Ino != original.Ino || currentParent.Mode != original.Mode || currentParent.Uid != original.Uid || currentParent.Gid != original.Gid || !m.reservedChannelParentAdmitted(currentParent) {
 			return ErrPolicy
 		}
+		for _, entry := range []string{"." + owner.InstanceID + ".channel-prepare", "." + owner.InstanceID + ".video-directory-retire-" + strconv.FormatInt(record.Intent.Request.Revision, 10)} {
+			if err := unix.Fstatat(int(parent.Fd()), entry, &named, unix.AT_SYMLINK_NOFOLLOW); !errors.Is(err, unix.ENOENT) {
+				return errors.Join(ErrPolicy, err)
+			}
+		}
 		if unix.Fstat(int(directory.Fd()), &dir) != nil || uint64(dir.Dev) != owner.Device || dir.Ino != owner.Inode || dir.Uid != owner.UID || dir.Gid != owner.AccessGID || dir.Mode != unix.S_IFDIR|0710 || unix.Fstatat(int(parent.Fd()), owner.InstanceID, &named, unix.AT_SYMLINK_NOFOLLOW) != nil || named.Dev != dir.Dev || named.Ino != dir.Ino || named.Mode != dir.Mode || named.Uid != dir.Uid || named.Gid != dir.Gid {
 			return ErrPolicy
 		}

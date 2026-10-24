@@ -109,11 +109,15 @@ func (m *Manager) retireVideoDirectory(ctx context.Context, supplied videoRetire
 				return ErrPolicy
 			}
 		}
-		for _, entry := range []string{source + ".raw", "." + source + ".video-volume-retire-" + strconv.FormatInt(record.Intent.Request.Revision, 10)} {
+		for _, entry := range []string{"." + source + ".volume-prepare", source + ".raw", "." + source + ".video-volume-retire-" + strconv.FormatInt(record.Intent.Request.Revision, 10)} {
 			var v unix.Stat_t
 			if err := unix.Fstatat(int(volumeParent.Fd()), entry, &v, unix.AT_SYMLINK_NOFOLLOW); !errors.Is(err, unix.ENOENT) {
 				return errors.Join(ErrPolicy, err)
 			}
+		}
+		var preparation unix.Stat_t
+		if err := unix.Fstatat(int(parent.Fd()), "."+source+".channel-prepare", &preparation, unix.AT_SYMLINK_NOFOLLOW); !errors.Is(err, unix.ENOENT) {
+			return errors.Join(ErrPolicy, err)
 		}
 		var pm unix.Statx_t
 		if unix.Statx(int(parent.Fd()), "", unix.AT_EMPTY_PATH, unix.STATX_MNT_ID, &pm) != nil || pm.Mask&unix.STATX_MNT_ID == 0 || pm.Mnt_id == 0 {
