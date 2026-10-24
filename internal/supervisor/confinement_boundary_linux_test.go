@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -42,8 +43,13 @@ func nativeInstallWriteBoundary(t *testing.T, ctx context.Context, d *Domain) {
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := command(ctx, "", "/usr/sbin/apparmor_parser", "--add", path); err != nil {
-		t.Fatal("per-domain policy load", err)
+	load := exec.CommandContext(ctx, "/usr/sbin/apparmor_parser", "--add", path)
+	load.Env = []string{"LANG=C", "LC_ALL=C", "PATH=/usr/sbin:/usr/bin:/sbin:/bin"}
+	var diagnostics boundedOutput
+	load.Stdout = &diagnostics
+	load.Stderr = &diagnostics
+	if err := load.Run(); err != nil || diagnostics.tooLarge {
+		t.Fatal("per-domain policy load", err, diagnostics.String())
 	}
 	t.Cleanup(func() {
 		scope, cancel := context.WithTimeout(context.Background(), 15*time.Second)

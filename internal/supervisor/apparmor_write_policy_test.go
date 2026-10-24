@@ -10,7 +10,7 @@ import (
 )
 
 func TestDomainAppArmorWritePolicyRejectsInjectionAndAuthorityAliases(t *testing.T) {
-	for _, kind := range []string{"wildcard", "quote", "newline", "relative", "traversal", "readonly-alias", "channel-alias", "device-alias", "missing-uid", "oversized"} {
+	for _, kind := range []string{"wildcard", "quote", "newline", "relative", "traversal", "readonly-alias", "channel-alias", "device-alias", "missing-uid", "oversized", "root-directory"} {
 		t.Run(kind, func(t *testing.T) {
 			d := Domain{ID: state.Random(), GuestUID: 200000, GuestGID: 108, SystemPath: "/var/lib/homenode/images/system.raw", DataPath: "/var/lib/homenode/volumes/video.raw", ChannelPath: "/run/homenode/video/adapter.sock"}
 			switch kind {
@@ -32,6 +32,8 @@ func TestDomainAppArmorWritePolicyRejectsInjectionAndAuthorityAliases(t *testing
 				d.DataPath = "/dev/kvm"
 			case "missing-uid":
 				d.GuestUID = 0
+			case "root-directory":
+				d.DataPath = "/"
 			case "oversized":
 				d.DataPath = "/" + strings.Repeat("a", 256)
 			}

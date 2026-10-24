@@ -19,7 +19,7 @@ func (d Domain) AppArmorWritePolicy() (string, error) {
 		return "", ErrPolicy
 	}
 	for _, path := range []string{d.SystemPath, d.DataPath, d.ChannelPath} {
-		if !filepath.IsAbs(path) || filepath.Clean(path) != path || len(path) > 256 || strings.Trim(path, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._-") != "" {
+		if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" || len(path) > 256 || strings.Trim(path, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._-") != "" {
 			return "", ErrPolicy
 		}
 	}
@@ -55,7 +55,7 @@ func (d Domain) AppArmorWritePolicy() (string, error) {
 		if !current.terminal {
 			fmt.Fprintf(&out, " deny \"%s\" wkl,\n", prefix)
 		}
-		if current.children['/'] == nil {
+		if current.children['/'] == nil && !strings.HasSuffix(prefix, "/") {
 			fmt.Fprintf(&out, " deny \"%s/**\" wkl,\n", prefix)
 		}
 		keys := make([]int, 0, len(current.children))
