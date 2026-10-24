@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "386111f9fd70dc1212c29440c4f942241ed8bf72",
+  "workflowRun": 40113093732,
+  "job": 120928716333,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40113093732",
+  "conclusion": "success",
+  "logSHA256": "0c361211493cccf736b0e4210533dd135eebd564a4678fd92e50b60eafc599a2",
+  "inheritedRegularDescriptorWriteAllowed": [
+    true,
+    true
+  ],
+  "pairedFreshAccessControls": 2,
+  "finding": "An intentionally delegated root-owned 0600 regular-file descriptor retained one-byte write authority after transition to the live VM profile/namespace, reserved IDs, empty groups, zero capabilities and no-new-privileges. Parent verified changed bytes.",
+  "limits": [
+    "Generated file opened by an unconfined root parent; not an actual libvirt/QEMU descriptor or a user file.",
+    "This does not establish that libvirt delegates an unsafe descriptor or reproduce QEMU seccomp or guest exploitation.",
+    "Fresh temporary writes and hardlinks remained refused; this finding concerns inherited authority.",
+    "Actual writable-descriptor inventory, explicit descriptor admission, verified exit and safe UID reuse remain unqualified."
+  ],
+  "releaseQualified": false
+}

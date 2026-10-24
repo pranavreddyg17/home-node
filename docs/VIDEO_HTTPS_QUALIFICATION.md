@@ -395,6 +395,18 @@ parent-confirmed enforcing label, the child verifies the descriptor's metadata
 and attempts a one-byte pwrite. It accepts only a successful write or explicit
 EACCES/EPERM refusal. The parent checks actual bytes against the reported result.
 The workflow requires two observations alongside existing confinement controls.
-No user or workload files are used. Linux cross-compilation passed; native
-execution is pending. This measures this particular delegated regular descriptor,
+No user or workload files are used. Linux cross-compilation and the
+[native run](https://github.com/pranavreddyg17/home-node/actions/runs/40113093732)
+at `386111f` passed. Both intentionally delegated descriptor writes succeeded,
+with changed bytes independently verified by the parent. Fresh temporary writes
+and hardlinks remained denied. [Retained evidence](evidence/confinement-inherited-386111f.json)
+records the result and source/log hash. This measures this particular delegated regular descriptor,
 not libvirt's actual inherited descriptors or all file/socket/device classes.
+
+The inherited-descriptor result requires an explicit launch-authority audit:
+inventory actual QEMU writable regular files and other descriptor classes under
+the admitted process identity, bind necessary inherited authority to owned
+resources and lifecycle, and refuse unexplained persistent writable handles.
+A rendered pathname allowlist alone cannot establish that boundary. The observed
+deliberate delegation is not evidence that libvirt passes an unsafe descriptor.
+Production adoption and UID reuse remain closed pending that qualification.
