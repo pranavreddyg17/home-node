@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "cbc66b96cb3b995b42537d16018ebcdf83c816ba",
+  "workflowRun": 40108222447,
+  "job": 120914263253,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40108222447",
+  "conclusion": "success",
+  "logSHA256": "6518df11c2051b44f5a37cced0f4570e817334ef392fcbc29d93b05621b11ae7",
+  "passedSIGKILLCases": [
+    "phase:socket-removing",
+    "phase:socket-removed",
+    "phase:volume-removing",
+    "phase:volume-removed",
+    "phase:directory-removing",
+    "phase:directory-removed",
+    "socket-rename",
+    "socket-unlink",
+    "volume-rename",
+    "volume-unlink",
+    "directory-rename",
+    "directory-unlink"
+  ],
+  "uidReleased": false,
+  "limits": [
+    "Actual child-process SIGKILL at acknowledged checkpoints with SQLite and resource descriptors open; not host reboot or power-loss.",
+    "Generated root-private filesystem resources and injected stopped guards, not actual application VMs.",
+    "Known resource removal and journal recovery do not establish absence of arbitrary UID-owned files outside managed roots.",
+    "Production physical cleanup, safe UID reuse and full video workflow remain unqualified."
+  ],
+  "releaseQualified": false
+}

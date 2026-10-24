@@ -267,6 +267,20 @@ boundaries and the socket/volume/directory rename and unlink boundaries. The
 child is killed with SQLite and resource descriptors open; parent recovery opens
 the existing journal in a fresh manager, authenticates the original request and
 requires physical completion with the UID lease retained. No fixture credentials
-or workload data are passed in arguments or logs. Linux cross-compilation passed;
-execution is pending. Generated resources and injected stopped guards do not
+or workload data are passed in arguments or logs. Linux cross-compilation and
+the [disposable run](https://github.com/pranavreddyg17/home-node/actions/runs/40108222447)
+at `cbc66b9` passed all twelve SIGKILL cases and the existing retirement scopes.
+[Retained evidence](evidence/video-sigkill-cbc66b9.json) records source, cases and
+log hash. Generated resources and injected stopped guards do not
 qualify power-loss, reboot, live VM exit, safe UID reuse or full video cleanup.
+
+Safe UID reuse still requires effective write-confinement qualification. The
+[upstream libvirt QEMU AppArmor abstraction](https://github.com/libvirt/libvirt/blob/master/src/security/apparmor/libvirt-qemu)
+includes owner-writable temporary PulseAudio and shared-memory paths in addition
+to dynamically added resource permissions. This is upstream source research,
+not a claim about the effective Ubuntu profile on the runner or installed host.
+An enforcing label alone therefore cannot prove that all UID-owned persistent
+objects are among the retired HomeNode paths. Before enabling reuse, inspect the
+exact shipped/generated profile, included abstractions, mount namespace and DAC
+constraints; test positive allowed operations and negative writes outside the
+retired resource set. Current cleanup remains fail-closed at this gate.
