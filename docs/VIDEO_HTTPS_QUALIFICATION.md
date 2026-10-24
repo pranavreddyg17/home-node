@@ -380,6 +380,10 @@ attempts to link the guest-owned data inode into its same-filesystem temporary
 directory and requires EACCES/EPERM. An unconfined positive control uses the same
 UID/GID, empty groups and zero capabilities to create, verify and remove a link
 to that inode, demonstrating that ownership and protected_hardlinks alone do not
-explain the negative result. Linux cross-compilation passed; native execution is
-pending. This does not qualify arbitrary inherited descriptors, alternate filesystems,
+explain the negative result. Linux cross-compilation, focused Domain race tests
+and the [native run](https://github.com/pranavreddyg17/home-node/actions/runs/40112644747)
+at `a403cdb` passed. The workflow now requires exactly two paired positive and
+negative observations. [Retained evidence](evidence/confinement-hardlinks-a403cdb.json)
+records profile/log hashes and controls. The negative tests exercise combined
+write/link denials, without attributing refusal to only one rule. This does not qualify arbitrary inherited descriptors, alternate filesystems,
 application guests or safe UID reuse.

@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "a403cdb7fe2b621cc3e1808145c638c8dd3183b5",
+  "workflowRun": 40112644747,
+  "job": 120927402509,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40112644747",
+  "conclusion": "success",
+  "logSHA256": "3ad28b7ac09e28bf297536f45781d0f2b9e1fcb93e3f4e835693241c054faa6f",
+  "profiles": [
+    {
+      "label": "libvirt-9090c460-1c6b-85b2-b682-8ffd04472a17",
+      "sourceSHA256": "dd6e13b8fa315e0d9989a3ffd21edc3788f4f00bf119983d70b4170fd76b2d3f",
+      "expandedSHA256": "eba7e7a1d574be622c684b795543d0f2a156468bcba75e2e530f1a4baf5aad46",
+      "bytes": 106317
+    },
+    {
+      "label": "libvirt-9090c460-1c6b-85b2-b682-8ffd04472a17",
+      "sourceSHA256": "dd6e13b8fa315e0d9989a3ffd21edc3788f4f00bf119983d70b4170fd76b2d3f",
+      "expandedSHA256": "eba7e7a1d574be622c684b795543d0f2a156468bcba75e2e530f1a4baf5aad46",
+      "bytes": 106317
+    }
+  ],
+  "observations": [
+    {
+      "managedWriteOpen": true,
+      "readonlyWriteDenied": true,
+      "temporaryWriteAllowed": false,
+      "temporaryDirectoryMatchesHost": true,
+      "managedHardlinkDenied": true
+    },
+    {
+      "managedWriteOpen": true,
+      "readonlyWriteDenied": true,
+      "temporaryWriteAllowed": false,
+      "temporaryDirectoryMatchesHost": true,
+      "managedHardlinkDenied": true
+    }
+  ],
+  "unconfinedOwnerHardlinkControls": 2,
+  "priorNativePass": {
+    "workflowRun": 40112467551,
+    "sourceRevision": "46955720954053e6192935bef5a692e9cd937b98",
+    "conclusion": "success"
+  },
+  "localChecks": [
+    "Linux amd64 supervisor tests cross-compiled.",
+    "Focused Domain race suite passed (1.934s)."
+  ],
+  "limits": [
+    "Same-filesystem generated resource probe under a synthetic VM profile/namespace, not an application guest or exploit.",
+    "Positive control uses exact UID/GID, empty groups and zero capabilities; combined write/link denials are tested rather than isolated attribution to a single rule.",
+    "No existing workload bytes are changed; generated hardlink aliases are removed.",
+    "Production adoption, inherited descriptors, QEMU syscall-policy equivalence, alternate filesystems and safe UID reuse remain unqualified."
+  ],
+  "releaseQualified": false
+}
