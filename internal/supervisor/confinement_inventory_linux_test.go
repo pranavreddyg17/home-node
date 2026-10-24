@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -154,4 +155,67 @@ func nativeConfinementInventory(t *testing.T, ctx context.Context, d Domain) {
 	sourceDigest := sha256.Sum256(source)
 	t.Log("native AppArmor source inventory", name, "sourceSHA256", hex.EncodeToString(sourceDigest[:]), "expandedSHA256", hash, "bytes", output.Len())
 	t.Log("native AppArmor source inventory retained; effective kernel write permissions and safe UID reuse remain unqualified")
+	nativeConfinementWriteProbe(t, ctx, d, pid, name)
+}
+
+// A separate single-threaded helper joins the actual mount namespace, adopts
+// the live profile, drops all IDs/groups/capabilities and performs fresh opens.
+// This is a host task probe, not execution from a compromised guest or QEMU.
+func nativeConfinementWriteProbe(t *testing.T, ctx context.Context, d Domain, pid int, label string) {
+	t.Helper()
+	if os.Getenv("HOMENODE_CONFINEMENT_WRITE_PROBE") != "1" {
+		return
+	}
+	const helper = "/usr/lib/homenode-fixtures/confinement-probe"
+	info, err := os.Lstat(helper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || !info.Mode().IsRegular() || meta.Uid != 0 || info.Mode().Perm() != 0755 {
+		t.Fatal("unqualified confinement probe helper")
+	}
+	namespace, err := os.Open(filepath.Join("/proc", strconv.Itoa(pid), "ns/mnt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer namespace.Close()
+	temp, err := os.MkdirTemp("/tmp", "pulse-homenode-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Remove(temp); err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Error("temporary probe directory cleanup", err)
+		}
+	}()
+	if err := os.Chown(temp, int(d.GuestUID), int(d.GuestGID)); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Lstat(temp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := before.Sys().(*syscall.Stat_t)
+	scope, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(scope, helper, label, strconv.FormatUint(uint64(d.GuestUID), 10), strconv.FormatUint(uint64(d.GuestGID), 10), d.DataPath, d.SystemPath, temp)
+	cmd.Env = []string{"LANG=C", "HOMENODE_CONFINEMENT_WRITE_PROBE=1"}
+	cmd.ExtraFiles = []*os.File{namespace}
+	var output, diagnostic boundedOutput
+	cmd.Stdout = &output
+	cmd.Stderr = &diagnostic
+	if err := cmd.Run(); err != nil || output.tooLarge || diagnostic.tooLarge {
+		t.Fatal("confined task write probe failed", err, diagnostic.String())
+	}
+	var result struct {
+		TemporaryWrite                  bool
+		DirectoryDevice, DirectoryInode uint64
+	}
+	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
+		t.Fatal("probe result", err)
+	}
+	shared := result.DirectoryDevice == uint64(host.Dev) && result.DirectoryInode == host.Ino
+	t.Log("native confined task write probe", "managedWriteOpen", true, "readonlyWriteDenied", true, "temporaryWrite", result.TemporaryWrite, "temporaryDirectoryMatchesHost", shared)
+	t.Log("native confined task write probe completed; host task does not qualify guest escape containment or safe UID reuse")
 }

@@ -305,3 +305,20 @@ not proof that source and currently loaded kernel policy are equivalent. It
 also does not measure write permission, mount-namespace restrictions or positive
 and negative access under QEMU credentials. Those observations are still needed
 before safe UID reuse or reserved public cleanup can be qualified.
+
+The disposable write-access probe now uses a protected single-threaded C helper
+linked to libapparmor. It joins the live QEMU mount namespace through an inherited
+namespace descriptor, verifies namespace identity, adopts the actual AppArmor
+profile, drops all IDs/groups, requires zero effective/permitted capabilities
+and sets no-new-privileges. It verifies its task label, opens the managed data
+volume for writing as a positive control, requires refusal of a write-open on
+the readonly system image, then attempts a generated temporary file write under
+a PulseAudio-shaped path. It cleans its generated file and reports whether the
+temporary directory matches the host's inode. No existing workload bytes are
+written. The helper is a disposable test artifact, not a product executable.
+
+Go/Linux cross-compilation passed; Linux C compilation and execution are pending.
+An allowed temporary write is reported as a finding, not a security qualification.
+This probes a host task under the selected profile/namespace and DAC identity;
+it does not run through a guest exploit, reproduce QEMU seccomp or establish safe
+UID reuse. Public reserved cleanup remains refused.

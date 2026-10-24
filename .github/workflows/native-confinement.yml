@@ -5,6 +5,7 @@ on:
       - '.github/workflows/native-confinement.yml'
       - 'internal/supervisor/confinement_inventory_linux_test.go'
       - 'internal/supervisor/kvm_domain_linux_test.go'
+      - 'packaging/systemd/confinement_probe.c'
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,7 +20,7 @@ jobs:
           go-version: '1.26.10'
           cache: true
       - name: Install native runtime and read-only policy tools
-        run: sudo apt-get update && sudo apt-get install -y libvirt-clients libvirt-daemon-system qemu-system-x86 apparmor e2fsprogs
+        run: sudo apt-get update && sudo apt-get install -y libvirt-clients libvirt-daemon-system qemu-system-x86 apparmor libapparmor-dev e2fsprogs
       - name: Capture expanded sources beside a live confined synthetic domain
         working-directory: internal/supervisor
         run: |
@@ -31,13 +32,15 @@ jobs:
           dpkg-query -W apparmor libvirt-daemon-system qemu-system-x86
           go test -c -o "$RUNNER_TEMP/confinement.test" .
           sudo install -D -m 0755 "$RUNNER_TEMP/confinement.test" /usr/lib/homenode-fixtures/supervisor.test
+          cc -std=c11 -O2 -Wall -Wextra -Werror ../../packaging/systemd/confinement_probe.c -lapparmor -o "$RUNNER_TEMP/confinement-probe"
+          sudo install -m 0755 "$RUNNER_TEMP/confinement-probe" /usr/lib/homenode-fixtures/confinement-probe
           sudo systemctl start libvirtd
-          sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 HOMENODE_CONFINEMENT_INVENTORY=1 /usr/lib/homenode-fixtures/supervisor.test -test.run='^TestNativeReservedDACLibvirtLaunch$' -test.v -test.timeout=3m | tee "$RUNNER_TEMP/confinement-inventory.log"
+          sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 HOMENODE_CONFINEMENT_INVENTORY=1 HOMENODE_CONFINEMENT_WRITE_PROBE=1 /usr/lib/homenode-fixtures/supervisor.test -test.run='^TestNativeReservedDACLibvirtLaunch$' -test.v -test.timeout=3m | tee "$RUNNER_TEMP/confinement-inventory.log"
           python3 -B - "$RUNNER_TEMP/confinement-inventory.log" <<'PY'
           import pathlib, sys
           with pathlib.Path(sys.argv[1]).open('rb') as stream:
               output = stream.read((1 << 20) + 1)
-          if len(output) > 1 << 20 or b'native AppArmor source inventory retained;' not in output:
+          if len(output) > 1 << 20 or b'native AppArmor source inventory retained;' not in output or b'native confined task write probe completed;' not in output:
               raise SystemExit('bounded source inventory evidence missing')
           PY
       - name: Retain generated expanded policy sources
