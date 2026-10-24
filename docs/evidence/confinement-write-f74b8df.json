@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "f74b8dfe56826a1526fcb23a9754798b2c7d67ae",
+  "workflowRun": 40109589284,
+  "job": 120918324107,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/40109589284",
+  "conclusion": "success",
+  "logSHA256": "44dce561106e2de0bf22c65c6434044bf8edad8e00723ecea6060f6bd9d3869a",
+  "profiles": [
+    {
+      "label": "libvirt-95fe6ed0-b042-4ca0-a296-e4754d5c60d5",
+      "sourceSHA256": "85013548735f108705e392fbd94d871d4748e3b5ffae637709bdf4dd6e810162",
+      "expandedSHA256": "a4c3527cbbec0cdd1dafa0795d851295bcfacc25baec1745cc10d06410eabd5d",
+      "bytes": 73384
+    },
+    {
+      "label": "libvirt-0a72e74f-89ba-4ddc-9db7-ddc6a62432a7",
+      "sourceSHA256": "85321f8bb355e606a954bf99a122bccb321f7270946b1ca2e5523ca2c2fb5e8b",
+      "expandedSHA256": "edcd25c0697b6f70b467f3f9272642cc913f930ebdec1ba63de2a97a746689de",
+      "bytes": 73384
+    }
+  ],
+  "observations": [
+    {
+      "managedWriteOpen": true,
+      "readonlyWriteDenied": true,
+      "temporaryWriteAllowed": true,
+      "temporaryDirectoryMatchesHost": true
+    },
+    {
+      "managedWriteOpen": true,
+      "readonlyWriteDenied": true,
+      "temporaryWriteAllowed": true,
+      "temporaryDirectoryMatchesHost": true
+    }
+  ],
+  "securityFinding": "Fresh generated file writes under a PulseAudio-shaped host temporary directory are permitted outside the managed HomeNode resource set. This is a failed confinement gate, not a security pass.",
+  "priorProbeFailures": [
+    {
+      "run": 40109208073,
+      "sourceRevision": "8d3f23d3b72ecef969ddf6dfda0a2becafc10ef6",
+      "scope": "Failed before access probes while reading task label."
+    },
+    {
+      "run": 40109388773,
+      "sourceRevision": "f893ddcccef09d9c2be0e1522114cf220a429611",
+      "scope": "Confirmed self-label observation errno EACCES; resolved with mandatory parent-observed enforcing-label acknowledgement without changing policy."
+    }
+  ],
+  "limits": [
+    "Single-threaded host task uses live QEMU mount namespace and AppArmor profile, exact reserved IDs, no groups, zero effective/permitted capabilities and no-new-privileges.",
+    "Does not reproduce a guest exploit or QEMU seccomp; managed positive control opens for write without altering existing workload bytes.",
+    "Generated temporary files and directories are removed after observation.",
+    "Safe UID reuse and public reserved cleanup remain disabled pending per-VM write-boundary remediation and qualification."
+  ],
+  "releaseQualified": false
+}

@@ -310,15 +310,32 @@ The disposable write-access probe now uses a protected single-threaded C helper
 linked to libapparmor. It joins the live QEMU mount namespace through an inherited
 namespace descriptor, verifies namespace identity, adopts the actual AppArmor
 profile, drops all IDs/groups, requires zero effective/permitted capabilities
-and sets no-new-privileges. It verifies its task label, opens the managed data
+and sets no-new-privileges. The parent independently verifies its enforcing task
+label after a readiness message and acknowledges admission before file probes.
+The helper opens the managed data
 volume for writing as a positive control, requires refusal of a write-open on
 the readonly system image, then attempts a generated temporary file write under
 a PulseAudio-shaped path. It cleans its generated file and reports whether the
 temporary directory matches the host's inode. No existing workload bytes are
 written. The helper is a disposable test artifact, not a product executable.
 
-Go/Linux cross-compilation passed; Linux C compilation and execution are pending.
+Go/Linux cross-compilation, warning-strict Linux C compilation and the
+[native probe run](https://github.com/pranavreddyg17/home-node/actions/runs/40109589284)
+at `f74b8df` passed. [Retained evidence](evidence/confinement-write-f74b8df.json)
+records both profile hashes, observations and prior self-label-read failures.
+Both live-domain attempts allowed generated temporary writes and reported the
+same directory inode visible on the host. The managed write-open positive and
+readonly system-image negative controls also passed. This is a confirmed write
+boundary finding; a successful observational job does not pass the security gate.
 An allowed temporary write is reported as a finding, not a security qualification.
 This probes a host task under the selected profile/namespace and DAC identity;
 it does not run through a guest exploit, reproduce QEMU seccomp or establish safe
 UID reuse. Public reserved cleanup remains refused.
+
+Required remediation is now concrete: constrain each HomeNode VM's effective
+writes to its admitted resources and explicitly lifecycle-managed private
+scratch, then rerun positive managed operations and negative host temporary,
+shared-memory, foreign-guest and management-path tests under the actual profile,
+namespace, credentials and syscall policy. Avoid changing global libvirt policy
+for unrelated VMs. Keep UID leases retained and public physical purge refused
+until confinement and verified exit jointly support safe reuse.
