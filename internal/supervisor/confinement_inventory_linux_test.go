@@ -158,6 +158,7 @@ func nativeConfinementInventory(t *testing.T, ctx context.Context, d Domain) {
 	sourceDigest := sha256.Sum256(source)
 	t.Log("native AppArmor source inventory", name, "sourceSHA256", hex.EncodeToString(sourceDigest[:]), "expandedSHA256", hash, "bytes", output.Len())
 	t.Log("native AppArmor source inventory retained; effective kernel write permissions and safe UID reuse remain unqualified")
+	nativeQEMUDescriptorInventory(t, ctx, d, pid)
 	nativeConfinementWriteProbe(t, ctx, d, pid, name)
 }
 

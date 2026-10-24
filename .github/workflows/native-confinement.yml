@@ -7,6 +7,7 @@ on:
       - 'internal/supervisor/kvm_domain_linux_test.go'
       - 'packaging/systemd/confinement_probe.c'
       - 'internal/supervisor/confinement_boundary_linux_test.go'
+      - 'internal/supervisor/confinement_descriptors_linux_test.go'
       - 'internal/supervisor/apparmor_write_policy.go'
       - 'internal/supervisor/domain.go'
   workflow_dispatch:
@@ -53,7 +54,7 @@ jobs:
           with pathlib.Path(sys.argv[1]).open('rb') as stream:
               output = stream.read((1 << 20) + 1)
           expected = b'native confined task write probe managedWriteOpen true readonlyWriteDenied true temporaryWrite false temporaryDirectoryMatchesHost true managedHardlinkDenied true'
-          if len(output) > 1 << 20 or output.count(b'native inherited descriptor write observation allowed ') != 2 or output.count(expected) != 2 or output.count(b'native unconfined owned-volume hardlink positive control passed') != 2 or b'native AppArmor source inventory retained;' not in output or b'native confined task write probe completed;' not in output:
+          if len(output) > 1 << 20 or output.count(b'native QEMU descriptor inventory completed') != 2 or output.count(b'native inherited descriptor write observation allowed ') != 2 or output.count(expected) != 2 or output.count(b'native unconfined owned-volume hardlink positive control passed') != 2 or b'native AppArmor source inventory retained;' not in output or b'native confined task write probe completed;' not in output:
               raise SystemExit('bounded source inventory evidence missing')
           PY
       - name: Retain generated expanded policy sources

@@ -410,3 +410,19 @@ resources and lifecycle, and refuse unexplained persistent writable handles.
 A rendered pathname allowlist alone cannot establish that boundary. The observed
 deliberate delegation is not evidence that libvirt passes an unsafe descriptor.
 Production adoption and UID reuse remain closed pending that qualification.
+
+Actual QEMU descriptor inventory is now implemented for the disposable launch
+fixture. A pidfd detects process exit, exact DAC identity is checked before and
+after, and a pinned proc directory bounds enumeration to 256 descriptor slots.
+Each slot's flags, target and inode identity are observed twice; drift refuses
+capture. Metadata records include object type, access flags, owner, inode/link
+identity and target without reading file contents or opening target devices for
+I/O. Writable regular data descriptors must match the admitted named volume.
+Domain logs are tagged as candidates; other writable regular targets remain
+unexplained rather than automatically accepted. All descriptor classes remain
+visible for subsequent review. The workflow requires two inventories.
+
+Linux cross-compilation passed; native execution is pending. This is a bounded
+live observation, not retained exclusion of descriptor creation/transfer or a
+production descriptor-admission implementation. Socket peers, anonymous objects,
+log ownership/lifecycle and complete application startup still need qualification.
