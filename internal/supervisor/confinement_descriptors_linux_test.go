@@ -258,6 +258,14 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 				t.Fatal("socket source slot changed", err)
 			}
 		}
+		if r.Kind == "other" {
+			identity := qemuRegularIdentity{Device: uint64(first.Dev), Inode: first.Ino, Links: first.Nlink, UID: first.Uid, GID: first.Gid, Mode: first.Mode}
+			role, err := qualifyQEMUAnonymous(d, firstTarget, identity, uint32(firstFlags&unix.O_ACCMODE))
+			if err != nil {
+				t.Fatal("unexplained anonymous object metadata", firstTarget, err)
+			}
+			r.Role = role
+		}
 		records = append(records, r)
 	}
 	live()

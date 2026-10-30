@@ -526,7 +526,9 @@ reserved process verification rather than only the candidate profile fixture.
 The native inventory separately requires two per-task observation markers.
 Focused parser/metadata tests, the full local supervisor race suite (23.388s),
 and Linux cross-compilation passed; native
-execution is pending. Mode/count cannot establish filter contents,
+execution passed at `e60932b` and `38de2cb`, with six observed tasks per launch
+on both runs. [Retained evidence](evidence/confinement-seccomp-38de2cb.json)
+records the runs and retirement regressions. Mode/count cannot establish filter contents,
 libvirt's requested sandbox options, forbidden-syscall behavior, or exclusion of
 threads created after observation. These qualifications remain open.
 See [Linux status fields](https://man7.org/linux/man-pages/man5/proc_pid_status.5.html)
@@ -538,6 +540,16 @@ logging other arguments. It requires one exact -sandbox argument with on and
 obsolete=deny, elevateprivileges=deny, spawn=deny, resourcecontrol=deny; missing,
 duplicate, aliased, malformed, unknown or permissive option forms refuse the
 fixture. CI requires two observations. Focused parser race tests and Linux
-cross-compilation passed; native execution is pending. Process argv is
+cross-compilation passed. The [native run](https://github.com/pranavreddyg17/home-node/actions/runs/41109163684) at `38de2cb` observed the required sandbox options on both launches. Process argv is
 mutable and is not attestation of filter content or syscall refusal. Production
 seccomp state checks remain separate from this diagnostic argument check.
+
+Anonymous kernel-object metadata now has explicit candidate roles for observed
+eventfds, signalfd, KVM VM, vCPU and read-only vCPU-statistics handles. Unknown
+targets refuse capture. Each role requires the observed root-owned mode-0600
+anonymous inode shape, one link and exact access mode; vCPU indices must be
+canonical and inside the admitted CPU count. Focused metadata race tests and
+Linux cross-compilation passed; native execution is pending. Anonymous inode
+names do not attest VM ownership, installed seccomp contents, ioctl safety or
+absence of transferred handles. These remain candidate fixture roles rather
+than production authorization. Pipe authority still needs separate treatment.

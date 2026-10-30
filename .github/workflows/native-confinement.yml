@@ -16,6 +16,7 @@ on:
       - 'internal/supervisor/qemu_socket_authority*'
       - 'internal/supervisor/qemu_seccomp*'
       - 'internal/supervisor/qemu_sandbox_arguments*'
+      - 'internal/supervisor/qemu_anonymous_authority*'
       - 'internal/supervisor/uid_verify_linux.go'
   workflow_dispatch:
 permissions:
@@ -33,7 +34,7 @@ jobs:
       - name: Install native runtime and read-only policy tools
         run: sudo apt-get update && sudo apt-get install -y libvirt-clients libvirt-daemon-system qemu-system-x86 apparmor libapparmor-dev e2fsprogs
       - name: Verify regular, device and socket descriptor metadata refusal
-        run: go test -race ./internal/supervisor -run '^TestQEMU((Regular(Read|Write)|Device|Socket)Metadata|SeccompStatus|SandboxArguments)$' -count=1
+        run: go test -race ./internal/supervisor -run '^TestQEMU((Regular(Read|Write)|Device|Socket|Anonymous)Metadata|SeccompStatus|SandboxArguments)$' -count=1
       - name: Capture expanded sources beside a live confined synthetic domain
         working-directory: internal/supervisor
         run: |

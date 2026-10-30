@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "runs": [
+    {
+      "sourceRevision": "e60932b306329a3a527ea224ac825662a3ed590a",
+      "workflowRun": 41108912852,
+      "job": 124245865601,
+      "url": "https://github.com/pranavreddyg17/home-node/actions/runs/41108912852",
+      "conclusion": "success",
+      "logSHA256": "7865c3f56ed809c1315bcd16a31834dcdbe22191773dd47ef9acbf038306af7d",
+      "observedFilteredTaskCounts": [
+        6,
+        6
+      ],
+      "sandboxArgumentObservations": 0
+    },
+    {
+      "sourceRevision": "38de2cb0c18a6015874ce561e3682acd67e21ed0",
+      "workflowRun": 41109163684,
+      "job": 124246749671,
+      "url": "https://github.com/pranavreddyg17/home-node/actions/runs/41109163684",
+      "conclusion": "success",
+      "logSHA256": "3a8dc7813dbca5c5720fcd1e6668808b3f741a9d4d1d78a2dad2e9b037f0f741",
+      "observedFilteredTaskCounts": [
+        6,
+        6
+      ],
+      "sandboxArgumentObservations": 2
+    }
+  ],
+  "retirementRegressions": [
+    {
+      "workflowRun": 41108912858,
+      "conclusion": "success"
+    },
+    {
+      "workflowRun": 41109163666,
+      "conclusion": "success"
+    }
+  ],
+  "limits": [
+    "Every enumerated task required seccomp filter mode and nonzero filter count; scans do not freeze creation.",
+    "Sandbox arguments can be mutated and do not attest actual filter contents or syscall refusal.",
+    "Production seccomp mode verification is implemented, but descriptor lifecycle and safe UID reuse remain unqualified."
+  ],
+  "releaseQualified": false
+}
