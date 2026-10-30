@@ -69,3 +69,64 @@ func TestQEMURegularWriteMetadata(t *testing.T) {
 		})
 	}
 }
+
+func TestQEMURegularReadMetadata(t *testing.T) {
+	d := Domain{ID: state.Random(), GuestUID: 200000, GuestGID: 108, SystemPath: "/var/lib/homenode/images/system.raw", DataPath: "/var/lib/homenode/volumes/data.raw"}
+	image := qemuRegularIdentity{Device: 10, Inode: 100, Links: 1, GID: d.GuestGID, Mode: 0100000 | 0440}
+	if role, err := qualifyQEMURegularRead(d, d.SystemPath, image, image, 0); err != nil || role != "readonly-system-image" {
+		t.Fatal(role, err)
+	}
+	for _, mutation := range []string{"owner", "group", "writable", "links", "deleted", "inode", "named", "foreign", "alias", "readwrite", "writeonly", "invalid-id", "invalid-uid", "invalid-gid", "relative", "unclean", "symlink"} {
+		t.Run(mutation, func(t *testing.T) {
+			domain, target, open, named, access := d, d.SystemPath, image, image, uint32(0)
+			switch mutation {
+			case "owner":
+				open.UID = d.GuestUID
+				named = open
+			case "group":
+				open.GID++
+				named = open
+			case "writable":
+				open.Mode |= 0200
+				named = open
+			case "links":
+				open.Links = 2
+				named = open
+			case "deleted":
+				open.Links = 0
+				named = open
+			case "inode":
+				open.Inode = 0
+				named = open
+			case "named":
+				named.Inode++
+			case "foreign":
+				target = "/var/lib/homenode/images/other.raw"
+			case "alias":
+				domain.DataPath = domain.SystemPath
+			case "readwrite":
+				access = 2
+			case "writeonly":
+				access = 1
+			case "invalid-id":
+				domain.ID = "../foreign"
+			case "invalid-uid":
+				domain.GuestUID = 0
+			case "invalid-gid":
+				domain.GuestGID = 0
+			case "relative":
+				target = "system.raw"
+				domain.SystemPath = target
+			case "unclean":
+				target = "/var/lib/homenode/images/../system.raw"
+				domain.SystemPath = target
+			case "symlink":
+				open.Mode = 0120000 | 0440
+				named = open
+			}
+			if role, err := qualifyQEMURegularRead(domain, target, open, named, access); role != "" || !errors.Is(err, ErrPolicy) {
+				t.Fatal("unqualified image descriptor admitted", role, err)
+			}
+		})
+	}
+}

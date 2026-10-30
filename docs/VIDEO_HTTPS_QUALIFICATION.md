@@ -418,11 +418,11 @@ Each slot's flags, target and inode identity are observed twice; drift refuses
 capture. Metadata records include object type, access flags, owner, inode/link
 identity and target without reading file contents or opening target devices for
 I/O. Writable regular data descriptors must match the admitted named volume.
-Domain logs are tagged as candidates; other writable regular targets remain
-unexplained rather than automatically accepted. All descriptor classes remain
+The initial collector tagged domain logs as candidates; the stricter metadata
+check below now refuses logs and all unexplained writable regular targets. All descriptor classes remain
 visible for subsequent review. The workflow requires two inventories.
 
-Linux cross-compilation passed; native execution is pending. This is a bounded
+The native inventory run at `f2257c4` passed. This is a bounded
 live observation, not retained exclusion of descriptor creation/transfer or a
 production descriptor-admission implementation. Socket peers, anonymous objects,
 log ownership/lifecycle and complete application startup still need qualification.
@@ -440,8 +440,8 @@ unexpected access modes. The data file requires its exact reserved identity,
 root:root ownership, 0644 mode, single link and write-only access, and remains
 explicitly tagged as a candidate role. This checks metadata; it does not grant
 lifetime authority or establish that the writable PID capability is safe. Linux
-cross-compilation and local metadata race tests passed; native execution of this
-stricter check is pending. Production adoption and UID reuse remain closed.
+cross-compilation and local metadata race tests passed. Native execution of this
+stricter check passed at `fbbd10b`. Production adoption and UID reuse remain closed.
 
 The candidate PID handle now has a post-stop native check: after libvirt reports
 the VM stopped, its exact PID-file path must be absent and bounded procfs
@@ -449,4 +449,14 @@ observation must find no task with the reserved UID. Both stop cycles must emit
 the required marker. This checks an observed lifetime on the disposable host;
 it does not authorize production UID release, defeat process-creation races or
 prove that every descriptor in other host processes has closed. Linux
-cross-compilation passed; native execution is pending.
+cross-compilation passed. The [native run](https://github.com/pranavreddyg17/home-node/actions/runs/41105923277) at `c1f317f` passed both cycles.
+[Retained evidence](evidence/confinement-regular-lifetime-c1f317f.json) includes
+the actual descriptor snapshots and two post-stop observations.
+
+Read-only regular descriptors now also require an explicit metadata role: the
+exact system-image path and named inode, root ownership, the admitted guest
+group, mode 0440, one link and read-only access. Unknown regular handles refuse
+the synthetic launch inventory regardless of access mode. This does not hash
+image contents or replace the catalog verification path. Focused local race
+tests and Linux cross-compilation passed; native execution is pending.
+Production descriptor admission and UID reuse remain closed.

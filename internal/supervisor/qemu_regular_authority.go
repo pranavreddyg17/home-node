@@ -38,3 +38,12 @@ func qualifyQEMURegularWrite(d Domain, target string, open, named qemuRegularIde
 		return "", ErrPolicy
 	}
 }
+
+// Read-only image metadata is checked separately from writable authority. This
+// binds a snapshot to its named image; it does not authenticate image contents.
+func qualifyQEMURegularRead(d Domain, target string, open, named qemuRegularIdentity, access uint32) (string, error) {
+	if !guestproto.ValidID(d.ID) || d.GuestUID < 65536 || d.GuestUID > 1<<31-1 || d.GuestGID == 0 || d.GuestGID > 1<<31-1 || !filepath.IsAbs(target) || filepath.Clean(target) != target || target != d.SystemPath || target == d.DataPath || open != named || open.Inode == 0 || open.Links != 1 || access != 0 || open.UID != 0 || open.GID != d.GuestGID || open.Mode != 0100000|0440 {
+		return "", ErrPolicy
+	}
+	return "readonly-system-image", nil
+}

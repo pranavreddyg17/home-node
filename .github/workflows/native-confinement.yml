@@ -26,8 +26,8 @@ jobs:
           cache: true
       - name: Install native runtime and read-only policy tools
         run: sudo apt-get update && sudo apt-get install -y libvirt-clients libvirt-daemon-system qemu-system-x86 apparmor libapparmor-dev e2fsprogs
-      - name: Verify writable regular descriptor metadata refusal
-        run: go test -race ./internal/supervisor -run '^TestQEMURegularWriteMetadata$' -count=1
+      - name: Verify regular descriptor metadata refusal
+        run: go test -race ./internal/supervisor -run '^TestQEMURegular(Read|Write)Metadata$' -count=1
       - name: Capture expanded sources beside a live confined synthetic domain
         working-directory: internal/supervisor
         run: |

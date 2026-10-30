@@ -138,18 +138,24 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 		default:
 			r.Kind = "other"
 		}
-		if r.Kind == "regular" && firstFlags&unix.O_ACCMODE != unix.O_RDONLY && strings.HasPrefix(firstTarget, "/") {
-			writableRegular++
+		if r.Kind == "regular" {
+			if firstFlags&unix.O_ACCMODE != unix.O_RDONLY {
+				writableRegular++
+			}
 			var named unix.Stat_t
 			if err := unix.Lstat(firstTarget, &named); err != nil {
-				t.Fatal("writable descriptor name unavailable", err)
+				t.Fatal("regular descriptor name unavailable", err)
 			}
 			identity := func(s unix.Stat_t) qemuRegularIdentity {
 				return qemuRegularIdentity{Device: uint64(s.Dev), Inode: s.Ino, Links: s.Nlink, UID: s.Uid, GID: s.Gid, Mode: s.Mode}
 			}
-			role, err := qualifyQEMURegularWrite(d, firstTarget, identity(first), identity(named), uint32(firstFlags&unix.O_ACCMODE))
+			qualify := qualifyQEMURegularWrite
+			if firstFlags&unix.O_ACCMODE == unix.O_RDONLY {
+				qualify = qualifyQEMURegularRead
+			}
+			role, err := qualify(d, firstTarget, identity(first), identity(named), uint32(firstFlags&unix.O_ACCMODE))
 			if err != nil {
-				t.Fatal("unexplained writable regular descriptor", firstTarget, err)
+				t.Fatal("unexplained regular descriptor", firstTarget, err)
 			}
 			r.Role = role
 		}
