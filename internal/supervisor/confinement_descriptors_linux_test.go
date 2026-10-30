@@ -159,6 +159,7 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 	writableRegular := 0
 	socketCount := 0
 	socketRoles := map[string]int{}
+	outputPipes := map[int]qemuOutputPipe{}
 	for _, entry := range entries {
 		name := entry.Name()
 		number, err := strconv.Atoi(name)
@@ -266,8 +267,25 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 			}
 			r.Role = role
 		}
+		if r.Kind == "pipe" {
+			if number != 1 && number != 2 {
+				t.Fatal("unexplained pipe descriptor", number)
+			}
+			outputPipes[number] = qemuOutputPipe{FD: number, Target: firstTarget, Identity: qemuRegularIdentity{Device: uint64(first.Dev), Inode: first.Ino, Links: first.Nlink, UID: first.Uid, GID: first.Gid, Mode: first.Mode}, Access: uint32(firstFlags & unix.O_ACCMODE)}
+			r.Role = "candidate-log-stdout"
+			if number == 2 {
+				r.Role = "candidate-log-stderr"
+			}
+		}
+		if r.Role == "unclassified" {
+			t.Fatal("unclassified descriptor role", number)
+		}
 		records = append(records, r)
 	}
+	if len(outputPipes) != 2 || qualifyQEMUOutputPipes(outputPipes[1], outputPipes[2]) != nil {
+		t.Fatal("unqualified output pipe pair")
+	}
+	t.Log("native QEMU paired output pipe metadata observed", "readerQualified", false)
 	live()
 	if err := verifyGuestDACProcess(ctx, pid, d.GuestUID, d.GuestGID); err != nil {
 		t.Fatal(err)

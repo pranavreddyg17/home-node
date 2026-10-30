@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "4ad0c40169b8f7eed1d7ecd60d509f0e0b1b3570",
+  "workflowRun": 41109493919,
+  "job": 124247920076,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/41109493919",
+  "conclusion": "success",
+  "logSHA256": "316597bfa0637080f4d19135dc40941348c2fc7fd665ab62017a0faa63d10079",
+  "anonymousRoleCountsPerLaunch": {
+    "candidate-eventfd": 8,
+    "candidate-signalfd": 1,
+    "candidate-kvm-vm": 1,
+    "candidate-kvm-vcpu": 1,
+    "candidate-kvm-vcpu-stats": 1
+  },
+  "descriptorCounts": [
+    23,
+    23
+  ],
+  "unclassifiedPipeCounts": [
+    2,
+    2
+  ],
+  "anonymousMetadataShapes": [
+    [
+      "anon_inode:[eventfd]",
+      "2004002",
+      384,
+      0,
+      0,
+      1
+    ],
+    [
+      "anon_inode:[signalfd]",
+      "2004002",
+      384,
+      0,
+      0,
+      1
+    ],
+    [
+      "anon_inode:kvm-vcpu-stats:0",
+      "2000000",
+      384,
+      0,
+      0,
+      1
+    ],
+    [
+      "anon_inode:kvm-vcpu:0",
+      "2000002",
+      384,
+      0,
+      0,
+      1
+    ],
+    [
+      "anon_inode:kvm-vm",
+      "2000002",
+      384,
+      0,
+      0,
+      1
+    ]
+  ],
+  "retirementRegressionRun": 41109494060,
+  "retirementRegressionConclusion": "success",
+  "limits": [
+    "Candidate anonymous inode names/metadata do not attest VM ownership, ioctl safety or transfer provenance.",
+    "Pipe handles remained unclassified at this revision.",
+    "Synthetic fixture evidence does not qualify production launch/cleanup or safe UID reuse."
+  ],
+  "releaseQualified": false
+}

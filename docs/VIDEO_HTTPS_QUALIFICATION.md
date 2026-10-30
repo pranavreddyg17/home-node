@@ -549,7 +549,20 @@ eventfds, signalfd, KVM VM, vCPU and read-only vCPU-statistics handles. Unknown
 targets refuse capture. Each role requires the observed root-owned mode-0600
 anonymous inode shape, one link and exact access mode; vCPU indices must be
 canonical and inside the admitted CPU count. Focused metadata race tests and
-Linux cross-compilation passed; native execution is pending. Anonymous inode
+Linux cross-compilation passed. The [native run](https://github.com/pranavreddyg17/home-node/actions/runs/41109493919) at `4ad0c40` passed both launches and retirement regressions.
+[Retained evidence](evidence/confinement-anonymous-4ad0c40.json) records role
+counts and observed shapes. Anonymous inode
 names do not attest VM ownership, installed seccomp contents, ioctl safety or
 absence of transferred handles. These remain candidate fixture roles rather
 than production authorization. Pipe authority still needs separate treatment.
+
+Output pipes now require descriptors 1 and 2, write-only access, the same
+root:root mode-0600 pipe inode, single link and the exact canonical pipe target.
+Additional pipes refuse capture, and no descriptor may remain unclassified.
+CI requires two completed pipe-pair observations. No pipe payload is read or
+written. Focused pair-refusal race tests and Linux cross-compilation passed;
+native execution is pending. This identifies a candidate output-pipe shape,
+not the reader process or ultimate log sink. The complete role inventory is
+still metadata qualification, not production launch authority or UID-release
+approval. Production profile publication under shipped service protections,
+authenticated launch provenance and retained lifecycle exclusion remain open.
