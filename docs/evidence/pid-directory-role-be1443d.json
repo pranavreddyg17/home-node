@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "be1443dc3e8b68ce8e16d05ffbc2caf4bb7d6887",
+  "workflowRun": 41117007285,
+  "job": 124273738120,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/41117007285",
+  "conclusion": "failure",
+  "logSHA256": "b99aed06a9fb7cbf77c6ccc2b6fa1afe5741dfe422ca11d489e3ee11a989daae",
+  "explicitPassingTests": [
+    "TestNativeDomainPIDMetadata",
+    "TestNativeKVMPrimaryGroupAccess",
+    "TestNativeGuestDACProcessVerification"
+  ],
+  "failure": "Root-only runtime-directory ownership assumption refused observed UID 64055, GID 993, mode 0755.",
+  "observedRuntimePIDDirectory": {
+    "uid": 64055,
+    "gid": 993,
+    "mode": "040755"
+  },
+  "retirementRegressionRun": 41117007330,
+  "retirementRegressionConclusion": "success",
+  "limits": [
+    "PID-file type/ownership/size/link refusal cases passed on generated root fixtures.",
+    "Credential-only KVM/UID probes passed and the KVM probe was refused as QEMU.",
+    "The supported service-account directory role still requires independent protected local identity qualification.",
+    "Native VM launch and complete application qualification did not pass in this run."
+  ],
+  "releaseQualified": false
+}

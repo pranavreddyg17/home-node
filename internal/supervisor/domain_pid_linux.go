@@ -31,8 +31,15 @@ func readDomainPID(ctx context.Context, d Domain) (pid int, result error) {
 	if err := unix.Fstat(int(parent.Fd()), &initial); err != nil {
 		return 0, err
 	}
-	if initial.Mode&unix.S_IFMT != unix.S_IFDIR || initial.Uid != 0 || initial.Mode&0022 != 0 {
-		return 0, fmt.Errorf("PID directory metadata uid=%d gid=%d mode=%#o: %w", initial.Uid, initial.Gid, initial.Mode, ErrPolicy)
+	var serviceUID, serviceGID uint32
+	if initial.Uid != 0 {
+		serviceUID, serviceGID, err = observeLocalLibvirtQEMUIdentity(ctx)
+		if err != nil {
+			return 0, err
+		}
+	}
+	if err := qualifyDomainPIDDirectory(initial.Uid, initial.Gid, initial.Mode, d.GuestUID, serviceUID, serviceGID); err != nil {
+		return 0, fmt.Errorf("PID directory metadata uid=%d gid=%d mode=%#o serviceUID=%d serviceGID=%d: %w", initial.Uid, initial.Gid, initial.Mode, serviceUID, serviceGID, err)
 	}
 	guard := func() error {
 		var current, named unix.Stat_t
@@ -44,6 +51,15 @@ func readDomainPID(ctx context.Context, d Domain) (pid int, result error) {
 		}
 		if !sameQEMUDescriptorStat(initial, current) || !sameQEMUDescriptorStat(current, named) || !samePathMount(int(parent.Fd()), unix.AT_FDCWD, path) {
 			return fmt.Errorf("PID directory binding changed: %w", ErrPolicy)
+		}
+		if initial.Uid != 0 {
+			uid, gid, err := observeLocalLibvirtQEMUIdentity(ctx)
+			if err != nil {
+				return err
+			}
+			if uid != serviceUID || gid != serviceGID {
+				return ErrPolicy
+			}
 		}
 		return ctx.Err()
 	}
@@ -117,4 +133,17 @@ func readDomainPIDAt(parent int, d Domain) (pid int, result error) {
 		return 0, err
 	}
 	return pid, nil
+}
+
+func observeLocalLibvirtQEMUIdentity(ctx context.Context) (uid, gid uint32, result error) {
+	root, err := os.OpenRoot("/etc")
+	if err != nil {
+		return 0, 0, err
+	}
+	defer func() { result = errors.Join(result, root.Close()) }()
+	data, err := readGuestUIDAccountFile(ctx, root, "passwd", 0)
+	if err != nil {
+		return 0, 0, err
+	}
+	return localLibvirtQEMUIdentity(data)
 }

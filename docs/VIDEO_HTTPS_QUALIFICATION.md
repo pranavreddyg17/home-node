@@ -686,3 +686,21 @@ cases now execute before the VM launch in native CI. PID refusals now report
 metadata/binding/value stages without logging file contents. No acceptance check
 was relaxed. Linux cross-build and workflow lint passed; native retesting is
 pending. The macOS suite cannot establish these Linux privileged behaviors.
+
+The diagnostic run at `be1443d` passed generated PID metadata refusal cases,
+the KVM primary-group probe (including refusal as QEMU), and generic DAC process
+verification. VM launch then refused the runtime PID directory because its
+observed owner was UID 64055, group 993, mode 0755 rather than root.
+[Retained evidence](evidence/pid-directory-role-be1443d.json) records both the
+passing component checks and the failed launch.
+
+The reader now recognizes root-owned directories or a uniquely mapped local
+libvirt-qemu service account, with a canonical service UID below the reserved
+range and its primary group. It reads only authenticated bounded local passwd
+data, invokes no network NSS lookup, refuses aliases/missing mappings, guest
+ownership and group/world writing, and rechecks the mapping around the read.
+No global directory ownership or permissions are changed. PID contents remain
+a lookup hint: the service-account directory does not authenticate a process;
+all QEMU callers retain credential, seccomp/arguments and exact live-domain
+profile checks. Focused identity/parser race tests, Linux all-command cross-build
+and workflow lint passed. Native qualification of this directory role is pending.

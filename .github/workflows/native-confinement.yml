@@ -12,6 +12,7 @@ on:
       - 'internal/supervisor/apparmor_identity*'
       - 'internal/supervisor/backend.go'
       - 'internal/supervisor/domain_pid*'
+      - 'internal/supervisor/libvirt_local_identity*'
       - 'internal/supervisor/domain_socket_linux.go'
       - 'packaging/systemd/reserved_manager_fixture.py'
       - 'internal/supervisor/domain.go'
@@ -43,7 +44,7 @@ jobs:
       - name: Install native runtime and read-only policy tools
         run: sudo apt-get update && sudo apt-get install -y libvirt-clients libvirt-daemon-system qemu-system-x86 apparmor libapparmor-dev e2fsprogs
       - name: Verify regular, device and socket descriptor metadata refusal
-        run: go test -race -v ./internal/supervisor -run '^Test(QEMU((Regular(Read|Write)|Device|Socket|Anonymous)Metadata|OutputPipeMetadata|SeccompStatus|SandboxArguments|FDFlags|ProcMetadataReader.*|SocketObservation.*)|DomainAppArmorIdentity|DomainPIDParser)$' -count=1
+        run: go test -race -v ./internal/supervisor -run '^Test(QEMU((Regular(Read|Write)|Device|Socket|Anonymous)Metadata|OutputPipeMetadata|SeccompStatus|SandboxArguments|FDFlags|ProcMetadataReader.*|SocketObservation.*)|DomainAppArmorIdentity|DomainPIDParser|LocalLibvirtQEMUIdentity|DomainPIDDirectoryIdentity)$' -count=1
       - name: Capture expanded sources beside a live confined synthetic domain
         working-directory: internal/supervisor
         run: |
