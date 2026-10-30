@@ -670,3 +670,19 @@ Go suite, all-command Linux cross-build and workflow lint passed. Native
 qualification is pending, including generated root-file refusal cases for
 foreign ownership/group, writable mode, links, size, symlink, FIFO, directory
 and malformed values. No UID-release effect is enabled.
+
+Native qualification at `d9ae22e` failed. Launch verification returned generic
+ErrPolicy after introducing the bounded PID reader; that revision did not expose
+the exact refusal stage. Complete Linux CI separately found that QEMU-only
+argument/seccomp checks had been placed in a DAC verifier also used by the
+non-QEMU KVM device probe. [Retained failures](evidence/native-refusals-d9ae22e.json)
+keep both results distinct. Retirement component tests passed independently.
+
+The credential-only and QEMU-specific process verifiers are now explicit separate
+entry points sharing their bounded pidfd/procfs scope. Every actual QEMU caller
+uses the stricter entry point; the device probe additionally requires refusal
+from that entry point. Existing generic DAC tests and generated PID metadata
+cases now execute before the VM launch in native CI. PID refusals now report
+metadata/binding/value stages without logging file contents. No acceptance check
+was relaxed. Linux cross-build and workflow lint passed; native retesting is
+pending. The macOS suite cannot establish these Linux privileged behaviors.

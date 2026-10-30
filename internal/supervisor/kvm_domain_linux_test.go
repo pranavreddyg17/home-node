@@ -468,7 +468,7 @@ for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.arg
 		t.Log(memoryEvidence)
 		t.Log("native per-domain memory observer positive and refusal checks passed")
 		if guestConnect {
-			if err := verifyGuestDACProcess(ctx, pid, uid, domain.GuestGID); err != nil {
+			if err := verifyQEMUProcess(ctx, pid, uid, domain.GuestGID); err != nil {
 				t.Fatal("guest-connect process credentials", err)
 			}
 			label, err := readBounded(filepath.Join("/proc", strconv.Itoa(pid), "attr/current"), 4096)

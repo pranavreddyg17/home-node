@@ -80,7 +80,7 @@ func observeQEMUDescriptorMetadata(ctx context.Context, d Domain, pid int) (reco
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	if err := verifyGuestDACProcess(ctx, pid, d.GuestUID, d.GuestGID); err != nil {
+	if err := verifyQEMUProcess(ctx, pid, d.GuestUID, d.GuestGID); err != nil {
 		return nil, err
 	}
 	root, err := os.OpenRoot("/proc")
@@ -202,7 +202,7 @@ func observeQEMUDescriptorMetadata(ctx context.Context, d Domain, pid int) (reco
 	if err := checkLabel(); err != nil {
 		return nil, err
 	}
-	if err := verifyGuestDACProcess(ctx, pid, d.GuestUID, d.GuestGID); err != nil {
+	if err := verifyQEMUProcess(ctx, pid, d.GuestUID, d.GuestGID); err != nil {
 		return nil, err
 	}
 	if err := live(); err != nil {

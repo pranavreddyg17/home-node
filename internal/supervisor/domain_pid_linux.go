@@ -5,6 +5,7 @@ package supervisor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -31,7 +32,7 @@ func readDomainPID(ctx context.Context, d Domain) (pid int, result error) {
 		return 0, err
 	}
 	if initial.Mode&unix.S_IFMT != unix.S_IFDIR || initial.Uid != 0 || initial.Mode&0022 != 0 {
-		return 0, ErrPolicy
+		return 0, fmt.Errorf("PID directory metadata uid=%d gid=%d mode=%#o: %w", initial.Uid, initial.Gid, initial.Mode, ErrPolicy)
 	}
 	guard := func() error {
 		var current, named unix.Stat_t
@@ -42,7 +43,7 @@ func readDomainPID(ctx context.Context, d Domain) (pid int, result error) {
 			return err
 		}
 		if !sameQEMUDescriptorStat(initial, current) || !sameQEMUDescriptorStat(current, named) || !samePathMount(int(parent.Fd()), unix.AT_FDCWD, path) {
-			return ErrPolicy
+			return fmt.Errorf("PID directory binding changed: %w", ErrPolicy)
 		}
 		return ctx.Err()
 	}
@@ -77,7 +78,7 @@ func readDomainPIDAt(parent int, d Domain) (pid int, result error) {
 		return 0, err
 	}
 	if before.Mode != unix.S_IFREG|0644 || before.Uid != 0 || before.Gid != 0 || before.Nlink != 1 || before.Size < 1 || before.Size > 32 {
-		return 0, ErrPolicy
+		return 0, fmt.Errorf("PID file metadata uid=%d gid=%d mode=%#o links=%d bytes=%d: %w", before.Uid, before.Gid, before.Mode, before.Nlink, before.Size, ErrPolicy)
 	}
 	fd, err := unix.Open("/proc/self/fd/"+strconv.Itoa(pathfd), unix.O_RDONLY|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
 	if err != nil {
@@ -94,7 +95,7 @@ func readDomainPIDAt(parent int, d Domain) (pid int, result error) {
 			return err
 		}
 		if !sameQEMUDescriptorStat(before, current) || !sameQEMUDescriptorStat(current, named) || before.Size != current.Size || current.Size != named.Size || before.Mtim != current.Mtim || before.Ctim != current.Ctim || current.Mtim != named.Mtim || current.Ctim != named.Ctim {
-			return ErrPolicy
+			return fmt.Errorf("PID file identity changed: %w", ErrPolicy)
 		}
 		return nil
 	}
@@ -106,11 +107,11 @@ func readDomainPIDAt(parent int, d Domain) (pid int, result error) {
 		return 0, err
 	}
 	if int64(len(data)) != before.Size {
-		return 0, ErrPolicy
+		return 0, fmt.Errorf("PID file read size changed: %w", ErrPolicy)
 	}
 	pid, err = parseDomainPID(data)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("PID file value refused: %w", err)
 	}
 	if err := stable(); err != nil {
 		return 0, err

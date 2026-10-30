@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "d9ae22e3802316a7461a65f776abbbab899f5c81",
+  "runs": [
+    {
+      "workflowRun": 41115264707,
+      "job": 124267715946,
+      "conclusion": "failure",
+      "logSHA256": "0a7835313ca8b1e80218be88d782cd371e2bb1dfb15248c1f42ae0f11402c162",
+      "failure": "Native launch verification returned generic ErrPolicy after the bounded PID reader change. Exact refusal stage was not present in this revision."
+    },
+    {
+      "workflowRun": 41115317931,
+      "job": 124267910643,
+      "conclusion": "failure",
+      "logSHA256": "7bbd313f0de47908ebb3857a13279f73fac77bbe47b7d0c963de0fe0eb886ed2",
+      "failure": "Native KVM device probe was subjected to QEMU-specific argument/seccomp checks by a shared DAC verifier."
+    }
+  ],
+  "retirementRegressionRun": 41115264748,
+  "retirementRegressionConclusion": "success",
+  "limits": [
+    "No native acceptance of the bounded PID reader is claimed.",
+    "A credential-only probe must not be accepted as QEMU; every actual QEMU caller must retain the stronger checks.",
+    "No completed paired video workflow or safe UID reuse evidence."
+  ],
+  "releaseQualified": false
+}

@@ -104,7 +104,7 @@ func (m *Manager) checkReservedDomainSocket(ctx context.Context, d Domain, revis
 			if e != nil {
 				return 0, e
 			}
-			return pid, verifyGuestDACProcess(ctx, pid, d.GuestUID, d.GuestGID)
+			return pid, verifyQEMUProcess(ctx, pid, d.GuestUID, d.GuestGID)
 		}
 		pid, err := readPID()
 		if err != nil {

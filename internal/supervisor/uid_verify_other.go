@@ -10,3 +10,7 @@ func verifyGuestDACProcess(ctx context.Context, pid int, uid, gid uint32) error 
 	}
 	return ErrPolicy
 }
+
+func verifyQEMUProcess(ctx context.Context, pid int, uid, gid uint32) error {
+	return verifyGuestDACProcess(ctx, pid, uid, gid)
+}

@@ -113,6 +113,9 @@ os.close(pinned)
 	if err := verifyGuestDACProcess(ctx, cmd.Process.Pid, uid, stat.Gid); err != nil {
 		t.Fatal("device query process gained unexpected authority", err)
 	}
+	if err := verifyQEMUProcess(ctx, cmd.Process.Pid, uid, stat.Gid); !errors.Is(err, ErrPolicy) {
+		t.Fatal("non-QEMU device probe admitted as QEMU", err)
+	}
 
 	wrongGID := uid
 	if wrongGID == stat.Gid {

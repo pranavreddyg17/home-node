@@ -183,7 +183,7 @@ func (b LinuxBackend) Verify(ctx context.Context, d Domain) error {
 		return err
 	}
 	if d.GuestUID != 0 {
-		if err = verifyGuestDACProcess(ctx, pid, d.GuestUID, d.GuestGID); err != nil {
+		if err = verifyQEMUProcess(ctx, pid, d.GuestUID, d.GuestGID); err != nil {
 			return err
 		}
 	}

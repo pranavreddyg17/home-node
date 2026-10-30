@@ -14,7 +14,16 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func verifyGuestDACProcess(ctx context.Context, pid int, uid, gid uint32) (result error) {
+// Credential-only observation is also used for non-QEMU device probes.
+func verifyGuestDACProcess(ctx context.Context, pid int, uid, gid uint32) error {
+	return verifyReservedGuestProcess(ctx, pid, uid, gid, false)
+}
+
+func verifyQEMUProcess(ctx context.Context, pid int, uid, gid uint32) error {
+	return verifyReservedGuestProcess(ctx, pid, uid, gid, true)
+}
+
+func verifyReservedGuestProcess(ctx context.Context, pid int, uid, gid uint32, qemu bool) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -66,25 +75,29 @@ func verifyGuestDACProcess(ctx context.Context, pid int, uid, gid uint32) (resul
 		return err
 	}
 	defer func() { result = errors.Join(result, process.Close()) }()
-	cmdline, err := process.OpenFile("cmdline", os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
-	if err != nil {
-		return err
-	}
-	arguments, readErr := io.ReadAll(io.LimitReader(cmdline, (128<<10)+1))
-	closeErr := cmdline.Close()
-	if err := errors.Join(readErr, closeErr); err != nil {
-		return err
-	}
-	if err := validateQEMUSandboxArguments(arguments); err != nil {
-		return err
+	if qemu {
+		cmdline, err := process.OpenFile("cmdline", os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+		if err != nil {
+			return err
+		}
+		arguments, readErr := io.ReadAll(io.LimitReader(cmdline, (128<<10)+1))
+		closeErr := cmdline.Close()
+		if err := errors.Join(readErr, closeErr); err != nil {
+			return err
+		}
+		if err := validateQEMUSandboxArguments(arguments); err != nil {
+			return err
+		}
 	}
 	count, verified := 0, 0
 	err = withGuestUIDTaskStatus(ctx, root, strconv.Itoa(pid), &count, func(status []byte) error {
 		if err := validateGuestDACCredentials(status, uid, gid); err != nil {
 			return err
 		}
-		if err := validateQEMUSeccompStatus(status); err != nil {
-			return err
+		if qemu {
+			if err := validateQEMUSeccompStatus(status); err != nil {
+				return err
+			}
 		}
 		verified++
 		return nil
