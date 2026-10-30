@@ -76,6 +76,18 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 		t.Fatal(err)
 	}
 	defer process.Close()
+	cmdFD, err := unix.Openat(int(process.Fd()), "cmdline", unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
+		t.Fatal("sandbox arguments unavailable", err)
+	}
+	cmdFile := os.NewFile(uintptr(cmdFD), "qemu-sandbox-arguments")
+	cmdBytes, readErr := io.ReadAll(io.LimitReader(cmdFile, (128<<10)+1))
+	cmdCloseErr := cmdFile.Close()
+	if readErr != nil || cmdCloseErr != nil || validateQEMUSandboxArguments(cmdBytes) != nil {
+		t.Fatal("sandbox launch argument qualification refused", readErr, cmdCloseErr)
+	}
+	t.Log("native QEMU sandbox launch arguments observed", "filterContentsQualified", false)
+
 	fdDirectory, err := unix.Openat(int(process.Fd()), "fd", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
 		t.Fatal(err)

@@ -531,3 +531,13 @@ libvirt's requested sandbox options, forbidden-syscall behavior, or exclusion of
 threads created after observation. These qualifications remain open.
 See [Linux status fields](https://man7.org/linux/man-pages/man5/proc_pid_status.5.html)
 and [libvirt's QEMU security model](https://www.libvirt.org/kbase/qemu-passthrough-security.html).
+
+The disposable launch inventory now additionally reads a bounded cmdline from
+the pinned QEMU proc directory and checks the requested sandbox options without
+logging other arguments. It requires one exact -sandbox argument with on and
+obsolete=deny, elevateprivileges=deny, spawn=deny, resourcecontrol=deny; missing,
+duplicate, aliased, malformed, unknown or permissive option forms refuse the
+fixture. CI requires two observations. Focused parser race tests and Linux
+cross-compilation passed; native execution is pending. Process argv is
+mutable and is not attestation of filter content or syscall refusal. Production
+seccomp state checks remain separate from this diagnostic argument check.
