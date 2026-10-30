@@ -196,11 +196,12 @@ func (b LinuxBackend) Verify(ctx context.Context, d Domain) error {
 	if err != nil {
 		return err
 	}
-	if d.ConfinedWrites && strings.TrimSpace(string(label)) != d.AppArmorName()+" (enforce)" {
-		return errors.New("QEMU write-boundary profile differs from admitted domain")
+	runtimeUUID, err := command(ctx, "", "/usr/bin/virsh", "--connect", "qemu:///system", "domuuid", d.Name())
+	if err != nil {
+		return err
 	}
-	if !strings.HasPrefix(string(label), "libvirt-") || !strings.HasSuffix(strings.TrimSpace(string(label)), "(enforce)") {
-		return errors.New("QEMU process is not confined by enforcing libvirt AppArmor")
+	if err := validateDomainAppArmorIdentity(d, strings.TrimSpace(runtimeUUID), string(label)); err != nil {
+		return fmt.Errorf("QEMU AppArmor identity differs from live domain: %w", err)
 	}
 	cgroups, err := os.ReadFile(filepath.Join(proc, "cgroup"))
 	if err != nil {

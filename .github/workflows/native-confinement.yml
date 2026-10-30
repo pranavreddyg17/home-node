@@ -9,6 +9,9 @@ on:
       - 'internal/supervisor/confinement_boundary_linux_test.go'
       - 'internal/supervisor/confinement_descriptors_linux_test.go'
       - 'internal/supervisor/apparmor_write_policy.go'
+      - 'internal/supervisor/apparmor_identity*'
+      - 'internal/supervisor/backend.go'
+      - 'packaging/systemd/reserved_manager_fixture.py'
       - 'internal/supervisor/domain.go'
       - 'internal/supervisor/qemu_regular_authority*'
       - 'internal/supervisor/qemu_device_authority*'
@@ -37,7 +40,7 @@ jobs:
       - name: Install native runtime and read-only policy tools
         run: sudo apt-get update && sudo apt-get install -y libvirt-clients libvirt-daemon-system qemu-system-x86 apparmor libapparmor-dev e2fsprogs
       - name: Verify regular, device and socket descriptor metadata refusal
-        run: go test -race -v ./internal/supervisor -run '^TestQEMU((Regular(Read|Write)|Device|Socket|Anonymous)Metadata|OutputPipeMetadata|SeccompStatus|SandboxArguments|FDFlags|ProcMetadataReader.*|SocketObservation.*)$' -count=1
+        run: go test -race -v ./internal/supervisor -run '^Test(QEMU((Regular(Read|Write)|Device|Socket|Anonymous)Metadata|OutputPipeMetadata|SeccompStatus|SandboxArguments|FDFlags|ProcMetadataReader.*|SocketObservation.*)|DomainAppArmorIdentity)$' -count=1
       - name: Capture expanded sources beside a live confined synthetic domain
         working-directory: internal/supervisor
         run: |
@@ -70,6 +73,8 @@ jobs:
           if len(output) > 1 << 20 or output.count(b'native QEMU paired output pipe metadata observed') != 2 or output.count(b'native QEMU sandbox launch arguments observed') != 2 or output.count(b'native QEMU per-task seccomp filter mode observed') != 2 or output.count(b'native confined Internet socket creation denied with Unix positive control') != 2 or output.count(b'native unconfined Internet socket creation positive controls passed') != 2 or output.count(b'native QEMU socket metadata observation completed') != 2 or output.count(b'native candidate PID file absence and reserved UID task exit observed after stop') != 2 or output.count(b'native QEMU descriptor inventory completed') != 2 or output.count(b'native inherited descriptor write observation allowed ') != 2 or output.count(expected) != 2 or output.count(b'native unconfined owned-volume hardlink positive control passed') != 2 or b'native AppArmor source inventory retained;' not in output or b'native confined task write probe completed;' not in output:
               raise SystemExit('bounded source inventory evidence missing')
           PY
+      - name: Verify dynamic profile identity through reserved Manager lifecycle
+        run: sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 python3 -B packaging/systemd/reserved_manager_fixture.py "$(command -v go)"
       - name: Retain generated expanded policy sources
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

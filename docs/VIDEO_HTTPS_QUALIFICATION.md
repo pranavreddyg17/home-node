@@ -631,3 +631,15 @@ tests, YAML parsing and actionlint passed locally. No video end-to-end execution
 is established by this wiring. The job requires the unchanged decoded-output
 and acknowledged-cleanup marker; the reserved cleanup gate remains an expected
 open blocker rather than a reason to accept conversion alone as completion.
+
+Production LinuxBackend verification now binds every observed enforcing
+AppArmor label to the live UUID queried for the exact protected libvirt domain
+name. Dynamic profiles no longer pass by libvirt-prefix/enforce-suffix alone;
+the static candidate additionally requires its deterministic domain UUID.
+Malformed/noncanonical UUIDs, foreign labels and complain mode refuse. Focused
+identity race tests, the full local supervisor race suite (23.079s), Linux
+cross-compilation and actionlint passed. Native qualification is pending.
+The confinement workflow now also runs the disposable reserved Manager launch,
+audit, stop and retained restart with dynamic profiles, rather than covering
+only static-profile launches. This label binding does not attest loaded policy
+contents or establish process/descriptor lifetime exclusion or safe UID reuse.
