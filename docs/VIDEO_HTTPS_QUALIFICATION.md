@@ -605,7 +605,7 @@ after each role inspection and joins retained-directory/pidfd close errors.
 Regular/device targets are checked against finite known paths before named stat.
 A shared bounded fdinfo parser rejects duplicate/missing/malformed/overflowing
 flags. Focused parser/role race tests and Linux cross-compilation passed; native
-qualification of the full extraction is pending. This remains an observation API, with no
+qualification of the full extraction passed at `d7e85f0` (see retained evidence below). This remains an observation API, with no
 backend enablement, admission receipt or UID-release effect. Application guests,
 descriptor transfer/lifetime and installed service protections remain open.
 
@@ -616,4 +616,18 @@ O_NOFOLLOW and limit-plus-one overflow detection. Linux cross-compilation
 passed. New Linux tests use generated ordinary files solely to exercise name,
 size and symlink refusal; they do not authenticate procfs or substitute for the
 collector's source checks. CI execution and native collector qualification are
-pending. No launch authority or UID-release effect is enabled by this change.
+passed in the [native run](https://github.com/pranavreddyg17/home-node/actions/runs/41111648004) at `d7e85f0`.
+[Retained evidence](evidence/confinement-shared-collector-d7e85f0.json) includes
+explicit reader/socket test passes and both complete role inventories. No launch
+authority or UID-release effect is enabled by this change.
+
+The development image workflow now has an explicit video_browser opt-in. It
+requires both image profiles and bounded Files settings, downloads the Files
+and video artifacts from that same workflow run, builds the frontend and actual
+service/test executables, preserves the sandboxed browser staging, and invokes
+the existing paired HTTPS fixture. Manifests must match the selected checkout
+revision before either image identity is published. Fifteen manifest/client unit
+tests, YAML parsing and actionlint passed locally. No video end-to-end execution
+is established by this wiring. The job requires the unchanged decoded-output
+and acknowledged-cleanup marker; the reserved cleanup gate remains an expected
+open blocker rather than a reason to accept conversion alone as completion.

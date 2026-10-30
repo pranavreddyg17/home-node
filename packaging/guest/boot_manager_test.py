@@ -78,6 +78,24 @@ class ManagerInputs(unittest.TestCase):
                     fixture.prepare_workflow_inputs(*arguments)
                 self.assertNotIn("HOMENODE_FILES_IMAGE", os.environ)
 
+    def test_paired_inputs_bind_to_selected_checkout_before_publication(self):
+        environment = {"HOMENODE_FILES_MANAGER_INTEGRATION": "1", "HOMENODE_FILES_HTTPS_INTEGRATION": "1", "HOMENODE_VIDEO_HTTPS_INTEGRATION": "1"}
+        with tempfile.TemporaryDirectory() as directory:
+            files_manifest, video_manifest = Path(directory) / "files.json", Path(directory) / "video.json"
+            files_manifest.write_text(json.dumps(self.record()))
+            video_manifest.write_text(json.dumps(self.record() | {"profile": "video", "sha256": "e" * 64}))
+            arguments = (str(Path(directory) / "files.raw"), str(files_manifest), str(Path(directory) / "video.raw"), str(video_manifest))
+            for expected in ("b" * 40, "", "A" * 40, "a" * 39, "../foreign"):
+                with self.subTest(expected=expected), mock.patch.dict(os.environ, environment | {"HOMENODE_DEVELOPMENT_SOURCE_REVISION": expected}, clear=True):
+                    with self.assertRaises(RuntimeError):
+                        fixture.prepare_workflow_inputs(*arguments)
+                    self.assertNotIn("HOMENODE_FILES_IMAGE", os.environ)
+                    self.assertNotIn("HOMENODE_VIDEO_IMAGE", os.environ)
+            with mock.patch.dict(os.environ, environment | {"HOMENODE_DEVELOPMENT_SOURCE_REVISION": "a" * 40}, clear=True):
+                fixture.prepare_workflow_inputs(*arguments)
+                self.assertIn("HOMENODE_FILES_IMAGE", os.environ)
+                self.assertIn("HOMENODE_VIDEO_IMAGE", os.environ)
+
     def test_client_requires_ready_state_before_object_work(self):
         result = {"bytes": 1048579, "chunkBytes": 262144, "acknowledgedChunkReplay": True}
         with mock.patch.object(manager_channel.sys, "platform", "linux"), mock.patch.object(os, "geteuid", return_value=2), mock.patch.dict(os.environ, {"HOMENODE_FILES_MANAGER_INTEGRATION": "1"}), mock.patch.object(manager_channel.sys, "argv", ["fixture", "/tmp/admitted.sock", "Generated_Token_12345678901", "0"]), mock.patch.object(manager_channel.socket, "socket"), mock.patch.object(manager_channel.boot_image, "request", return_value={"state": "foreign"}) as request, mock.patch.object(manager_channel.boot_image, "object_roundtrip", return_value=result) as transfer:

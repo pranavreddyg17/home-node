@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "d7e85f00d209791ac10ac0869622b8454f8119c2",
+  "workflowRun": 41111648004,
+  "job": 124254904917,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/41111648004",
+  "conclusion": "success",
+  "logSource": "GitHub job logs endpoint; gh run log view omitted capture steps",
+  "logSHA256": "1b9e0742ac431381290baeedaed0685b81c5ccca83d57ac7637d9103ee5a2b7e",
+  "explicitFocusedTestPasses": [
+    "TestQEMUProcMetadataReaderBoundsAndNames",
+    "TestQEMUSocketObservationPreservesQueuedDataAndFlags",
+    "TestQEMUSocketObservationRequiresSocketIdentity"
+  ],
+  "descriptorCounts": [
+    23,
+    23
+  ],
+  "roleCounts": [
+    {
+      "null-device": 1,
+      "candidate-log-stdout": 1,
+      "candidate-log-stderr": 1,
+      "random-device": 1,
+      "candidate-eventfd": 8,
+      "candidate-domain-pidfile": 1,
+      "candidate-signalfd": 1,
+      "readonly-system-image": 1,
+      "kvm-device": 1,
+      "candidate-kvm-vm": 1,
+      "candidate-monitor-connected": 1,
+      "candidate-kvm-vcpu": 1,
+      "candidate-kvm-vcpu-stats": 1,
+      "managed-data": 1,
+      "candidate-adapter-listener": 1,
+      "candidate-monitor-listener": 1
+    },
+    {
+      "null-device": 1,
+      "candidate-log-stdout": 1,
+      "candidate-log-stderr": 1,
+      "random-device": 1,
+      "candidate-eventfd": 8,
+      "candidate-domain-pidfile": 1,
+      "candidate-signalfd": 1,
+      "readonly-system-image": 1,
+      "kvm-device": 1,
+      "candidate-kvm-vm": 1,
+      "candidate-monitor-connected": 1,
+      "candidate-kvm-vcpu": 1,
+      "candidate-kvm-vcpu-stats": 1,
+      "managed-data": 1,
+      "candidate-adapter-listener": 1,
+      "candidate-monitor-listener": 1
+    }
+  ],
+  "retirementRegressionRun": 41111648084,
+  "retirementRegressionConclusion": "success",
+  "limits": [
+    "Shared observer was exercised with synthetic KVM guests, not complete application guests or installed services.",
+    "Candidate metadata roles do not authorize transferred authority, peer holders, ioctl safety or resource lifetime.",
+    "Static-profile production publication, launch provenance, safe UID reuse and full release remain unqualified."
+  ],
+  "releaseQualified": false
+}

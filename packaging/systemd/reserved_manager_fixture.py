@@ -103,6 +103,9 @@ def read_development_input(image, manifest, profile):
         value = record[field]
         if not isinstance(value, str) or len(value) != length or any(char not in "0123456789abcdef" for char in value):
             raise RuntimeError("invalid development source identity")
+    expected_revision = os.environ.get("HOMENODE_DEVELOPMENT_SOURCE_REVISION")
+    if expected_revision is not None and (len(expected_revision) != 40 or any(char not in "0123456789abcdef" for char in expected_revision) or record["sourceRevision"] != expected_revision):
+        raise RuntimeError("development image source differs from selected checkout")
     return record
 
 

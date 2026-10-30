@@ -51,6 +51,10 @@ on:
         type: choice
         default: '32768'
         options: ['32768', '1073741824']
+      video_browser:
+        description: Qualify paired Files/video browser conversion and cleanup (requires both, 32 KiB settings)
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -66,6 +70,12 @@ jobs:
         profile: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.profile == 'files' && '["files"]' || github.event_name == 'workflow_dispatch' && inputs.profile == 'video' && '["video"]' || '["files","video"]') }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Validate paired video selection
+        if: github.event_name == 'workflow_dispatch' && inputs.video_browser
+        run: |
+          test "${{ inputs.profile }}" = both
+          test "${{ inputs.files_https_bytes }}" = 32768
+          test "${{ inputs.files_browser_bytes }}" = 32768
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version: '1.26.10'
@@ -202,4 +212,96 @@ jobs:
           name: homenode-development-guest-${{ matrix.profile }}
           path: ${{ runner.temp }}/assembly/${{ matrix.profile }}/artifacts/*
           if-no-files-found: error
+          retention-days: 7
+
+  paired-video:
+    name: Paired native browser video workflow
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.video_browser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.26.10'
+          cache: true
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Download same-run Files disk
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: homenode-development-guest-files
+          path: ${{ runner.temp }}/paired/files
+      - name: Download same-run video disk
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: homenode-development-guest-video
+          path: ${{ runner.temp }}/paired/video
+      - name: Verify fixture contracts and build frontend
+        run: |
+          python3 -B packaging/guest/boot_manager_test.py
+          go test -race ./internal/transfer
+          go test -race ./cmd/homenode-gateway -run '^TestNativeBrowserInvitationPipeBoundary$' -count=1
+          npm --prefix web ci
+          npm --prefix web run build
+      - name: Prepare disposable native runtime and protected browser
+        run: |
+          test -c /dev/kvm
+          sudo apt-get update && sudo apt-get install -y qemu-system-x86 ffmpeg libvirt-clients libvirt-daemon-system e2fsprogs libnss3-tools
+          test -x /opt/google/chrome/chrome
+          test "$(readlink -f /opt/google/chrome/chrome)" = /opt/google/chrome/chrome
+          test -f /opt/google/chrome/chrome-sandbox
+          test ! -L /opt/google/chrome/chrome-sandbox
+          browser_fixture_digest=$(sha256sum /opt/google/chrome/chrome | cut -d ' ' -f1)
+          stat -c 'Browser ancestor %n uid=%u gid=%g mode=%a' /opt /opt/google /opt/google/chrome
+          sudo chown root:root /opt
+          sudo chmod go-w /opt
+          sudo chown --no-dereference -R root:root /opt/google/chrome
+          sudo chmod -R go-w /opt/google/chrome
+          sudo chown root:root /opt/google
+          sudo chmod go-w /opt/google
+          sudo chmod 4755 /opt/google/chrome/chrome-sandbox
+          test "$(sha256sum /opt/google/chrome/chrome | cut -d ' ' -f1)" = "$browser_fixture_digest"
+          sha256sum /opt/google/chrome/chrome
+          stat -c 'Browser runtime uid=%u gid=%g mode=%a' /opt/google/chrome/chrome
+          stat -c 'Browser sandbox helper uid=%u gid=%g mode=%a' /opt/google/chrome/chrome-sandbox
+          /opt/google/chrome/chrome --version
+          sudo install -D -m 0755 "$(command -v node)" /usr/lib/homenode-fixtures/node
+          PYTHONPATH=packaging/inspection /usr/bin/python3 -B -c 'from browser_fixture import protected_program; protected_program("/usr/lib/homenode-fixtures/node"); protected_program("/opt/google/chrome/chrome"); print("PASS protected Node and Chrome runtime hierarchy")'
+      - name: Stage actual native service executables
+        run: |
+          go test -c -o "$RUNNER_TEMP/supervisor-memory.test" ./internal/supervisor
+          sudo install -D -m 0755 "$RUNNER_TEMP/supervisor-memory.test" /usr/lib/homenode-fixtures/supervisor.test
+          go test -c -o "$RUNNER_TEMP/https-identity.test" ./cmd/homenode-gateway
+          sudo install -D -m 0755 "$RUNNER_TEMP/https-identity.test" /usr/lib/homenode-fixtures/https-identity.test
+          for program in homenode homenode-gateway homenode-supervisor homenode-transfer; do
+            go build -o "$RUNNER_TEMP/$program" "./cmd/$program"
+            sudo install -D -m 0755 "$RUNNER_TEMP/$program" "/usr/lib/homenode-fixtures/$program"
+          done
+          sudo systemctl start libvirtd
+      - name: Exercise paired conversion through authenticated browser services
+        env:
+          HOMENODE_DEVELOPMENT_SOURCE_REVISION: ${{ github.sha }}
+        run: |
+          set -o pipefail
+          sudo env HOMENODE_KVM_DOMAIN_INTEGRATION=1 HOMENODE_FILES_MANAGER_INTEGRATION=1 HOMENODE_FILES_HTTPS_INTEGRATION=1 HOMENODE_FILES_HTTPS_BYTES=32768 HOMENODE_FILES_BROWSER_INTEGRATION=1 HOMENODE_FILES_BROWSER_BYTES=32768 HOMENODE_VIDEO_HTTPS_INTEGRATION=1 HOMENODE_DEVELOPMENT_SOURCE_REVISION="$HOMENODE_DEVELOPMENT_SOURCE_REVISION" python3 -B packaging/systemd/reserved_manager_fixture.py "$(command -v go)" "$RUNNER_TEMP/paired/files/homenode-development-files.raw" "$RUNNER_TEMP/paired/files/development-build.json" "$RUNNER_TEMP/paired/video/homenode-development-video.raw" "$RUNNER_TEMP/paired/video/development-build.json" | tee "$RUNNER_TEMP/paired-video.log"
+          python3 -B - "$RUNNER_TEMP/paired-video.log" <<'PY'
+          import pathlib, sys
+          with pathlib.Path(sys.argv[1]).open('rb') as source:
+              data = source.read((1 << 20) + 1)
+          marker = b'PASS native browser video conversion, decoded output integrity and acknowledged cleanup'
+          if len(data) > 1 << 20 or data.count(marker) != 1:
+              raise SystemExit('paired video completion and cleanup evidence missing')
+          PY
+      - name: Retain paired workflow diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: homenode-paired-video-workflow
+          path: ${{ runner.temp }}/paired-video.log
+          if-no-files-found: warn
           retention-days: 7
