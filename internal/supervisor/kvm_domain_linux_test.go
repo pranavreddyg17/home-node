@@ -726,7 +726,7 @@ func nativeDomainDiagnostics(t *testing.T, domain Domain) {
 	if pid, err := strconv.Atoi(strings.TrimSpace(string(read(filepath.Join("/run/libvirt/qemu", domain.Name()+".pid"), 64)))); err == nil && pid > 0 {
 		process := filepath.Join("/proc", strconv.Itoa(pid))
 		for _, line := range strings.Split(string(read(filepath.Join(process, "status"), 64<<10)), "\n") {
-			if strings.HasPrefix(line, "Uid:") || strings.HasPrefix(line, "Gid:") || strings.HasPrefix(line, "Groups:") || strings.HasPrefix(line, "Cap") || strings.HasPrefix(line, "NoNewPrivs:") {
+			if strings.HasPrefix(line, "Uid:") || strings.HasPrefix(line, "Gid:") || strings.HasPrefix(line, "Groups:") || strings.HasPrefix(line, "Cap") || strings.HasPrefix(line, "NoNewPrivs:") || strings.HasPrefix(line, "Seccomp") {
 				t.Log(line)
 			}
 		}

@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "eb4dbd54fcbb714021ab3b633c7873e08c58aa27",
+  "workflowRun": 41108557157,
+  "job": 124244627218,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/41108557157",
+  "conclusion": "success",
+  "logSHA256": "6cd2d2428f0d8a3ef96975a8551fdc2c78dd7647a1c2ef9c7f8326374fefc933",
+  "socketRoleSnapshots": [
+    [
+      {
+        "fd": 13,
+        "kind": "socket",
+        "target": "socket:[29489]",
+        "flags": "2004002",
+        "UID": 2000000000,
+        "GID": 993,
+        "Device": 10,
+        "Inode": 29489,
+        "Links": 1,
+        "Major": 0,
+        "Minor": 0,
+        "Mode": 49663,
+        "role": "candidate-monitor-connected",
+        "socket": {
+          "Domain": 1,
+          "Type": 1,
+          "Protocol": 0,
+          "Listening": 0,
+          "Local": "/var/lib/libvirt/qemu/domain-1-homenode-NMGZUE4VPP7/monitor.sock",
+          "Peer": "@",
+          "PeerCredentials": {
+            "Pid": 4685,
+            "Uid": 0,
+            "Gid": 0
+          }
+        }
+      },
+      {
+        "fd": 31,
+        "kind": "socket",
+        "target": "socket:[29402]",
+        "flags": "2",
+        "UID": 0,
+        "GID": 0,
+        "Device": 10,
+        "Inode": 29402,
+        "Links": 1,
+        "Major": 0,
+        "Minor": 0,
+        "Mode": 49663,
+        "role": "candidate-adapter-listener",
+        "socket": {
+          "Domain": 1,
+          "Type": 1,
+          "Protocol": 0,
+          "Listening": 1,
+          "Local": "/tmp/hn-kvm-3113744352/NMGZUE4VPP7IPG4QADLNK6YINZ/adapter.sock",
+          "Peer": ""
+        }
+      },
+      {
+        "fd": 32,
+        "kind": "socket",
+        "target": "socket:[29403]",
+        "flags": "2",
+        "UID": 0,
+        "GID": 0,
+        "Device": 10,
+        "Inode": 29403,
+        "Links": 1,
+        "Major": 0,
+        "Minor": 0,
+        "Mode": 49663,
+        "role": "candidate-monitor-listener",
+        "socket": {
+          "Domain": 1,
+          "Type": 1,
+          "Protocol": 0,
+          "Listening": 1,
+          "Local": "/var/lib/libvirt/qemu/domain-1-homenode-NMGZUE4VPP7/monitor.sock",
+          "Peer": ""
+        }
+      }
+    ],
+    [
+      {
+        "fd": 13,
+        "kind": "socket",
+        "target": "socket:[30902]",
+        "flags": "2004002",
+        "UID": 2000000000,
+        "GID": 993,
+        "Device": 10,
+        "Inode": 30902,
+        "Links": 1,
+        "Major": 0,
+        "Minor": 0,
+        "Mode": 49663,
+        "role": "candidate-monitor-connected",
+        "socket": {
+          "Domain": 1,
+          "Type": 1,
+          "Protocol": 0,
+          "Listening": 0,
+          "Local": "/var/lib/libvirt/qemu/domain-2-homenode-NMGZUE4VPP7/monitor.sock",
+          "Peer": "@",
+          "PeerCredentials": {
+            "Pid": 4685,
+            "Uid": 0,
+            "Gid": 0
+          }
+        }
+      },
+      {
+        "fd": 31,
+        "kind": "socket",
+        "target": "socket:[29914]",
+        "flags": "2",
+        "UID": 0,
+        "GID": 0,
+        "Device": 10,
+        "Inode": 29914,
+        "Links": 1,
+        "Major": 0,
+        "Minor": 0,
+        "Mode": 49663,
+        "role": "candidate-adapter-listener",
+        "socket": {
+          "Domain": 1,
+          "Type": 1,
+          "Protocol": 0,
+          "Listening": 1,
+          "Local": "/tmp/hn-kvm-3113744352/NMGZUE4VPP7IPG4QADLNK6YINZ/adapter.sock",
+          "Peer": ""
+        }
+      },
+      {
+        "fd": 32,
+        "kind": "socket",
+        "target": "socket:[29915]",
+        "flags": "2",
+        "UID": 0,
+        "GID": 0,
+        "Device": 10,
+        "Inode": 29915,
+        "Links": 1,
+        "Major": 0,
+        "Minor": 0,
+        "Mode": 49663,
+        "role": "candidate-monitor-listener",
+        "socket": {
+          "Domain": 1,
+          "Type": 1,
+          "Protocol": 0,
+          "Listening": 1,
+          "Local": "/var/lib/libvirt/qemu/domain-2-homenode-NMGZUE4VPP7/monitor.sock",
+          "Peer": ""
+        }
+      }
+    ]
+  ],
+  "retirementRegressionRun": 41108557166,
+  "retirementRegressionConclusion": "success",
+  "limits": [
+    "Live numeric libvirt ID is checked before and after inventory, but capture is not a process freeze.",
+    "Candidate monitor root peer credentials do not authenticate the live peer executable or all endpoint holders.",
+    "Production descriptor admission, socket authority lifetime, anonymous-object roles and safe UID reuse remain unqualified."
+  ],
+  "releaseQualified": false
+}

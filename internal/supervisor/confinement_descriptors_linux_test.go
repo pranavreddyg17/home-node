@@ -26,6 +26,28 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 	if err := verifyGuestDACProcess(ctx, pid, d.GuestUID, d.GuestGID); err != nil {
 		t.Fatal(err)
 	}
+	// Reuse the bounded protected task walker; do not infer thread coverage
+	// from the thread-group leader's status alone.
+	procRoot, err := os.OpenRoot("/proc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskCount, verifiedTasks := 0, 0
+	taskErr := withGuestUIDTaskStatus(ctx, procRoot, strconv.Itoa(pid), &taskCount, func(status []byte) error {
+		if err := validateGuestDACCredentials(status, d.GuestUID, d.GuestGID); err != nil {
+			return err
+		}
+		if err := validateQEMUSeccompStatus(status); err != nil {
+			return err
+		}
+		verifiedTasks++
+		return nil
+	})
+	closeErr := procRoot.Close()
+	if taskErr != nil || closeErr != nil || verifiedTasks == 0 {
+		t.Fatal("per-task seccomp observation refused", taskErr, closeErr)
+	}
+	t.Log("native QEMU per-task seccomp filter mode observed", "tasks", verifiedTasks, "filterContentsQualified", false)
 	pidfd, err := unix.PidfdOpen(pid, 0)
 	if err != nil {
 		t.Fatal(err)

@@ -14,6 +14,8 @@ on:
       - 'internal/supervisor/qemu_regular_authority*'
       - 'internal/supervisor/qemu_device_authority*'
       - 'internal/supervisor/qemu_socket_authority*'
+      - 'internal/supervisor/qemu_seccomp*'
+      - 'internal/supervisor/uid_verify_linux.go'
   workflow_dispatch:
 permissions:
   contents: read
@@ -30,7 +32,7 @@ jobs:
       - name: Install native runtime and read-only policy tools
         run: sudo apt-get update && sudo apt-get install -y libvirt-clients libvirt-daemon-system qemu-system-x86 apparmor libapparmor-dev e2fsprogs
       - name: Verify regular, device and socket descriptor metadata refusal
-        run: go test -race ./internal/supervisor -run '^TestQEMU(Regular(Read|Write)|Device|Socket)Metadata$' -count=1
+        run: go test -race ./internal/supervisor -run '^TestQEMU((Regular(Read|Write)|Device|Socket)Metadata|SeccompStatus)$' -count=1
       - name: Capture expanded sources beside a live confined synthetic domain
         working-directory: internal/supervisor
         run: |
@@ -60,7 +62,7 @@ jobs:
           with pathlib.Path(sys.argv[1]).open('rb') as stream:
               output = stream.read((1 << 20) + 1)
           expected = b'native confined task write probe managedWriteOpen true readonlyWriteDenied true temporaryWrite false temporaryDirectoryMatchesHost true managedHardlinkDenied true'
-          if len(output) > 1 << 20 or output.count(b'native confined Internet socket creation denied with Unix positive control') != 2 or output.count(b'native unconfined Internet socket creation positive controls passed') != 2 or output.count(b'native QEMU socket metadata observation completed') != 2 or output.count(b'native candidate PID file absence and reserved UID task exit observed after stop') != 2 or output.count(b'native QEMU descriptor inventory completed') != 2 or output.count(b'native inherited descriptor write observation allowed ') != 2 or output.count(expected) != 2 or output.count(b'native unconfined owned-volume hardlink positive control passed') != 2 or b'native AppArmor source inventory retained;' not in output or b'native confined task write probe completed;' not in output:
+          if len(output) > 1 << 20 or output.count(b'native QEMU per-task seccomp filter mode observed') != 2 or output.count(b'native confined Internet socket creation denied with Unix positive control') != 2 or output.count(b'native unconfined Internet socket creation positive controls passed') != 2 or output.count(b'native QEMU socket metadata observation completed') != 2 or output.count(b'native candidate PID file absence and reserved UID task exit observed after stop') != 2 or output.count(b'native QEMU descriptor inventory completed') != 2 or output.count(b'native inherited descriptor write observation allowed ') != 2 or output.count(expected) != 2 or output.count(b'native unconfined owned-volume hardlink positive control passed') != 2 or b'native AppArmor source inventory retained;' not in output or b'native confined task write probe completed;' not in output:
               raise SystemExit('bounded source inventory evidence missing')
           PY
       - name: Retain generated expanded policy sources

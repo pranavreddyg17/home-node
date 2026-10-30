@@ -42,6 +42,9 @@ func verifyGuestDACProcess(ctx context.Context, pid int, uid, gid uint32) (resul
 		if err := validateGuestDACCredentials(status, uid, gid); err != nil {
 			return err
 		}
+		if err := validateQEMUSeccompStatus(status); err != nil {
+			return err
+		}
 		verified++
 		return nil
 	})

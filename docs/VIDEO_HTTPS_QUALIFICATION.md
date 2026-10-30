@@ -514,5 +514,20 @@ path and observed peer shape. Connected monitor credentials must report a
 positive peer PID and root IDs. These remain candidate roles: root credentials
 do not authenticate the peer executable, prevent PID reuse, or inventory every
 holder of the endpoint. Focused metadata race tests and Linux cross-compilation passed; native execution
-is pending. The synthetic fixture requires exactly one observation of each
-expected socket role. Production admission remains off.
+passed in the [native run](https://github.com/pranavreddyg17/home-node/actions/runs/41108557157) at `eb4dbd5`. The synthetic fixture observed exactly one of each
+expected socket role on both launches. [Retained evidence](evidence/confinement-socket-roles-eb4dbd5.json)
+records those snapshots and retirement regressions. Production admission remains off.
+
+Reserved-QEMU process verification now additionally requires Seccomp mode 2
+and a positive canonical Seccomp_filters count on every observed task, using
+the existing bounded protected-procfs task walker. Missing, duplicate, disabled,
+strict-only or malformed fields refuse adoption. This applies to production
+reserved process verification rather than only the candidate profile fixture.
+The native inventory separately requires two per-task observation markers.
+Focused parser/metadata tests, the full local supervisor race suite (23.388s),
+and Linux cross-compilation passed; native
+execution is pending. Mode/count cannot establish filter contents,
+libvirt's requested sandbox options, forbidden-syscall behavior, or exclusion of
+threads created after observation. These qualifications remain open.
+See [Linux status fields](https://man7.org/linux/man-pages/man5/proc_pid_status.5.html)
+and [libvirt's QEMU security model](https://www.libvirt.org/kbase/qemu-passthrough-security.html).
