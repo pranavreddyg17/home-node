@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "b8a67b5478a498b545baf2c501344c04327a556d",
+  "workflowRun": 41108247763,
+  "job": 124243623665,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/41108247763",
+  "conclusion": "success",
+  "logSHA256": "3b7ac4da5146eb2d9d36d09b8121e5c46e937f51d729bec7245208048971cbb8",
+  "confinedFourInternetSocketRefusalsAndUnixPositiveControls": 2,
+  "unconfinedSameIdentityFourInternetSocketCreationControls": 2,
+  "retirementRegressionRun": 41108247571,
+  "retirementRegressionConclusion": "success",
+  "limits": [
+    "Fresh socket creation only; no traffic, bind or connection attempted.",
+    "Does not qualify inherited sockets, other families, QEMU syscall policy, guest packet paths or installed firewall ordering.",
+    "Synthetic candidate profile remains disabled in production; safe UID reuse is not qualified."
+  ],
+  "releaseQualified": false
+}

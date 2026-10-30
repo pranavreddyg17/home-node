@@ -498,6 +498,21 @@ The unconfined task with the exact reserved UID/GID, empty groups and zero
 capabilities must create all four Internet sockets successfully. No bind,
 connect or packets are used. CI requires two paired observations. Focused
 profile race tests and Linux cross-compilation passed; native execution of
-these network controls is pending. This does not cover inherited Internet
+these network controls passed on both launches in the [native run](https://github.com/pranavreddyg17/home-node/actions/runs/41108247763) at `b8a67b5`.
+[Retained evidence](evidence/confinement-network-b8a67b5.json) records the paired
+controls and retirement regression result. This does not cover inherited Internet
 sockets, other address families, guest packet paths or a complete firewall test.
 Syntax follows the [Ubuntu AppArmor profile manual](https://manpages.ubuntu.com/manpages/noble/man5/apparmor.d.5.html).
+
+Socket metadata qualification now refuses unknown endpoint roles. A live
+libvirt numeric domain ID is resolved by the protected domain name before and
+after capture; its exact runtime directory and shortened domain name bind the
+monitor path. Only the owned adapter listener, domain monitor listener and
+connected domain monitor stream are recognized, with exact AF_UNIX stream
+protocol/access, inode-owner/group/mode/link metadata, listener state, local
+path and observed peer shape. Connected monitor credentials must report a
+positive peer PID and root IDs. These remain candidate roles: root credentials
+do not authenticate the peer executable, prevent PID reuse, or inventory every
+holder of the endpoint. Focused metadata race tests and Linux cross-compilation passed; native execution
+is pending. The synthetic fixture requires exactly one observation of each
+expected socket role. Production admission remains off.

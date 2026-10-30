@@ -39,6 +39,16 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 		}
 	}
 	live()
+	runtimeID := func() uint32 {
+		t.Helper()
+		output, err := command(ctx, "", "/usr/bin/virsh", "--connect", "qemu:///system", "domid", d.Name())
+		value, parseErr := strconv.ParseUint(strings.TrimSpace(output), 10, 31)
+		if err != nil || parseErr != nil || value == 0 {
+			t.Fatal("live domain numeric identity unavailable", err, parseErr)
+		}
+		return uint32(value)
+	}
+	admittedRuntimeID := runtimeID()
 	process, err := os.OpenFile(filepath.Join("/proc", strconv.Itoa(pid)), os.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -114,6 +124,7 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 	records := make([]descriptor, 0, len(entries))
 	writableRegular := 0
 	socketCount := 0
+	socketRoles := map[string]int{}
 	for _, entry := range entries {
 		name := entry.Name()
 		number, err := strconv.Atoi(name)
@@ -194,6 +205,18 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 		}
 		if r.Kind == "socket" {
 			metadata := nativeQEMUSocketInventory(t, pidfd, number, first)
+			socketIdentity := qemuSocketIdentity{qemuRegularIdentity: qemuRegularIdentity{Device: uint64(first.Dev), Inode: first.Ino, Links: first.Nlink, UID: first.Uid, GID: first.Gid, Mode: first.Mode}, Family: metadata.Domain, Type: metadata.Type, Protocol: metadata.Protocol, Listening: metadata.Listening, Local: metadata.Local, Peer: metadata.Peer}
+			if metadata.PeerCredentials != nil {
+				socketIdentity.PeerPID = metadata.PeerCredentials.Pid
+				socketIdentity.PeerUID = metadata.PeerCredentials.Uid
+				socketIdentity.PeerGID = metadata.PeerCredentials.Gid
+			}
+			role, err := qualifyQEMUSocket(d, admittedRuntimeID, socketIdentity, uint32(firstFlags&unix.O_ACCMODE))
+			if err != nil {
+				t.Fatal("unexplained socket metadata", err)
+			}
+			r.Role = role
+			socketRoles[role]++
 			r.Socket = &metadata
 			socketCount++
 			var current unix.Stat_t
@@ -211,8 +234,11 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 	if err != nil || len(data) > 128<<10 {
 		t.Fatal("descriptor inventory serialization", err)
 	}
-	if socketCount == 0 {
-		t.Fatal("socket inventory positive control absent")
+	if runtimeID() != admittedRuntimeID {
+		t.Fatal("live domain numeric identity changed")
+	}
+	if socketCount != 3 || socketRoles["candidate-adapter-listener"] != 1 || socketRoles["candidate-monitor-listener"] != 1 || socketRoles["candidate-monitor-connected"] != 1 {
+		t.Fatal("socket role inventory differs", socketRoles)
 	}
 	t.Log("native QEMU socket metadata observation completed", "count", socketCount, "admissionQualified", false)
 	t.Log("native QEMU descriptor metadata", string(data))

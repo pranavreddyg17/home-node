@@ -13,6 +13,7 @@ on:
       - 'internal/supervisor/domain.go'
       - 'internal/supervisor/qemu_regular_authority*'
       - 'internal/supervisor/qemu_device_authority*'
+      - 'internal/supervisor/qemu_socket_authority*'
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,8 +29,8 @@ jobs:
           cache: true
       - name: Install native runtime and read-only policy tools
         run: sudo apt-get update && sudo apt-get install -y libvirt-clients libvirt-daemon-system qemu-system-x86 apparmor libapparmor-dev e2fsprogs
-      - name: Verify regular and device descriptor metadata refusal
-        run: go test -race ./internal/supervisor -run '^TestQEMU(Regular(Read|Write)|Device)Metadata$' -count=1
+      - name: Verify regular, device and socket descriptor metadata refusal
+        run: go test -race ./internal/supervisor -run '^TestQEMU(Regular(Read|Write)|Device|Socket)Metadata$' -count=1
       - name: Capture expanded sources beside a live confined synthetic domain
         working-directory: internal/supervisor
         run: |
