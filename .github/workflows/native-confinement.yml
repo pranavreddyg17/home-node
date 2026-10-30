@@ -37,7 +37,7 @@ jobs:
       - name: Install native runtime and read-only policy tools
         run: sudo apt-get update && sudo apt-get install -y libvirt-clients libvirt-daemon-system qemu-system-x86 apparmor libapparmor-dev e2fsprogs
       - name: Verify regular, device and socket descriptor metadata refusal
-        run: go test -race -v ./internal/supervisor -run '^TestQEMU((Regular(Read|Write)|Device|Socket|Anonymous)Metadata|OutputPipeMetadata|SeccompStatus|SandboxArguments|FDFlags|SocketObservation.*)$' -count=1
+        run: go test -race -v ./internal/supervisor -run '^TestQEMU((Regular(Read|Write)|Device|Socket|Anonymous)Metadata|OutputPipeMetadata|SeccompStatus|SandboxArguments|FDFlags|ProcMetadataReader.*|SocketObservation.*)$' -count=1
       - name: Capture expanded sources beside a live confined synthetic domain
         working-directory: internal/supervisor
         run: |

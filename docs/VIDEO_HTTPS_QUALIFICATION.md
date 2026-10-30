@@ -608,3 +608,12 @@ flags. Focused parser/role race tests and Linux cross-compilation passed; native
 qualification of the full extraction is pending. This remains an observation API, with no
 backend enablement, admission receipt or UID-release effect. Application guests,
 descriptor transfer/lifetime and installed service protections remain open.
+
+The shared procfs read primitive now accepts only attr/current or a canonical
+bounded fdinfo slot, with positive per-file size limits (4096/8192). It refuses
+other names and invalid bounds before opening anything, and keeps final
+O_NOFOLLOW and limit-plus-one overflow detection. Linux cross-compilation
+passed. New Linux tests use generated ordinary files solely to exercise name,
+size and symlink refusal; they do not authenticate procfs or substitute for the
+collector's source checks. CI execution and native collector qualification are
+pending. No launch authority or UID-release effect is enabled by this change.

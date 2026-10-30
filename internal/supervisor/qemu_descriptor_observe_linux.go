@@ -38,6 +38,23 @@ func qemuRegularStat(s unix.Stat_t) qemuRegularIdentity {
 	return qemuRegularIdentity{Device: uint64(s.Dev), Inode: s.Ino, Links: s.Nlink, UID: s.Uid, GID: s.Gid, Mode: s.Mode}
 }
 func readQEMUProcFile(directory int, name string, limit int64) ([]byte, error) {
+	// The caller authenticates and pins the process directory. Keep this
+	// primitive metadata-only even if a later caller supplies a bad name/bound.
+	maximum := int64(4096)
+	if name != "attr/current" {
+		if !strings.HasPrefix(name, "fdinfo/") {
+			return nil, ErrPolicy
+		}
+		slot := strings.TrimPrefix(name, "fdinfo/")
+		number, err := strconv.ParseUint(slot, 10, 32)
+		if err != nil || number > 1<<20 || strconv.FormatUint(number, 10) != slot {
+			return nil, ErrPolicy
+		}
+		maximum = 8192
+	}
+	if limit < 1 || limit > maximum {
+		return nil, ErrPolicy
+	}
 	fd, err := unix.Openat(directory, name, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC|unix.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, err
