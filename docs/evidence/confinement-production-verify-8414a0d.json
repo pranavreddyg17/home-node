@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "8414a0d94a2c1f7a66fd587d7cefbcba270fa933",
+  "workflowRun": 41110105989,
+  "job": 124250012184,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/41110105989",
+  "conclusion": "success",
+  "logSHA256": "5ef3b23b021e0f9c030b3821eb1f41773d1573655690bf7375b2b0c058fa1412",
+  "observedFilteredTaskCounts": [
+    6,
+    6
+  ],
+  "sandboxArgumentObservations": 2,
+  "descriptorCounts": [
+    23,
+    23
+  ],
+  "unclassifiedDescriptors": 0,
+  "retirementRegressionRun": 41110106226,
+  "retirementRegressionConclusion": "success",
+  "limits": [
+    "Synthetic normal launches exercised mandatory reserved-process sandbox argument and per-task seccomp checks.",
+    "No forced process-exit/PID-reuse negative scenario was injected in this run.",
+    "Not installed service qualification; argv/filter-mode observations do not attest BPF contents or prevent later process/descriptor changes.",
+    "Production static-profile loading, complete descriptor authority admission, lifetime exclusion and safe UID reuse remain unqualified."
+  ],
+  "releaseQualified": false
+}

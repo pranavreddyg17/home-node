@@ -151,9 +151,9 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 		Device, Inode, Links uint64
 		Major, Minor         uint32
 		Mode                 uint32
-		Role                 string                    `json:"role"`
-		NamedScope           string                    `json:"namedScope,omitempty"`
-		Socket               *nativeQEMUSocketMetadata `json:"socket,omitempty"`
+		Role                 string              `json:"role"`
+		NamedScope           string              `json:"namedScope,omitempty"`
+		Socket               *qemuSocketMetadata `json:"socket,omitempty"`
 	}
 	records := make([]descriptor, 0, len(entries))
 	writableRegular := 0

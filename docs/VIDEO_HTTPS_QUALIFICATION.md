@@ -575,6 +575,19 @@ pidfd across the procfs argument read and bounded per-task credential/seccomp
 scan, refusing process exit before returning. Arguments are read through a
 pinned process directory, never logged in full, and closed on every path.
 Linux cross-compilation passed; native qualification of this production wiring
-is pending. This detects observed exit and a disabled/permissive requested
+passed on both launches in the [native run](https://github.com/pranavreddyg17/home-node/actions/runs/41110105989) at `8414a0d`.
+[Retained evidence](evidence/confinement-production-verify-8414a0d.json) also
+records retirement regressions; no forced-exit/PID-reuse case was injected.
+The implementation checks observed exit and a disabled/permissive requested
 sandbox; mutable argv and mode/count do not attest filter contents. It does not
 freeze tasks, retain runtime exclusion after return or authorize UID release.
+
+Socket observation has moved from a test-only implementation into shared Linux
+code. The disposable fixture calls the same observer intended for future
+production descriptor admission. It returns errors, checks socket type and
+inode/owner/group/mode/link identity, performs metadata queries only, and joins
+duplicate-close errors on every return. Observation still grants no peer or
+lifecycle authorization. Linux cross-compilation passed. New Linux-only tests
+queue generated stream data, observe metadata, and then require unchanged
+flags and exact queued bytes; foreign inode and regular-file inputs refuse.
+Those tests and native VM qualification are pending execution in CI.
