@@ -458,5 +458,17 @@ exact system-image path and named inode, root ownership, the admitted guest
 group, mode 0440, one link and read-only access. Unknown regular handles refuse
 the synthetic launch inventory regardless of access mode. This does not hash
 image contents or replace the catalog verification path. Focused local race
-tests and Linux cross-compilation passed; native execution is pending.
+tests and Linux cross-compilation passed. The [native run](https://github.com/pranavreddyg17/home-node/actions/runs/41107430503) at `09e5ad0` passed both launches, as did retirement regressions.
+[Retained evidence](evidence/confinement-readonly-09e5ad0.json) records the image
+identities and remaining unclassified descriptor counts.
 Production descriptor admission and UID reuse remain closed.
+
+The synthetic inventory now also checks character-device metadata. Only
+/dev/null (read/write), /dev/urandom (read-only) and /dev/kvm (read/write) are
+recognized, with exact device numbers, root ownership, expected group/mode,
+single link and named inode equality. Device paths may match either the
+observer root or the pinned QEMU process root; the observed scope is recorded.
+No device is opened for I/O. Double observation now also compares link count
+and rdev. Local metadata race tests and Linux cross-compilation passed; native
+execution of these checks is pending. This does not qualify device ioctl
+surfaces, seccomp, sockets, anonymous objects or descriptor lifetime exclusion.

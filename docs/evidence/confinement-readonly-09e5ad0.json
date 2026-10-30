@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "09e5ad054bb412c6a3c08f35618bea6f05edf4b1",
+  "workflowRun": 41107430503,
+  "job": 124240851066,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/41107430503",
+  "conclusion": "success",
+  "logSHA256": "f852b9bd0111da0b829c1a701dfd9841615171eb5d23070759c58d9277201407",
+  "descriptorCounts": [
+    23,
+    23
+  ],
+  "roleCounts": [
+    {
+      "unclassified": 20,
+      "candidate-domain-pidfile": 1,
+      "readonly-system-image": 1,
+      "managed-data": 1
+    },
+    {
+      "unclassified": 20,
+      "candidate-domain-pidfile": 1,
+      "readonly-system-image": 1,
+      "managed-data": 1
+    }
+  ],
+  "readonlyImageDescriptors": [
+    [
+      {
+        "fd": 9,
+        "kind": "regular",
+        "target": "/tmp/hn-kvm-4107472144/images/system.raw",
+        "flags": "2140000",
+        "UID": 0,
+        "GID": 993,
+        "Device": 66305,
+        "Inode": 9189324,
+        "Links": 1,
+        "Mode": 33056,
+        "role": "readonly-system-image"
+      }
+    ],
+    [
+      {
+        "fd": 9,
+        "kind": "regular",
+        "target": "/tmp/hn-kvm-4107472144/images/system.raw",
+        "flags": "2140000",
+        "UID": 0,
+        "GID": 993,
+        "Device": 66305,
+        "Inode": 9189324,
+        "Links": 1,
+        "Mode": 33056,
+        "role": "readonly-system-image"
+      }
+    ]
+  ],
+  "retirementRegressionRun": 41107430501,
+  "retirementRegressionConclusion": "success",
+  "limits": [
+    "Metadata-only synthetic VM launch evidence; does not rehash image content.",
+    "Device, socket, pipe and anonymous-object admission was not enforced at this revision.",
+    "No production descriptor admission, lifetime exclusion or safe UID reuse claim."
+  ],
+  "releaseQualified": false
+}

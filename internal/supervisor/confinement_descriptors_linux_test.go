@@ -105,8 +105,10 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 		Flags                string `json:"flags"`
 		UID, GID             uint32
 		Device, Inode, Links uint64
+		Major, Minor         uint32
 		Mode                 uint32
 		Role                 string `json:"role"`
+		NamedScope           string `json:"namedScope,omitempty"`
 	}
 	records := make([]descriptor, 0, len(entries))
 	writableRegular := 0
@@ -122,7 +124,7 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 			t.Fatal(err)
 		}
 		secondFlags, secondTarget := flags(name), target(name)
-		if err := unix.Fstatat(int(files.Fd()), name, &last, 0); err != nil || firstFlags != secondFlags || firstTarget != secondTarget || first.Dev != last.Dev || first.Ino != last.Ino || first.Mode != last.Mode || first.Uid != last.Uid || first.Gid != last.Gid {
+		if err := unix.Fstatat(int(files.Fd()), name, &last, 0); err != nil || firstFlags != secondFlags || firstTarget != secondTarget || first.Dev != last.Dev || first.Ino != last.Ino || first.Mode != last.Mode || first.Uid != last.Uid || first.Gid != last.Gid || first.Nlink != last.Nlink || first.Rdev != last.Rdev {
 			t.Fatal("descriptor changed during observation", err)
 		}
 		r := descriptor{FD: number, Target: firstTarget, Flags: strconv.FormatInt(int64(firstFlags), 8), UID: first.Uid, GID: first.Gid, Device: uint64(first.Dev), Inode: first.Ino, Links: first.Nlink, Mode: first.Mode, Role: "unclassified"}
@@ -131,6 +133,7 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 			r.Kind = "regular"
 		case unix.S_IFCHR:
 			r.Kind = "character-device"
+			r.Major, r.Minor = unix.Major(uint64(first.Rdev)), unix.Minor(uint64(first.Rdev))
 		case unix.S_IFSOCK:
 			r.Kind = "socket"
 		case unix.S_IFIFO:
@@ -156,6 +159,34 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 			role, err := qualify(d, firstTarget, identity(first), identity(named), uint32(firstFlags&unix.O_ACCMODE))
 			if err != nil {
 				t.Fatal("unexplained regular descriptor", firstTarget, err)
+			}
+			r.Role = role
+		}
+		if r.Kind == "character-device" {
+			var named unix.Stat_t
+			if err := unix.Lstat(firstTarget, &named); err != nil {
+				t.Fatal("device name unavailable", err)
+			}
+			identity := func(s unix.Stat_t) qemuDeviceIdentity {
+				return qemuDeviceIdentity{qemuRegularIdentity: qemuRegularIdentity{Device: uint64(s.Dev), Inode: s.Ino, Links: s.Nlink, UID: s.Uid, GID: s.Gid, Mode: s.Mode}, Major: unix.Major(uint64(s.Rdev)), Minor: unix.Minor(uint64(s.Rdev))}
+			}
+			role, err := qualifyQEMUDevice(d, firstTarget, identity(first), identity(named), uint32(firstFlags&unix.O_ACCMODE))
+			r.NamedScope = "observer-root"
+			if err != nil {
+				// Libvirt may open devices after entering its private mount
+				// namespace. Stat through the pinned live process root only;
+				// never open the device for I/O or adopt a different node.
+				if firstTarget != "/dev/null" && firstTarget != "/dev/urandom" && firstTarget != "/dev/kvm" {
+					t.Fatal("unexplained device path")
+				}
+				if statErr := unix.Fstatat(int(process.Fd()), "root"+firstTarget, &named, unix.AT_SYMLINK_NOFOLLOW); statErr != nil {
+					t.Fatal("process device name unavailable", statErr)
+				}
+				role, err = qualifyQEMUDevice(d, firstTarget, identity(first), identity(named), uint32(firstFlags&unix.O_ACCMODE))
+				r.NamedScope = "process-root"
+			}
+			if err != nil {
+				t.Fatal("unexplained device descriptor", firstTarget, err)
 			}
 			r.Role = role
 		}
