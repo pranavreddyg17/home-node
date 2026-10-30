@@ -62,7 +62,7 @@ func (d Domain) AppArmorWritePolicy() (string, error) {
 	}
 	root := buildTree(writable)
 	var out strings.Builder
-	fmt.Fprintf(&out, "#include <tunables/global>\nprofile %s flags=(attach_disconnected) {\n #include <abstractions/libvirt-qemu>\n", d.AppArmorName())
+	fmt.Fprintf(&out, "#include <tunables/global>\nprofile %s flags=(attach_disconnected) {\n #include <abstractions/libvirt-qemu>\n deny network inet,\n deny network inet6,\n", d.AppArmorName())
 	fmt.Fprintf(&out, " \"%s\" rk,\n \"%s\" rwk,\n \"%s\" rw,\n", d.SystemPath, d.DataPath, d.ChannelPath)
 	// Libvirt opens its per-domain key by pathname after applying the profile.
 	// The numeric runtime directory is assigned at launch. Only this filename is

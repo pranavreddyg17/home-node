@@ -257,14 +257,19 @@ func nativeConfinementWriteProbe(t *testing.T, ctx context.Context, d Domain, pi
 		t.Fatal("confined task write probe failed", observationErr, waitErr, diagnostic.String())
 	}
 	var result struct {
-		HardlinkDenied                  bool
-		InheritedDescriptorWrite        bool
-		TemporaryWrite                  bool
-		DirectoryDevice, DirectoryInode uint64
+		HardlinkDenied                           bool
+		InternetSocketsDenied, UnixSocketCreated bool
+		InheritedDescriptorWrite                 bool
+		TemporaryWrite                           bool
+		DirectoryDevice, DirectoryInode          uint64
 	}
 	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
 		t.Fatal("probe result", err)
 	}
+	if !result.InternetSocketsDenied || !result.UnixSocketCreated {
+		t.Fatal("network socket controls missing")
+	}
+	t.Log("native confined Internet socket creation denied with Unix positive control")
 	var observed [1]byte
 	if n, err := delegated.ReadAt(observed[:], 0); err != nil || n != 1 {
 		t.Fatal("delegated descriptor observation", err)

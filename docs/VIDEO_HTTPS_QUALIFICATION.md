@@ -470,7 +470,7 @@ single link and named inode equality. Device paths may match either the
 observer root or the pinned QEMU process root; the observed scope is recorded.
 No device is opened for I/O. Double observation now also compares link count
 and rdev. Local metadata race tests and Linux cross-compilation passed; native
-execution of these checks is pending. This does not qualify device ioctl
+execution passed at `1e552c6` and again at `2b78a0a`. This does not qualify device ioctl
 surfaces, seccomp, sockets, anonymous objects or descriptor lifetime exclusion.
 
 Socket inspection is now a disposable-fixture diagnostic using pidfd_getfd.
@@ -481,8 +481,23 @@ Only AF_UNIX is accepted; a disconnected socket must be listening. No message
 is received, no SCM_RIGHTS is adopted, and no shared flags, socket options or
 connection state are changed. Source-slot identity is rechecked afterward.
 Two completed socket observations are required by CI. Linux cross-compilation
-passed; native execution is pending. Peer credentials are observations rather
+passed. The [native run](https://github.com/pranavreddyg17/home-node/actions/runs/41107962921) at `2b78a0a` passed both launches.
+[Retained evidence](evidence/confinement-sockets-2b78a0a.json) records connected
+monitor and listening monitor/adapter sockets, root peer credentials, and device
+namespace observations. Peer credentials are observations rather
 than authorization, and do not identify every process holding the peer endpoint.
 Production peer admission and descriptor-transfer exclusion remain unqualified.
 The [pidfd_getfd manual](https://www.man7.org/linux/man-pages/man2/pidfd_getfd.2.html)
 explains the shared open-file-description authority and ptrace permission check.
+
+The candidate profile now explicitly denies network inet and inet6, overriding
+broader distro abstraction permissions for fresh Internet socket creation.
+The confined native task must receive EACCES/EPERM for IPv4/IPv6 stream and
+datagram socket creation and must successfully create an AF_UNIX stream socket.
+The unconfined task with the exact reserved UID/GID, empty groups and zero
+capabilities must create all four Internet sockets successfully. No bind,
+connect or packets are used. CI requires two paired observations. Focused
+profile race tests and Linux cross-compilation passed; native execution of
+these network controls is pending. This does not cover inherited Internet
+sockets, other address families, guest packet paths or a complete firewall test.
+Syntax follows the [Ubuntu AppArmor profile manual](https://manpages.ubuntu.com/manpages/noble/man5/apparmor.d.5.html).

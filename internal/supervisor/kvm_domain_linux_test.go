@@ -279,7 +279,7 @@ func runNativeReservedDACLaunch(t *testing.T, guestConnect bool, managerLaunch .
 		t.Helper()
 		// A host process with the exact proposed guest DAC identity tests
 		// pathname access only; this is not an in-guest exploit test.
-		probe := exec.CommandContext(ctx, "/usr/bin/python3", "-c", `import errno, os, sys
+		probe := exec.CommandContext(ctx, "/usr/bin/python3", "-c", `import errno, os, sys, socket
 uid, gid = int(sys.argv[4]), int(sys.argv[5])
 if os.getresuid() != (uid,uid,uid) or os.getresgid() != (gid,gid,gid) or os.getgroups() != []:
     raise RuntimeError("guest storage probe credentials differ")
@@ -292,6 +292,10 @@ if os.environ.get("HOMENODE_CONFINEMENT_WRITE_BOUNDARY") == "1":
         status=dict(line.split(":",1) for line in source if ":" in line)
     if int(status["CapEff"].strip(),16) or int(status["CapPrm"].strip(),16):
         raise RuntimeError("hardlink positive control has capabilities")
+    for family in (socket.AF_INET,socket.AF_INET6):
+        for kind in (socket.SOCK_STREAM,socket.SOCK_DGRAM):
+            with socket.socket(family,kind):
+                pass
     alias=os.path.join(os.path.dirname(sys.argv[6]),"generated-link-control")
     os.link(sys.argv[2],alias,follow_symlinks=False)
     try:
@@ -321,6 +325,7 @@ for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.arg
 		}
 		if os.Getenv("HOMENODE_CONFINEMENT_WRITE_BOUNDARY") == "1" {
 			t.Log("native unconfined owned-volume hardlink positive control passed")
+			t.Log("native unconfined Internet socket creation positive controls passed")
 		}
 
 	}

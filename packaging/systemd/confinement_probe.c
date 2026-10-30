@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
+#include <sys/socket.h>
 #include <sched.h>
 #include <grp.h>
 #include <fcntl.h>
@@ -40,6 +41,18 @@ int main(int argc,char **argv) {
        our live label after credential drop, then explicitly admits the probes. */
     char acknowledged=0;
     if(write(4,"R",1)!=1 || close(4) || read(5,&acknowledged,1)!=1 || acknowledged!='A' || close(5)) fail("parent label acknowledgement");
+    /* No packets are sent. Same-UID unconfined creation is checked by parent. */
+    int families[]={AF_INET,AF_INET6};
+    int types[]={SOCK_STREAM,SOCK_DGRAM};
+    for(unsigned int family=0;family<2;family++) {
+        for(unsigned int type=0;type<2;type++) {
+            int network=socket(families[family],types[type]|SOCK_CLOEXEC,0);
+            if(network>=0){close(network);fail("Internet socket admitted");}
+            if(errno!=EACCES && errno!=EPERM) fail("Internet socket refusal classification");
+        }
+    }
+    int local=socket(AF_UNIX,SOCK_STREAM|SOCK_CLOEXEC,0);
+    if(local<0 || close(local)) fail("Unix socket creation positive control");
     struct stat delegated;
     if(fstat(6,&delegated) || !S_ISREG(delegated.st_mode) || delegated.st_uid!=0 || (delegated.st_mode&07777)!=0600 || delegated.st_size!=1 || delegated.st_nlink!=1) fail("delegated descriptor admission");
     ssize_t delegated_result=pwrite(6,"D",1,0);
@@ -53,7 +66,7 @@ int main(int argc,char **argv) {
     if(errno!=EACCES && errno!=EPERM) fail("readonly refusal classification");
     if(mkdir(argv[6],0700) && errno!=EEXIST) {
         if(errno!=EACCES && errno!=EPERM) fail("temporary directory classification");
-        printf("{\"inheritedDescriptorWrite\":%s,\"hardlinkDenied\":false,\"temporaryWrite\":false,\"directoryDevice\":0,\"directoryInode\":0}\n",inherited_allowed?"true":"false");return 0;
+        printf("{\"internetSocketsDenied\":true,\"unixSocketCreated\":true,\"inheritedDescriptorWrite\":%s,\"hardlinkDenied\":false,\"temporaryWrite\":false,\"directoryDevice\":0,\"directoryInode\":0}\n",inherited_allowed?"true":"false");return 0;
     }
     int dir=open(argv[6],O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
     struct stat metadata;
@@ -72,6 +85,6 @@ int main(int argc,char **argv) {
     if(close(dir)) fail("directory close");
     /* The parent removes its host directory. Remove any namespace-private copy. */
     if(rmdir(argv[6]) && errno!=EACCES && errno!=EPERM) fail("temporary directory cleanup");
-    printf("{\"inheritedDescriptorWrite\":%s,\"hardlinkDenied\":true,\"temporaryWrite\":%s,\"directoryDevice\":%llu,\"directoryInode\":%llu}\n",inherited_allowed?"true":"false",allowed?"true":"false",(unsigned long long)metadata.st_dev,(unsigned long long)metadata.st_ino);
+    printf("{\"internetSocketsDenied\":true,\"unixSocketCreated\":true,\"inheritedDescriptorWrite\":%s,\"hardlinkDenied\":true,\"temporaryWrite\":%s,\"directoryDevice\":%llu,\"directoryInode\":%llu}\n",inherited_allowed?"true":"false",allowed?"true":"false",(unsigned long long)metadata.st_dev,(unsigned long long)metadata.st_ino);
     return 0;
 }
