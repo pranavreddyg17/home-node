@@ -638,8 +638,22 @@ name. Dynamic profiles no longer pass by libvirt-prefix/enforce-suffix alone;
 the static candidate additionally requires its deterministic domain UUID.
 Malformed/noncanonical UUIDs, foreign labels and complain mode refuse. Focused
 identity race tests, the full local supervisor race suite (23.079s), Linux
-cross-compilation and actionlint passed. Native qualification is pending.
+cross-compilation and actionlint passed. The [native run](https://github.com/pranavreddyg17/home-node/actions/runs/41113372475) at `c587b5b` passed static launch and dynamic Manager lifecycles.
+[Retained evidence](evidence/confinement-profile-identity-c587b5b.json) records
+those results and retirement regressions.
 The confinement workflow now also runs the disposable reserved Manager launch,
 audit, stop and retained restart with dynamic profiles, rather than covering
 only static-profile launches. This label binding does not attest loaded policy
 contents or establish process/descriptor lifetime exclusion or safe UID reuse.
+
+The first paired workflow attempt at `6209f5a` failed before the browser job.
+The actual Files Manager test passed in 198.70s, and the video image build job
+succeeded, but CLI compilation refused confinement_probe.c inside the embedded
+systemd-template Go package. The paired browser job was skipped; no conversion
+or cleanup completion is claimed. [Retained failure evidence](evidence/paired-video-build-6209f5a.json)
+records the exact job/log identity. The standalone C fixture now has a Go build
+exclusion; explicit C compilation remains required by the confinement workflow.
+All command packages cross-built for Linux and the full local working-tree Go
+suite passed after the fix. Main CI now supports manual branch dispatch so
+complete Linux checks can run before promotion. Unrelated pre-existing local
+test edits were preserved and are not included in these commits.

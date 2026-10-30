@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "c587b5b5e7af544afad311dc4eba4e724975bfa1",
+  "workflowRun": 41113372475,
+  "job": 124261194306,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/41113372475",
+  "conclusion": "success",
+  "logSHA256": "85aae26ac65031485dca56f631734f7e149c279033dc4b2cc77b4fda61667457",
+  "explicitTestPasses": [
+    "TestDomainAppArmorIdentity",
+    "TestNativeReservedDACLibvirtLaunch",
+    "TestNativeReservedDACManagerLaunch"
+  ],
+  "retirementRegressionRun": 41113372524,
+  "retirementRegressionConclusion": "success",
+  "limits": [
+    "Synthetic static-profile launches and dynamic-profile reserved Manager lifecycle exercised exact live-domain UUID binding.",
+    "No wrong live enforcing profile was injected; foreign label/UUID refusal was checked by focused tests.",
+    "Loaded policy content, complete application workflows and safe UID reuse remain unqualified."
+  ],
+  "releaseQualified": false
+}

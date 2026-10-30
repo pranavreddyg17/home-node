@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "6209f5a60caa382570a288f5309f783d2027eb6f",
+  "workflowRun": 41112597074,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/41112597074",
+  "conclusion": "failure",
+  "filesJob": 124258518024,
+  "filesLogSHA256": "fc447f0f1827cca96013ad46b9124460a810006293784924a23afafe6689a446",
+  "filesManagerNativeTest": "passed, 198.70s",
+  "failurePhase": "Build CLI for authenticated HTTPS Files fixture",
+  "failure": "C source files not allowed when not using cgo or SWIG: confinement_probe.c",
+  "videoBuildJob": {
+    "id": 124258518623,
+    "conclusion": "success"
+  },
+  "pairedBrowserJob": {
+    "id": 124262392871,
+    "conclusion": "skipped"
+  },
+  "limits": [
+    "The real Files Manager test passed but the HTTPS service/browser stage did not run.",
+    "No paired video conversion or cleanup evidence was produced.",
+    "Standalone fixture C source must be excluded from Go package source selection, without disabling its explicit native compilation."
+  ],
+  "releaseQualified": false
+}

@@ -1,3 +1,5 @@
+//go:build ignore
+
 #define _GNU_SOURCE
 /* Disposable qualification helper, never shipped as a privileged product tool. */
 #include <sys/apparmor.h>
