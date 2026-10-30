@@ -472,3 +472,17 @@ No device is opened for I/O. Double observation now also compares link count
 and rdev. Local metadata race tests and Linux cross-compilation passed; native
 execution of these checks is pending. This does not qualify device ioctl
 surfaces, seccomp, sockets, anonymous objects or descriptor lifetime exclusion.
+
+Socket inspection is now a disposable-fixture diagnostic using pidfd_getfd.
+It duplicates one actual QEMU socket at a time, requires matching inode,
+owner/group/mode/link metadata, queries family/type/protocol/listener state,
+Unix addresses and connected-peer credentials, then closes the duplicate.
+Only AF_UNIX is accepted; a disconnected socket must be listening. No message
+is received, no SCM_RIGHTS is adopted, and no shared flags, socket options or
+connection state are changed. Source-slot identity is rechecked afterward.
+Two completed socket observations are required by CI. Linux cross-compilation
+passed; native execution is pending. Peer credentials are observations rather
+than authorization, and do not identify every process holding the peer endpoint.
+Production peer admission and descriptor-transfer exclusion remain unqualified.
+The [pidfd_getfd manual](https://www.man7.org/linux/man-pages/man2/pidfd_getfd.2.html)
+explains the shared open-file-description authority and ptrace permission check.

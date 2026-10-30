@@ -107,11 +107,13 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 		Device, Inode, Links uint64
 		Major, Minor         uint32
 		Mode                 uint32
-		Role                 string `json:"role"`
-		NamedScope           string `json:"namedScope,omitempty"`
+		Role                 string                    `json:"role"`
+		NamedScope           string                    `json:"namedScope,omitempty"`
+		Socket               *nativeQEMUSocketMetadata `json:"socket,omitempty"`
 	}
 	records := make([]descriptor, 0, len(entries))
 	writableRegular := 0
+	socketCount := 0
 	for _, entry := range entries {
 		name := entry.Name()
 		number, err := strconv.Atoi(name)
@@ -190,6 +192,15 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 			}
 			r.Role = role
 		}
+		if r.Kind == "socket" {
+			metadata := nativeQEMUSocketInventory(t, pidfd, number, first)
+			r.Socket = &metadata
+			socketCount++
+			var current unix.Stat_t
+			if err := unix.Fstatat(int(files.Fd()), name, &current, 0); err != nil || current.Dev != first.Dev || current.Ino != first.Ino || current.Mode != first.Mode || current.Uid != first.Uid || current.Gid != first.Gid || current.Nlink != first.Nlink {
+				t.Fatal("socket source slot changed", err)
+			}
+		}
 		records = append(records, r)
 	}
 	live()
@@ -200,6 +211,10 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 	if err != nil || len(data) > 128<<10 {
 		t.Fatal("descriptor inventory serialization", err)
 	}
+	if socketCount == 0 {
+		t.Fatal("socket inventory positive control absent")
+	}
+	t.Log("native QEMU socket metadata observation completed", "count", socketCount, "admissionQualified", false)
 	t.Log("native QEMU descriptor metadata", string(data))
 	t.Log("native QEMU descriptor inventory completed", "count", len(records), "writableRegular", writableRegular, "admissionQualified", false)
 }
