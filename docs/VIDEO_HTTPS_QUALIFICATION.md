@@ -442,3 +442,11 @@ explicitly tagged as a candidate role. This checks metadata; it does not grant
 lifetime authority or establish that the writable PID capability is safe. Linux
 cross-compilation and local metadata race tests passed; native execution of this
 stricter check is pending. Production adoption and UID reuse remain closed.
+
+The candidate PID handle now has a post-stop native check: after libvirt reports
+the VM stopped, its exact PID-file path must be absent and bounded procfs
+observation must find no task with the reserved UID. Both stop cycles must emit
+the required marker. This checks an observed lifetime on the disposable host;
+it does not authorize production UID release, defeat process-creation races or
+prove that every descriptor in other host processes has closed. Linux
+cross-compilation passed; native execution is pending.

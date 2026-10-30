@@ -522,6 +522,17 @@ for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.arg
 		if err != nil || running {
 			t.Fatal("native guest not stopped", running, err)
 		}
+		if domain.ConfinedWrites {
+			pidPath := filepath.Join("/run/libvirt/qemu", domain.Name()+".pid")
+			if _, err := os.Lstat(pidPath); !errors.Is(err, os.ErrNotExist) {
+				t.Fatal("candidate PID file persists after stop", err)
+			}
+			observed, err := ObserveGuestUIDProcessConflicts(ctx, GuestUIDPool{First: domain.GuestUID, Last: domain.GuestUID})
+			if err != nil || observed.Blocked[domain.GuestUID] {
+				t.Fatal("reserved UID exit not observed", err)
+			}
+			t.Log("native candidate PID file absence and reserved UID task exit observed after stop")
+		}
 		checkStorage()
 		if err := prepareGuestChannelDirectory(ctx, filepath.Dir(domain.ChannelPath), int(uid), int(transferGID)); err != nil {
 			t.Fatal("stopped channel retry refused", err)
