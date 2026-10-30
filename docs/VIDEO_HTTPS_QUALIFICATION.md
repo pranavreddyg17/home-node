@@ -561,8 +561,20 @@ root:root mode-0600 pipe inode, single link and the exact canonical pipe target.
 Additional pipes refuse capture, and no descriptor may remain unclassified.
 CI requires two completed pipe-pair observations. No pipe payload is read or
 written. Focused pair-refusal race tests and Linux cross-compilation passed;
-native execution is pending. This identifies a candidate output-pipe shape,
+native execution passed on both launches in the [run](https://github.com/pranavreddyg17/home-node/actions/runs/41109807827) at `4c43c5b`.
+[Retained evidence](evidence/confinement-complete-roles-4c43c5b.json) records all
+23 role counts and paired output identities. This identifies a candidate output-pipe shape,
 not the reader process or ultimate log sink. The complete role inventory is
 still metadata qualification, not production launch authority or UID-release
 approval. Production profile publication under shipped service protections,
 authenticated launch provenance and retained lifecycle exclusion remain open.
+
+Reserved-QEMU production verification now also requires the exact bounded
+sandbox launch options already qualified in the native fixture. It holds a
+pidfd across the procfs argument read and bounded per-task credential/seccomp
+scan, refusing process exit before returning. Arguments are read through a
+pinned process directory, never logged in full, and closed on every path.
+Linux cross-compilation passed; native qualification of this production wiring
+is pending. This detects observed exit and a disabled/permissive requested
+sandbox; mutable argv and mode/count do not attest filter contents. It does not
+freeze tasks, retain runtime exclusion after return or authorize UID release.
