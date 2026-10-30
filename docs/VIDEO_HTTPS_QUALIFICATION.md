@@ -426,3 +426,19 @@ Linux cross-compilation passed; native execution is pending. This is a bounded
 live observation, not retained exclusion of descriptor creation/transfer or a
 production descriptor-admission implementation. Socket peers, anonymous objects,
 log ownership/lifecycle and complete application startup still need qualification.
+
+The first actual inventory run at `f2257c4` passed and observed 23 descriptors on
+each launch. Writable regular handles included the admitted data volume and a
+root-owned, mode-0644 libvirt PID file held write-only. This is an observed extra
+inherited capability, not proof of an unsafe libvirt delegation. Other recorded
+classes included devices, pipes, sockets and anonymous kernel objects.
+
+Writable regular metadata qualification now refuses unknown paths, mismatched
+named/described inodes, owner/group/mode drift, extra links, deleted objects and
+unexpected access modes. The data file requires its exact reserved identity,
+0600 mode and read/write access. The PID file requires its exact domain path,
+root:root ownership, 0644 mode, single link and write-only access, and remains
+explicitly tagged as a candidate role. This checks metadata; it does not grant
+lifetime authority or establish that the writable PID capability is safe. Linux
+cross-compilation and local metadata race tests passed; native execution of this
+stricter check is pending. Production adoption and UID reuse remain closed.

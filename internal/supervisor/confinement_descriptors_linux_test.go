@@ -140,18 +140,18 @@ func nativeQEMUDescriptorInventory(t *testing.T, ctx context.Context, d Domain, 
 		}
 		if r.Kind == "regular" && firstFlags&unix.O_ACCMODE != unix.O_RDONLY && strings.HasPrefix(firstTarget, "/") {
 			writableRegular++
-			switch firstTarget {
-			case d.DataPath:
-				var named unix.Stat_t
-				if unix.Lstat(d.DataPath, &named) != nil || named.Dev != first.Dev || named.Ino != first.Ino || first.Uid != d.GuestUID || first.Gid != d.GuestGID || first.Mode != unix.S_IFREG|0600 || first.Nlink != 1 {
-					t.Fatal("managed writable descriptor drift")
-				}
-				r.Role = "managed-data"
-			case filepath.Join("/var/log/libvirt/qemu", d.Name()+".log"):
-				r.Role = "candidate-domain-log"
-			default:
-				r.Role = "unexplained-writable-regular"
+			var named unix.Stat_t
+			if err := unix.Lstat(firstTarget, &named); err != nil {
+				t.Fatal("writable descriptor name unavailable", err)
 			}
+			identity := func(s unix.Stat_t) qemuRegularIdentity {
+				return qemuRegularIdentity{Device: uint64(s.Dev), Inode: s.Ino, Links: s.Nlink, UID: s.Uid, GID: s.Gid, Mode: s.Mode}
+			}
+			role, err := qualifyQEMURegularWrite(d, firstTarget, identity(first), identity(named), uint32(firstFlags&unix.O_ACCMODE))
+			if err != nil {
+				t.Fatal("unexplained writable regular descriptor", firstTarget, err)
+			}
+			r.Role = role
 		}
 		records = append(records, r)
 	}

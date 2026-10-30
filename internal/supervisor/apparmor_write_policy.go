@@ -20,9 +20,10 @@ func (d Domain) RuntimeUUID() string {
 }
 func (d Domain) AppArmorName() string { return "libvirt-" + d.RuntimeUUID() }
 
-// AppArmorWritePolicy adds deny rules for the complement of a finite write
-// allowlist. Denies override writable paths inherited from distro abstractions.
-// It renders policy only; loading, ownership, launch and lifecycle are separate.
+// AppArmorWritePolicy constrains fresh pathname writes with a finite allowlist.
+// Denies override writable paths inherited from distro abstractions, but do not
+// revoke inherited descriptor authority. Loading and descriptor/lifetime admission
+// remain separate requirements.
 func (d Domain) AppArmorWritePolicy() (string, error) {
 	if !guestproto.ValidID(d.ID) || d.GuestUID < 65536 || d.GuestGID == 0 {
 		return "", ErrPolicy
