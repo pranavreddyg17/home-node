@@ -178,13 +178,9 @@ func (b LinuxBackend) Stop(ctx context.Context, id string) error {
 	return err
 }
 func (b LinuxBackend) Verify(ctx context.Context, d Domain) error {
-	pidData, err := os.ReadFile(filepath.Join("/run/libvirt/qemu", d.Name()+".pid"))
+	pid, err := readDomainPID(ctx, d)
 	if err != nil {
 		return err
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
-	if err != nil || pid < 1 {
-		return ErrPolicy
 	}
 	if d.GuestUID != 0 {
 		if err = verifyGuestDACProcess(ctx, pid, d.GuestUID, d.GuestGID); err != nil {

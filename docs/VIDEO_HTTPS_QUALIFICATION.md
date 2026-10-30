@@ -657,3 +657,16 @@ All command packages cross-built for Linux and the full local working-tree Go
 suite passed after the fix. Main CI now supports manual branch dispatch so
 complete Linux checks can run before promotion. Unrelated pre-existing local
 test edits were preserved and are not included in these commits.
+
+Reserved socket and LinuxBackend verification now share a bounded PID-file
+reader. It retains the runtime directory, refuses unprotected directory metadata,
+pins the named file with O_PATH/NOFOLLOW, and admits only a single-link root:root
+0644 regular inode of 1–32 bytes before opening that retained inode for reading.
+Named/opened inode metadata and modification/change times are rechecked around
+the canonical positive PID parse. Every descriptor close error is retained.
+The PID remains a lookup hint; live credential, sandbox, label/UUID and resource
+checks are still required. Focused parser race tests, the full local working-tree
+Go suite, all-command Linux cross-build and workflow lint passed. Native
+qualification is pending, including generated root-file refusal cases for
+foreign ownership/group, writable mode, links, size, symlink, FIFO, directory
+and malformed values. No UID-release effect is enabled.

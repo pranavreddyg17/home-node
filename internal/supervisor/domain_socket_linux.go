@@ -6,12 +6,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"math"
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -103,13 +100,9 @@ func (m *Manager) checkReservedDomainSocket(ctx context.Context, d Domain, revis
 		}
 	} else {
 		readPID := func() (int, error) {
-			data, e := os.ReadFile(filepath.Join("/run/libvirt/qemu", d.Name()+".pid"))
+			pid, e := readDomainPID(ctx, d)
 			if e != nil {
 				return 0, e
-			}
-			pid, e := strconv.Atoi(strings.TrimSpace(string(data)))
-			if e != nil || pid < 1 || pid > math.MaxInt32 {
-				return 0, ErrPolicy
 			}
 			return pid, verifyGuestDACProcess(ctx, pid, d.GuestUID, d.GuestGID)
 		}
