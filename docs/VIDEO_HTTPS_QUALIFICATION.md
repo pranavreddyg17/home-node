@@ -590,4 +590,21 @@ duplicate-close errors on every return. Observation still grants no peer or
 lifecycle authorization. Linux cross-compilation passed. New Linux-only tests
 queue generated stream data, observe metadata, and then require unchanged
 flags and exact queued bytes; foreign inode and regular-file inputs refuse.
-Those tests and native VM qualification are pending execution in CI.
+The selected package test step and both native VM launches passed in the
+[run](https://github.com/pranavreddyg17/home-node/actions/runs/41110502697) at `f36e492`.
+[Retained evidence](evidence/confinement-shared-socket-f36e492.json) distinguishes
+that nonverbose selected-package result from explicit per-test PASS output.
+
+The complete descriptor collector has now moved into shared Linux code; the
+native fixture is a thin evidence/logging caller. The observer requires root,
+the candidate static-profile selection and valid domain identity, a ten-second
+context bound, real host procfs/UID mapping, a live pidfd, exact enforcing label,
+stable live libvirt domain ID, bounded descriptor enumeration, explicit roles,
+and paired output/socket cardinalities. It repeats flags/target/inode metadata
+after each role inspection and joins retained-directory/pidfd close errors.
+Regular/device targets are checked against finite known paths before named stat.
+A shared bounded fdinfo parser rejects duplicate/missing/malformed/overflowing
+flags. Focused parser/role race tests and Linux cross-compilation passed; native
+qualification of the full extraction is pending. This remains an observation API, with no
+backend enablement, admission receipt or UID-release effect. Application guests,
+descriptor transfer/lifetime and installed service protections remain open.

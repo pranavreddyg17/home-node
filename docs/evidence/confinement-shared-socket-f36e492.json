@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "f36e4926a61c674d730dacd314ea86ca1e303f4d",
+  "workflowRun": 41110502697,
+  "job": 124251365462,
+  "url": "https://github.com/pranavreddyg17/home-node/actions/runs/41110502697",
+  "conclusion": "success",
+  "logSHA256": "c6051015878afb35e431afa2594d02e11341bfab50fdcfa2c48a65b75bbb5ad2",
+  "sharedSocketObservations": [
+    3,
+    3
+  ],
+  "descriptorCounts": [
+    23,
+    23
+  ],
+  "focusedRaceTestSelection": "^TestQEMU((Regular(Read|Write)|Device|Socket|Anonymous)Metadata|OutputPipeMetadata|SeccompStatus|SandboxArguments|SocketObservation.*)$",
+  "retirementRegressionRun": 41110502677,
+  "retirementRegressionConclusion": "success",
+  "limits": [
+    "The focused unprivileged test step was not verbose at this revision; it provides a selected-package result rather than explicit per-test PASS lines.",
+    "Socket metadata and candidate roles do not authorize peer executables or transferred authority.",
+    "Shared socket observer was exercised by the synthetic native fixture, not installed production services.",
+    "Full collector extraction, production static profile loading and safe UID reuse remain unqualified at this revision."
+  ],
+  "releaseQualified": false
+}
