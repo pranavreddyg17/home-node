@@ -66,7 +66,13 @@ func (b LinuxBackend) ValidateHost(ctx context.Context, p Policy) error {
 	}
 	report := hostcheck.Inspect(b.DataRoot)
 	if !report.PrerequisitesMet {
-		return errors.New("host prerequisites failed")
+		var failed []string
+		for _, check := range report.Checks {
+			if check.Status == hostcheck.Fail {
+				failed = append(failed, check.ID)
+			}
+		}
+		return fmt.Errorf("host prerequisites failed (%s)", strings.Join(failed, ", "))
 	}
 	if int64(p.MemoryMiB+2048)*(1<<20) > int64(report.Host.MemoryBytes) || p.VCPUs >= runtime.NumCPU() {
 		return ErrCapacity

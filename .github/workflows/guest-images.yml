@@ -119,6 +119,9 @@ jobs:
           /opt/google/chrome/chrome --version
           sudo install -D -m 0755 "$(command -v node)" /usr/lib/homenode-fixtures/node
           PYTHONPATH=packaging/inspection /usr/bin/python3 -B -c 'from browser_fixture import protected_program; protected_program("/usr/lib/homenode-fixtures/node"); protected_program("/opt/google/chrome/chrome"); print("PASS protected Node and Chrome runtime hierarchy")'
+      - name: Check application commands compile before image assembly
+        if: matrix.profile == 'files'
+        run: go build ./cmd/...
       - name: Install disposable image build dependencies
         run: sudo apt-get update && sudo apt-get install -y systemd-container dosfstools mtools grub-pc-bin e2fsprogs python3-pefile squashfs-tools qemu-system-x86 ffmpeg libvirt-clients libvirt-daemon-system
       - name: Stage and authenticate local development adapter overlay
