@@ -13,6 +13,7 @@ import (
 type purgeFailureBackend struct {
 	*jobBackend
 	fail     bool
+	badReply bool
 	requests []supervisor.Request
 }
 
@@ -20,6 +21,9 @@ func (b *purgeFailureBackend) Apply(ctx context.Context, r supervisor.Request) (
 	b.requests = append(b.requests, r)
 	if r.Action == "purge" && b.fail {
 		return supervisor.Instance{}, errors.New("temporary volume removal failed")
+	}
+	if r.Action == "purge" && b.badReply {
+		return supervisor.Instance{ID: r.InstanceID, State: "stopped"}, nil
 	}
 	return b.jobBackend.Apply(ctx, r)
 }
@@ -204,5 +208,22 @@ func TestMissingVideoCleanupJournalRemainsUnresolved(t *testing.T) {
 	inventory, err := s.Store.InspectMaintenance(ctx, token)
 	if err != nil || inventory.Cleanup != 1 {
 		t.Fatalf("maintenance omitted unresolved cleanup: %+v err=%v", inventory, err)
+	}
+}
+
+func TestVideoCleanupRequiresRemovedAcknowledgement(t *testing.T) {
+	s, original, device, input := jobService(t)
+	s.Backend = &purgeFailureBackend{jobBackend: original, badReply: true}
+	ctx := context.Background()
+	job, err := s.CreateJob(ctx, device, state.Random(), input.ID, "mp4-720p", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.processJob(ctx); !errors.Is(err, ErrConflict) {
+		t.Fatal("incomplete purge acknowledgement accepted", err)
+	}
+	got, err := s.attempt(ctx, job.AttemptID)
+	if err != nil || got.State != "succeeded" || !got.CleanupPending {
+		t.Fatalf("incomplete purge cleared cleanup: %+v err=%v", got, err)
 	}
 }

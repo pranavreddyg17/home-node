@@ -52,8 +52,12 @@ func (s *Service) releaseJobResources(ctx context.Context, j Job) error {
 	if _, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: "cleanup-stop-" + suffix, Action: "stop", Revision: 2, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration}); err != nil {
 		return err
 	}
-	if _, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: "cleanup-purge-" + suffix, Action: "purge", Revision: 3, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration}); err != nil {
+	removed, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: "cleanup-purge-" + suffix, Action: "purge", Revision: 3, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration})
+	if err != nil {
 		return err
+	}
+	if removed.ID != j.InstanceID || removed.State != "removed" {
+		return ErrConflict
 	}
 	return s.Store.Transaction(ctx, func(tx *sql.Tx) error {
 		result, err := tx.Exec("UPDATE settings SET value=json_set(value,'$.state','done') WHERE key=? AND value=?", key, string(encoded))
