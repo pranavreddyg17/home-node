@@ -215,10 +215,10 @@ func (m *Manager) operation(tx *sql.Tx, r Request) (bool, error) {
 		return false, err
 	}
 	hash := runtimeRequestHash(r)
-	var existing, phase string
-	err := tx.QueryRow("SELECT request_hash,state FROM runtime_operations WHERE id=?", r.OperationID).Scan(&existing, &phase)
+	var existingHash, existingInstance string
+	err := tx.QueryRow("SELECT request_hash,instance_id FROM runtime_operations WHERE id=?", r.OperationID).Scan(&existingHash, &existingInstance)
 	if err == nil {
-		if existing != hash {
+		if existingHash != hash || existingInstance != r.InstanceID {
 			return false, ErrPolicy
 		}
 		return true, nil
@@ -341,7 +341,7 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 			if _, err := tx.Exec("UPDATE runtime_instances SET state=?,desired='stopped' WHERE id=? AND (revision=? OR (? AND revision>? AND desired='stopped'))", phase, r.InstanceID, r.Revision, stopErr != nil, r.Revision); err != nil {
 				return err
 			}
-			_, err := tx.Exec("UPDATE runtime_operations SET state='failed' WHERE id=?", r.OperationID)
+			_, err := tx.Exec("UPDATE runtime_operations SET state='failed' WHERE id=? AND instance_id=? AND request_hash=? AND state IN('pending','succeeded')", r.OperationID, r.InstanceID, runtimeRequestHash(r))
 			return err
 		})
 		return Instance{}, errors.Join(cause, stopErr, journalErr)

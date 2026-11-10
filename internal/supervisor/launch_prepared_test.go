@@ -68,4 +68,8 @@ func TestLaunchCannotAcknowledgeChangedRequest(t *testing.T) {
 	if err != nil || instance.State == "running" || backend.running {
 		t.Fatal("unacknowledged launch remained running", instance, err)
 	}
+	var phase string
+	if err := m.Store.DB.QueryRow("SELECT state FROM runtime_operations WHERE id=?", r.OperationID).Scan(&phase); err != nil || phase != "pending" {
+		t.Fatal("launch cleanup overwrote the changed operation", phase, err)
+	}
 }
