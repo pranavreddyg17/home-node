@@ -248,23 +248,31 @@ try {
   await page.getByRole('main').getByRole('button', { name: 'Files', exact: true }).click()
   await expect(row).toHaveCount(1)
   if (videoWorkflow) {
-    phase = 'video-input'
+    phase = 'video-generate'
     const videoName = 'native-browser-video.mp4', videoPath = join(uploadDirectory, videoName)
     await fixtureFFmpeg(['-f', 'lavfi', '-i', 'testsrc2=duration=2:size=160x90:rate=10', '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-f', 'mp4', videoPath])
     const sourceInfo = await stat(videoPath)
     if (!sourceInfo.isFile() || sourceInfo.size < 32 || sourceInfo.size > 8 * 1024 * 1024) throw new Error('Generated video is outside fixture bounds')
-    await page.getByLabel('Upload a file', { exact: true }).setInputFiles(videoPath)
+    phase = 'video-upload-select'
+    const picker = page.getByLabel('Upload a file', { exact: true })
+    await expect(picker).toBeEnabled()
+    await picker.setInputFiles(videoPath)
+    phase = 'video-upload-verify'
     await expect(page.locator('.transfer-progress')).toContainText('Upload verified', { timeout: 60000 })
     // A previous completed upload can leave that status visible briefly; the
     // new file row must exist before navigation may unmount the upload form.
+    phase = 'video-upload-list'
     await expect(page.locator('.file-row').filter({ hasText: videoName })).toHaveCount(1)
-    await page.locator('nav').getByRole('button', { name: 'Jobs', exact: false }).click()
+    phase = 'video-jobs-navigation'
+    await page.locator('nav').getByRole('button', { name: 'Jobs', exact: true }).click()
+    phase = 'video-job-input'
     const input = page.getByLabel('Input file', { exact: true })
     const option = input.locator('option').filter({ hasText: videoName })
     await expect(option).toHaveCount(1)
     const inputID = await option.getAttribute('value')
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(inputID)) throw new Error('Uploaded video input identity is unavailable')
     await input.selectOption(inputID)
+    phase = 'video-job-preset'
     await page.getByLabel('Conversion preset', { exact: true }).selectOption('mp4-720p')
     phase = 'video-job'
     await page.getByRole('button', { name: 'Queue conversion', exact: true }).click()
