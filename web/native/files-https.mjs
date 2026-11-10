@@ -266,14 +266,14 @@ try {
     phase = 'video-jobs-navigation'
     await page.locator('nav').getByRole('button', { name: 'Jobs', exact: true }).click()
     phase = 'video-job-input'
-    const input = page.getByLabel('Input file', { exact: true })
+    const input = page.getByRole('combobox', { name: 'Input file', exact: true })
     const option = input.locator('option').filter({ hasText: videoName })
     await expect(option).toHaveCount(1)
     const inputID = await option.getAttribute('value')
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(inputID)) throw new Error('Uploaded video input identity is unavailable')
     await input.selectOption(inputID)
     phase = 'video-job-preset'
-    await page.getByLabel('Conversion preset', { exact: true }).selectOption('mp4-720p')
+    await page.getByRole('combobox', { name: 'Conversion preset', exact: true }).selectOption('mp4-720p')
     phase = 'video-job'
     await page.getByRole('button', { name: 'Queue conversion', exact: true }).click()
     const job = page.locator('.file-row').filter({ hasText: videoName })
