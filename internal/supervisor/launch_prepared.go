@@ -56,7 +56,7 @@ func (m *Manager) launchPreparedDomain(ctx context.Context, r Request, d Domain,
 		if count != 1 {
 			return ErrPolicy
 		}
-		result, err = tx.Exec("UPDATE runtime_operations SET state='succeeded' WHERE id=? AND instance_id=? AND state='pending'", r.OperationID, r.InstanceID)
+		result, err = tx.Exec("UPDATE runtime_operations SET state='succeeded' WHERE id=? AND instance_id=? AND state='pending' AND request_hash=?", r.OperationID, r.InstanceID, runtimeRequestHash(r))
 		if err != nil {
 			return err
 		}

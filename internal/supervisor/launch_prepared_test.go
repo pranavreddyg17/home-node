@@ -52,3 +52,20 @@ func TestLaunchCannotPublishAfterAuthorityRevocation(t *testing.T) {
 		t.Fatal("operation published after revocation", phase, err)
 	}
 }
+
+func TestLaunchCannotAcknowledgeChangedRequest(t *testing.T) {
+	m, backend := newManager(t)
+	r := startRequest()
+	m.Backend = &revokedLaunchBackend{fakeBackend: backend, revoke: func() {
+		if _, err := m.Store.DB.Exec("UPDATE runtime_operations SET request_hash='changed' WHERE id=?", r.OperationID); err != nil {
+			t.Fatal(err)
+		}
+	}}
+	if _, err := m.Apply(context.Background(), r); !errors.Is(err, ErrPolicy) {
+		t.Fatal("changed request was acknowledged", err)
+	}
+	instance, err := m.Inspect(context.Background(), r.InstanceID)
+	if err != nil || instance.State == "running" || backend.running {
+		t.Fatal("unacknowledged launch remained running", instance, err)
+	}
+}

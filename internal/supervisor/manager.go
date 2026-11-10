@@ -205,12 +205,16 @@ func (m *Manager) Apply(ctx context.Context, r Request) (Instance, error) {
 		return Instance{}, ErrPolicy
 	}
 }
+func runtimeRequestHash(r Request) string {
+	data, _ := json.Marshal(r)
+	return state.Hash(string(data))
+}
+
 func (m *Manager) operation(tx *sql.Tx, r Request) (bool, error) {
 	if err := requireRuntimeAdmission(tx); err != nil {
 		return false, err
 	}
-	data, _ := json.Marshal(r)
-	hash := state.Hash(string(data))
+	hash := runtimeRequestHash(r)
 	var existing, phase string
 	err := tx.QueryRow("SELECT request_hash,state FROM runtime_operations WHERE id=?", r.OperationID).Scan(&existing, &phase)
 	if err == nil {
