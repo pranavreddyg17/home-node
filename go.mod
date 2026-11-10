@@ -4,7 +4,7 @@ go 1.26.10
 
 require (
 	github.com/go-webauthn/webauthn v0.18.2
-	github.com/klauspost/compress v1.20.1
+	github.com/klauspost/compress v1.20.2
 	modernc.org/sqlite v1.60.0
 )
 
