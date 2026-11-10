@@ -435,7 +435,7 @@ func (m *Manager) stop(ctx context.Context, r Request) (Instance, error) {
 				return ErrPolicy
 			}
 		}
-		result, err := tx.Exec("UPDATE runtime_operations SET state='succeeded' WHERE id=? AND instance_id=? AND state IN('pending','succeeded')", r.OperationID, r.InstanceID)
+		result, err := tx.Exec("UPDATE runtime_operations SET state='succeeded' WHERE id=? AND instance_id=? AND request_hash=? AND state IN('pending','succeeded')", r.OperationID, r.InstanceID, runtimeRequestHash(r))
 		if err != nil {
 			return err
 		}

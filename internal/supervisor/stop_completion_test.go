@@ -22,7 +22,7 @@ func (b *changedStopBackend) Stop(ctx context.Context, id string) error {
 }
 
 func TestForcedStopCompletionPreservesNewerOrInterruptedOwnership(t *testing.T) {
-	for _, scenario := range []string{"revision", "phase", "operation", "removed"} {
+	for _, scenario := range []string{"revision", "phase", "operation", "request", "removed"} {
 		t.Run(scenario, func(t *testing.T) {
 			m, b := newManager(t)
 			ctx := context.Background()
@@ -40,6 +40,8 @@ func TestForcedStopCompletionPreservesNewerOrInterruptedOwnership(t *testing.T) 
 					_, err = m.Store.DB.Exec("UPDATE runtime_instances SET revision=3,state='stopping' WHERE id=?", start.InstanceID)
 				case "phase":
 					_, err = m.Store.DB.Exec("UPDATE runtime_instances SET state='interrupted' WHERE id=?", start.InstanceID)
+				case "request":
+					_, err = m.Store.DB.Exec("UPDATE runtime_operations SET request_hash='changed' WHERE id=?", stop.OperationID)
 				case "operation":
 					_, err = m.Store.DB.Exec("UPDATE runtime_operations SET state='interrupted' WHERE id=?", stop.OperationID)
 				}
