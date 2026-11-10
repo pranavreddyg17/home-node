@@ -3856,3 +3856,12 @@ Added homenode guest-storage-plan, guest-storage-prepare and guest-storage-check
 ### Packaged storage CLI native fixture queued
 
 Real-account storage subtest now closes the fixture engine before invoking installed /usr/bin/homenode guest-storage-plan/prepare/check against its private owned journal, verifies exact proposal plus explicit false policyPublished/servicesActivated/activationQualified fields and correct intent-state flags, then reacquires the installer flock. Cleanup follows the current engine; subtest failure halts parent before account mutation retries. Missing KVM remains explicitly unverified. Linux amd64 installer tests compile; actual packaged execution remains pending. CI37800928815 remains confirmed live at80ab00a in dependency installation and excludes these changes. Full storage migration/runtime activation and product remain unfinished.
+
+On `7cebcf9`, Go 1.26.10 built all eight command binaries for Linux/amd64
+with CGO disabled. Govulncheck v1.8.0 reported zero vulnerable symbols in
+each binary. The CLI and inspector retained a module-level OpenPGP finding
+with zero affected imported packages. The Go vulnerability database lists
+the OpenPGP package as unmaintained and identifies a prerelease boundary for
+the advisory in the original module. The stable versions available at the
+time of verification stop at v0.58.0, so this verification retains the
+existing crypto pin. [Go advisory GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932)
