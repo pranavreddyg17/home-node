@@ -376,7 +376,7 @@ func (s *Service) executeJob(ctx context.Context, j Job) error {
 		if n != 1 {
 			return context.Canceled
 		}
-		_, err = tx.Exec("INSERT OR IGNORE INTO settings(key,value) VALUES(?,json_object('state','pending','lastAttempt',0))", cleanupKey(j.AttemptID))
+		_, err = tx.Exec("INSERT INTO settings(key,value) VALUES(?,json_object('state','pending','lastAttempt',0))", cleanupKey(j.AttemptID))
 		return err
 	})
 	if err != nil {

@@ -158,3 +158,24 @@ func TestMalformedCleanupDoesNotStarveValidPurge(t *testing.T) {
 		})
 	}
 }
+
+func TestVideoStartRequiresFreshCleanupJournal(t *testing.T) {
+	s, original, device, input := jobService(t)
+	backend := &purgeFailureBackend{jobBackend: original}
+	s.Backend = backend
+	ctx := context.Background()
+	job, err := s.CreateJob(ctx, device, state.Random(), input.ID, "mp4-720p", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Store.DB.Exec("INSERT INTO settings(key,value) VALUES(?,?)", cleanupKey(job.AttemptID), `{"state":"done","lastAttempt":0}`); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.processJob(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.attempt(ctx, job.AttemptID)
+	if err != nil || got.State != "failed" || got.StartRequested || len(backend.requests) != 0 {
+		t.Fatalf("stale cleanup receipt admitted runtime work: %+v requests=%d err=%v", got, len(backend.requests), err)
+	}
+}
