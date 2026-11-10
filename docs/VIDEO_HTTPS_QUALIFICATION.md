@@ -724,3 +724,10 @@ matched one control and selected the intended value for both fields. The
 [paired run at `2ddc0d6`](https://github.com/pranavreddyg17/home-node/actions/runs/42882168162)
 exercises the corrected selectors. Conversion, output integrity, and retirement
 still require native evidence.
+
+The [paired browser result at `2ddc0d6`](https://github.com/pranavreddyg17/home-node/actions/runs/42882168162/job/130083978454)
+passed native video conversion, output download and decode, and verification
+against the checksum published in Files. It failed in `video-cleanup` and
+did not emit the combined completion marker. This qualifies the observed
+conversion and output path on the disposable runner. Retirement through the
+production manager and UID reuse remain unqualified.
