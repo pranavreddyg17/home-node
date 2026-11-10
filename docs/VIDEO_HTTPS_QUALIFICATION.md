@@ -704,3 +704,12 @@ a lookup hint: the service-account directory does not authenticate a process;
 all QEMU callers retain credential, seccomp/arguments and exact live-domain
 profile checks. Focused identity/parser race tests, Linux all-command cross-build
 and workflow lint passed. Native qualification of this directory role is pending.
+
+Native qualification passed at `3560833` in [run 42878253340](https://github.com/pranavreddyg17/home-node/actions/runs/42878253340).
+Job `130047269057` explicitly passed generated PID metadata checks, the KVM
+primary-group probe, generic DAC process verification, two static-profile VM
+launches and the dynamic-profile reserved Manager lifecycle. This qualifies
+the packaged libvirt PID directory mapping for the observed runner. The earlier
+generic host preflight failure did not recur, so its failed check remains
+unknown. The paired Files/video browser workflow and full Linux checks are
+tracked separately as runs `42878826327` and `42878895090`.
