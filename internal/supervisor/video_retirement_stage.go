@@ -6,8 +6,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-
-	"github.com/pranavreddyg17/home-node/internal/state"
 )
 
 func nextVideoRetirementStage(stage string) string {
@@ -68,9 +66,8 @@ func (m *Manager) readVideoRetirementRecordTx(ctx context.Context, tx *sql.Tx, i
 	if err := tx.QueryRowContext(ctx, `SELECT request_hash,instance_id,state FROM runtime_operations WHERE id=?`, intent.Request.OperationID).Scan(&hash, &instanceID, &phase); err != nil {
 		return "", errors.Join(ErrPolicy, err)
 	}
-	request, err := json.Marshal(intent.Request)
-	if err != nil || hash != state.Hash(string(request)) || instanceID != intent.Request.InstanceID || phase != "pending" {
-		return "", errors.Join(ErrPolicy, err)
+	if hash != runtimeRequestHash(intent.Request) || instanceID != intent.Request.InstanceID || phase != "pending" {
+		return "", ErrPolicy
 	}
 	return stage, ctx.Err()
 }

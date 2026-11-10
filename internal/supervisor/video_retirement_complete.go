@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-
-	"github.com/pranavreddyg17/home-node/internal/state"
 )
 
 // Commit only after all descriptor scopes have closed under retained start and
@@ -116,9 +114,8 @@ func (m *Manager) verifyCompletedVideoRetirementTx(ctx context.Context, tx *sql.
 	if err := tx.QueryRowContext(ctx, `SELECT request_hash,instance_id,state FROM runtime_operations WHERE id=?`, intent.Request.OperationID).Scan(&hash, &operationInstance, &operationPhase); err != nil {
 		return errors.Join(ErrPolicy, err)
 	}
-	request, err := json.Marshal(intent.Request)
-	if err != nil || hash != state.Hash(string(request)) || operationInstance != intent.Request.InstanceID || operationPhase != "succeeded" {
-		return errors.Join(ErrPolicy, err)
+	if hash != runtimeRequestHash(intent.Request) || operationInstance != intent.Request.InstanceID || operationPhase != "succeeded" {
+		return ErrPolicy
 	}
 	if err := tx.QueryRowContext(ctx, `SELECT state,desired,workload,image_sha256,revision FROM runtime_instances WHERE id=?`, intent.Request.InstanceID).Scan(&runtimePhase, &desired, &workload, &image, &revision); err != nil {
 		return errors.Join(ErrPolicy, err)
