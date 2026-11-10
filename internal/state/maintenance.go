@@ -193,6 +193,14 @@ func (s *Store) InspectMaintenance(ctx context.Context, token string) (Maintenan
 	return inventory, nil
 }
 
+// Started attempts without a journal have no durable retirement acknowledgement.
+const unresolvedJobCleanupCount = `(
+ (SELECT count(*) FROM settings WHERE key GLOB 'job.cleanup.*' AND
+   CASE WHEN json_valid(value) THEN COALESCE(json_extract(value,'$.state'),'') ELSE '' END<>'done') +
+ (SELECT count(*) FROM jobs WHERE start_requested!=0 AND
+   NOT EXISTS(SELECT 1 FROM settings WHERE key='job.cleanup.'||jobs.id))
+)`
+
 func readMaintenanceInventory(tx *sql.Tx) (MaintenanceInventory, error) {
 	var inventory MaintenanceInventory
 	err := tx.QueryRow(`SELECT
@@ -202,8 +210,7 @@ func readMaintenanceInventory(tx *sql.Tx) (MaintenanceInventory, error) {
    (SELECT count(*) FROM generations WHERE state NOT IN('succeeded','failed','cancelled','interrupted')),
    (SELECT count(*) FROM operations WHERE state NOT IN('succeeded','failed','cancelled','interrupted')),
    (SELECT count(*) FROM apps WHERE state<>'stopped'),
-   (SELECT count(*) FROM settings WHERE key GLOB 'job.cleanup.*' AND
-     CASE WHEN json_valid(value) THEN COALESCE(json_extract(value,'$.state'),'') ELSE '' END<>'done'),
+   `+unresolvedJobCleanupCount+`,
    (SELECT count(*) FROM orphan_objects)
   `).Scan(&inventory.Activities, &inventory.Transfers, &inventory.Jobs, &inventory.Generations, &inventory.Operations, &inventory.Apps, &inventory.Cleanup, &inventory.Orphans)
 	return inventory, err

@@ -295,7 +295,7 @@ func (s *Store) CompleteMaintenanceJob(ctx context.Context, token, id string) er
    (SELECT count(*) FROM jobs WHERE state NOT IN('succeeded','failed','cancelled','interrupted'))+
    (SELECT count(*) FROM generations WHERE state NOT IN('succeeded','failed','cancelled','interrupted'))+
    (SELECT count(*) FROM orphan_objects)+
-   (SELECT count(*) FROM settings WHERE key GLOB 'job.cleanup.*' AND CASE WHEN json_valid(value) THEN COALESCE(json_extract(value,'$.state'),'') ELSE '' END<>'done')`).Scan(&blockers); err != nil {
+   ` + unresolvedJobCleanupCount).Scan(&blockers); err != nil {
 			return err
 		}
 		if blockers != 0 {

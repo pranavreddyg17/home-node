@@ -179,3 +179,30 @@ func TestVideoStartRequiresFreshCleanupJournal(t *testing.T) {
 		t.Fatalf("stale cleanup receipt admitted runtime work: %+v requests=%d err=%v", got, len(backend.requests), err)
 	}
 }
+
+func TestMissingVideoCleanupJournalRemainsUnresolved(t *testing.T) {
+	s, _, device, input := jobService(t)
+	ctx := context.Background()
+	job, err := s.CreateJob(ctx, device, state.Random(), input.ID, "mp4-720p", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.processJob(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Store.DB.Exec("DELETE FROM settings WHERE key=?", cleanupKey(job.AttemptID)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.attempt(ctx, job.AttemptID)
+	if err != nil || got.State != "succeeded" || !got.StartRequested || !got.CleanupPending {
+		t.Fatalf("missing cleanup receipt was treated as acknowledgement: %+v err=%v", got, err)
+	}
+	token, err := s.Store.BeginMaintenance(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inventory, err := s.Store.InspectMaintenance(ctx, token)
+	if err != nil || inventory.Cleanup != 1 {
+		t.Fatalf("maintenance omitted unresolved cleanup: %+v err=%v", inventory, err)
+	}
+}
