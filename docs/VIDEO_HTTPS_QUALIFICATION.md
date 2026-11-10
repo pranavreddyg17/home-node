@@ -713,3 +713,14 @@ the packaged libvirt PID directory mapping for the observed runner. The earlier
 generic host preflight failure did not recur, so its failed check remains
 unknown. The paired Files/video browser workflow and full Linux checks are
 tracked separately as runs `42878826327` and `42878895090`.
+
+The [paired diagnostic run at `f942d30`](https://github.com/pranavreddyg17/home-node/actions/runs/42881935208/job/130065732665)
+passed both image builds and reached `video-job-input` in the browser. That
+phase follows video generation, upload verification, file listing, and
+navigation to Jobs. The browser did not reach submission. A local Chromium
+check reproduced the locator mismatch for selects nested in labels. The exact
+label locator returned zero matches, while the accessible combobox locator
+matched one control and selected the intended value for both fields. The
+[paired run at `2ddc0d6`](https://github.com/pranavreddyg17/home-node/actions/runs/42882168162)
+exercises the corrected selectors. Conversion, output integrity, and retirement
+still require native evidence.
