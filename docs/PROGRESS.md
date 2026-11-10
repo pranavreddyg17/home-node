@@ -3865,3 +3865,10 @@ the OpenPGP package as unmaintained and identifies a prerelease boundary for
 the advisory in the original module. The stable versions available at the
 time of verification stop at v0.58.0, so this verification retains the
 existing crypto pin. [Go advisory GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932)
+
+[Linux CI run 42879975150](https://github.com/pranavreddyg17/home-node/actions/runs/42879975150)
+passed on the same revision. The Linux job reported zero reachable Go source
+vulnerabilities, built and inspected the development Debian package, ran the
+packaged binary scans, and passed all 16 Playwright workflows. The separate
+paired guest image workflow is the gate for conversion and temporary workload
+retirement through the installed HTTPS path.
