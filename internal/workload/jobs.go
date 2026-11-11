@@ -183,15 +183,15 @@ func (s *Service) CancelJob(ctx context.Context, device, id, attemptID string) e
 	// The worker observes intent between chunks and polls. Stop enforcement does
 	// not depend on the guest honoring its cancel request.
 	if stopRequired && s.Backend != nil {
-		err = s.stopVideoAttempt(ctx, j, state.Random())
+		err = s.stopVideoAttempt(ctx, j)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
 }
-func (s *Service) stopVideoAttempt(ctx context.Context, j Job, operationID string) error {
-	stopped, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: operationID, Action: "stop", Revision: 2, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration})
+func (s *Service) stopVideoAttempt(ctx context.Context, j Job) error {
+	stopped, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: "cleanup-stop-" + s.videoCleanupOperationSuffix(j), Action: "stop", Revision: 2, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration})
 	if err != nil {
 		return err
 	}
@@ -308,7 +308,7 @@ func (s *Service) processJob(ctx context.Context) error {
 	}
 	for _, j := range cancelled {
 		if j.StartRequested {
-			if err = s.stopVideoAttempt(ctx, j, state.Random()); err != nil {
+			if err = s.stopVideoAttempt(ctx, j); err != nil {
 				continue
 			}
 		}
@@ -555,7 +555,7 @@ func (s *Service) reconcileJobs(ctx context.Context) error {
 			if s.Backend == nil {
 				return ErrUnavailable
 			}
-			if err = s.stopVideoAttempt(ctx, j, state.Random()); err != nil {
+			if err = s.stopVideoAttempt(ctx, j); err != nil {
 				return err
 			}
 		}

@@ -16,10 +16,13 @@ import (
 
 func cleanupKey(attempt string) string { return "job.cleanup." + attempt }
 
+func (s *Service) videoCleanupOperationSuffix(j Job) string {
+	return j.AttemptID + "-" + strconv.FormatInt(s.PolicyGeneration, 36)
+}
+
 // Cleanup intent is journaled before start can reach the privileged supervisor.
 // Retry IDs are stable within a policy generation, avoiding duplicate journals.
 func (s *Service) releaseJobResources(ctx context.Context, j Job) error {
-	suffix := j.AttemptID + "-" + strconv.FormatInt(s.PolicyGeneration, 36)
 	key := cleanupKey(j.AttemptID)
 	var payload string
 	if err := s.Store.DB.QueryRowContext(ctx, "SELECT value FROM settings WHERE key=?", key).Scan(&payload); err != nil {
@@ -49,10 +52,10 @@ func (s *Service) releaseJobResources(ctx context.Context, j Job) error {
 	if count != 1 {
 		return ErrConflict
 	}
-	if err := s.stopVideoAttempt(ctx, j, "cleanup-stop-"+suffix); err != nil {
+	if err := s.stopVideoAttempt(ctx, j); err != nil {
 		return err
 	}
-	removed, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: "cleanup-purge-" + suffix, Action: "purge", Revision: 3, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration})
+	removed, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: "cleanup-purge-" + s.videoCleanupOperationSuffix(j), Action: "purge", Revision: 3, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration})
 	if err != nil {
 		return err
 	}

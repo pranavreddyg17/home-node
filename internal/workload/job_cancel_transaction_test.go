@@ -113,10 +113,14 @@ func TestJobCancellationRetainsUncertainRuntimeAuthority(t *testing.T) {
 	}
 }
 
-type unconfirmedVideoStopBackend struct{ *jobBackend }
+type unconfirmedVideoStopBackend struct {
+	*jobBackend
+	stopsRequested []supervisor.Request
+}
 
-func (b unconfirmedVideoStopBackend) Apply(ctx context.Context, r supervisor.Request) (supervisor.Instance, error) {
+func (b *unconfirmedVideoStopBackend) Apply(ctx context.Context, r supervisor.Request) (supervisor.Instance, error) {
 	if r.Action == "stop" {
+		b.stopsRequested = append(b.stopsRequested, r)
 		return supervisor.Instance{ID: r.InstanceID, State: "stopping"}, nil
 	}
 	return b.jobBackend.Apply(ctx, r)
@@ -132,9 +136,15 @@ func TestJobCancellationRequiresConfirmedStop(t *testing.T) {
 	if _, err = s.Store.DB.Exec("UPDATE jobs SET state='running',start_requested=1 WHERE id=?", job.AttemptID); err != nil {
 		t.Fatal(err)
 	}
-	s.Backend = unconfirmedVideoStopBackend{backend}
-	if err = s.CancelJob(ctx, device, job.ID, job.AttemptID); !errors.Is(err, ErrConflict) {
-		t.Fatal("unconfirmed stop accepted", err)
+	unconfirmed := &unconfirmedVideoStopBackend{jobBackend: backend}
+	s.Backend = unconfirmed
+	for range 2 {
+		if err = s.CancelJob(ctx, device, job.ID, job.AttemptID); !errors.Is(err, ErrConflict) {
+			t.Fatal("unconfirmed stop accepted", err)
+		}
+	}
+	if stops := unconfirmed.stopsRequested; len(stops) != 2 || stops[0] != stops[1] {
+		t.Fatalf("retry changed stop intent: %+v", stops)
 	}
 	got, err := s.attempt(ctx, job.AttemptID)
 	if err != nil || got.State != "cancelling" {
