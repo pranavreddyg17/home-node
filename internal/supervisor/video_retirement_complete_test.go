@@ -122,3 +122,31 @@ func TestVideoRetirementCompletedReceiptRefusesTampering(t *testing.T) {
 		})
 	}
 }
+
+func TestVideoRetirementReceiptSurvivesCleanupStopReplay(t *testing.T) {
+	m, record := completedRetirementFixture(t)
+	ctx := context.Background()
+	purge := record.Intent.Request
+	stop := Request{
+		Version: 1, OperationID: state.Random(), InstanceID: purge.InstanceID,
+		Action: "stop", Revision: record.Intent.Ownership.SourceRevision, PolicyGeneration: purge.PolicyGeneration,
+	}
+	if _, err := m.Store.DB.Exec("INSERT INTO runtime_operations(id,request_hash,instance_id,state) VALUES(?,?,?,'succeeded')", stop.OperationID, runtimeRequestHash(stop), stop.InstanceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.commitVideoRetirement(ctx, record, func(context.Context) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	backend := &fakeBackend{running: true}
+	m.Backend = backend
+	stops := backend.stops
+	for _, request := range []Request{stop, purge} {
+		instance, err := m.Apply(ctx, request)
+		if err != nil || instance.ID != purge.InstanceID || instance.State != "removed" || instance.Revision != purge.Revision {
+			t.Fatalf("%s replay changed retirement: %+v, %v", request.Action, instance, err)
+		}
+	}
+	if backend.stops != stops {
+		t.Fatal("replay issued a new backend stop")
+	}
+}
