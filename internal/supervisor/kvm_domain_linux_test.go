@@ -503,6 +503,13 @@ for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.arg
 			nativeDomainDiagnostics(t, domain)
 			t.Fatal("native launch isolation verification refused", err)
 		}
+		otherDomain := domain
+		otherDomain.ConfinedWrites = false
+		foreignUUID := (Domain{ID: state.Random()}).RuntimeUUID()
+		if err := observeGuestDomainResources(ctx, pid, otherDomain, foreignUUID); !errors.Is(err, ErrPolicy) {
+			t.Fatal("native QEMU resource observation accepted another domain label", err)
+		}
+		t.Log("native retained QEMU resource observation refused a foreign AppArmor identity")
 		nativeConfinementInventory(t, ctx, domain)
 		peer, err := (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", domain.ChannelPath)
 		if err != nil {
