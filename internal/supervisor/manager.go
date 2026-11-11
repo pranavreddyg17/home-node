@@ -389,14 +389,30 @@ func (m *Manager) start(ctx context.Context, r Request) (Instance, error) {
 func (m *Manager) stop(ctx context.Context, r Request) (Instance, error) {
 	releaseStop := m.retainStopEffect(r.InstanceID)
 	defer releaseStop()
-	var existed bool
+	var existed, removed bool
 	err := m.Store.Transaction(ctx, func(tx *sql.Tx) error {
-		if _, err := m.operation(tx, r); err != nil {
+		replay, err := m.operation(tx, r)
+		if err != nil {
 			return err
 		}
 		var current int64
 		if err := tx.QueryRow("SELECT coalesce(max(revision),0) FROM runtime_instances WHERE id=?", r.InstanceID).Scan(&current); err != nil {
 			return err
+		}
+		var retired bool
+		if err := tx.QueryRow("SELECT EXISTS(SELECT 1 FROM runtime_instances WHERE id=? AND state='removed' AND desired='stopped')", r.InstanceID).Scan(&retired); err != nil {
+			return err
+		}
+		if retired {
+			var phase string
+			if err := tx.QueryRow("SELECT state FROM runtime_operations WHERE id=?", r.OperationID).Scan(&phase); err != nil {
+				return err
+			}
+			if !replay || phase != "succeeded" || r.Revision > current {
+				return ErrPolicy
+			}
+			removed = true
+			return nil
 		}
 		if r.Revision < current {
 			return ErrPolicy
@@ -405,11 +421,14 @@ func (m *Manager) stop(ctx context.Context, r Request) (Instance, error) {
 		if _, err := tx.Exec("INSERT INTO runtime_stops VALUES(?,?) ON CONFLICT(instance_id) DO UPDATE SET revision=max(revision,excluded.revision)", r.InstanceID, r.Revision); err != nil {
 			return err
 		}
-		_, err := tx.Exec("UPDATE runtime_instances SET desired='stopped',state='stopping',revision=? WHERE id=?", r.Revision, r.InstanceID)
+		_, err = tx.Exec("UPDATE runtime_instances SET desired='stopped',state='stopping',revision=? WHERE id=?", r.Revision, r.InstanceID)
 		return err
 	})
 	if err != nil {
 		return Instance{}, err
+	}
+	if removed {
+		return m.Inspect(ctx, r.InstanceID)
 	}
 	if err = m.stopDomain(ctx, r.InstanceID); err != nil {
 		return Instance{}, err

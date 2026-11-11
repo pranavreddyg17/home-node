@@ -49,8 +49,12 @@ func (s *Service) releaseJobResources(ctx context.Context, j Job) error {
 	if count != 1 {
 		return ErrConflict
 	}
-	if _, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: "cleanup-stop-" + suffix, Action: "stop", Revision: 2, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration}); err != nil {
+	stopped, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: "cleanup-stop-" + suffix, Action: "stop", Revision: 2, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration})
+	if err != nil {
 		return err
+	}
+	if stopped.ID != j.InstanceID || (stopped.State != "stopped" && stopped.State != "removed") {
+		return ErrConflict
 	}
 	removed, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: "cleanup-purge-" + suffix, Action: "purge", Revision: 3, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration})
 	if err != nil {

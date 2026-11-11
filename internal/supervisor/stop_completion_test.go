@@ -63,3 +63,31 @@ func TestForcedStopCompletionPreservesNewerOrInterruptedOwnership(t *testing.T) 
 		})
 	}
 }
+
+func TestStopReplayPreservesRemovedVideo(t *testing.T) {
+	m, b := newManager(t)
+	ctx := context.Background()
+	start := startRequest()
+	start.Workload = "video"
+	m.Manifest.Images[0].ID = "video"
+	if _, err := m.Apply(ctx, start); err != nil {
+		t.Fatal(err)
+	}
+	stop := Request{Version: 1, OperationID: state.Random(), InstanceID: start.InstanceID, Action: "stop", Revision: 2, PolicyGeneration: 1}
+	if _, err := m.Apply(ctx, stop); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Store.DB.Exec("UPDATE runtime_instances SET state='removed',revision=3 WHERE id=?", start.InstanceID); err != nil {
+		t.Fatal(err)
+	}
+	calls := b.stops
+	got, err := m.Apply(ctx, stop)
+	if err != nil || got.State != "removed" || got.Revision != 3 || b.stops != calls {
+		t.Fatal("stop replay modified retired instance", got, err)
+	}
+	stop.OperationID = state.Random()
+	stop.Revision = 4
+	if _, err := m.Apply(ctx, stop); !errors.Is(err, ErrPolicy) {
+		t.Fatal("new stop admitted for retired instance", err)
+	}
+}
