@@ -76,14 +76,32 @@ func New(directory, kind string, quota int64) (*Agent, error) {
 		root.Close()
 		return nil, errors.New("guest data root changed during admission")
 	}
-	a := &Agent{root: root, kind: kind, quota: quota, tasks: map[string]*task{}, client: &http.Client{Timeout: 2 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect denied") }, Transport: &http.Transport{Proxy: nil, MaxConnsPerHost: 1, ResponseHeaderTimeout: 15 * time.Second}}}
-	a.readinessClient = &http.Client{Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect denied") }, Transport: &http.Transport{Proxy: nil, MaxConnsPerHost: 1, ResponseHeaderTimeout: time.Second}}
+	a := &Agent{
+		root: root, kind: kind, quota: quota, tasks: map[string]*task{},
+		client:          localInferenceClient(2*time.Minute, 15*time.Second),
+		readinessClient: localInferenceClient(2*time.Second, time.Second),
+	}
 	if err = a.recoverTasks(); err != nil {
 		root.Close()
 		return nil, err
 	}
 	return a, nil
 }
+func localInferenceClient(timeout, headerTimeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return errors.New("redirect denied")
+		},
+		Transport: &http.Transport{
+			MaxConnsPerHost:        1,
+			ResponseHeaderTimeout:  headerTimeout,
+			MaxResponseHeaderBytes: 32 << 10,
+			DisableCompression:     true,
+		},
+	}
+}
+
 func (a *Agent) Close() error {
 	a.closeOnce.Do(func() {
 		a.mu.Lock()
