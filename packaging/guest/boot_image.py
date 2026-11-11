@@ -140,7 +140,8 @@ def cancel_task(channel, job_id):
 def ai_roundtrip(channel):
     cancellation = cancel_ai(channel)
     generation = uuid.uuid4().hex
-    if request(channel, "generate", objectId=generation, prompt="Say hello briefly.").get("state") != "running":
+    prompt = "Say hello briefly."
+    if request(channel, "generate", objectId=generation, prompt=prompt).get("state") != "running":
         raise ValueError("guest inference was not started")
     deadline = time.monotonic() + 120
     while True:
@@ -153,6 +154,15 @@ def ai_roundtrip(channel):
     text = result.get("text", "")
     if not 0 < len(text.encode("utf-8")) <= 32768:
         raise ValueError("guest inference text exceeds bound")
+    if request(channel, "generate", objectId=generation, prompt=prompt).get("state") != "succeeded":
+        raise ValueError("guest replay did not preserve the completed generation")
+    conflict = request(channel, "generate", allowed_error="OPERATION_FAILED", objectId=generation, prompt="A different prompt.")
+    if conflict.get("error") != "OPERATION_FAILED":
+        raise ValueError("guest replay accepted a different prompt")
+    replay = request(channel, "result", objectId=generation)
+    if replay.get("state") != "succeeded" or replay.get("text") != text:
+        raise ValueError("guest replay changed the original result")
+    print("PASS AI guest replay preserved the result and refused a different prompt", flush=True)
     request(channel, "delete", objectId=generation)
     return {"generationSucceeded": True, "textBytes": len(text.encode("utf-8")), "taskDeletionAcknowledged": True, "cancellation": cancellation}
 

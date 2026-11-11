@@ -148,9 +148,10 @@ class VideoCancellationTests(unittest.TestCase):
 class AIInferenceTests(unittest.TestCase):
     def test_actual_adapter_sequence_requires_terminal_text_and_delete(self):
         with patch.object(boot_image, "request", side_effect=[{"state": "running"}, {"state": "running"},
+                {"state": "succeeded", "text": "héllo"}, {"state": "succeeded"}, {"error": "OPERATION_FAILED"},
                 {"state": "succeeded", "text": "héllo"}, {}]) as calls, patch.object(boot_image.time, "sleep"), patch.object(boot_image, "cancel_ai", return_value={"cancelled": True, "taskDeletionAcknowledged": True}):
             self.assertEqual(boot_image.ai_roundtrip(None), {"generationSucceeded": True, "textBytes": 6, "taskDeletionAcknowledged": True, "cancellation": {"cancelled": True, "taskDeletionAcknowledged": True}})
-        self.assertEqual([call.args[1] for call in calls.call_args_list], ["generate", "result", "result", "delete"])
+        self.assertEqual([call.args[1] for call in calls.call_args_list], ["generate", "result", "result", "generate", "generate", "result", "delete"])
 
     def test_failed_empty_oversized_or_timed_out_inference_refused(self):
         cases = [[{"state": "failed"}], [{"state": "running"}, {"state": "failed"}],
