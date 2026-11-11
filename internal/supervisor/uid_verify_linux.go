@@ -56,18 +56,7 @@ func verifyReservedGuestProcess(ctx context.Context, pid int, uid, gid uint32, q
 		return err
 	}
 	defer func() { result = errors.Join(result, unix.Close(pidfd)) }()
-	live := func() error {
-		events := []unix.PollFd{{Fd: int32(pidfd), Events: unix.POLLIN}}
-		n, err := unix.Poll(events, 0)
-		if err != nil {
-			return err
-		}
-		if n != 0 {
-			return ErrPolicy
-		}
-		return ctx.Err()
-	}
-	if err := live(); err != nil {
+	if err := checkLivePIDFD(ctx, pidfd); err != nil {
 		return err
 	}
 	process, err := root.OpenRoot(strconv.Itoa(pid))
@@ -108,5 +97,17 @@ func verifyReservedGuestProcess(ctx context.Context, pid int, uid, gid uint32, q
 	if verified == 0 {
 		return ErrPolicy
 	}
-	return live()
+	return checkLivePIDFD(ctx, pidfd)
+}
+
+func checkLivePIDFD(ctx context.Context, pidfd int) error {
+	events := []unix.PollFd{{Fd: int32(pidfd), Events: unix.POLLIN}}
+	n, err := unix.Poll(events, 0)
+	if err != nil {
+		return err
+	}
+	if n != 0 {
+		return ErrPolicy
+	}
+	return ctx.Err()
 }

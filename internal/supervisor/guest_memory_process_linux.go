@@ -57,6 +57,14 @@ func observeGuestProcessResources(ctx context.Context, pid int, id string, maxim
 	if err := qualifyGuestUIDNamespace(root); err != nil {
 		return err
 	}
+	pidfd, err := unix.PidfdOpen(pid, 0)
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, unix.Close(pidfd)) }()
+	if err := checkLivePIDFD(ctx, pidfd); err != nil {
+		return err
+	}
 	name := strconv.Itoa(pid)
 	before, err := root.Lstat(name)
 	if err != nil {
@@ -133,5 +141,5 @@ func observeGuestProcessResources(ctx context.Context, pid int, id string, maxim
 	if err != nil || !os.SameFile(opened, named) {
 		return ErrPolicy
 	}
-	return ctx.Err()
+	return checkLivePIDFD(ctx, pidfd)
 }

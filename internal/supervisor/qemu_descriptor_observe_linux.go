@@ -96,18 +96,7 @@ func observeQEMUDescriptorMetadata(ctx context.Context, d Domain, pid int) (reco
 		return nil, err
 	}
 	defer func() { result = errors.Join(result, unix.Close(pidfd)) }()
-	live := func() error {
-		events := []unix.PollFd{{Fd: int32(pidfd), Events: unix.POLLIN}}
-		n, err := unix.Poll(events, 0)
-		if err != nil {
-			return err
-		}
-		if n != 0 {
-			return ErrPolicy
-		}
-		return ctx.Err()
-	}
-	if err := live(); err != nil {
+	if err := checkLivePIDFD(ctx, pidfd); err != nil {
 		return nil, err
 	}
 	process, err := root.OpenFile(strconv.Itoa(pid), os.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW, 0)
@@ -205,7 +194,7 @@ func observeQEMUDescriptorMetadata(ctx context.Context, d Domain, pid int) (reco
 	if err := verifyQEMUProcess(ctx, pid, d.GuestUID, d.GuestGID); err != nil {
 		return nil, err
 	}
-	if err := live(); err != nil {
+	if err := checkLivePIDFD(ctx, pidfd); err != nil {
 		return nil, err
 	}
 	return records, nil

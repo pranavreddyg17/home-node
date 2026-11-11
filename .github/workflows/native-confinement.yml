@@ -11,6 +11,8 @@ on:
       - 'internal/supervisor/apparmor_write_policy.go'
       - 'internal/supervisor/apparmor_identity*'
       - 'internal/supervisor/backend.go'
+      - 'internal/supervisor/guest_memory_process_*'
+      - 'internal/supervisor/guest_cgroup*'
       - 'internal/supervisor/domain_pid*'
       - 'internal/supervisor/libvirt_local_identity*'
       - 'internal/supervisor/domain_socket_linux.go'
