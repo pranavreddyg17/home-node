@@ -18,11 +18,11 @@ type ChannelSocketIntent struct {
 }
 
 func (m *Manager) recordChannelSocketIntent(ctx context.Context, intent ChannelSocketIntent) error {
-	return m.checkChannelSocketIntent(ctx, intent, true)
+	return m.checkChannelSocketIntent(ctx, intent, true, nil)
 }
 
 func (m *Manager) verifyChannelSocketIntent(ctx context.Context, intent ChannelSocketIntent) error {
-	return m.checkChannelSocketIntent(ctx, intent, false)
+	return m.checkChannelSocketIntent(ctx, intent, false, nil)
 }
 
 // loadActiveChannelSocketIntent is read-only and accepts the current preparing
@@ -110,7 +110,7 @@ func (m *Manager) loadChannelSocketRetirementRecord(ctx context.Context, d Domai
 	return intent, retired, nil
 }
 
-func (m *Manager) checkChannelSocketIntent(ctx context.Context, intent ChannelSocketIntent, create bool) error {
+func (m *Manager) checkChannelSocketIntent(ctx context.Context, intent ChannelSocketIntent, create bool, guard func() error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -195,8 +195,19 @@ func (m *Manager) checkChannelSocketIntent(ctx context.Context, intent ChannelSo
 		if active != 0 {
 			return ErrPolicy
 		}
+		if guard != nil {
+			if err := guard(); err != nil {
+				return err
+			}
+		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO runtime_channel_sockets(instance_id,revision,device,inode,retired,image_sha256,uid,guest_gid,access_gid,parent_device,parent_inode) VALUES(?,?,?,?,0,?,?,?,?,?,?)`, channel.InstanceID, revision, intent.Device, intent.Inode, channel.ImageSHA256, channel.UID, channel.GuestGID, channel.AccessGID, channel.Device, channel.Inode)
-		return err
+		if err != nil {
+			return err
+		}
+		if guard != nil {
+			return guard()
+		}
+		return ctx.Err()
 	})
 }
 

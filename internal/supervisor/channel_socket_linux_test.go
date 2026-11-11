@@ -76,7 +76,7 @@ func testPinnedChannelSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	for retry := 0; retry < 2; retry++ {
-		got, err := m.checkPinnedChannelSocket(ctx, 1, channel, directory, socket, false)
+		got, err := m.checkPinnedChannelSocket(ctx, 1, channel, directory, socket, false, nil)
 		if err != nil || got.Inode != native.Ino {
 			t.Fatal("running pinned socket audit", retry, got, err)
 		}
@@ -104,7 +104,7 @@ func testPinnedChannelSocket(t *testing.T) {
 	}
 	testShutdownSocketReceipt(t, m, d, ChannelSocketIntent{Channel: channel, Revision: 1, Device: uint64(native.Dev), Inode: native.Ino}, func() {
 		for retry := 0; retry < 2; retry++ {
-			got, err := m.checkPinnedChannelSocket(ctx, 1, channel, directory, socket, false)
+			got, err := m.checkPinnedChannelSocket(ctx, 1, channel, directory, socket, false, nil)
 			if err != nil || got.Inode != native.Ino {
 				t.Fatal("shutdown pinned socket audit", retry, got, err)
 			}

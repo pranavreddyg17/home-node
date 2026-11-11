@@ -136,7 +136,7 @@ func (m *Manager) checkReservedDomainSocket(ctx context.Context, d Domain, revis
 	if err := checkLivePIDFD(ctx, pidfd); err != nil {
 		return err
 	}
-	actual, err := m.checkPinnedChannelSocket(ctx, revision, channel, directory, socket, create)
+	actual, err := m.checkPinnedChannelSocket(ctx, revision, channel, directory, socket, create, func() error { return checkLivePIDFD(ctx, pidfd) })
 	if err != nil {
 		return err
 	}

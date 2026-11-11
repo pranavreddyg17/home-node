@@ -35,6 +35,20 @@ func TestChannelSocketIntentBindsRuntimeRevision(t *testing.T) {
 	if err := m.verifyChannelSocketIntent(ctx, intent); !errors.Is(err, ErrPolicy) {
 		t.Fatal("verification created missing socket proof", err)
 	}
+	observations := 0
+	exit := errors.New("fixture process exited")
+	if err := m.checkChannelSocketIntent(ctx, intent, true, func() error {
+		observations++
+		if observations == 2 {
+			return exit
+		}
+		return nil
+	}); !errors.Is(err, exit) {
+		t.Fatal("socket proof survived lost liveness", err)
+	}
+	if err := m.verifyChannelSocketIntent(ctx, intent); !errors.Is(err, ErrPolicy) {
+		t.Fatal("failed liveness check committed socket proof", err)
+	}
 	if err := m.recordChannelSocketIntent(ctx, intent); err != nil {
 		t.Fatal(err)
 	}

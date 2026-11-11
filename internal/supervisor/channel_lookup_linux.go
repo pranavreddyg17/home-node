@@ -45,7 +45,7 @@ func (m *Manager) qualifyReservedChannelPath(ctx context.Context, d Domain, revi
 	if err := checkPath(); err != nil {
 		return err
 	}
-	actual, err := m.checkPinnedChannelSocket(ctx, revision, intent.Channel, directory, socket, false)
+	actual, err := m.checkPinnedChannelSocket(ctx, revision, intent.Channel, directory, socket, false, nil)
 	if err != nil || actual != intent {
 		return errors.Join(ErrPolicy, err)
 	}
