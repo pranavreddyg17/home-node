@@ -296,7 +296,7 @@ try {
       hash.update(chunk)
     }
     if (length !== resultInfo.size) throw new Error('Video output changed during verification')
-    await fixtureFFmpeg(['-i', resultPath, '-f', 'null', '-'])
+    await fixtureFFmpeg(['-xerror', '-abort_on', 'empty_output', '-protocol_whitelist', 'file,pipe', '-i', resultPath, '-map', '0:V:0', '-f', 'null', '-'])
     const outputHash = hash.digest('hex')
     await page.locator('nav').getByRole('button', { name: 'Files', exact: false }).click()
     const output = page.locator(`.file-row:has(a[href="${resultHref}"])`)
