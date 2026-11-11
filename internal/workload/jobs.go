@@ -183,13 +183,24 @@ func (s *Service) CancelJob(ctx context.Context, device, id, attemptID string) e
 	// The worker observes intent between chunks and polls. Stop enforcement does
 	// not depend on the guest honoring its cancel request.
 	if stopRequired && s.Backend != nil {
-		_, err = s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: state.Random(), Action: "stop", Revision: 2, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration})
+		err = s.stopVideoAttempt(ctx, j, state.Random())
 		if err != nil {
 			return err
 		}
 	}
 	return nil
 }
+func (s *Service) stopVideoAttempt(ctx context.Context, j Job, operationID string) error {
+	stopped, err := s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: operationID, Action: "stop", Revision: 2, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration})
+	if err != nil {
+		return err
+	}
+	if stopped.ID != j.InstanceID || (stopped.State != "stopped" && stopped.State != "removed") {
+		return ErrConflict
+	}
+	return nil
+}
+
 func (s *Service) jobPhase(ctx context.Context, j Job, phase string) error {
 	expected := map[string]string{"preparing": "queued", "running": "preparing", "finalizing": "running"}[phase]
 	if expected == "" {
@@ -297,7 +308,7 @@ func (s *Service) processJob(ctx context.Context) error {
 	}
 	for _, j := range cancelled {
 		if j.StartRequested {
-			if _, err = s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: state.Random(), Action: "stop", Revision: 2, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration}); err != nil {
+			if err = s.stopVideoAttempt(ctx, j, state.Random()); err != nil {
 				continue
 			}
 		}
@@ -544,7 +555,7 @@ func (s *Service) reconcileJobs(ctx context.Context) error {
 			if s.Backend == nil {
 				return ErrUnavailable
 			}
-			if _, err = s.Backend.Apply(ctx, supervisor.Request{Version: 1, OperationID: state.Random(), Action: "stop", Revision: 2, InstanceID: j.InstanceID, PolicyGeneration: s.PolicyGeneration}); err != nil {
+			if err = s.stopVideoAttempt(ctx, j, state.Random()); err != nil {
 				return err
 			}
 		}

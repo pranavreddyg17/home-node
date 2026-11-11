@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/pranavreddyg17/home-node/internal/state"
+	"github.com/pranavreddyg17/home-node/internal/supervisor"
 )
 
 func TestNeverStartedJobCancelsAtomicallyWithoutRuntime(t *testing.T) {
@@ -109,5 +110,34 @@ func TestJobCancellationRetainsUncertainRuntimeAuthority(t *testing.T) {
 		if backend.runs != 0 || backend.stops != 0 {
 			t.Fatal("unavailable runtime dispatched effects")
 		}
+	}
+}
+
+type unconfirmedVideoStopBackend struct{ *jobBackend }
+
+func (b unconfirmedVideoStopBackend) Apply(ctx context.Context, r supervisor.Request) (supervisor.Instance, error) {
+	if r.Action == "stop" {
+		return supervisor.Instance{ID: r.InstanceID, State: "stopping"}, nil
+	}
+	return b.jobBackend.Apply(ctx, r)
+}
+
+func TestJobCancellationRequiresConfirmedStop(t *testing.T) {
+	s, backend, device, input := jobService(t)
+	ctx := context.Background()
+	job, err := s.CreateJob(ctx, device, state.Random(), input.ID, "mp4-720p", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Store.DB.Exec("UPDATE jobs SET state='running',start_requested=1 WHERE id=?", job.AttemptID); err != nil {
+		t.Fatal(err)
+	}
+	s.Backend = unconfirmedVideoStopBackend{backend}
+	if err = s.CancelJob(ctx, device, job.ID, job.AttemptID); !errors.Is(err, ErrConflict) {
+		t.Fatal("unconfirmed stop accepted", err)
+	}
+	got, err := s.attempt(ctx, job.AttemptID)
+	if err != nil || got.State != "cancelling" {
+		t.Fatal("unconfirmed stop lost cancellation intent", got, err)
 	}
 }
