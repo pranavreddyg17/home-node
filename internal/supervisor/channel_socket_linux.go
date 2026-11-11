@@ -68,7 +68,16 @@ func (m *Manager) checkPinnedChannelSocket(ctx context.Context, revision int64, 
 		return ChannelSocketIntent{}, err
 	}
 	intent := ChannelSocketIntent{Channel: channel, Revision: revision, Device: uint64(originalSocket.Dev), Inode: originalSocket.Ino}
-	if err := m.checkChannelSocketIntent(ctx, intent, create, guard); err != nil {
+	checkPublication := func() error {
+		if err := check(); err != nil {
+			return err
+		}
+		if guard != nil {
+			return guard()
+		}
+		return nil
+	}
+	if err := m.checkChannelSocketIntent(ctx, intent, create, checkPublication); err != nil {
 		return ChannelSocketIntent{}, err
 	}
 	if err := check(); err != nil {
