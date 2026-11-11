@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -127,5 +128,29 @@ func TestModelJSONRejectsAmbiguousOrUnboundedEvents(t *testing.T) {
 				t.Fatalf("valid=%v want=%v", got, c.want)
 			}
 		})
+	}
+}
+
+func TestLocalInferenceClientBoundsResponseHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/oversized" {
+			w.Header().Set("X-Fixture", strings.Repeat("x", 64<<10))
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	client := localInferenceClient(2*time.Second, time.Second)
+	defer client.CloseIdleConnections()
+	response, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := response.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+	response, err = client.Get(server.URL + "/oversized")
+	if err == nil {
+		response.Body.Close()
+		t.Fatal("client accepted oversized inference headers")
 	}
 }
