@@ -213,3 +213,38 @@ func TestConversationBoundsAndActiveDeletion(t *testing.T) {
 		t.Fatal("concurrent conversation context accepted")
 	}
 }
+
+type aiCompletionBeforeCancel struct {
+	*aiBackend
+	cancel func() error
+}
+
+func (b aiCompletionBeforeCancel) Call(ctx context.Context, id string, r guestproto.Request) (guestproto.Response, error) {
+	if r.Operation == "cancel" {
+		return b.aiBackend.Call(ctx, id, guestproto.Request{Operation: "result", ObjectID: r.ObjectID, RequestID: r.RequestID})
+	}
+	response, err := b.aiBackend.Call(ctx, id, r)
+	if err == nil && r.Operation == "generate" {
+		err = b.cancel()
+	}
+	return response, err
+}
+
+func TestAICancellationAcceptsAlreadyFinishedGuestTask(t *testing.T) {
+	s, backend, device, conversation := aiService(t)
+	ctx := context.Background()
+	g, err := s.CreateGeneration(ctx, device, state.Random(), conversation.ID, "Cancel near completion")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Backend = aiCompletionBeforeCancel{aiBackend: backend, cancel: func() error {
+		return s.CancelGeneration(ctx, g.ID)
+	}}
+	if err := s.processGeneration(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Generation(ctx, g.ID)
+	if err != nil || got.State != "cancelled" {
+		t.Fatal("guest completion raced past cancellation", got, err)
+	}
+}

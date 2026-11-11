@@ -444,7 +444,7 @@ func (s *Service) processGeneration(ctx context.Context) error {
 			}
 			if current.State == "cancelling" {
 				response, e := s.call(generationCtx, instance, guestproto.Request{Operation: "cancel", ObjectID: id})
-				if e != nil || response.State != "cancelled" {
+				if e != nil || !terminalGenerationState(response.State) {
 					return s.endGeneration(generationCtx, g, "interrupted", "CANCEL_REQUIRES_ATTENTION")
 				}
 				return s.endGeneration(generationCtx, g, "cancelled", "CANCELLED")
@@ -603,6 +603,15 @@ func (s *Service) deleteConversation(ctx context.Context, device, id, operationI
 		return state.Event(tx, device, "conversation.deleted", id, map[string]any{})
 	})
 }
+func terminalGenerationState(phase string) bool {
+	switch phase {
+	case "cancelled", "succeeded", "failed", "interrupted":
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Service) reconcileGenerations(ctx context.Context) error {
 	rows, err := s.Store.DB.QueryContext(ctx, "SELECT id FROM generations WHERE state IN('running','cancelling')")
 	if err != nil {
@@ -629,7 +638,7 @@ func (s *Service) reconcileGenerations(ctx context.Context) error {
 		}
 		if instance, e := s.app(ctx, "ai"); e == nil {
 			response, e := s.call(ctx, instance, guestproto.Request{Operation: "cancel", ObjectID: id})
-			if e != nil || response.State != "cancelled" && response.State != "succeeded" && response.State != "failed" && response.State != "interrupted" {
+			if e != nil || !terminalGenerationState(response.State) {
 				return ErrUnavailable
 			}
 		}
