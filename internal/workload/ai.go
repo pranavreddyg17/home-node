@@ -424,8 +424,24 @@ func (s *Service) processGeneration(ctx context.Context) error {
 
 	generationCtx, cancel := context.WithTimeout(ctx, 150*time.Second)
 	defer cancel()
-	if _, err = s.call(generationCtx, instance, guestproto.Request{Operation: "generate", ObjectID: id, InputID: g.reference.ID}); err != nil {
-		return s.endGeneration(ctx, g, "failed", "GENERATION_FAILED")
+	request := guestproto.Request{Operation: "generate", ObjectID: id, InputID: g.reference.ID}
+	response, err := s.call(generationCtx, instance, request)
+	if err != nil && response.Error == "" && generationCtx.Err() == nil {
+		// The guest keys execution by object and prompt identity. A new
+		// transport request can recover a lost reply without running twice.
+		current, readErr := s.generation(generationCtx, id)
+		if readErr == nil && current.State == "running" {
+			response, err = s.call(generationCtx, instance, request)
+		}
+	}
+	if err != nil {
+		if response.Error != "" {
+			return s.endGeneration(ctx, g, "failed", "GENERATION_FAILED")
+		}
+		cleanup, stop := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer stop()
+		_, _ = s.call(cleanup, instance, guestproto.Request{Operation: "cancel", ObjectID: id})
+		return s.endGeneration(cleanup, g, "interrupted", "GENERATION_START_UNCONFIRMED")
 	}
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()

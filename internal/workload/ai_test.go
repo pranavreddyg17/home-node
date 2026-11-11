@@ -248,3 +248,43 @@ func TestAICancellationAcceptsAlreadyFinishedGuestTask(t *testing.T) {
 		t.Fatal("guest completion raced past cancellation", got, err)
 	}
 }
+
+type lostAIStartReply struct {
+	*aiBackend
+	start guestproto.Request
+}
+
+func (b *lostAIStartReply) Call(ctx context.Context, instance string, r guestproto.Request) (guestproto.Response, error) {
+	if r.Operation != "generate" {
+		return b.aiBackend.Call(ctx, instance, r)
+	}
+	if b.start.ObjectID != "" {
+		if r.ObjectID != b.start.ObjectID || r.InputID != b.start.InputID {
+			return guestproto.Response{}, errors.New("retry changed guest task identity")
+		}
+		return guestproto.Response{Version: 1, RequestID: r.RequestID, State: "succeeded"}, nil
+	}
+	_, err := b.aiBackend.Call(ctx, instance, r)
+	if err != nil {
+		return guestproto.Response{}, err
+	}
+	b.start = r
+	return guestproto.Response{}, errors.New("fixture lost reply after guest start")
+}
+
+func TestAIStartRecoversLostGuestReply(t *testing.T) {
+	s, backend, device, conversation := aiService(t)
+	s.Backend = &lostAIStartReply{aiBackend: backend}
+	ctx := context.Background()
+	g, err := s.CreateGeneration(ctx, device, state.Random(), conversation.ID, "Recover the same generation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.processGeneration(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Generation(ctx, g.ID)
+	if err != nil || got.State != "succeeded" || got.Output == "" || backend.calls != 1 {
+		t.Fatal("lost response did not recover the original generation", got, err, backend.calls)
+	}
+}
