@@ -37,11 +37,23 @@ func (m *Manager) checkReservedDomainSocket(ctx context.Context, d Domain, revis
 	default:
 		return ErrPolicy
 	}
+	pid, err := readDomainPID(ctx, d)
+	if err != nil {
+		return err
+	}
+	pidfd, err := unix.PidfdOpen(pid, 0)
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, unix.Close(pidfd)) }()
+	if err := checkLivePIDFD(ctx, pidfd); err != nil {
+		return err
+	}
 	if err := m.Backend.Verify(ctx, d); err != nil {
 		return err
 	}
 	var existing int
-	err := m.Store.DB.QueryRowContext(ctx, `SELECT 1 FROM runtime_channel_sockets WHERE instance_id=? AND revision=?`, d.ID, revision).Scan(&existing)
+	err = m.Store.DB.QueryRowContext(ctx, `SELECT 1 FROM runtime_channel_sockets WHERE instance_id=? AND revision=?`, d.ID, revision).Scan(&existing)
 	create := errors.Is(err, sql.ErrNoRows)
 	if create && !allowCreate {
 		return ErrPolicy
@@ -99,17 +111,6 @@ func (m *Manager) checkReservedDomainSocket(ctx context.Context, d Domain, revis
 			return err
 		}
 	} else {
-		readPID := func() (int, error) {
-			pid, e := readDomainPID(ctx, d)
-			if e != nil {
-				return 0, e
-			}
-			return pid, verifyQEMUProcess(ctx, pid, d.GuestUID, d.GuestGID)
-		}
-		pid, err := readPID()
-		if err != nil {
-			return err
-		}
 		connection, err := (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", d.ChannelPath)
 		if err != nil {
 			return err
@@ -119,16 +120,20 @@ func (m *Manager) checkReservedDomainSocket(ctx context.Context, d Domain, revis
 		if peerErr != nil || closeErr != nil || peer != (UnixPeerIdentity{PID: int32(pid), UID: d.GuestUID, GID: d.GuestGID}) {
 			return errors.Join(ErrPolicy, peerErr, closeErr)
 		}
-		currentPID, err := readPID()
-		if err != nil || currentPID != pid {
-			return errors.Join(ErrPolicy, err)
-		}
+
 	}
 	if err := checkPath(); err != nil {
 		return err
 	}
 	// Recheck confinement after the potentially blocking peer observation.
 	if err := m.Backend.Verify(ctx, d); err != nil {
+		return err
+	}
+	currentPID, err := readDomainPID(ctx, d)
+	if err != nil || currentPID != pid {
+		return errors.Join(ErrPolicy, err)
+	}
+	if err := checkLivePIDFD(ctx, pidfd); err != nil {
 		return err
 	}
 	actual, err := m.checkPinnedChannelSocket(ctx, revision, channel, directory, socket, create)
@@ -138,5 +143,5 @@ func (m *Manager) checkReservedDomainSocket(ctx context.Context, d Domain, revis
 	if actual != intent {
 		return ErrPolicy
 	}
-	return checkPath()
+	return errors.Join(checkPath(), checkLivePIDFD(ctx, pidfd))
 }
