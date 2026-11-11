@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -527,9 +528,29 @@ for path, flags in ((sys.argv[1],os.O_WRONLY),(sys.argv[3],os.O_RDONLY),(sys.arg
 		if identityErr != nil || peerUID != uid || closeErr != nil {
 			t.Fatal("native listener creator identity differs from guest", peerUID, identityErr, closeErr)
 		}
-		if err := backend.Stop(ctx, id); err != nil {
+		if err := func() (result error) {
+			pidfd, err := unix.PidfdOpen(pid, 0)
+			if err != nil {
+				return err
+			}
+			defer func() { result = errors.Join(result, unix.Close(pidfd)) }()
+			if err := checkLivePIDFD(ctx, pidfd); err != nil {
+				return err
+			}
+			if err := backend.Stop(ctx, id); err != nil {
+				return err
+			}
+			if _, err := unix.Poll([]unix.PollFd{{Fd: int32(pidfd), Events: unix.POLLIN}}, 3000); err != nil {
+				return err
+			}
+			if err := checkLivePIDFD(ctx, pidfd); !errors.Is(err, ErrPolicy) {
+				return fmt.Errorf("QEMU exit was not observed through retained pidfd: %v", err)
+			}
+			return nil
+		}(); err != nil {
 			t.Fatal(err)
 		}
+		t.Log("native retained pidfd observed QEMU exit after stop")
 		running, err := backend.Running(ctx, id)
 		if err != nil || running {
 			t.Fatal("native guest not stopped", running, err)
