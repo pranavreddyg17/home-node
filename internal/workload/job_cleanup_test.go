@@ -12,9 +12,11 @@ import (
 
 type purgeFailureBackend struct {
 	*jobBackend
-	fail     bool
-	badReply bool
-	requests []supervisor.Request
+	fail           bool
+	badReply       bool
+	losePurgeReply bool
+	removed        bool
+	requests       []supervisor.Request
 }
 
 func (b *purgeFailureBackend) Apply(ctx context.Context, r supervisor.Request) (supervisor.Instance, error) {
@@ -25,11 +27,25 @@ func (b *purgeFailureBackend) Apply(ctx context.Context, r supervisor.Request) (
 	if r.Action == "purge" && b.badReply {
 		return supervisor.Instance{ID: r.InstanceID, State: "stopped"}, nil
 	}
-	return b.jobBackend.Apply(ctx, r)
+	if b.removed && (r.Action == "stop" || r.Action == "purge") {
+		return supervisor.Instance{ID: r.InstanceID, State: "removed", Revision: 3}, nil
+	}
+	result, err := b.jobBackend.Apply(ctx, r)
+	if err == nil && r.Action == "purge" && b.losePurgeReply {
+		b.removed = true
+		return supervisor.Instance{}, errors.New("purge response lost after removal")
+	}
+	return result, err
 }
 func TestFailedVideoPurgeIsDurableAndRetried(t *testing.T) {
+	t.Run("failure-before-removal", func(t *testing.T) { testVideoPurgeRetry(t, false) })
+	t.Run("lost-reply-after-removal", func(t *testing.T) { testVideoPurgeRetry(t, true) })
+}
+
+func testVideoPurgeRetry(t *testing.T, losePurgeReply bool) {
+	t.Helper()
 	s, original, device, input := jobService(t)
-	backend := &purgeFailureBackend{jobBackend: original, fail: true}
+	backend := &purgeFailureBackend{jobBackend: original, fail: !losePurgeReply, losePurgeReply: losePurgeReply}
 	s.Backend = backend
 	ctx := context.Background()
 	job, err := s.CreateJob(ctx, device, state.Random(), input.ID, "mp4-720p", "")
@@ -64,14 +80,19 @@ func TestFailedVideoPurgeIsDurableAndRetried(t *testing.T) {
 	if err != nil || completed.CleanupPending || completed.ErrorCode != nil || completed.State != "succeeded" {
 		t.Fatal(completed, err)
 	}
-	var stopIDs []string
-	for _, request := range backend.requests {
-		if request.Action == "stop" {
-			stopIDs = append(stopIDs, request.OperationID)
+	for _, action := range []string{"stop", "purge"} {
+		var attempts []supervisor.Request
+		for _, request := range backend.requests {
+			if request.Action == action {
+				attempts = append(attempts, request)
+			}
+		}
+		if len(attempts) != 2 || attempts[0] != attempts[1] {
+			t.Fatalf("retry changed supervisor %s intent: %v", action, attempts)
 		}
 	}
-	if len(stopIDs) != 2 || stopIDs[0] != stopIDs[1] {
-		t.Fatal("retry duplicated supervisor intent", stopIDs)
+	if losePurgeReply && backend.purges != 1 {
+		t.Fatal("retry repeated removal", backend.purges)
 	}
 	before := len(backend.requests)
 	if err = restarted.cleanupJobResources(ctx); err != nil || len(backend.requests) != before {
