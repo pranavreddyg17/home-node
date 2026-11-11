@@ -14,3 +14,7 @@ func verifyGuestDACProcess(ctx context.Context, pid int, uid, gid uint32) error 
 func verifyQEMUProcess(ctx context.Context, pid int, uid, gid uint32) error {
 	return verifyGuestDACProcess(ctx, pid, uid, gid)
 }
+
+func withLivePIDFD(context.Context, int, func(func() error) error) error {
+	return ErrPolicy
+}

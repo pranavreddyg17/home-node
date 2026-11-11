@@ -111,3 +111,24 @@ func checkLivePIDFD(ctx context.Context, pidfd int) error {
 	}
 	return ctx.Err()
 }
+
+// withLivePIDFD keeps observations and socket admission tied to one process
+// even when the individual checks open and close their own descriptors.
+func withLivePIDFD(ctx context.Context, pid int, observe func(func() error) error) (result error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	pidfd, err := unix.PidfdOpen(pid, 0)
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, unix.Close(pidfd)) }()
+	live := func() error { return checkLivePIDFD(ctx, pidfd) }
+	if err := live(); err != nil {
+		return err
+	}
+	if err := observe(live); err != nil {
+		return err
+	}
+	return live()
+}

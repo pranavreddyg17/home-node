@@ -188,34 +188,39 @@ func (b LinuxBackend) Verify(ctx context.Context, d Domain) error {
 	if err != nil {
 		return err
 	}
-	if d.GuestUID != 0 {
-		if err = verifyQEMUProcess(ctx, pid, d.GuestUID, d.GuestGID); err != nil {
+	return withLivePIDFD(ctx, pid, func(live func() error) error {
+		if d.GuestUID != 0 {
+			if err := verifyQEMUProcess(ctx, pid, d.GuestUID, d.GuestGID); err != nil {
+				return err
+			}
+		}
+		runtimeUUID, err := command(ctx, "", "/usr/bin/virsh", "--connect", "qemu:///system", "domuuid", d.Name())
+		if err != nil {
 			return err
 		}
-	}
-	runtimeUUID, err := command(ctx, "", "/usr/bin/virsh", "--connect", "qemu:///system", "domuuid", d.Name())
-	if err != nil {
-		return err
-	}
-	if err = observeGuestDomainResources(ctx, pid, d, strings.TrimSpace(runtimeUUID)); err != nil {
-		return fmt.Errorf("verify QEMU confinement and resource domain: %w", err)
-	}
-	uid := d.GuestUID
-	if uid == 0 {
-		account, lookupErr := user.Lookup("libvirt-qemu")
-		if lookupErr != nil {
-			return lookupErr
+		if err := observeGuestDomainResources(ctx, pid, d, strings.TrimSpace(runtimeUUID)); err != nil {
+			return fmt.Errorf("verify QEMU confinement and resource domain: %w", err)
 		}
-		parsed, parseErr := strconv.ParseUint(account.Uid, 10, 32)
-		if parseErr != nil || parsed == 0 {
-			return ErrPolicy
+		uid := d.GuestUID
+		if uid == 0 {
+			account, lookupErr := user.Lookup("libvirt-qemu")
+			if lookupErr != nil {
+				return lookupErr
+			}
+			parsed, parseErr := strconv.ParseUint(account.Uid, 10, 32)
+			if parseErr != nil || parsed == 0 {
+				return ErrPolicy
+			}
+			uid = uint32(parsed)
 		}
-		uid = uint32(parsed)
-	}
-	if d.GuestUID != 0 {
-		return grantLibvirtGuestChannelAccess(ctx, d.ChannelPath, uid, b.TransferGID, UnixPeerIdentity{PID: int32(pid), UID: uid, GID: d.GuestGID})
-	}
-	return grantGuestChannelAccess(ctx, d.ChannelPath, uid, b.TransferGID)
+		if err := live(); err != nil {
+			return err
+		}
+		if d.GuestUID != 0 {
+			return grantLibvirtGuestChannelAccess(ctx, d.ChannelPath, uid, b.TransferGID, UnixPeerIdentity{PID: int32(pid), UID: uid, GID: d.GuestGID})
+		}
+		return grantGuestChannelAccess(ctx, d.ChannelPath, uid, b.TransferGID)
+	})
 }
 func (b LinuxBackend) FreeBytes(directory string) (int64, error) {
 	var stat syscall.Statfs_t
