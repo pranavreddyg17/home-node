@@ -17,7 +17,21 @@ import (
 
 // observeGuestMemoryProcess retains the procfs process while observing its
 // resource domain. It proves a bounded snapshot, not exclusion of migration.
-func observeGuestMemoryProcess(ctx context.Context, pid int, id string, maximum int64) (result error) {
+func observeGuestMemoryProcess(ctx context.Context, pid int, id string, maximum int64) error {
+	return observeGuestProcessResources(ctx, pid, id, maximum, nil)
+}
+
+func observeGuestDomainResources(ctx context.Context, pid int, d Domain, runtimeUUID string) error {
+	return observeGuestProcessResources(ctx, pid, d.ID, int64(d.Image.MemoryMiB+512)*(1<<20), func(process int) error {
+		label, err := readQEMUProcFile(process, "attr/current", 4096)
+		if err != nil {
+			return err
+		}
+		return validateDomainAppArmorIdentity(d, runtimeUUID, string(label))
+	})
+}
+
+func observeGuestProcessResources(ctx context.Context, pid int, id string, maximum int64, checkLabel func(int) error) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -87,6 +101,11 @@ func observeGuestMemoryProcess(ctx context.Context, pid int, id string, maximum 
 		}
 		return data, ctx.Err()
 	}
+	if checkLabel != nil {
+		if err := checkLabel(int(handle.Fd())); err != nil {
+			return err
+		}
+	}
 	membership, err := read()
 	if err != nil {
 		return err
@@ -104,6 +123,11 @@ func observeGuestMemoryProcess(ctx context.Context, pid int, id string, maximum 
 	}
 	if !bytes.Equal(current, membership) {
 		return ErrPolicy
+	}
+	if checkLabel != nil {
+		if err := checkLabel(int(handle.Fd())); err != nil {
+			return err
+		}
 	}
 	named, err := root.Lstat(name)
 	if err != nil || !os.SameFile(opened, named) {

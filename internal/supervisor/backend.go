@@ -193,33 +193,12 @@ func (b LinuxBackend) Verify(ctx context.Context, d Domain) error {
 			return err
 		}
 	}
-	proc := filepath.Join("/proc", strconv.Itoa(pid))
-	label, err := os.ReadFile(filepath.Join(proc, "attr/current"))
-	if err != nil {
-		return err
-	}
 	runtimeUUID, err := command(ctx, "", "/usr/bin/virsh", "--connect", "qemu:///system", "domuuid", d.Name())
 	if err != nil {
 		return err
 	}
-	if err := validateDomainAppArmorIdentity(d, strings.TrimSpace(runtimeUUID), string(label)); err != nil {
-		return fmt.Errorf("QEMU AppArmor identity differs from live domain: %w", err)
-	}
-	cgroups, err := os.ReadFile(filepath.Join(proc, "cgroup"))
-	if err != nil {
-		return err
-	}
-	relative := ""
-	for _, line := range strings.Split(string(cgroups), "\n") {
-		if value, ok := strings.CutPrefix(line, "0::"); ok {
-			relative = value
-		}
-	}
-	if !strings.HasPrefix(relative, "/homenode.slice/") || filepath.Clean(relative) != relative {
-		return errors.New("QEMU is outside bounded workload slice")
-	}
-	if err = observeGuestMemoryProcess(ctx, pid, d.ID, int64(d.Image.MemoryMiB+512)*(1<<20)); err != nil {
-		return err
+	if err = observeGuestDomainResources(ctx, pid, d, strings.TrimSpace(runtimeUUID)); err != nil {
+		return fmt.Errorf("verify QEMU confinement and resource domain: %w", err)
 	}
 	uid := d.GuestUID
 	if uid == 0 {
