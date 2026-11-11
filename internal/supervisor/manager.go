@@ -451,7 +451,21 @@ func (m *Manager) stop(ctx context.Context, r Request) (Instance, error) {
 				return err
 			}
 			if count != 1 {
-				return ErrPolicy
+				// Another caller may have finished this same stop while the
+				// backend was confirming exit.
+				var acknowledged bool
+				err := tx.QueryRow(`SELECT EXISTS(
+ SELECT 1 FROM runtime_instances r JOIN runtime_operations o ON o.instance_id=r.id
+ WHERE r.id=? AND r.revision=? AND r.state='stopped' AND r.desired='stopped'
+   AND o.id=? AND o.request_hash=? AND o.state='succeeded')`,
+					r.InstanceID, r.Revision, r.OperationID, runtimeRequestHash(r)).Scan(&acknowledged)
+				if err != nil {
+					return err
+				}
+				if !acknowledged {
+					return ErrPolicy
+				}
+				return nil
 			}
 		}
 		result, err := tx.Exec("UPDATE runtime_operations SET state='succeeded' WHERE id=? AND instance_id=? AND request_hash=? AND state IN('pending','succeeded')", r.OperationID, r.InstanceID, runtimeRequestHash(r))

@@ -91,3 +91,25 @@ func TestStopReplayPreservesRemovedVideo(t *testing.T) {
 		t.Fatal("new stop admitted for retired instance", err)
 	}
 }
+
+func TestForcedStopAcceptsConcurrentAcknowledgementOfSameRequest(t *testing.T) {
+	m, backend := newManager(t)
+	ctx := context.Background()
+	start := startRequest()
+	if _, err := m.Apply(ctx, start); err != nil {
+		t.Fatal(err)
+	}
+	stop := Request{Version: 1, OperationID: state.Random(), InstanceID: start.InstanceID, Action: "stop", Revision: 2, PolicyGeneration: 1}
+	m.Backend = &changedStopBackend{fakeBackend: backend, change: func() {
+		// Complete the overlapping call after the first caller has admitted
+		// the stop but before it records its backend observation.
+		m.Backend = backend
+		if _, err := m.Apply(ctx, stop); err != nil {
+			t.Fatal(err)
+		}
+	}}
+	instance, err := m.Apply(ctx, stop)
+	if err != nil || instance.State != "stopped" || instance.Revision != stop.Revision {
+		t.Fatal("matching stop acknowledgement was refused", instance, err)
+	}
+}
