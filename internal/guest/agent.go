@@ -534,7 +534,7 @@ func (a *Agent) convert(ctx context.Context, r guestproto.Request) error {
 	if r.Preset == "mp4-1080p" {
 		height = "1080"
 	}
-	cmd := exec.CommandContext(ctx, "/usr/bin/ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-max_alloc", "268435456", "-protocol_whitelist", "file,pipe", "-threads", "2", "-filter_threads", "2", "-i", "/proc/self/fd/3", "-map", "0:v:0?", "-map", "0:a:0?", "-vf", "scale=-2:min(ih\\,"+height+")", "-c:v", "libx264", "-threads", "2", "-preset", "veryfast", "-crf", "28", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-fs", "4294967296", "-f", "mp4", "/proc/self/fd/4")
+	cmd := exec.CommandContext(ctx, "/usr/bin/ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-max_alloc", "268435456", "-protocol_whitelist", "file,pipe", "-threads", "2", "-filter_threads", "2", "-i", "/proc/self/fd/3", "-map", "0:V:0", "-map", "0:a:0?", "-vf", "scale=-2:min(ih\\,"+height+")", "-c:v", "libx264", "-threads", "2", "-preset", "veryfast", "-crf", "28", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-fs", "4294967296", "-f", "mp4", "/proc/self/fd/4")
 	cmd.ExtraFiles = []*os.File{input, output}
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "LANG=C"}
 	cmd.WaitDelay = 5 * time.Second

@@ -25,10 +25,21 @@ func TestRealVideoConversion(t *testing.T) {
 	if _, err := os.Stat("/usr/bin/ffmpeg"); err != nil {
 		t.Fatal(err)
 	}
+	t.Run("video", func(t *testing.T) {
+		testVideoConversion(t, []string{"-f", "lavfi", "-i", "testsrc2=size=320x240:rate=10", "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p"}, "succeeded")
+	})
+	t.Run("audio-only", func(t *testing.T) {
+		testVideoConversion(t, []string{"-f", "lavfi", "-i", "sine=duration=1", "-c:a", "aac"}, "failed")
+	})
+}
+
+func testVideoConversion(t *testing.T, source []string, wantState string) {
+	t.Helper()
 	inputPath := filepath.Join(privateDataDir(t), "input.mp4")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "/usr/bin/ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=10", "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p", inputPath)
+	args := append([]string{"-hide_banner", "-loglevel", "error"}, source...)
+	cmd := exec.CommandContext(ctx, "/usr/bin/ffmpeg", append(args, inputPath)...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("create fixture: %v %s", err, output)
 	}
@@ -70,7 +81,17 @@ func TestRealVideoConversion(t *testing.T) {
 			if result.State == "running" {
 				continue
 			}
-			if result.State != "succeeded" || result.Size <= 0 || result.SHA256 == "" {
+			if result.State != wantState {
+				t.Fatalf("conversion state: got %+v, want %s", result, wantState)
+			}
+			if wantState == "failed" {
+				chunk := a.Handle(guestproto.Request{Version: 1, RequestID: state.Random(), Operation: "download", ObjectID: jobID})
+				if chunk.Error == "" || len(chunk.Data) != 0 {
+					t.Fatal("failed conversion exposed output")
+				}
+				return
+			}
+			if result.Size <= 0 || result.SHA256 == "" {
 				t.Fatalf("conversion failed %+v", result)
 			}
 			chunk := a.Handle(guestproto.Request{Version: 1, RequestID: state.Random(), Operation: "download", ObjectID: jobID})
